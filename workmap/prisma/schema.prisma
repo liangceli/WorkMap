@@ -1,0 +1,369 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  EMPLOYEE
+  TEAM_LEAD
+  MANAGER
+  HR_ADMIN
+  IT_ADMIN
+  OWNER
+}
+
+enum UserStatus {
+  AVAILABLE
+  BUSY
+  FOCUS
+  IDLE
+  BREAK
+  OFFLINE
+  ON_CALL
+}
+
+enum DeviceOS {
+  WINDOWS
+  MACOS
+  LINUX
+  UNKNOWN
+}
+
+enum ActivityEventType {
+  APP
+  BROWSER
+  IDLE
+  LOCK
+  UNLOCK
+  HEARTBEAT
+}
+
+enum BrowserName {
+  CHROME
+  EDGE
+  FIREFOX
+  SAFARI
+  UNKNOWN
+}
+
+enum ProductivityLabel {
+  PRODUCTIVE
+  NEUTRAL
+  DISTRACTING
+  BLOCKED
+  UNCATEGORISED
+}
+
+enum IntegrationProvider {
+  MICROSOFT
+  TEAMS
+  OUTLOOK
+  THREE_CX
+}
+
+enum AvatarDirection {
+  UP
+  DOWN
+  LEFT
+  RIGHT
+}
+
+enum OfficeRoomType {
+  OPEN_OFFICE
+  FOCUS
+  BREAK
+  MEETING
+  DEPARTMENT_ZONE
+  OTHER
+}
+
+model Company {
+  id              String               @id @default(uuid()) @db.Uuid
+  name            String
+  slug            String               @unique
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  departments     Department[]
+  users           User[]
+  devices         Device[]
+  activityEvents  ActivityEvent[]
+  appSummaries    AppUsageSummary[]
+  websiteSummaries WebsiteUsageSummary[]
+  officeMaps      OfficeMap[]
+  officeRooms     OfficeRoom[]
+  positions       VirtualOfficePosition[]
+  policies        MonitoringPolicy[]
+  acknowledgements PolicyAcknowledgement[]
+  integrations    IntegrationAccount[]
+  auditLogs       AuditLog[]
+}
+
+model Department {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users     User[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model User {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  companyId             String                  @db.Uuid
+  departmentId          String?                 @db.Uuid
+  email                 String
+  displayName           String
+  role                  UserRole                @default(EMPLOYEE)
+  status                UserStatus              @default(OFFLINE)
+  avatarId              String?
+  jobTitle              String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  company               Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department            Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  devices               Device[]
+  activityEvents        ActivityEvent[]
+  appSummaries          AppUsageSummary[]
+  websiteSummaries      WebsiteUsageSummary[]
+  position              VirtualOfficePosition?
+  policyAcknowledgements PolicyAcknowledgement[]
+  integrationAccounts   IntegrationAccount[]
+  auditLogsAuthored     AuditLog[]              @relation("AuditActor")
+  auditLogsTargeting    AuditLog[]              @relation("AuditTarget")
+
+  @@unique([companyId, email])
+  @@index([companyId, departmentId])
+  @@index([companyId, role])
+}
+
+model Device {
+  id             String          @id @default(uuid()) @db.Uuid
+  companyId      String          @db.Uuid
+  userId         String          @db.Uuid
+  os             DeviceOS        @default(UNKNOWN)
+  hostname       String?
+  agentVersion   String?
+  lastSeenAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityEvents ActivityEvent[]
+
+  @@index([companyId, userId])
+  @@index([companyId, lastSeenAt])
+}
+
+model ActivityEvent {
+  id              String             @id @default(uuid()) @db.Uuid
+  companyId       String             @db.Uuid
+  userId          String             @db.Uuid
+  deviceId        String             @db.Uuid
+  eventType       ActivityEventType
+  appName         String?
+  browserName     BrowserName?
+  domain          String?
+  isIdle          Boolean            @default(false)
+  isActiveWindow  Boolean            @default(false)
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationSeconds Int?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device          Device             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId, startedAt])
+  @@index([companyId, deviceId, startedAt])
+  @@index([companyId, eventType, startedAt])
+}
+
+model AppUsageSummary {
+  id                String            @id @default(uuid()) @db.Uuid
+  companyId         String            @db.Uuid
+  userId            String            @db.Uuid
+  date              DateTime          @db.Date
+  appName           String
+  category          String?
+  productivityLabel ProductivityLabel @default(UNCATEGORISED)
+  activeSeconds     Int               @default(0)
+  idleSeconds       Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId, date, appName])
+  @@index([companyId, userId, date])
+  @@index([companyId, date])
+}
+
+model WebsiteUsageSummary {
+  id                String            @id @default(uuid()) @db.Uuid
+  companyId         String            @db.Uuid
+  userId            String            @db.Uuid
+  date              DateTime          @db.Date
+  domain            String
+  browserName       BrowserName       @default(UNKNOWN)
+  category          String?
+  productivityLabel ProductivityLabel @default(UNCATEGORISED)
+  activeSeconds     Int               @default(0)
+  idleSeconds       Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId, date, domain, browserName])
+  @@index([companyId, userId, date])
+  @@index([companyId, date])
+}
+
+model OfficeMap {
+  id        String                  @id @default(uuid()) @db.Uuid
+  companyId String                  @db.Uuid
+  name      String
+  slug      String
+  width     Int
+  height    Int
+  tileSize  Int                     @default(32)
+  mapData   Json?
+  isDefault Boolean                 @default(false)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+  company   Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rooms     OfficeRoom[]
+  positions VirtualOfficePosition[]
+
+  @@unique([companyId, slug])
+  @@index([companyId, isDefault])
+}
+
+model OfficeRoom {
+  id          String                  @id @default(uuid()) @db.Uuid
+  companyId   String                  @db.Uuid
+  officeMapId String                  @db.Uuid
+  name        String
+  type        OfficeRoomType          @default(OTHER)
+  zoneData    Json?
+  autoStatus  UserStatus?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  officeMap   OfficeMap               @relation(fields: [officeMapId], references: [id], onDelete: Cascade)
+  positions   VirtualOfficePosition[]
+
+  @@unique([officeMapId, name])
+  @@index([companyId, officeMapId])
+}
+
+model VirtualOfficePosition {
+  id           String          @id @default(uuid()) @db.Uuid
+  companyId    String          @db.Uuid
+  userId       String          @unique @db.Uuid
+  officeMapId  String          @db.Uuid
+  officeRoomId String?         @db.Uuid
+  x            Float
+  y            Float
+  direction    AvatarDirection @default(DOWN)
+  isMoving     Boolean         @default(false)
+  status       UserStatus      @default(OFFLINE)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  company      Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  officeMap    OfficeMap       @relation(fields: [officeMapId], references: [id], onDelete: Cascade)
+  officeRoom   OfficeRoom?     @relation(fields: [officeRoomId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, userId])
+  @@index([companyId, officeMapId])
+  @@index([companyId, officeRoomId])
+}
+
+model MonitoringPolicy {
+  id                      String                  @id @default(uuid()) @db.Uuid
+  companyId               String                  @db.Uuid
+  name                    String
+  collectAppUsage         Boolean                 @default(true)
+  collectWebsiteDomain    Boolean                 @default(true)
+  collectFullUrl          Boolean                 @default(false)
+  collectScreenshots      Boolean                 @default(false)
+  collectKeystrokes       Boolean                 @default(false)
+  workHoursOnly           Boolean                 @default(true)
+  workdayStart            String                  @default("09:00")
+  workdayEnd              String                  @default("17:00")
+  retentionDays           Int                     @default(90)
+  employeeCanViewOwnData  Boolean                 @default(true)
+  policyVersion           String
+  activeFrom              DateTime
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  company                 Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  acknowledgements        PolicyAcknowledgement[]
+
+  @@unique([companyId, policyVersion])
+  @@index([companyId, activeFrom])
+}
+
+model PolicyAcknowledgement {
+  id                  String           @id @default(uuid()) @db.Uuid
+  companyId           String           @db.Uuid
+  userId              String           @db.Uuid
+  monitoringPolicyId  String           @db.Uuid
+  acknowledgedAt      DateTime
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monitoringPolicy    MonitoringPolicy @relation(fields: [monitoringPolicyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, monitoringPolicyId])
+  @@index([companyId, userId])
+}
+
+model IntegrationAccount {
+  id                 String              @id @default(uuid()) @db.Uuid
+  companyId          String              @db.Uuid
+  userId             String?             @db.Uuid
+  provider           IntegrationProvider
+  externalAccountId  String?
+  displayName        String?
+  enabled            Boolean             @default(true)
+  connectedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user               User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, provider])
+  @@index([companyId, userId])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @db.Uuid
+  actorUserId   String?  @db.Uuid
+  targetUserId  String?  @db.Uuid
+  action        String
+  resourceType  String
+  resourceId    String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actorUser     User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  targetUser    User?    @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, actorUserId, createdAt])
+  @@index([companyId, targetUserId, createdAt])
+  @@index([companyId, action, createdAt])
+}

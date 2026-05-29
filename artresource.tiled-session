@@ -1,0 +1,95 @@
+{
+    "activeFile": "workmap_office_mvp.tmx",
+    "expandedProjectPaths": [
+        "workmap",
+        "workmap/apps/web",
+        ".",
+        "workmap/apps"
+    ],
+    "fileStates": {
+        "1.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "1_Room_Builder_Officer.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Modern_Office_Shadowless_32x32.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "office.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "shadowless.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "tileset.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "tileset_office_modern_v1.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1.5
+        },
+        "tilets.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "walls.tsx": {
+            "scaleInDock": 2,
+            "scaleInEditor": 1
+        },
+        "walls32 32.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "workmap2.tmx": {
+            "scale": 0.75,
+            "selectedLayer": 5,
+            "viewCenter": {
+                "x": 225.33333333333326,
+                "y": 539.3333333333333
+            }
+        },
+        "workmap_office_mvp.tmx": {
+            "scale": 0.75,
+            "selectedLayer": 3,
+            "viewCenter": {
+                "x": 524.6666666666666,
+                "y": 306.66666666666663
+            }
+        }
+    },
+    "last.imagePath": "C:/Users/lilia/WorkMap/workmap/apps/web/public/modern-office/1_Room_Builder_Office",
+    "map.height": 100,
+    "map.lastUsedFormat": "tmx",
+    "map.width": 100,
+    "openFiles": [
+        "walls.tsx",
+        "shadowless.tsx",
+        "1_Room_Builder_Officer.tsx",
+        "walls32 32.tsx",
+        "workmap_office_mvp.tmx",
+        "workmap2.tmx"
+    ],
+    "project": "artresource.tiled-project",
+    "recentFiles": [
+        "walls.tsx",
+        "shadowless.tsx",
+        "1_Room_Builder_Officer.tsx",
+        "walls32 32.tsx",
+        "workmap2.tmx",
+        "workmap_office_mvp.tmx",
+        "Modern_Office_Shadowless_32x32.tsx",
+        "1.tsx",
+        "office.tsx",
+        "tileset.tsx",
+        "tilets.tsx",
+        "tileset_office_modern_v1.tsx"
+    ],
+    "tileset.lastUsedFormat": "tsx"
+}

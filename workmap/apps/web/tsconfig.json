@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "plugins": [{ "name": "next" }],
+    "incremental": true,
+    "paths": {
+      "@workmap/shared-types": ["../../packages/shared-types/src"],
+      "@workmap/ui": ["../../packages/ui/src"],
+      "@workmap/config": ["../../packages/config/src"],
+      "@workmap/domain-utils": ["../../packages/domain-utils/src"],
+      "@workmap/auth": ["../../packages/auth/src"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
