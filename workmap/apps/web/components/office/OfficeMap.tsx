@@ -505,16 +505,10 @@ function drawScene(
   context.fillStyle = "#eef2f7";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.save();
-  context.translate(-camera.x, -camera.y);
+  context.translate(-Math.round(camera.x), -Math.round(camera.y));
 
   for (const layer of map.layers) {
     drawLayer(context, layer, map, images);
-  }
-
-  for (const room of roomZones) {
-    context.strokeStyle = activeRoom?.id === room.id ? "rgba(37, 99, 235, 0.55)" : "rgba(15, 23, 42, 0.1)";
-    context.lineWidth = activeRoom?.id === room.id ? 3 : 1;
-    context.strokeRect(room.x, room.y, room.width, room.height);
   }
 
   if (nearestChair) {
