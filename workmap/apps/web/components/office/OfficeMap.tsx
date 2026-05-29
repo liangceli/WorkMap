@@ -1,7 +1,16 @@
 "use client";
 
 import { MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ContactTarget, OfficeRoomZone, PlayerDirection, PlayerState, UserPresenceStatus } from "@workmap/shared-types";
+import {
+  avatarLayersByType,
+  getLayeredAvatarAssets,
+  type AvatarLayerAsset,
+  type LayeredAvatarConfig,
+} from "../../lib/avatar/avatarLayerAssets";
+import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/avatarFrameMaps";
+import { getAvatarConfigForOffice } from "../../lib/avatar/avatarStorage";
 import { ContactMenu } from "./ContactMenu";
 import { officeTilesets, remotePlayers, roomZones } from "./mockOfficeData";
 import { labelStatus, statusColors } from "./presence";
@@ -27,6 +36,15 @@ type ChairSpot = {
   y: number;
 };
 
+type LoadedAvatar = {
+  layers: Array<{
+    asset: AvatarLayerAsset;
+    image?: HTMLImageElement;
+  }>;
+};
+
+type LoadedAvatarMap = Record<string, LoadedAvatar>;
+
 const MAP_URL = "/maps/workmap2.tmx";
 const CANVAS_WIDTH = 1120;
 const CANVAS_HEIGHT = 680;
@@ -35,8 +53,14 @@ const PLAYER_SPEED = 180;
 const PROXIMITY_DISTANCE = 80;
 const CHAIR_INTERACTION_DISTANCE = 46;
 const COLLISION_LAYERS = new Set(["Walls", "Tools", "furniture", "chairs", "plants"]);
+const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {
+  "demo-manager": createRandomRemoteAvatarConfig("demo-manager"),
+  "demo-engineer": createRandomRemoteAvatarConfig("demo-engineer"),
+  "demo-sales": createRandomRemoteAvatarConfig("demo-sales"),
+};
 
 export function OfficeMap() {
+  const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const keysRef = useRef(new Set<string>());
   const nearestChairRef = useRef<ChairSpot | null>(null);
@@ -63,6 +87,8 @@ export function OfficeMap() {
   const [nearbyTarget, setNearbyTarget] = useState<ContactTarget | null>(null);
   const [nearestChair, setNearestChair] = useState<ChairSpot | null>(null);
   const [seatedChair, setSeatedChair] = useState<ChairSpot | null>(null);
+  const [selectedAvatar, setSelectedAvatar] = useState<LayeredAvatarConfig | null>(null);
+  const [avatarChecked, setAvatarChecked] = useState(false);
 
   const mapPixels = useMemo(
     () => ({
@@ -73,6 +99,28 @@ export function OfficeMap() {
   );
 
   useEffect(() => {
+    const avatarConfig = getAvatarConfigForOffice();
+
+    if (!avatarConfig) {
+      router.replace("/onboarding/avatar");
+      setAvatarChecked(true);
+      return;
+    }
+
+    playerRef.current = {
+      ...playerRef.current,
+      avatarId: avatarConfig.bodyId,
+    };
+    setPlayer(playerRef.current);
+    setSelectedAvatar(avatarConfig);
+    setAvatarChecked(true);
+  }, [router]);
+
+  useEffect(() => {
+    if (!avatarChecked || !selectedAvatar) {
+      return undefined;
+    }
+
     let cancelled = false;
 
     fetch(MAP_URL)
@@ -96,7 +144,7 @@ export function OfficeMap() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [avatarChecked, selectedAvatar]);
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -158,22 +206,62 @@ export function OfficeMap() {
     let animationFrame = 0;
     let previousTime = performance.now();
     const images = new Map<string, HTMLImageElement>();
+    let loadedAvatars: LoadedAvatarMap = {};
     const collision = buildCollisionGrid(map);
     const chairs = findChairSpots(map);
+    const avatarConfigs: Record<string, LayeredAvatarConfig> = selectedAvatar
+      ? {
+          "local-user": selectedAvatar,
+          ...remoteAvatarConfigs,
+        }
+      : remoteAvatarConfigs;
+    const uniqueAssets = Array.from(
+      new Map(
+        Object.values(avatarConfigs)
+          .flatMap((config) => getLayeredAvatarAssets(config))
+          .map((asset) => [asset.id, asset]),
+      ).values(),
+    );
 
     Promise.all(
-      officeTilesets.map(
-        (tileset) =>
-          new Promise<void>((resolve) => {
-            const image = new Image();
-            image.src = tileset.imagePath;
-            image.onload = () => {
-              images.set(tileset.imagePath, image);
-              resolve();
-            };
-            image.onerror = () => resolve();
-          }),
-      ),
+      [
+        ...officeTilesets.map(
+          (tileset) =>
+            new Promise<void>((resolve) => {
+              const image = new Image();
+              image.src = tileset.imagePath;
+              image.onload = () => {
+                images.set(tileset.imagePath, image);
+                resolve();
+              };
+              image.onerror = () => resolve();
+            }),
+        ),
+        Promise.all(
+          uniqueAssets.map(
+            (asset) =>
+              new Promise<{ asset: AvatarLayerAsset; image?: HTMLImageElement }>((resolve) => {
+                const image = new Image();
+                image.src = asset.src;
+                image.onload = () => resolve({ asset, image });
+                image.onerror = () => resolve({ asset });
+              }),
+          ),
+        ).then((loadedAssets) => {
+          const imageByAssetId = new Map(loadedAssets.map((loaded) => [loaded.asset.id, loaded.image]));
+          loadedAvatars = Object.fromEntries(
+            Object.entries(avatarConfigs).map(([userId, config]) => [
+              userId,
+              {
+                layers: getLayeredAvatarAssets(config).map((asset) => ({
+                  asset,
+                  image: imageByAssetId.get(asset.id),
+                })),
+              },
+            ]),
+          );
+        }),
+      ],
     ).then(() => {
       const loop = (time: number) => {
         const deltaSeconds = Math.min((time - previousTime) / 1000, 0.04);
@@ -210,7 +298,18 @@ export function OfficeMap() {
         setActiveRoom(room);
         setNearbyTarget(nearest);
         setNearestChair(chair);
-        drawScene(canvasRef.current, map, images, nextPlayer, mapPixels, room, nearest, chair, seatedChairRef.current);
+        drawScene(
+          canvasRef.current,
+          map,
+          images,
+          nextPlayer,
+          mapPixels,
+          room,
+          nearest,
+          chair,
+          seatedChairRef.current,
+          loadedAvatars,
+        );
 
         animationFrame = requestAnimationFrame(loop);
       };
@@ -219,7 +318,7 @@ export function OfficeMap() {
     });
 
     return () => cancelAnimationFrame(animationFrame);
-  }, [map, mapPixels]);
+  }, [map, mapPixels, selectedAvatar]);
 
   const standUpFromChair = useCallback(() => {
     const fallback = seatedChairRef.current
@@ -275,6 +374,19 @@ export function OfficeMap() {
     },
     [map, mapPixels],
   );
+
+  if (!avatarChecked || !selectedAvatar) {
+    return (
+      <main style={styles.page}>
+        <section style={styles.shell}>
+          <div style={styles.card}>
+            <p style={styles.panelLabel}>Avatar setup</p>
+            <p style={styles.panelText}>Taking you to avatar selection...</p>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main style={styles.page}>
@@ -376,6 +488,7 @@ function drawScene(
   nearbyTarget?: ContactTarget | null,
   nearestChair?: ChairSpot | null,
   seatedChair?: ChairSpot | null,
+  avatars?: LoadedAvatarMap,
 ) {
   if (!canvas) {
     return;
@@ -413,10 +526,10 @@ function drawScene(
   }
 
   for (const remote of remotePlayers) {
-    drawPlayer(context, remote, remote.displayName, nearbyTarget?.userId === remote.userId);
+    drawPlayer(context, remote, remote.displayName, nearbyTarget?.userId === remote.userId, false, false, avatars?.[remote.userId]);
   }
 
-  drawPlayer(context, player, "You", false, true, Boolean(seatedChair));
+  drawPlayer(context, player, "You", false, true, Boolean(seatedChair), avatars?.[player.userId]);
   context.restore();
 }
 
@@ -458,6 +571,7 @@ function drawPlayer(
   highlighted = false,
   local = false,
   seated = false,
+  avatar?: LoadedAvatar,
 ) {
   context.save();
   const bob = player.isMoving && !seated ? Math.sin(Date.now() / 95) * 2 : 0;
@@ -469,38 +583,132 @@ function drawPlayer(
   context.ellipse(player.x, player.y + 17, player.isMoving ? 22 : 20, player.isMoving ? 8 : 7, 0, 0, Math.PI * 2);
   context.fill();
 
-  context.strokeStyle = highlighted ? "#0f172a" : statusColors[player.status];
-  context.lineWidth = highlighted ? 4 : 3;
-  context.fillStyle = local ? "#1d4ed8" : "#f8fafc";
-  if (seated) {
+  const hasAvatarImage = Boolean(avatar?.layers.some((layer) => layer.image));
+
+  if (hasAvatarImage && avatar) {
+    context.strokeStyle = highlighted ? "#0f172a" : statusColors[player.status];
+    context.lineWidth = highlighted ? 3 : 2;
     context.beginPath();
-    context.roundRect(player.x - 18, drawY - 10, 36, 25, 7);
-    context.fill();
+    context.ellipse(player.x, player.y + 17, highlighted ? 25 : 22, highlighted ? 10 : 8, 0, 0, Math.PI * 2);
     context.stroke();
+    drawAvatarSprite(context, player, drawY, seated, avatar);
   } else {
-    context.beginPath();
-    context.arc(player.x, drawY, PLAYER_RADIUS, 0, Math.PI * 2);
-    context.fill();
-    context.stroke();
+    context.strokeStyle = highlighted ? "#0f172a" : statusColors[player.status];
+    context.lineWidth = highlighted ? 4 : 3;
+    context.fillStyle = local ? "#1d4ed8" : "#f8fafc";
+    if (seated) {
+      context.beginPath();
+      context.roundRect(player.x - 18, drawY - 10, 36, 25, 7);
+      context.fill();
+      context.stroke();
+    } else {
+      context.beginPath();
+      context.arc(player.x, drawY, PLAYER_RADIUS, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+    }
+
+    context.fillStyle = local ? "#ffffff" : "#0f172a";
+    context.font = "700 14px Arial";
+    context.fillText(seated ? "SIT" : local ? "YOU" : "WM", player.x, drawY + 5);
+
+    if (!seated) {
+      drawDirectionCue(context, player.x, drawY, player.direction);
+    }
   }
 
-  context.fillStyle = local ? "#ffffff" : "#0f172a";
-  context.font = "700 14px Arial";
-  context.fillText(seated ? "SIT" : local ? "YOU" : "WM", player.x, drawY + 5);
+  drawNameBubble(context, player.x, hasAvatarImage ? drawY - 58 : drawY - 38, label, player.status);
+  context.restore();
+}
 
-  if (!seated) {
-    drawDirectionCue(context, player.x, drawY, player.direction);
-  }
-
-  context.fillStyle = "#0f172a";
+function drawNameBubble(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  label: string,
+  status: UserPresenceStatus,
+) {
+  context.save();
   context.font = "600 12px Arial";
-  context.fillText(label, player.x, drawY - 24);
+  context.textAlign = "left";
+  context.textBaseline = "middle";
 
-  context.fillStyle = statusColors[player.status];
+  const textWidth = context.measureText(label).width;
+  const bubbleWidth = Math.max(54, textWidth + 34);
+  const bubbleHeight = 24;
+  const bubbleX = x - bubbleWidth / 2;
+  const bubbleY = y - bubbleHeight / 2;
+
+  context.fillStyle = "rgba(15, 23, 42, 0.92)";
   context.beginPath();
-  context.arc(player.x + 16, drawY - 13, 5, 0, Math.PI * 2);
+  context.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 9);
+  context.fill();
+
+  context.fillStyle = statusColors[status];
+  context.beginPath();
+  context.arc(bubbleX + 13, y, 5, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = "#f8fafc";
+  context.fillText(label, bubbleX + 24, y + 0.5);
+
+  context.fillStyle = "rgba(15, 23, 42, 0.92)";
+  context.beginPath();
+  context.moveTo(x - 5, bubbleY + bubbleHeight - 1);
+  context.lineTo(x + 5, bubbleY + bubbleHeight - 1);
+  context.lineTo(x, bubbleY + bubbleHeight + 6);
+  context.closePath();
   context.fill();
   context.restore();
+}
+
+function drawAvatarSprite(
+  context: CanvasRenderingContext2D,
+  player: PlayerState,
+  drawY: number,
+  seated: boolean,
+  avatar: LoadedAvatar,
+) {
+  if (!avatar.layers.some((layer) => layer.image)) {
+    return;
+  }
+
+  const frameIndex = getAvatarFrameIndex(layeredAvatarFrameMap, player.direction, player.isMoving, seated, Date.now());
+  const firstLayer = avatar.layers.find((layer) => layer.image);
+  if (!firstLayer) {
+    return;
+  }
+
+  const firstSourceHeight = firstLayer.asset.sourceHeight ?? firstLayer.asset.frameHeight;
+  const targetWidth = firstLayer.asset.frameWidth * 1.25;
+  const targetHeight = firstSourceHeight * 1.25;
+  context.imageSmoothingEnabled = false;
+  for (const { asset, image } of avatar.layers) {
+    if (!image) {
+      continue;
+    }
+
+    const sourceHeight = asset.sourceHeight ?? asset.frameHeight;
+    const sourceYOffset = asset.sourceYOffset ?? 0;
+    const sourceX = (frameIndex % asset.columns) * asset.frameWidth;
+    const sourceY = Math.max(0, Math.floor(frameIndex / asset.columns) * asset.frameHeight + sourceYOffset);
+    if (sourceX + asset.frameWidth > image.width || sourceY + sourceHeight > image.height) {
+      continue;
+    }
+
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      asset.frameWidth,
+      sourceHeight,
+      player.x - targetWidth / 2,
+      drawY - targetHeight + 18,
+      targetWidth,
+      targetHeight,
+    );
+  }
+  context.imageSmoothingEnabled = true;
 }
 
 function drawDirectionCue(context: CanvasRenderingContext2D, x: number, y: number, direction: PlayerDirection) {
@@ -719,6 +927,42 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function createRandomRemoteAvatarConfig(seed: string): LayeredAvatarConfig {
+  const random = createSeededRandom(seed);
+  const accessory = pickRandom(avatarLayersByType.accessory, random);
+  const useAccessory = random() > 0.35;
+
+  return {
+    version: 2,
+    bodyId: pickRandom(avatarLayersByType.body, random)?.id ?? "",
+    eyesId: pickRandom(avatarLayersByType.eyes, random)?.id,
+    hairstyleId: pickRandom(avatarLayersByType.hairstyle, random)?.id,
+    outfitId: pickRandom(avatarLayersByType.outfit, random)?.id,
+    accessoryIds: useAccessory && accessory ? [accessory.id] : [],
+  };
+}
+
+function pickRandom<T>(items: T[], random: () => number) {
+  return items[Math.floor(random() * items.length)];
+}
+
+function createSeededRandom(seed: string) {
+  let state = 2166136261;
+
+  for (let index = 0; index < seed.length; index += 1) {
+    state ^= seed.charCodeAt(index);
+    state = Math.imul(state, 16777619);
+  }
+
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 const styles = {

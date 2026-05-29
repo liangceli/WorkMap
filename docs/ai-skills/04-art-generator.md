@@ -58,6 +58,18 @@ All generated assets must be:
 
 ## Avatar system
 
+Current MVP avatar implementation:
+
+- The onboarding avatar builder uses layered sprite sheets.
+- Layered sheets live under `apps/web/public/assets/avatars/layers/`.
+- Current layer categories are bodies, eyes, hairstyles, outfits, and accessories.
+- Current sheets are 1792x704, using 56 columns x 22 rows of 32px indexed frames.
+- The frontend renders a 32x48 source crop with a -16px y offset so the full head is visible.
+- The frontend keeps configurable frame maps in `apps/web/lib/avatar/avatarFrameMaps.ts`; exact idle, walk, run, and sit indexes may need calibration.
+- Preserve transparent alignment across every layer so body, eyes, hair, outfits, and accessories stack cleanly.
+
+Layered avatar work needs:
+
 Need avatar base assets:
 
 - male/female/neutral body options

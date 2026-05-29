@@ -55,6 +55,12 @@ Later versions can support:
 
 Use Phaser.js inside the Next.js frontend.
 
+Current MVP note:
+
+- The current `/virtual-office` implementation still uses Canvas, not Phaser.
+- Do not switch the Canvas MVP to Phaser unless the task explicitly asks for it and dependency install is approved.
+- Keep Canvas changes small and preserve movement, collision, room zones, proximity contact menu, and chair sit/stand behavior.
+
 Recommended frontend structure:
 
 ```txt
@@ -204,8 +210,10 @@ Avatar should have:
 
 4-direction walking animation
 idle animation
+layered avatar rendering for the local player in the current Canvas MVP
+deterministic randomized layered avatars for mock remote players
 small oval foot shadow
-display name label
+compact dark name/status bubble above avatar
 status ring or status dot
 smooth start and stop
 no sliding through walls
@@ -371,11 +379,45 @@ on_call    => purple
 
 Status can be shown using:
 
-small dot near name label
+small dot inside the name/status bubble
 ring below avatar
 subtle outline around avatar
 
 Do not make status indicators too large or aggressive.
+
+Layered avatar MVP
+
+The current avatar system is layered for the onboarding and virtual office MVP.
+
+Current files:
+
+```txt
+apps/web/app/onboarding/avatar/page.tsx
+apps/web/components/avatar/AvatarPreview.tsx
+apps/web/components/avatar/LayeredAvatarPreview.tsx
+apps/web/lib/avatar/avatarAssets.ts
+apps/web/lib/avatar/avatarLayerAssets.ts
+apps/web/lib/avatar/avatarStorage.ts
+apps/web/lib/avatar/avatarFrameMaps.ts
+apps/web/components/office/OfficeMap.tsx
+```
+
+Current rules:
+
+- Use layered sprite sheets from `apps/web/public/assets/avatars/layers/`.
+- The current layered categories are body, eyes, hairstyle, outfit, and accessory.
+- Store the MVP selected avatar in `localStorage` under `workmap.avatarConfig`.
+- Use `LayeredAvatarConfig` with `version: 2`, `bodyId`, optional `eyesId`, optional `hairstyleId`, optional `outfitId`, and optional `accessoryIds`.
+- If no valid avatar is selected, guide the user to `/onboarding/avatar`.
+- If layer loading fails, keep the existing placeholder player fallback.
+- Mock remote players should not reuse the local user's avatar; give them deterministic randomized layered configs.
+- Keep local avatar customization client-side until Director approves a backend profile API.
+- Keep frame mapping configurable in `avatarFrameMaps.ts`.
+- If exact frame indexes are unknown, use safe defaults and mark them for later calibration.
+- The layered sheets are 56 columns x 22 rows with 32px frame indexing.
+- The current Canvas renderer uses 32x48 source crops with a -16px y offset to avoid clipping the top of the head.
+- Current walk frames use row 5 after visual calibration for clearer leg motion.
+- Left/right frame mappings may need further calibration whenever art changes.
 
 Map interaction zones
 
@@ -473,6 +515,10 @@ Testing requirements
 
 The movement system should be tested for:
 
+avatar onboarding route
+layered avatar selection
+avatar config saved to localStorage
+virtual office redirect when avatar config is missing
 WASD movement
 arrow key movement
 collision with walls
@@ -480,12 +526,15 @@ collision with furniture
 avatar direction change
 walking animation
 idle animation
-remote avatar rendering
+selected local avatar sprite rendering
+placeholder fallback when avatar image fails
+randomized remote avatar rendering
 remote avatar interpolation
 status ring update
 room enter/leave
 proximity detection
 contact menu trigger
+chair sit/stand behavior with avatar selected
 company room isolation
 socket disconnect/reconnect
 no private data in socket payload
@@ -494,6 +543,8 @@ MVP acceptance criteria
 The MVP movement system is acceptable when:
 
 one local player can move smoothly in the office
+one local player can build a layered avatar before entering the office
+the selected local avatar renders from the layered sprite sheets
 the player cannot walk through blocked objects
 player direction updates correctly
 idle/walking animation switches correctly

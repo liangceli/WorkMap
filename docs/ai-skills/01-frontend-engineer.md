@@ -38,6 +38,7 @@ Implement these pages:
 - `/login`
 - `/dashboard`
 - `/virtual-office`
+- `/onboarding/avatar`
 - `/employees`
 - `/employees/[id]`
 - `/reports`
@@ -50,6 +51,8 @@ Implement these pages:
 Create reusable components:
 
 - `EmployeeAvatar`
+- `AvatarPreview`
+- `LayeredAvatarPreview`
 - `EmployeeCard`
 - `ContactMenu`
 - `PresenceBadge`
@@ -88,6 +91,7 @@ The avatar movement should feel like a light office RPG:
 - directional movement
 - foot shadow
 - small name label above avatar
+- compact dark name/status bubble above avatar in the current Canvas MVP
 - status color ring
 - no aggressive game style
 - professional but friendly
@@ -149,14 +153,32 @@ Do not invent new movement rules, socket event names, or avatar state shapes wit
 Completed in current MVP:
 
 - `/virtual-office` page exists.
+- `/onboarding/avatar` page exists as a layered avatar builder.
 - `workmap2.tmx` is loaded from `apps/web/public/maps/workmap2.tmx`.
 - Office map renders with Canvas using current Tiled TMX layers and copied tileset images.
-- Placeholder local player supports WASD / arrow-key movement.
+- Local player supports WASD / arrow-key movement.
 - Basic collision exists for walls, tools, furniture, chairs, and plants.
 - Room zone detection updates local presence status.
-- Placeholder remote players render on the map.
+- Remote placeholder players render on the map with deterministic randomized layered avatars.
 - Proximity detection supports opening a contact menu.
 - `ContactMenu` and `PresenceBadge` reusable components exist.
+- `AvatarPreview` reusable component exists.
+- `LayeredAvatarPreview` reusable component exists.
+- Avatar preset manifest exists in `apps/web/lib/avatar/avatarAssets.ts`.
+- Layered avatar manifest exists in `apps/web/lib/avatar/avatarLayerAssets.ts`.
+- Avatar config helper exists in `apps/web/lib/avatar/avatarStorage.ts` using localStorage key `workmap.avatarConfig`.
+- Avatar frame maps exist in `apps/web/lib/avatar/avatarFrameMaps.ts`.
+- Uploaded preset sheets are registered from `apps/web/public/assets/avatars/presets/`.
+- Layered assets are registered from `apps/web/public/assets/avatars/layers/`.
+- Layered avatar builder supports body, eyes, hairstyle, outfit, and accessories.
+- Layered avatar config is saved to localStorage as version 2 under `workmap.avatarConfig`.
+- `/virtual-office` redirects users without a valid local avatar config to `/onboarding/avatar`.
+- `/virtual-office` loads the selected layered avatar and renders the local player from the selected layers.
+- `/virtual-office` gives each mock remote player a deterministic randomized layered avatar.
+- If avatar layer images fail to load, `/virtual-office` falls back to the existing placeholder player visual.
+- Basic layered avatar animation frame cycling exists for moving, idle, and seated fallback states.
+- Layered avatar rendering uses 32x48 source crops for full head visibility while keeping 32px frame indexing.
+- Player labels use a compact dark name/status bubble above the avatar.
 - `PlayerState`, presence status, player direction, room zone, and contact target types are exported from `@workmap/shared-types`.
 - Chair interaction exists: approach a chair, press `E` to sit; press `E` or move to stand.
 - No private monitoring data is exposed through the virtual office UI.
@@ -164,9 +186,11 @@ Completed in current MVP:
 Known remaining frontend work:
 
 - Replace Canvas MVP with Phaser.js when dependency install is approved.
-- Replace placeholder avatar text/shapes with real 4-direction character sprites.
-- Add true walking/idle sprite animations.
+- Continue calibrating layered avatar frame indexes for idle, walk, run, and sit states.
+- Replace mock randomized remote avatars with backend-provided avatar configs when realtime identity/avatar data exists.
+- Add true authored sitting and optional running animations after frame mapping is confirmed.
 - Add Socket.IO client integration after backend gateway exists.
+- Move avatar config from localStorage to backend profile API after Director approves the API contract.
 - Replace mock office player and room data with backend APIs.
 - Implement remaining main pages: `/login`, `/dashboard`, `/employees`, `/employees/[id]`, `/reports`, `/compliance`, `/integrations`, `/settings`.
 - Build remaining dashboard/admin components: `EmployeeAvatar`, `EmployeeCard`, `UsageSummaryCard`, `AppUsageTable`, `WebsiteUsageTable`, `PrivacyNoticeCard`, `PolicyAcknowledgementModal`, `IntegrationButton`, `ManagerOverviewPanel`.
