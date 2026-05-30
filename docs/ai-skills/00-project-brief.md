@@ -101,9 +101,12 @@ Frontend MVP currently has:
 - `/onboarding/device-setup` exists as a lightweight Desktop Agent / Browser Extension transparency step.
 - `/virtual-office` using a Canvas renderer for the current Tiled TMX office map.
 - `/virtual-office` is now a full-screen map-first office UI with a lightweight top bar, floating current-area pill, movement hint, bottom coworker interaction drawer, and a right-bottom mini map showing the full office and player position.
+- `/virtual-office` now has a WorkMap-specific office workspace shell with a left vertical rail, People/Search/Chat/Calendar/Notices/Settings panels, command palette, and room context card.
 - The current `/virtual-office` camera keeps the local player centered while the map moves underneath.
 - Local movement treats mock remote players as blockers so avatars do not overlap.
 - The mini map now shows the full office and local player dot without a blue viewport range box.
+- The Canvas MVP now supports mouse drag pan, mouse wheel zoom, recenter, double-click click-to-move, and frontend-only Go to person/room navigation using a small grid pathfinding utility.
+- Chat, Calendar, Notices, and People office panels are frontend-only mock collaboration surfaces. They do not connect to Teams/Outlook content or backend persistence.
 - `/onboarding/avatar` as a layered avatar builder using local sprite sheet assets.
 - `/dashboard` as a manager overview mock UI with privacy-forward app/domain summaries.
 - `/employees` as a frontend mock employee directory with search, filters, manager summary view, and employee contact-only view.
@@ -148,6 +151,9 @@ Current frontend/backend handoff:
 - Backend/API chat owns NestJS API framework, Auth/JWT, request context, RBAC, business controllers, DTO validation, audit hooks, activity ingestion, reports, and later Socket.IO.
 - Backend/API chat should not assume frontend mock data is authoritative. Treat current frontend mock people, reports, integrations, and local avatar config as UI scaffolding until API contracts are approved.
 - Do not persist avatar layer config, map metadata, or activity/report data to new schema fields without Director approval.
+- Virtual Office workspace shell API proposal lives at `/docs/api/virtual-office-workspace-contract.md`.
+- Current backend endpoints can partially support People, room list/navigation from map rooms, contact links, compliance policy, and summary reports. Chat, Calendar, Notices, emoji/wave, real click-to-move sync, and Socket.IO remain frontend-only mock or future proposal work.
+- Contact links remain link-based only; no Microsoft Graph, Teams content, Outlook content, message persistence, calendar persistence, or notices persistence is implemented.
 - Current frontend workflow routes are demo-only: Employee first-time flow is login -> compliance -> avatar -> device setup -> virtual office; Owner first-time flow is login -> company onboarding -> compliance -> dashboard after setup; Manager and IT Admin returning flows land on dashboard.
 
 ## Initial architecture

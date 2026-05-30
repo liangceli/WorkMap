@@ -1,6 +1,6 @@
 "use client";
 
-import { MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MouseEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ContactTarget, OfficeRoomZone, PlayerDirection, PlayerState, UserPresenceStatus } from "@workmap/shared-types";
 import {
@@ -11,13 +11,20 @@ import {
 } from "../../lib/avatar/avatarLayerAssets";
 import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/avatarFrameMaps";
 import { getAvatarConfigForOffice } from "../../lib/avatar/avatarStorage";
+import { findDestinationAtPoint, officeDestinations, type OfficeDestination } from "../../lib/office/officeNavigationConfig";
+import { findGridPath, type PathPoint } from "../../lib/office/pathfinding";
 import { FloatingRoomPill } from "./FloatingRoomPill";
 import { InteractionDrawer } from "./InteractionDrawer";
 import { MovementHint } from "./MovementHint";
+import { OfficeCommandPalette } from "./OfficeCommandPalette";
+import { OfficeLeftRail, type OfficePanelKey } from "./OfficeLeftRail";
 import { OfficeMiniMap } from "./OfficeMiniMap";
-import { officeTilesets, remotePlayers, roomZones } from "./mockOfficeData";
+import { OfficeSidePanel } from "./OfficeSidePanel";
+import { officeTilesets, remotePlayers, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
+import { RoomContextCard } from "./RoomContextCard";
 import { statusColors } from "./presence";
 import { VirtualOfficeTopBar } from "./VirtualOfficeTopBar";
+import { VirtualOfficeShell } from "./VirtualOfficeShell";
 
 type TileLayer = {
   name: string;
@@ -77,6 +84,11 @@ const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {
   "demo-engineer": createRandomRemoteAvatarConfig("demo-engineer"),
   "demo-sales": createRandomRemoteAvatarConfig("demo-sales"),
 };
+const remoteProfileRouteIds: Record<string, string> = {
+  "demo-manager": "mia",
+  "demo-engineer": "ethan",
+  "demo-sales": "sofia",
+};
 
 export function OfficeMap() {
   const router = useRouter();
@@ -86,6 +98,13 @@ export function OfficeMap() {
   const seatedChairRef = useRef<ChairSpot | null>(null);
   const preSitPositionRef = useRef<{ x: number; y: number; direction: PlayerDirection } | null>(null);
   const mapXmlRef = useRef<string | null>(null);
+  const zoomRef = useRef(1);
+  const cameraOffsetRef = useRef({ x: 0, y: 0 });
+  const autoPathRef = useRef<PathPoint[]>([]);
+  const autoDestinationRef = useRef<PathPoint | null>(null);
+  const latestCollisionRef = useRef<boolean[]>([]);
+  const latestMapRef = useRef<ParsedMap | null>(null);
+  const dragRef = useRef<{ dragging: boolean; x: number; y: number; moved: boolean }>({ dragging: false, x: 0, y: 0, moved: false });
   const playerRef = useRef<PlayerState>({
     userId: "local-user",
     displayName: "You",
@@ -110,6 +129,13 @@ export function OfficeMap() {
   const [seatedChair, setSeatedChair] = useState<ChairSpot | null>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<LayeredAvatarConfig | null>(null);
   const [avatarChecked, setAvatarChecked] = useState(false);
+  const [activePanel, setActivePanel] = useState<OfficePanelKey | null>(null);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [selectedDestination, setSelectedDestination] = useState<OfficeDestination | null>(null);
+  const [selectedRemoteId, setSelectedRemoteId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [draggingMap, setDraggingMap] = useState(false);
 
   const mapPixels = useMemo(
     () => ({
@@ -182,11 +208,29 @@ export function OfficeMap() {
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen(true);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        autoPathRef.current = [];
+        autoDestinationRef.current = null;
+        setCommandOpen(false);
+        return;
+      }
+
       if (event.repeat && event.key.toLowerCase() === "e") {
         return;
       }
 
       keysRef.current.add(event.key.toLowerCase());
+      if (hasMovementInput(keysRef.current)) {
+        autoPathRef.current = [];
+        autoDestinationRef.current = null;
+        cameraOffsetRef.current = { x: 0, y: 0 };
+      }
 
       if (event.key.toLowerCase() === "e" && seatedChairRef.current) {
         standUpFromChair();
@@ -234,6 +278,15 @@ export function OfficeMap() {
   }, [nearbyTarget]);
 
   useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setToast(null), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
+
+  useEffect(() => {
     if (!nearbyTarget) {
       setDismissedContactTargetId(null);
     }
@@ -249,6 +302,8 @@ export function OfficeMap() {
     const images = new Map<string, HTMLImageElement>();
     let loadedAvatars: LoadedAvatarMap = {};
     const collision = buildCollisionGrid(map);
+    latestCollisionRef.current = collision;
+    latestMapRef.current = map;
     const chairs = findChairSpots(map);
     const avatarConfigs: Record<string, LayeredAvatarConfig> = selectedAvatar
       ? {
@@ -324,7 +379,9 @@ export function OfficeMap() {
               status: "busy" as UserPresenceStatus,
               updatedAt: new Date().toISOString(),
             }
-          : movePlayer(playerRef.current, keysRef.current, deltaSeconds, map, collision);
+          : wantsToMove
+            ? movePlayer(playerRef.current, keysRef.current, deltaSeconds, map, collision)
+            : moveAlongAutoPath(playerRef.current, deltaSeconds, map, collision, autoPathRef, autoDestinationRef);
         const room = findRoom(nextPlayer.x, nextPlayer.y);
         const nearest = findNearbyPlayer(nextPlayer);
         const chair = seatedChairRef.current ? null : findNearestChair(nextPlayer, chairs);
@@ -350,6 +407,10 @@ export function OfficeMap() {
           chair,
           seatedChairRef.current,
           loadedAvatars,
+          selectedRemoteId,
+          autoDestinationRef.current,
+          zoomRef.current,
+          cameraOffsetRef.current,
         );
 
         animationFrame = requestAnimationFrame(loop);
@@ -359,7 +420,7 @@ export function OfficeMap() {
     });
 
     return () => cancelAnimationFrame(animationFrame);
-  }, [map, mapPixels, selectedAvatar]);
+  }, [map, mapPixels, selectedAvatar, selectedRemoteId]);
 
   const standUpFromChair = useCallback(() => {
     const fallback = seatedChairRef.current
@@ -391,31 +452,103 @@ export function OfficeMap() {
 
   const handleCanvasClick = useCallback(
     (event: MouseEvent<HTMLCanvasElement>) => {
-      if (!map) {
+      if (!map || dragRef.current.moved) {
         return;
       }
 
-      const canvas = event.currentTarget;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = CANVAS_WIDTH / rect.width;
-      const scaleY = CANVAS_HEIGHT / rect.height;
-      const camera = getCamera(playerRef.current, mapPixels);
-      const x = (event.clientX - rect.left) * scaleX + camera.x;
-      const y = (event.clientY - rect.top) * scaleY + camera.y;
+      const { x, y } = getWorldPointFromEvent(event, mapPixels);
       const remote = remotePlayers.find((candidate) => distance(candidate, { x, y }) <= 28);
 
       if (remote) {
         setDismissedContactTargetId(null);
+        setSelectedRemoteId(remote.userId);
         setContactTarget({
           userId: remote.userId,
           displayName: remote.displayName,
           role: remote.role,
           status: remote.status,
         });
+        return;
+      }
+
+      const destination = findDestinationAtPoint(x, y);
+      if (destination) {
+        setSelectedDestination(destination);
       }
     },
     [map, mapPixels],
   );
+
+  const handleCanvasDoubleClick = useCallback(
+    (event: MouseEvent<HTMLCanvasElement>) => {
+      if (!map) {
+        return;
+      }
+
+      const point = getWorldPointFromEvent(event, mapPixels);
+      startAutoWalk(point);
+    },
+    [map, mapPixels],
+  );
+
+  const handleMouseDown = (event: MouseEvent<HTMLCanvasElement>) => {
+    dragRef.current = { dragging: true, x: event.clientX, y: event.clientY, moved: false };
+    setDraggingMap(true);
+  };
+
+  const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (!dragRef.current.dragging) {
+      return;
+    }
+
+    const dx = event.clientX - dragRef.current.x;
+    const dy = event.clientY - dragRef.current.y;
+
+    if (Math.abs(dx) + Math.abs(dy) > 2) {
+      dragRef.current.moved = true;
+    }
+
+    cameraOffsetRef.current = {
+      x: cameraOffsetRef.current.x - dx / zoomRef.current,
+      y: cameraOffsetRef.current.y - dy / zoomRef.current,
+    };
+    dragRef.current.x = event.clientX;
+    dragRef.current.y = event.clientY;
+  };
+
+  const handleMouseUp = () => {
+    dragRef.current.dragging = false;
+    window.setTimeout(() => {
+      dragRef.current.moved = false;
+    }, 0);
+    setDraggingMap(false);
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    const previousZoom = zoomRef.current;
+    const nextZoom = clamp(previousZoom + (event.deltaY > 0 ? -0.1 : 0.1), 0.4, 2);
+    const before = getWorldPointFromEvent(event, mapPixels);
+    zoomRef.current = nextZoom;
+    const after = getWorldPointFromEvent(event, mapPixels);
+    cameraOffsetRef.current = {
+      x: cameraOffsetRef.current.x + before.x - after.x,
+      y: cameraOffsetRef.current.y + before.y - after.y,
+    };
+    setZoom(nextZoom);
+  };
+
+  const getWorldPointFromEvent = (event: MouseEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>, pixels = mapPixels) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const scaleX = CANVAS_WIDTH / rect.width;
+    const scaleY = CANVAS_HEIGHT / rect.height;
+    const camera = getCamera(playerRef.current, pixels, zoomRef.current, cameraOffsetRef.current);
+
+    return {
+      x: ((event.clientX - rect.left) * scaleX) / zoomRef.current + camera.x,
+      y: ((event.clientY - rect.top) * scaleY) / zoomRef.current + camera.y,
+    };
+  };
 
   const drawerTarget =
     contactTarget ?? (nearbyTarget && nearbyTarget.userId !== dismissedContactTargetId ? nearbyTarget : null);
@@ -427,6 +560,80 @@ export function OfficeMap() {
 
     setContactTarget(null);
   };
+
+  const startAutoWalk = (destination: PathPoint, options?: { nearRemoteId?: string }) => {
+    if (!latestMapRef.current) {
+      return false;
+    }
+
+    const blocked = [...latestCollisionRef.current];
+    for (const remote of remotePlayers) {
+      if (remote.userId === options?.nearRemoteId) {
+        continue;
+      }
+      const tileX = Math.floor(remote.x / latestMapRef.current.tileWidth);
+      const tileY = Math.floor(remote.y / latestMapRef.current.tileHeight);
+      if (tileX >= 0 && tileY >= 0 && tileX < latestMapRef.current.width && tileY < latestMapRef.current.height) {
+        blocked[tileY * latestMapRef.current.width + tileX] = true;
+      }
+    }
+
+    const path = findGridPath(
+      {
+        width: latestMapRef.current.width,
+        height: latestMapRef.current.height,
+        tileWidth: latestMapRef.current.tileWidth,
+        tileHeight: latestMapRef.current.tileHeight,
+        blocked,
+      },
+      playerRef.current,
+      destination,
+    );
+
+    if (!path || path.length === 0) {
+      setToast("No clear path");
+      autoPathRef.current = [];
+      autoDestinationRef.current = null;
+      return false;
+    }
+
+    autoPathRef.current = path;
+    autoDestinationRef.current = path[path.length - 1];
+    cameraOffsetRef.current = { x: 0, y: 0 };
+    return true;
+  };
+
+  const goToRemotePlayer = (remote: RemoteOfficePlayer) => {
+    setSelectedRemoteId(remote.userId);
+    startAutoWalk({ x: remote.x - 48, y: remote.y + 12 }, { nearRemoteId: remote.userId });
+  };
+
+  const goToDestination = (destination: OfficeDestination) => {
+    setSelectedDestination(destination);
+    startAutoWalk(destination.anchor);
+  };
+
+  const handleSelectRemote = (target: ContactTarget) => {
+    setDismissedContactTargetId(null);
+    setSelectedRemoteId(target.userId);
+    setContactTarget(target);
+  };
+
+  const recenterCamera = () => {
+    cameraOffsetRef.current = { x: 0, y: 0 };
+    setZoom(zoomRef.current);
+  };
+
+  const openPanel = (panel: OfficePanelKey) => {
+    if (panel === "search") {
+      setCommandOpen(true);
+      return;
+    }
+    setActivePanel((current) => (current === panel ? null : panel));
+  };
+
+  const peopleInDestination = (destination: OfficeDestination) =>
+    remotePlayers.filter((remote) => destination.bounds && remote.x >= destination.bounds.x && remote.x <= destination.bounds.x + destination.bounds.width && remote.y >= destination.bounds.y && remote.y <= destination.bounds.y + destination.bounds.height).length;
 
   if (!avatarChecked || !selectedAvatar) {
     return (
@@ -443,8 +650,20 @@ export function OfficeMap() {
 
   return (
     <main style={styles.page}>
-      <section style={styles.officeSurface}>
+      <VirtualOfficeShell>
         <VirtualOfficeTopBar status={player.status} />
+        <OfficeLeftRail activePanel={activePanel} onSelectPanel={openPanel} />
+        <OfficeSidePanel
+          activePanel={activePanel}
+          people={remotePlayers}
+          destinations={officeDestinations}
+          onClose={() => setActivePanel(null)}
+          onSelectPerson={handleSelectRemote}
+          onGoToPerson={goToRemotePlayer}
+          onGoToDestination={goToDestination}
+          onOpenPanel={setActivePanel}
+          toast={setToast}
+        />
 
         <div style={styles.canvasPanel}>
           {loadError ? <div style={styles.error}>{loadError}</div> : null}
@@ -453,9 +672,19 @@ export function OfficeMap() {
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
             onClick={handleCanvasClick}
-            style={styles.canvas}
+            onDoubleClick={handleCanvasDoubleClick}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
+            style={{ ...styles.canvas, cursor: draggingMap ? "grabbing" : "grab" }}
           />
         </div>
+
+        <button type="button" onClick={recenterCamera} style={styles.recenterButton}>
+          Recenter / {Math.round(zoom * 100)}%
+        </button>
 
         <FloatingRoomPill
           room={activeRoom}
@@ -471,8 +700,59 @@ export function OfficeMap() {
           />
         ) : null}
         <MovementHint hasInteractionTarget={Boolean(drawerTarget)} />
-        {drawerTarget ? <InteractionDrawer target={drawerTarget} onClose={closeInteractionDrawer} /> : null}
-      </section>
+        {drawerTarget ? (
+          <InteractionDrawer
+            target={drawerTarget}
+            onClose={closeInteractionDrawer}
+            onGoTo={() => {
+              const remote = remotePlayers.find((candidate) => candidate.userId === drawerTarget.userId);
+              if (remote) goToRemotePlayer(remote);
+            }}
+            onOpenChat={() => {
+              setActivePanel("chat");
+              setToast(`Opening quick message with ${drawerTarget.displayName}`);
+            }}
+            onSchedule={() => {
+              setActivePanel("calendar");
+              setToast(`Scheduling with ${drawerTarget.displayName}`);
+            }}
+            onViewProfile={() => router.push(`/employees/${remoteProfileRouteIds[drawerTarget.userId] ?? drawerTarget.userId}`)}
+          />
+        ) : null}
+        {selectedDestination ? (
+          <RoomContextCard
+            destination={selectedDestination}
+            peopleCount={peopleInDestination(selectedDestination)}
+            onGoTo={() => goToDestination(selectedDestination)}
+            onViewPeople={() => setActivePanel("people")}
+            onClose={() => setSelectedDestination(null)}
+          />
+        ) : null}
+        <OfficeCommandPalette
+          open={commandOpen}
+          people={remotePlayers}
+          destinations={officeDestinations}
+          onClose={() => setCommandOpen(false)}
+          onSelectPerson={(target) => {
+            handleSelectRemote(target);
+            setCommandOpen(false);
+          }}
+          onGoToPerson={(remote) => {
+            goToRemotePlayer(remote);
+            setCommandOpen(false);
+          }}
+          onSelectDestination={(destination) => {
+            setSelectedDestination(destination);
+            setCommandOpen(false);
+          }}
+          onGoToDestination={(destination) => {
+            goToDestination(destination);
+            setCommandOpen(false);
+          }}
+          onNavigate={(href) => router.push(href)}
+        />
+        {toast ? <div style={styles.toast}>{toast}</div> : null}
+      </VirtualOfficeShell>
     </main>
   );
 }
@@ -524,6 +804,10 @@ function drawScene(
   nearestChair?: ChairSpot | null,
   seatedChair?: ChairSpot | null,
   avatars?: LoadedAvatarMap,
+  selectedRemoteId?: string | null,
+  destinationMarker?: PathPoint | null,
+  zoom = 1,
+  cameraOffset = { x: 0, y: 0 },
 ) {
   if (!canvas) {
     return;
@@ -535,11 +819,12 @@ function drawScene(
     return;
   }
 
-  const camera = getCamera(player, mapPixels);
+  const camera = getCamera(player, mapPixels, zoom, cameraOffset);
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = "#eef2f7";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.save();
+  context.scale(zoom, zoom);
   context.translate(-Math.round(camera.x), -Math.round(camera.y));
 
   for (const layer of map.layers) {
@@ -554,8 +839,20 @@ function drawScene(
     drawChairHint(context, seatedChair, "Seated");
   }
 
+  if (destinationMarker) {
+    drawDestinationMarker(context, destinationMarker);
+  }
+
   for (const remote of remotePlayers) {
-    drawPlayer(context, remote, remote.displayName, nearbyTarget?.userId === remote.userId, false, false, avatars?.[remote.userId]);
+    drawPlayer(
+      context,
+      remote,
+      remote.displayName,
+      nearbyTarget?.userId === remote.userId || selectedRemoteId === remote.userId,
+      false,
+      false,
+      avatars?.[remote.userId],
+    );
   }
 
   drawPlayer(context, player, "You", false, true, Boolean(seatedChair), avatars?.[player.userId]);
@@ -793,6 +1090,22 @@ function drawChairHint(context: CanvasRenderingContext2D, chair: ChairSpot, labe
   context.restore();
 }
 
+function drawDestinationMarker(context: CanvasRenderingContext2D, point: PathPoint) {
+  context.save();
+  context.strokeStyle = "#2563eb";
+  context.fillStyle = "rgba(37, 99, 235, 0.16)";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.arc(point.x, point.y, 14, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#2563eb";
+  context.beginPath();
+  context.arc(point.x, point.y, 4, 0, Math.PI * 2);
+  context.fill();
+  context.restore();
+}
+
 function movePlayer(
   player: PlayerState,
   keys: Set<string>,
@@ -835,6 +1148,53 @@ function movePlayer(
   }
 
   return next;
+}
+
+function moveAlongAutoPath(
+  player: PlayerState,
+  deltaSeconds: number,
+  map: ParsedMap,
+  collision: boolean[],
+  pathRef: { current: PathPoint[] },
+  destinationRef: { current: PathPoint | null },
+): PlayerState {
+  const target = pathRef.current[0];
+
+  if (!target) {
+    destinationRef.current = null;
+    return { ...player, isMoving: false };
+  }
+
+  const dx = target.x - player.x;
+  const dy = target.y - player.y;
+  const distanceToTarget = Math.hypot(dx, dy);
+
+  if (distanceToTarget < 5) {
+    pathRef.current = pathRef.current.slice(1);
+    if (pathRef.current.length === 0) {
+      destinationRef.current = null;
+    }
+    return { ...player, x: target.x, y: target.y, isMoving: pathRef.current.length > 0 };
+  }
+
+  const step = Math.min(PLAYER_SPEED * deltaSeconds, distanceToTarget);
+  const nextX = player.x + (dx / distanceToTarget) * step;
+  const nextY = player.y + (dy / distanceToTarget) * step;
+  const direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+
+  if (isBlocked(nextX, nextY, map, collision) || isBlockedByRemotePlayer(nextX, nextY)) {
+    pathRef.current = [];
+    destinationRef.current = null;
+    return { ...player, isMoving: false };
+  }
+
+  return {
+    ...player,
+    x: nextX,
+    y: nextY,
+    direction,
+    isMoving: true,
+  };
 }
 
 function hasMovementInput(keys: Set<string>) {
@@ -947,12 +1307,17 @@ function findNearestChair(player: PlayerState, chairs: ChairSpot[]) {
   return nearest;
 }
 
-function getCamera(player: PlayerState, mapPixels: { width: number; height: number }) {
+function getCamera(
+  player: PlayerState,
+  mapPixels: { width: number; height: number },
+  zoom = 1,
+  offset = { x: 0, y: 0 },
+) {
   void mapPixels;
 
   return {
-    x: player.x - CANVAS_WIDTH / 2,
-    y: player.y - CANVAS_HEIGHT / 2,
+    x: player.x - CANVAS_WIDTH / (2 * zoom) + offset.x,
+    y: player.y - CANVAS_HEIGHT / (2 * zoom) + offset.y,
   };
 }
 
@@ -1022,6 +1387,37 @@ const styles = {
     height: "100vh",
     overflow: "hidden",
     background: "#cbd5e1",
+  },
+  recenterButton: {
+    position: "absolute" as const,
+    right: "284px",
+    bottom: "24px",
+    zIndex: 19,
+    border: "1px solid rgba(203, 213, 225, 0.82)",
+    borderRadius: "12px",
+    background: "rgba(255, 255, 255, 0.86)",
+    color: "#0f172a",
+    padding: "10px 12px",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: 900,
+    boxShadow: "0 14px 35px rgba(15, 23, 42, 0.14)",
+    backdropFilter: "blur(14px)",
+  },
+  toast: {
+    position: "absolute" as const,
+    left: "50%",
+    top: "92px",
+    zIndex: 70,
+    transform: "translateX(-50%)",
+    border: "1px solid rgba(203, 213, 225, 0.84)",
+    borderRadius: "999px",
+    background: "rgba(15, 23, 42, 0.84)",
+    color: "#ffffff",
+    padding: "10px 14px",
+    fontSize: "13px",
+    fontWeight: 800,
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.18)",
   },
   canvasPanel: {
     position: "absolute" as const,

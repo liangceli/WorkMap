@@ -6,12 +6,32 @@ import { labelStatus, statusColors } from "./presence";
 type InteractionDrawerProps = {
   target: ContactTarget;
   onClose: () => void;
+  onGoTo?: () => void;
+  onOpenChat?: () => void;
+  onSchedule?: () => void;
+  onViewProfile?: () => void;
 };
 
-export function InteractionDrawer({ target, onClose }: InteractionDrawerProps) {
+export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSchedule, onViewProfile }: InteractionDrawerProps) {
   const firstName = target.displayName.split(" ")[0] ?? target.displayName;
 
   const handleAction = (action: string) => {
+    if (action === "Instant Message" && onOpenChat) {
+      onOpenChat();
+      return;
+    }
+    if (action === "Go to" && onGoTo) {
+      onGoTo();
+      return;
+    }
+    if (action === "Schedule Meeting" && onSchedule) {
+      onSchedule();
+      return;
+    }
+    if (action === "View Profile" && onViewProfile) {
+      onViewProfile();
+      return;
+    }
     if (action === "Outlook") {
       window.location.href = `mailto:${target.userId}@workmap.local`;
       return;
@@ -72,6 +92,10 @@ export function InteractionDrawer({ target, onClose }: InteractionDrawerProps) {
           <span style={styles.actionIcon}>Hi</span>
           Wave
         </button>
+        <button style={styles.actionButton} onClick={() => handleAction("Go to")} type="button">
+          <span style={styles.actionIcon}>Go</span>
+          Go to
+        </button>
         <button style={styles.actionButton} onClick={() => handleAction("Teams")} type="button">
           <span style={styles.actionIcon}>T</span>
           Teams
@@ -83,6 +107,14 @@ export function InteractionDrawer({ target, onClose }: InteractionDrawerProps) {
         <button style={styles.actionButton} onClick={() => handleAction("3CX")} type="button">
           <span style={styles.actionIcon}>3C</span>
           3CX
+        </button>
+        <button style={styles.actionButton} onClick={() => handleAction("View Profile")} type="button">
+          <span style={styles.actionIcon}>VP</span>
+          View Profile
+        </button>
+        <button style={styles.actionButton} onClick={() => handleAction("Schedule Meeting")} type="button">
+          <span style={styles.actionIcon}>Cal</span>
+          Schedule
         </button>
       </div>
     </section>
@@ -105,7 +137,7 @@ const styles = {
     bottom: "24px",
     zIndex: 30,
     display: "grid",
-    gridTemplateColumns: "minmax(240px, 0.9fr) minmax(260px, 1fr) minmax(420px, 1.3fr)",
+    gridTemplateColumns: "minmax(240px, 0.9fr) minmax(240px, 0.8fr) minmax(520px, 1.5fr)",
     gap: "24px",
     alignItems: "center",
     width: "min(1360px, 86vw)",
@@ -239,7 +271,7 @@ const styles = {
   },
   actions: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(120px, 1fr))",
+    gridTemplateColumns: "repeat(3, minmax(116px, 1fr))",
     gap: "12px",
   },
   actionButton: {

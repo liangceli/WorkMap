@@ -171,12 +171,21 @@ Completed in current MVP:
 - `workmap2.tmx` is loaded from `apps/web/public/maps/workmap2.tmx`.
 - Office map renders with Canvas using current Tiled TMX layers and copied tileset images.
 - `/virtual-office` uses a full-screen map-first layout: lightweight top bar, full-viewport Canvas, floating current-area pill, movement hint, bottom interaction drawer, and a right-bottom mini map.
+- `/virtual-office` now includes a WorkMap office shell:
+  - left vertical rail in `OfficeLeftRail.tsx`
+  - expandable office panel in `OfficeSidePanel.tsx`
+  - search/command palette in `OfficeCommandPalette.tsx`
+  - room/section context card in `RoomContextCard.tsx`
+  - wrapper shell in `VirtualOfficeShell.tsx`
 - The previous right-side debug/test panel has been removed. Do not bring it back unless explicitly asked.
 - The mini map is implemented as a small overlay Canvas in `OfficeMiniMap.tsx`; it reuses the parsed TMX map data and tileset images, draws the whole office, and marks the local player position.
 - Main Canvas display must preserve the original 1120x680 aspect ratio. Do not stretch the map to fit the browser viewport.
 - The local player should remain centered on screen while the map moves underneath. The camera is intentionally not clamped to the map edges.
 - The local player cannot overlap mock remote players; remote player positions act as lightweight movement blockers.
 - The mini map shows the full office and local player dot only. Do not draw the previous blue viewport range box.
+- Canvas interaction now supports drag-to-pan, wheel zoom, recenter, double-click click-to-move, and Go to person/room.
+- Click-to-move uses frontend-only grid pathfinding in `apps/web/lib/office/pathfinding.ts`; room/section anchors live in `apps/web/lib/office/officeNavigationConfig.ts`.
+- Chat, Calendar, Notices, and quick message actions are local frontend mock UI only. Do not persist messages/meetings/notices or connect to Teams/Outlook content in this frontend task.
 - `workmap2.tmx` tileset references are normalized under `apps/web/public/maps/tilesets/`, and `public/**/*.tsx` is excluded from TypeScript compilation because Tiled tilesets are XML files.
 - In development, `/virtual-office` polls `workmap2.tmx` and reloads the Canvas map when the TMX XML changes, so Tiled saves can appear without restarting the dev server.
 - Local player supports WASD / arrow-key movement.

@@ -67,8 +67,11 @@ Frontend:
 - `/virtual-office` is a Canvas MVP, not Phaser.
 - `/virtual-office` is now a full-screen map-first UI with no fixed right-side debug panel.
 - `/virtual-office` includes a lightweight top bar, floating current-area pill, movement hint, bottom coworker interaction drawer, and right-bottom mini map.
+- `/virtual-office` includes a WorkMap office shell with `OfficeLeftRail`, `OfficeSidePanel`, `OfficeCommandPalette`, `RoomContextCard`, and `VirtualOfficeShell`.
+- `/virtual-office` supports frontend-only People, Search, Chat, Calendar, Notices, and Settings panels. These are mock/link-only collaboration surfaces, not backend-backed messaging, calendar sync, or employee monitoring.
+- `/virtual-office` supports drag/pan, wheel zoom, recenter, double-click click-to-move, room context selection, and Go to person/room actions through frontend-only Canvas/pathfinding helpers.
 - The main Canvas must preserve its 1120x680 aspect ratio and must not be stretched to fit the browser.
-- The local player must remain centered on screen; the map moves underneath the player.
+- The local player should remain centered during normal keyboard movement and auto-walk; temporary manual pan/zoom is allowed, and recenter must restore the user-centered camera.
 - The local player must not overlap mock remote players.
 - The mini map should not show the previous blue viewport range box.
 - `/dashboard` is a frontend mock manager overview.
@@ -88,12 +91,16 @@ Backend/database:
 - A backend-focused chat should read `00-project-brief.md`, `02-backend-engineer.md`, `03-database-engineer.md`, `06-security-engineer.md`, and `09-game-movement-system.md` before building API framework pieces.
 - Current backend has module boundaries, Prisma service/module, health endpoint, internal virtual-office and compliance services, HS256 Bearer JWT verification, non-production `POST /auth/dev-token`, non-production header fallback, RBAC helper guard/decorator, initial protected business controllers, UUID param/query pipe validation, and summary-report scaffolding.
 - Current backend still has no production token issuance/login flow, DTO validation library, activity ingestion endpoint, Socket.IO gateway, Redis/BullMQ queue, or production-ready auth rollout.
+- Virtual Office workspace shell API proposal lives at `/docs/api/virtual-office-workspace-contract.md`.
+- Workspace shell backend support is currently limited to existing People, company/departments, map/rooms, latest positions, compliance, reports, and link-based contact endpoints. Chat, Calendar, Notices, emoji/wave, Microsoft Graph, Socket.IO, and persistence for those surfaces are not implemented.
 - After every completed code/config/API modification, update the relevant `docs/ai-skills/*.md` files in the same turn so the project handoff stays current.
 - Frontend mock data is not a backend contract. Convert mock surfaces into APIs only after the relevant auth/RBAC/schema/API decisions are clear.
 - Dashboard and employee-directory mock data must stay clearly named and must not be mistaken for real tracking data.
 - Integration mock data must stay link-based until backend/API/security decisions are approved.
 - Compliance acknowledgement has API scaffolding, but frontend use should remain mock/local until token issuance/login and final API contracts are approved.
 - Login and frontend reports must remain mock-only until Auth/JWT, final RBAC, report contracts, and audit logging flows are approved.
+- Workspace Chat, Calendar, Notices, emoji/wave, and schedule-meeting experiences must remain frontend mock/link-only until Director approves backend contracts and privacy scope.
+- Go to person, Go to room, command palette search, click-to-move, room cards, drag/zoom, and recenter are frontend-only office navigation affordances until realtime/API contracts are approved.
 - Demo role visibility in frontend navigation is not security. Do not expose real manager-only data until backend RBAC enforces it.
 
 Map assets:

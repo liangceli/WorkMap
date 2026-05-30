@@ -86,8 +86,14 @@ Avoid:
 - `/virtual-office` shows composed avatars, deterministic varied mock NPC avatars, status rings, and compact dark name/status bubbles above avatars.
 - `/virtual-office` is now a full-screen, map-first office experience rather than a dashboard page.
 - Current `/virtual-office` UI includes a translucent top bar, floating room/chair status pill, bottom movement hint, bottom coworker interaction drawer, and a right-bottom mini map.
+- Current `/virtual-office` also includes a Gather-inspired but WorkMap-specific office shell: a slim left rail, expandable People/Search/Chat/Calendar/Notices/Settings panels, command palette, room context card, drag/pan, wheel zoom, recenter, double-click click-to-move, and "Go to" actions.
 - The bottom coworker interaction drawer should feel like a professional SaaS version of a life-sim dialogue panel: clear, friendly, and contact-action focused, without fantasy/game styling.
 - The main map must not be stretched. Preserve the Canvas aspect ratio and avoid distorted tiles.
+- Chat, Calendar, Notices, emoji/wave, scheduling, and room/person navigation are currently frontend-only mock or launcher surfaces. Design them as collaboration tools, not as monitoring or content-capture surfaces.
+- The left rail should stay lightweight and map-first: no heavy dashboard cards, no manager analytics, and no private activity data inside the virtual office shell.
+- The command palette should help users find people, rooms, and primary actions quickly. It must not expose manager-only reporting data.
+- Room context cards should appear only when a room/section is selected and should offer simple actions like Go to, View people, or Copy link.
+- Drag/zoom controls are productivity affordances. Keyboard movement should still feel primary for avatar control, and recenter should restore the user-centered camera.
 - `/dashboard` exists as a manager overview mock with usage cards, employee cards, a privacy notice, app summaries, and domain summaries.
 - `/employees` exists as a mock employee directory with search, filters, manager summary mode, and employee contact-only mode.
 - `/employees/[id]` exists as a mock employee profile with contact actions, privacy note, manager summary mode, employee contact-only mode, and same-department teammate navigation.

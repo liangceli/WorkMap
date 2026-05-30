@@ -34,12 +34,29 @@ The MVP movement system should support:
 - mock or realtime remote players
 - status indicator above or below avatar
 
+### Current Canvas office navigation features
+
+The current Canvas MVP now supports:
+
+- drag/pan for map inspection
+- mouse wheel zoom
+- recenter control
+- double-click click-to-move
+- frontend-only grid pathfinding for click-to-move and Go to actions
+- Go to person
+- Go to room/section
+- click room/section to open a room context card
+- command palette for people, rooms, and actions
+- left office rail with People, Search, Chat, Calendar, Notices, and Settings panels
+
+These features are local frontend affordances. They do not imply realtime sync, persisted chat/calendar/notices, or backend navigation APIs yet.
+
 ### Later movement features
 
 Later versions can support:
 
-- click-to-move
-- pathfinding
+- backend-validated click-to-move
+- realtime path/status sync
 - room-based auto status
 - sit-at-desk action
 - wave action
@@ -430,14 +447,18 @@ Current Canvas MVP behavior:
 - Name/status UI is a compact dark bubble above the avatar with a small status dot.
 - Chair interaction is keyboard-driven: near a chair, press `E` to sit; press `E` again or move to stand.
 - `/virtual-office` uses a full-screen map-first UI with a lightweight top bar, floating room/chair status pill, movement hint, bottom interaction drawer, and mini map.
+- `/virtual-office` includes a WorkMap office shell: left rail, expandable side panels, command palette, room context card, drag/pan, zoom, recenter, double-click click-to-move, and Go to person/room.
 - The old right-side debug panel is removed.
 - The mini map is an overlay Canvas that draws the full TMX office and the local player dot. It must not affect movement, collision, or camera math.
 - Main Canvas display must preserve the 1120x680 aspect ratio; do not stretch the map to fit the browser viewport.
-- The current Canvas camera keeps the local player centered on screen while the map moves underneath; do not clamp the camera to map edges unless explicitly requested.
+- The current Canvas camera keeps the local player centered during normal movement and auto-walk while the map moves underneath; temporary manual pan/zoom is allowed, and recenter must restore the user-centered camera.
 - Local movement treats mock remote players as lightweight blockers so avatars do not overlap.
 - The mini map currently shows the full office and local player dot only; the blue viewport range box was intentionally removed.
 - No realtime socket sync is implemented yet.
 - Frontend-only workflow now routes first-time employees through compliance acknowledgement, avatar creation, device setup, and then `/virtual-office`. This workflow state is stored under `workmap.userSetupState` and is not real auth/RBAC.
+- Virtual Office workspace shell API proposal lives at `/docs/api/virtual-office-workspace-contract.md`.
+- Current backend can provide map rooms and latest positions, but Go to room, Go to person, click-to-move, emoji/wave, chat, calendar, and notices should remain frontend-only or proposal-level until Socket.IO/API contracts are approved.
+- Chat, Calendar, Notices, schedule meeting, emoji/wave, and command-palette actions must not collect or display Teams message content, Outlook email body, full URLs, screenshots, keystrokes, camera, microphone, or private monitoring data.
 
 Map interaction zones
 
@@ -557,6 +578,12 @@ contact menu trigger
 bottom interaction drawer open/close
 mini map player dot and viewport update while moving
 full-screen virtual office layout without map distortion
+left rail panel open/close
+command palette Ctrl/Cmd+K search
+room context card selection
+double-click click-to-move
+Go to person and Go to room
+drag/pan, zoom, and recenter behavior
 chair sit/stand behavior with avatar selected
 company room isolation
 socket disconnect/reconnect

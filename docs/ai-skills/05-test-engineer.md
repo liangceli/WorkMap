@@ -67,6 +67,16 @@ Always test:
 - Open `/virtual-office` and confirm the page is full-screen, map-first, and has no fixed right-side debug panel.
 - Confirm the main map is not visually stretched; tiles and avatars should keep their expected proportions.
 - Confirm the top bar, floating room/chair pill, movement hint, bottom interaction drawer, and right-bottom mini map render.
+- Confirm the left office rail renders with People, Search, Chat, Calendar, Notices, and Settings.
+- Open People panel and confirm it lists mock coworkers with contact and Go to actions.
+- Open Search or press Ctrl/Cmd+K and confirm people, rooms/sections, and actions appear.
+- Open Chat panel, send a local quick message, and confirm it stays frontend-only.
+- Open Calendar panel, add a local meeting, and confirm Teams/room actions are placeholders.
+- Open Notices panel and confirm notices are collaboration/system messages only, not monitoring activity.
+- Click a room/section and confirm RoomContextCard appears with Go to and View people.
+- Double-click a walkable map tile and confirm the local player auto-walks without crossing blocked objects.
+- Drag the map and confirm camera pans; press WASD and confirm camera recenters on the local player.
+- Use mouse wheel and confirm map zooms without stretching.
 - Move the local player and confirm the avatar remains centered while the map scrolls underneath.
 - Move toward a mock remote player and confirm the local player cannot overlap that avatar.
 - Confirm the mini map shows the full office and local player dot, with no blue viewport rectangle.

@@ -225,6 +225,8 @@ Completed in current MVP:
 - Manager-sensitive user detail and report reads call `AuditService.logSensitiveAction`.
 - Report APIs query summary tables, not raw `activity_events`.
 - UUID route parameters use Nest `ParseUUIDPipe`; optional report `userId` query uses `OptionalUuidPipe`.
+- Virtual Office workspace shell contract proposal exists at `/docs/api/virtual-office-workspace-contract.md`.
+- Current endpoints partially support People, room/department search sources, Go to person/room client stitching, and link-based contact actions. Chat, Calendar, Notices, emoji/wave, and realtime movement remain unimplemented backend features.
 - API typecheck passes.
 - API build and lint pass after protected controller work.
 
@@ -240,6 +242,7 @@ Recommended next backend/API sequence:
 8. Add Socket.IO gateway only after auth strategy, dependency install, and movement event contract are approved.
 9. Add Redis/BullMQ worker integration after queue contract is approved.
 10. Expand report APIs using summary tables and audit hooks as contracts are approved.
+11. If workspace shell needs backend changes, prefer compatible read/link endpoints such as `GET /virtual-office/navigation` before adding persistence.
 
 Known remaining backend work:
 
@@ -257,6 +260,7 @@ Known remaining backend work:
 - Add Redis/BullMQ worker integration after queue contract is approved.
 - Continue report API expansion using summary tables, not raw event scans.
 - Keep integration APIs link-based without Microsoft Graph permissions until Director approval.
+- Do not implement real chat, calendar, notices, emoji/wave persistence, or Socket.IO for the workspace shell without Director approval.
 
 Current frontend surfaces that will later need APIs:
 

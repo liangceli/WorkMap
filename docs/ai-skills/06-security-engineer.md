@@ -89,6 +89,8 @@ Current frontend-only MVP:
 - UUID route parameters and optional report `userId` query have built-in/custom pipe validation, but request bodies still need DTO validation once dependency strategy is approved.
 - Manager-sensitive user detail and report reads are audit logged.
 - API still has no production token issuance/login flow, activity ingestion endpoint, Socket.IO gateway, Redis/BullMQ queue, rate limiting, or DTO validation library.
+- Virtual Office workspace shell contract proposal exists at `/docs/api/virtual-office-workspace-contract.md`.
+- Chat, Calendar, Notices, emoji/wave, message persistence, calendar persistence, notices persistence, Microsoft Graph, and Socket.IO remain unimplemented. Contact links remain link-based only.
 
 Review implications:
 
@@ -106,6 +108,7 @@ Review implications:
 - Do not put app usage, website usage, idle durations, reports, or tracking events into realtime office player payloads.
 - Before production backend/API work exposes business data, require server-derived request context, company isolation, RBAC guards, DTO validation, and audit hooks for manager-sensitive reads.
 - Do not treat frontend mock manager/employee views as authorization proof.
+- Do not expose app/domain summaries in normal office shell people cards, room cards, notices, movement payloads, or quick interaction payloads.
 
 ## Desktop Agent bridge security
 
