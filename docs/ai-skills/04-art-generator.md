@@ -67,6 +67,18 @@ Current MVP avatar implementation:
 - The frontend renders a 32x48 source crop with a -16px y offset so the full head is visible.
 - The frontend keeps configurable frame maps in `apps/web/lib/avatar/avatarFrameMaps.ts`; exact idle, walk, run, and sit indexes may need calibration.
 - Preserve transparent alignment across every layer so body, eyes, hair, outfits, and accessories stack cleanly.
+- Current onboarding and dashboard previews use composed layered avatars, not preset-only sheets.
+- Current virtual office labels use compact dark name/status bubbles with a small status dot.
+- Current movement uses calibrated walk frames, but idle/walk/run/sit frame indexes still need a proper visual atlas confirmation pass.
+
+Current map art note:
+
+- `workmap2.tmx` depends on external `.tsx` tilesets.
+- If Tiled displays red X tiles, fix tileset file/image paths before assuming the artwork itself is broken.
+- Keep tileset source paths stable relative to `apps/web/public/maps/workmap2.tmx` when preparing map assets.
+- Current web renderer supports several Tiled firstgid ranges, including the shadowless office tileset resource `Modern_Office_Shadowless_32x32.png`.
+- `/virtual-office` now has a mini map overlay. Map artwork should remain readable when scaled down in a small 220x132 minimap.
+- Do not design map tiles that rely on very fine details only visible at full size; the full map and mini map both need clear room shapes and navigation cues.
 
 Layered avatar work needs:
 

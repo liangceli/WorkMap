@@ -11,9 +11,13 @@ import {
 } from "../../lib/avatar/avatarLayerAssets";
 import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/avatarFrameMaps";
 import { getAvatarConfigForOffice } from "../../lib/avatar/avatarStorage";
-import { ContactMenu } from "./ContactMenu";
+import { FloatingRoomPill } from "./FloatingRoomPill";
+import { InteractionDrawer } from "./InteractionDrawer";
+import { MovementHint } from "./MovementHint";
+import { OfficeMiniMap } from "./OfficeMiniMap";
 import { officeTilesets, remotePlayers, roomZones } from "./mockOfficeData";
-import { labelStatus, statusColors } from "./presence";
+import { statusColors } from "./presence";
+import { VirtualOfficeTopBar } from "./VirtualOfficeTopBar";
 
 type TileLayer = {
   name: string;
@@ -46,13 +50,28 @@ type LoadedAvatar = {
 type LoadedAvatarMap = Record<string, LoadedAvatar>;
 
 const MAP_URL = "/maps/workmap2.tmx";
+const MAP_DEV_POLL_MS = 1500;
 const CANVAS_WIDTH = 1120;
 const CANVAS_HEIGHT = 680;
 const PLAYER_RADIUS = 14;
+const PLAYER_COLLISION_DISTANCE = 34;
 const PLAYER_SPEED = 180;
 const PROXIMITY_DISTANCE = 80;
 const CHAIR_INTERACTION_DISTANCE = 46;
-const COLLISION_LAYERS = new Set(["Walls", "Tools", "furniture", "chairs", "plants"]);
+const MAP_LAYER_ORDER = [
+  "Floor",
+  "Carpet",
+  "plants",
+  "WallsPaper",
+  "corner",
+  "Walls",
+  "Tools",
+  "furniture",
+  "Shadows",
+  "chairs",
+  "some ons on table",
+] as const;
+const COLLISION_LAYERS = new Set(["Walls", "Tools", "furniture", "chairs", "plants", "some ons on table"]);
 const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {
   "demo-manager": createRandomRemoteAvatarConfig("demo-manager"),
   "demo-engineer": createRandomRemoteAvatarConfig("demo-engineer"),
@@ -66,6 +85,7 @@ export function OfficeMap() {
   const nearestChairRef = useRef<ChairSpot | null>(null);
   const seatedChairRef = useRef<ChairSpot | null>(null);
   const preSitPositionRef = useRef<{ x: number; y: number; direction: PlayerDirection } | null>(null);
+  const mapXmlRef = useRef<string | null>(null);
   const playerRef = useRef<PlayerState>({
     userId: "local-user",
     displayName: "You",
@@ -85,6 +105,7 @@ export function OfficeMap() {
   const [activeRoom, setActiveRoom] = useState<OfficeRoomZone | undefined>(roomZones[0]);
   const [contactTarget, setContactTarget] = useState<ContactTarget | null>(null);
   const [nearbyTarget, setNearbyTarget] = useState<ContactTarget | null>(null);
+  const [dismissedContactTargetId, setDismissedContactTargetId] = useState<string | null>(null);
   const [nearestChair, setNearestChair] = useState<ChairSpot | null>(null);
   const [seatedChair, setSeatedChair] = useState<ChairSpot | null>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<LayeredAvatarConfig | null>(null);
@@ -123,16 +144,19 @@ export function OfficeMap() {
 
     let cancelled = false;
 
-    fetch(MAP_URL)
-      .then((response) => {
+    const loadMap = () => {
+      fetch(MAP_URL, { cache: "no-store" })
+        .then((response) => {
         if (!response.ok) {
           throw new Error(`Failed to load map: ${response.status}`);
         }
         return response.text();
       })
       .then((xml) => {
-        if (!cancelled) {
+        if (!cancelled && mapXmlRef.current !== xml) {
+          mapXmlRef.current = xml;
           setMap(parseTmx(xml));
+          setLoadError(null);
         }
       })
       .catch((error: Error) => {
@@ -140,9 +164,19 @@ export function OfficeMap() {
           setLoadError(error.message);
         }
       });
+    };
+
+    loadMap();
+    const intervalId =
+      process.env.NODE_ENV === "development"
+        ? window.setInterval(loadMap, MAP_DEV_POLL_MS)
+        : undefined;
 
     return () => {
       cancelled = true;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
     };
   }, [avatarChecked, selectedAvatar]);
 
@@ -184,6 +218,7 @@ export function OfficeMap() {
       }
 
       if (event.key.toLowerCase() === "e" && nearbyTarget) {
+        setDismissedContactTargetId(null);
         setContactTarget(nearbyTarget);
       }
     };
@@ -196,6 +231,12 @@ export function OfficeMap() {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
+  }, [nearbyTarget]);
+
+  useEffect(() => {
+    if (!nearbyTarget) {
+      setDismissedContactTargetId(null);
+    }
   }, [nearbyTarget]);
 
   useEffect(() => {
@@ -364,6 +405,7 @@ export function OfficeMap() {
       const remote = remotePlayers.find((candidate) => distance(candidate, { x, y }) <= 28);
 
       if (remote) {
+        setDismissedContactTargetId(null);
         setContactTarget({
           userId: remote.userId,
           displayName: remote.displayName,
@@ -374,6 +416,17 @@ export function OfficeMap() {
     },
     [map, mapPixels],
   );
+
+  const drawerTarget =
+    contactTarget ?? (nearbyTarget && nearbyTarget.userId !== dismissedContactTargetId ? nearbyTarget : null);
+
+  const closeInteractionDrawer = () => {
+    if (nearbyTarget) {
+      setDismissedContactTargetId(nearbyTarget.userId);
+    }
+
+    setContactTarget(null);
+  };
 
   if (!avatarChecked || !selectedAvatar) {
     return (
@@ -390,58 +443,35 @@ export function OfficeMap() {
 
   return (
     <main style={styles.page}>
-      <section style={styles.shell}>
-        <div style={styles.header}>
-          <div>
-            <p style={styles.eyebrow}>Virtual Office MVP</p>
-            <h1 style={styles.title}>WorkMap Office</h1>
-          </div>
-          <div style={styles.statusPill}>
-            <span style={{ ...styles.statusDot, background: statusColors[player.status] }} />
-            {labelStatus(player.status)}
-          </div>
+      <section style={styles.officeSurface}>
+        <VirtualOfficeTopBar status={player.status} />
+
+        <div style={styles.canvasPanel}>
+          {loadError ? <div style={styles.error}>{loadError}</div> : null}
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            onClick={handleCanvasClick}
+            style={styles.canvas}
+          />
         </div>
 
-        <div style={styles.workspace}>
-          <div style={styles.canvasPanel}>
-            {loadError ? <div style={styles.error}>{loadError}</div> : null}
-            <canvas
-              ref={canvasRef}
-              width={CANVAS_WIDTH}
-              height={CANVAS_HEIGHT}
-              onClick={handleCanvasClick}
-              style={styles.canvas}
-            />
-          </div>
-
-          <aside style={styles.sidePanel}>
-            <section>
-              <p style={styles.panelLabel}>Current Room</p>
-              <h2 style={styles.panelTitle}>{activeRoom?.name ?? "Open Area"}</h2>
-              <p style={styles.panelText}>Position: {Math.round(player.x)}, {Math.round(player.y)}</p>
-            </section>
-
-            <section style={styles.card}>
-              <p style={styles.panelLabel}>Controls</p>
-              <p style={styles.panelText}>Move with WASD or arrow keys. Press E near a chair to sit. Move or press E again to stand.</p>
-            </section>
-
-            <section style={styles.card}>
-              <p style={styles.panelLabel}>Interaction</p>
-              <p style={styles.panelText}>
-                {seatedChair
-                  ? "You are seated."
-                  : nearestChair
-                    ? "Chair nearby. Press E to sit."
-                    : nearbyTarget
-                      ? `${nearbyTarget.displayName} is close enough to contact.`
-                      : "No interaction nearby."}
-              </p>
-            </section>
-
-            {contactTarget ? <ContactMenu target={contactTarget} onClose={() => setContactTarget(null)} /> : null}
-          </aside>
-        </div>
+        <FloatingRoomPill
+          room={activeRoom}
+          seated={Boolean(seatedChair)}
+          chairNearby={Boolean(nearestChair)}
+          elevated={Boolean(drawerTarget)}
+        />
+        {map ? (
+          <OfficeMiniMap
+            map={map}
+            player={player}
+            tilesets={officeTilesets}
+          />
+        ) : null}
+        <MovementHint hasInteractionTarget={Boolean(drawerTarget)} />
+        {drawerTarget ? <InteractionDrawer target={drawerTarget} onClose={closeInteractionDrawer} /> : null}
       </section>
     </main>
   );
@@ -467,7 +497,7 @@ function parseTmx(xml: string): ParsedMap {
         .map((value) => Number(value.trim()))
         .filter((value) => !Number.isNaN(value)),
     };
-  });
+  }).sort((left, right) => getLayerOrder(left.name) - getLayerOrder(right.name));
 
   return {
     width: Number(mapElement.getAttribute("width") ?? "0"),
@@ -476,6 +506,11 @@ function parseTmx(xml: string): ParsedMap {
     tileHeight: Number(mapElement.getAttribute("tileheight") ?? "32"),
     layers,
   };
+}
+
+function getLayerOrder(layerName: string) {
+  const index = MAP_LAYER_ORDER.indexOf(layerName as (typeof MAP_LAYER_ORDER)[number]);
+  return index === -1 ? MAP_LAYER_ORDER.length : index;
 }
 
 function drawScene(
@@ -792,10 +827,10 @@ function movePlayer(
   const nextX = player.x + (dx / length) * step;
   const nextY = player.y + (dy / length) * step;
 
-  if (!isBlocked(nextX, player.y, map, collision)) {
+  if (!isBlocked(nextX, player.y, map, collision) && !isBlockedByRemotePlayer(nextX, player.y)) {
     next.x = clamp(nextX, PLAYER_RADIUS, map.width * map.tileWidth - PLAYER_RADIUS);
   }
-  if (!isBlocked(next.x, nextY, map, collision)) {
+  if (!isBlocked(next.x, nextY, map, collision) && !isBlockedByRemotePlayer(next.x, nextY)) {
     next.y = clamp(nextY, PLAYER_RADIUS, map.height * map.tileHeight - PLAYER_RADIUS);
   }
 
@@ -851,6 +886,10 @@ function isBlocked(x: number, y: number, map: ParsedMap, collision: boolean[]) {
 
     return collision[tileY * map.width + tileX];
   });
+}
+
+function isBlockedByRemotePlayer(x: number, y: number) {
+  return remotePlayers.some((remote) => distance({ x, y }, remote) < PLAYER_COLLISION_DISTANCE);
 }
 
 function findRoom(x: number, y: number) {
@@ -909,9 +948,11 @@ function findNearestChair(player: PlayerState, chairs: ChairSpot[]) {
 }
 
 function getCamera(player: PlayerState, mapPixels: { width: number; height: number }) {
+  void mapPixels;
+
   return {
-    x: clamp(player.x - CANVAS_WIDTH / 2, 0, Math.max(0, mapPixels.width - CANVAS_WIDTH)),
-    y: clamp(player.y - CANVAS_HEIGHT / 2, 0, Math.max(0, mapPixels.height - CANVAS_HEIGHT)),
+    x: player.x - CANVAS_WIDTH / 2,
+    y: player.y - CANVAS_HEIGHT / 2,
   };
 }
 
@@ -961,82 +1002,50 @@ function createSeededRandom(seed: string) {
 
 const styles = {
   page: {
+    height: "100vh",
     minHeight: "100vh",
-    background: "#e5e7eb",
+    overflow: "hidden",
+    background: "#dbe4ef",
     color: "#0f172a",
     fontFamily: "Arial, Helvetica, sans-serif",
-    padding: "24px",
+    padding: 0,
   },
   shell: {
-    maxWidth: "1440px",
-    margin: "0 auto",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "16px",
-  },
-  eyebrow: {
-    margin: 0,
-    color: "#475569",
-    fontSize: "13px",
-    fontWeight: 700,
-    textTransform: "uppercase" as const,
-  },
-  title: {
-    margin: "4px 0 0",
-    fontSize: "32px",
-    lineHeight: 1.1,
-  },
-  statusPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "8px",
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
-    borderRadius: "8px",
-    padding: "8px 12px",
-    textTransform: "capitalize" as const,
-  },
-  workspace: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 320px",
-    gap: "16px",
+    minHeight: "100vh",
+    placeItems: "center",
+    padding: "24px",
+  },
+  officeSurface: {
+    position: "relative" as const,
+    width: "100vw",
+    height: "100vh",
+    overflow: "hidden",
+    background: "#cbd5e1",
   },
   canvasPanel: {
-    background: "#ffffff",
-    border: "1px solid #cbd5e1",
+    position: "absolute" as const,
+    inset: 0,
+    display: "grid",
+    placeItems: "center",
+    background: "#f8fafc",
+    border: 0,
     borderRadius: "8px",
     overflow: "hidden",
     minWidth: 0,
   },
   canvas: {
     display: "block",
-    width: "100%",
-    height: "auto",
-    maxHeight: "calc(100vh - 140px)",
-    objectFit: "contain" as const,
+    width: "max(100vw, calc(100vh * 1.647))",
+    height: "max(100vh, calc(100vw / 1.647))",
+    flex: "0 0 auto",
     background: "#f8fafc",
-  },
-  sidePanel: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "12px",
   },
   card: {
     border: "1px solid #cbd5e1",
     background: "#ffffff",
     borderRadius: "8px",
     padding: "14px",
-  },
-  contactCard: {
-    position: "relative" as const,
-    border: "1px solid #94a3b8",
-    background: "#ffffff",
-    borderRadius: "8px",
-    padding: "14px",
-    boxShadow: "0 16px 35px rgba(15, 23, 42, 0.12)",
   },
   panelLabel: {
     margin: "0 0 6px",
@@ -1055,40 +1064,16 @@ const styles = {
     fontSize: "14px",
     lineHeight: 1.45,
   },
-  statusDot: {
-    display: "inline-block",
-    width: "10px",
-    height: "10px",
-    borderRadius: "999px",
-    marginRight: "6px",
-  },
-  actions: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "8px",
-    marginTop: "12px",
-  },
-  actionButton: {
-    border: "1px solid #cbd5e1",
-    background: "#f8fafc",
-    borderRadius: "6px",
-    padding: "8px",
-    color: "#0f172a",
-    cursor: "pointer",
-  },
-  closeButton: {
-    position: "absolute" as const,
-    top: "10px",
-    right: "10px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
-    background: "#ffffff",
-    cursor: "pointer",
-  },
   error: {
+    position: "absolute" as const,
+    left: "24px",
+    right: "24px",
+    top: "92px",
+    zIndex: 22,
     color: "#b91c1c",
     padding: "12px",
-    borderBottom: "1px solid #fecaca",
+    border: "1px solid #fecaca",
+    borderRadius: "12px",
     background: "#fef2f2",
   },
 };

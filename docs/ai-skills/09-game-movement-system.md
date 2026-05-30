@@ -60,6 +60,10 @@ Current MVP note:
 - The current `/virtual-office` implementation still uses Canvas, not Phaser.
 - Do not switch the Canvas MVP to Phaser unless the task explicitly asks for it and dependency install is approved.
 - Keep Canvas changes small and preserve movement, collision, room zones, proximity contact menu, and chair sit/stand behavior.
+- Current office rendering reads `apps/web/public/maps/workmap2.tmx`.
+- Current Tiled tilesets live under `apps/web/public/maps/tilesets/`.
+- In development, the Canvas MVP polls the TMX file and reloads map data when the XML changes.
+- If Tiled shows red X tiles for `workmap2.tmx`, inspect external `.tsx` tileset references and image paths before changing movement or collision code.
 
 Recommended frontend structure:
 
@@ -419,6 +423,22 @@ Current rules:
 - Current walk frames use row 5 after visual calibration for clearer leg motion.
 - Left/right frame mappings may need further calibration whenever art changes.
 
+Current Canvas MVP behavior:
+
+- Local player uses the selected layered avatar.
+- Mock remote players use deterministic randomized layered avatars.
+- Name/status UI is a compact dark bubble above the avatar with a small status dot.
+- Chair interaction is keyboard-driven: near a chair, press `E` to sit; press `E` again or move to stand.
+- `/virtual-office` uses a full-screen map-first UI with a lightweight top bar, floating room/chair status pill, movement hint, bottom interaction drawer, and mini map.
+- The old right-side debug panel is removed.
+- The mini map is an overlay Canvas that draws the full TMX office and the local player dot. It must not affect movement, collision, or camera math.
+- Main Canvas display must preserve the 1120x680 aspect ratio; do not stretch the map to fit the browser viewport.
+- The current Canvas camera keeps the local player centered on screen while the map moves underneath; do not clamp the camera to map edges unless explicitly requested.
+- Local movement treats mock remote players as lightweight blockers so avatars do not overlap.
+- The mini map currently shows the full office and local player dot only; the blue viewport range box was intentionally removed.
+- No realtime socket sync is implemented yet.
+- Frontend-only workflow now routes first-time employees through compliance acknowledgement, avatar creation, device setup, and then `/virtual-office`. This workflow state is stored under `workmap.userSetupState` and is not real auth/RBAC.
+
 Map interaction zones
 
 The office map can contain interaction zones.
@@ -534,6 +554,9 @@ status ring update
 room enter/leave
 proximity detection
 contact menu trigger
+bottom interaction drawer open/close
+mini map player dot and viewport update while moving
+full-screen virtual office layout without map distortion
 chair sit/stand behavior with avatar selected
 company room isolation
 socket disconnect/reconnect

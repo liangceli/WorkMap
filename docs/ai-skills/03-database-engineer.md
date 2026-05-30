@@ -107,6 +107,33 @@ Before generating migration:
 5. Update seed data if needed.
 6. Update shared types if schema changes affect API contract.
 
+## Current progress - 2026-05-29
+
+No new Prisma schema or migration work has been approved for the avatar builder, dashboard mock, or Canvas virtual office MVP.
+
+Current frontend-only storage:
+
+- Layered avatar config is stored in browser `localStorage` under `workmap.avatarConfig`.
+- Frontend demo workflow state is stored in browser `localStorage` under `workmap.userSetupState`.
+- Manager dashboard data is mock frontend data.
+- Mock remote avatar configs are deterministic frontend-generated values.
+- Virtual office remote players, room zones, and contact drawer data are frontend mock data.
+- The current `/virtual-office` mini map is frontend-only and reuses the TMX map already loaded by Canvas; it does not require database tables.
+
+Do not add these schema fields without Director approval:
+
+- user avatar layer config
+- office map asset metadata
+- realtime position persistence changes
+- dashboard/report tables beyond the existing approved schema direction
+
+Backend framework handoff:
+
+- A backend/API chat may create controllers, guards, DTOs, and services without changing Prisma schema if it uses existing or mocked service responses.
+- Do not add database tables just to support the current frontend-only workflow state; real auth/onboarding persistence needs Director-approved schema and API contracts.
+- Any schema or migration for auth users, avatar profiles, office maps, rooms, activity ingestion, reports, integrations, compliance acknowledgements, or audit logs needs Director approval first.
+- When schema work is approved, keep it company-scoped, add indexes intentionally, and update shared API types when response shapes become public contracts.
+
 ## Handoff output
 
 ### Completed

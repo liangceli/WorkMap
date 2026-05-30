@@ -6,6 +6,14 @@ export type RequestContext = {
   role: WorkMapRole;
 };
 
+export type WorkMapJwtPayload = {
+  sub: string;
+  companyId: string;
+  role?: WorkMapRole;
+  iat?: number;
+  exp?: number;
+};
+
 const MANAGER_ROLES = new Set<WorkMapRole>(["TEAM_LEAD", "MANAGER", "HR_ADMIN", "OWNER"]);
 const ADMIN_ROLES = new Set<WorkMapRole>(["HR_ADMIN", "IT_ADMIN", "OWNER"]);
 

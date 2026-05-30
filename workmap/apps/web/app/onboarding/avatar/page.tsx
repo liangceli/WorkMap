@@ -11,6 +11,7 @@ import {
   type LayeredAvatarConfig,
 } from "../../../lib/avatar/avatarLayerAssets";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
+import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
 const groups: Array<{ type: AvatarLayerType; title: string; optional?: boolean; multi?: boolean }> = [
   { type: "body", title: "Body" },
@@ -32,7 +33,8 @@ export default function AvatarOnboardingPage() {
     }
 
     saveLayeredAvatarConfig(config);
-    router.push("/virtual-office");
+    const nextState = updateUserSetupState({ hasAvatar: true });
+    router.push(getNextRouteForUser(nextState));
   };
 
   return (
@@ -72,7 +74,7 @@ export default function AvatarOnboardingPage() {
                 WorkMap uses avatars for presence and collaboration. Activity visibility remains transparent and role-based.
               </p>
               <button type="button" onClick={saveAndEnterOffice} disabled={!config.bodyId} style={styles.saveButton}>
-                Save and enter office
+                Save and continue
               </button>
             </aside>
           </div>

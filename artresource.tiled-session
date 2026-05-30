@@ -1,10 +1,10 @@
 {
-    "activeFile": "workmap_office_mvp.tmx",
+    "activeFile": "workmap2.tmx",
     "expandedProjectPaths": [
+        "workmap/apps",
         "workmap",
-        "workmap/apps/web",
         ".",
-        "workmap/apps"
+        "workmap/apps/web"
     ],
     "fileStates": {
         "1.tsx": {
@@ -12,6 +12,7 @@
             "scaleInEditor": 1
         },
         "1_Room_Builder_Officer.tsx": {
+            "dynamicWrapping": true,
             "scaleInDock": 1,
             "scaleInEditor": 1
         },
@@ -19,12 +20,25 @@
             "scaleInDock": 1,
             "scaleInEditor": 1
         },
+        "farm side.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
         "office.tsx": {
             "scaleInDock": 1,
             "scaleInEditor": 1
         },
-        "shadowless.tsx": {
+        "s.tsx": {
             "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "shadowless.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "shadowlessthings.tsx": {
+            "scaleInDock": 0.75,
             "scaleInEditor": 1
         },
         "tileset.tsx": {
@@ -44,52 +58,67 @@
             "scaleInEditor": 1
         },
         "walls32 32.tsx": {
+            "dynamicWrapping": false,
             "scaleInDock": 1,
             "scaleInEditor": 1
         },
+        "workmap/apps/web/public/maps/tilesets/1_Room_Builder_Officer.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1
+        },
+        "workmap/apps/web/public/maps/tilesets/office.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1
+        },
+        "workmap/apps/web/public/maps/tilesets/shadowless.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1
+        },
+        "workmap/apps/web/public/maps/tilesets/walls32_32.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1
+        },
         "workmap2.tmx": {
-            "scale": 0.75,
-            "selectedLayer": 5,
+            "scale": 1.5,
+            "selectedLayer": 7,
             "viewCenter": {
-                "x": 225.33333333333326,
-                "y": 539.3333333333333
+                "x": 938.3333333333333,
+                "y": 346.33333333333337
             }
         },
         "workmap_office_mvp.tmx": {
             "scale": 0.75,
             "selectedLayer": 3,
             "viewCenter": {
-                "x": 524.6666666666666,
-                "y": 306.66666666666663
+                "x": 639.3333333333333,
+                "y": 179.33333333333331
             }
         }
     },
-    "last.imagePath": "C:/Users/lilia/WorkMap/workmap/apps/web/public/modern-office/1_Room_Builder_Office",
+    "last.externalTilesetPath": "C:/Users/lilia/Downloads",
+    "last.imagePath": "C:/Users/lilia/Downloads",
     "map.height": 100,
     "map.lastUsedFormat": "tmx",
     "map.width": 100,
+    "mapScene.enableWorlds": true,
     "openFiles": [
-        "walls.tsx",
-        "shadowless.tsx",
-        "1_Room_Builder_Officer.tsx",
-        "walls32 32.tsx",
-        "workmap_office_mvp.tmx",
         "workmap2.tmx"
     ],
     "project": "artresource.tiled-project",
     "recentFiles": [
+        "workmap2.tmx",
+        "s.tsx",
+        "farm side.tsx",
+        "shadowlessthings.tsx",
+        "workmap_office_mvp.tmx",
+        "tilets.tsx",
         "walls.tsx",
+        "walls32 32.tsx",
         "shadowless.tsx",
         "1_Room_Builder_Officer.tsx",
-        "walls32 32.tsx",
-        "workmap2.tmx",
-        "workmap_office_mvp.tmx",
         "Modern_Office_Shadowless_32x32.tsx",
-        "1.tsx",
-        "office.tsx",
-        "tileset.tsx",
-        "tilets.tsx",
-        "tileset_office_modern_v1.tsx"
+        "1.tsx"
     ],
+    "tileset.lastUsedFilter": "All Files (*)",
     "tileset.lastUsedFormat": "tsx"
 }

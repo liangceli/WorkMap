@@ -63,6 +63,21 @@ export const remotePlayers: RemoteOfficePlayer[] = [
 
 export const officeTilesets: OfficeTileset[] = [
   {
+    firstGid: 3217,
+    columns: 16,
+    imagePath: "/modern-office/Modern_Office_Shadowless_32x32.png",
+  },
+  {
+    firstGid: 2993,
+    columns: 16,
+    imagePath: "/modern-office/1_Room_Builder_Office/Room_Builder_Office_32x32.png",
+  },
+  {
+    firstGid: 2145,
+    columns: 16,
+    imagePath: "/modern-office/Modern_Office_32x32.png",
+  },
+  {
     firstGid: 1297,
     columns: 16,
     imagePath: "/modern-office/Modern_Office_32x32.png",
