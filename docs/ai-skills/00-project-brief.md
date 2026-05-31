@@ -139,6 +139,9 @@ Backend MVP currently has:
 - For local development only, the same guard falls back to `x-workmap-company-id`, `x-workmap-user-id`, and `x-workmap-role` headers when no Bearer token is present. Production requires Bearer JWT.
 - Initial company-scoped APIs exist for current auth context, company profile, users directory/current user/user detail, device health, virtual office map/positions, compliance policy/acknowledgement, link-based integrations/contact links, and report usage summaries.
 - UUID route parameters and optional `userId` report query now have Nest pipe validation.
+- Non-production header fallback now verifies user/company/role against the database and still remains disabled in production.
+- `GET /virtual-office/navigation` exists as a safe computed endpoint for office room destinations. It derives destination type, anchor, optional bounds, auto-status, and people count from existing room/position data without schema changes.
+- `GET /integrations/contact-links/:targetUserId` remains backward compatible with flat URLs and now also returns provider objects for Teams, Outlook, and 3CX buttons.
 - Manager-sensitive user detail and report reads write audit logs.
 - API dependencies currently include Nest core/platform-express, Prisma client, reflect-metadata, rxjs, `@workmap/auth`, and `@workmap/shared-types`; JWT verification and non-production demo token issuance are implemented with Node `crypto` for HS256 without adding a package. Socket.IO, Redis, BullMQ, production login/SSO, and validation libraries are not wired yet.
 - A backend-focused chat should start by reading this file plus `/docs/ai-skills/02-backend-engineer.md`, then inspect `apps/api/src` before coding.
@@ -160,6 +163,10 @@ Current frontend/backend handoff:
 - Backend/API chat should not assume frontend mock data is authoritative. Treat current frontend mock people, reports, integrations, and local avatar config as UI scaffolding until API contracts are approved.
 - Do not persist avatar layer config, map metadata, or activity/report data to new schema fields without Director approval.
 - Virtual Office workspace shell API proposal lives at `/docs/api/virtual-office-workspace-contract.md`.
+- Current backend endpoint map lives at `/docs/api/current-backend-endpoint-map.md`.
+- Backend validation plan lives at `/docs/api/backend-validation-plan.md`.
+- Future activity ingestion contract lives at `/docs/api/activity-ingestion-contract.md`.
+- Production auth readiness plan lives at `/docs/api/auth-production-readiness.md`.
 - Current backend endpoints can partially support People, room list/navigation from map rooms, contact links, compliance policy, and summary reports. Chat, Calendar, Notices, emoji/wave, real click-to-move sync, and Socket.IO remain frontend-only mock or future proposal work.
 - Contact links remain link-based only; no Microsoft Graph, Teams content, Outlook content, message persistence, calendar persistence, or notices persistence is implemented.
 - Current frontend workflow routes are demo-only: Employee first-time flow is login -> compliance -> avatar -> device setup -> virtual office; Owner first-time flow is login -> company onboarding -> compliance -> dashboard after setup; Manager and IT Admin returning flows land on dashboard.

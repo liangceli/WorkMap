@@ -1,5 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
-import type { RequestContext, WorkMapRole } from "@workmap/auth";
+import type { WorkMapRole } from "@workmap/auth";
 import { AuthService } from "./auth.service.js";
 import { REQUEST_CONTEXT_KEY, type RequestWithContext } from "./current-context.decorator.js";
 import { JwtService } from "./jwt.service.js";
@@ -39,11 +39,11 @@ export class RequestContextGuard implements CanActivate {
       throw new UnauthorizedException("Missing WorkMap request context.");
     }
 
-    request[REQUEST_CONTEXT_KEY] = {
+    request[REQUEST_CONTEXT_KEY] = await this.auth.resolveDevelopmentHeaderContext({
       companyId,
       userId,
-      role: role as RequestContext["role"],
-    };
+      role,
+    });
 
     return true;
   }

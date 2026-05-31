@@ -5,6 +5,7 @@ import type { ContactTarget, UserPresenceStatus } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import type { OfficePanelKey } from "./OfficeLeftRail";
+import { OfficeIcon } from "./OfficeIcons";
 import type { RemoteOfficePlayer } from "./mockOfficeData";
 import { labelStatus, statusColors } from "./presence";
 
@@ -75,7 +76,9 @@ export function OfficeSidePanel({
           <h2 style={styles.title}>{panelTitle(activePanel)}</h2>
           <p style={styles.subtitle}>{panelSubtitle(activePanel)}</p>
         </div>
-        <button type="button" aria-label="Close panel" onClick={onClose} style={styles.closeButton}>x</button>
+        <button type="button" aria-label="Close panel" onClick={onClose} style={styles.closeButton}>
+          <OfficeIcon name="close" size={18} />
+        </button>
       </header>
 
       {activePanel === "people" ? (
@@ -303,9 +306,9 @@ const styles = {
     placeItems: "center",
     width: "32px",
     height: "32px",
-    border: `1px solid ${wm.colors.border}`,
+    border: 0,
     borderRadius: wm.radius.md,
-    background: "rgba(255, 255, 255, 0.82)",
+    background: "transparent",
     color: wm.colors.textSecondary,
     cursor: "pointer",
     fontWeight: 700,

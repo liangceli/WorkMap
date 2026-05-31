@@ -93,6 +93,7 @@ Avoid:
 - Left rail action icons should be large and clean, with no persistent black outline boxes around inactive buttons. Only the active item may use a filled navy state.
 - Notification/status dots in the office shell should be readable at a glance: rail notification dots are around 10px with a light stroke, and dock/avatar online dots are around 14px with a navy stroke.
 - Dropdown indicators in top pills must use a clean chevron-down icon, not a text `v`.
+- Close controls in the virtual office shell must use a clean close icon without a visible border box; do not use text `x` or `Esc` as the visible close control.
 - Right-side map controls must stay as a small vertical white capsule with compact `+`, `-`, recenter target icon, and zoom percent label.
 - Bottom action dock should show large icons only for actions. Do not show persistent labels under the icons; reveal the action name in a compact dark tooltip on hover/focus.
 - Current `/virtual-office` also includes a WorkMap-specific office shell: a slim left rail, expandable Rooms/People/Search/Chat/Calendar/Notices/Settings panels, command palette, room context card, drag/pan, wheel zoom, recenter, double-click click-to-move, and "Go to" actions.

@@ -43,12 +43,31 @@ export class IntegrationsService {
 
     const encodedEmail = encodeURIComponent(user.email);
 
+    const teamsChatUrl = `https://teams.microsoft.com/l/chat/0/0?users=${encodedEmail}`;
+    const outlookMailtoUrl = `mailto:${encodedEmail}`;
+    const threeCxUrl = `https://webclient.3cx.com/call?to=${encodedEmail}`;
+
     return {
       targetUserId: user.id,
       displayName: user.displayName,
-      teamsChatUrl: `https://teams.microsoft.com/l/chat/0/0?users=${encodedEmail}`,
-      outlookMailtoUrl: `mailto:${encodedEmail}`,
-      threeCxUrl: `https://webclient.3cx.com/call?to=${encodedEmail}`,
+      teamsChatUrl,
+      outlookMailtoUrl,
+      threeCxUrl,
+      teams: {
+        label: "Teams Chat",
+        href: teamsChatUrl,
+        enabled: true,
+      },
+      outlook: {
+        label: "Outlook Email",
+        href: outlookMailtoUrl,
+        enabled: true,
+      },
+      threeCx: {
+        label: "3CX Call",
+        href: threeCxUrl,
+        enabled: true,
+      },
     };
   }
 }

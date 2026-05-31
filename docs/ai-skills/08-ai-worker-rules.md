@@ -67,6 +67,7 @@ Frontend:
 - `/virtual-office` is a Canvas MVP, not Phaser.
 - `/virtual-office` is now a full-screen map-first UI with no fixed right-side debug panel.
 - `/virtual-office` includes floating workspace/current-area/status pills, a bottom action dock, bottom coworker interaction drawer, map controls, and a bottom-left mini map.
+- `/virtual-office` close controls should be icon-only using the shared office close icon, with no visible bordered square and no text `x`/`Esc` placeholders.
 - `/virtual-office` includes a WorkMap office shell with `VirtualOfficeTopBar`, `OfficeLeftRail`, `OfficeSidePanel`, `OfficeCommandPalette`, `RoomContextCard`, `OfficeBottomDock`, `OfficeIcons`, `InteractionDrawer`, and `VirtualOfficeShell`.
 - `/virtual-office` currently follows the Stitch state-board reference under `docs/designs/`; do not treat that screenshot as a default state with all overlays visible.
 - `/virtual-office` supports frontend-only People, Search, Chat, Calendar, Notices, and Settings panels. These are mock/link-only collaboration surfaces, not backend-backed messaging, calendar sync, or employee monitoring.
@@ -91,8 +92,10 @@ Backend/database:
 - Do not change backend APIs, Prisma schema, tracking, or Socket.IO for avatar/dashboard/map UI tasks unless the Director explicitly approves.
 - A backend-focused chat should read `00-project-brief.md`, `02-backend-engineer.md`, `03-database-engineer.md`, `06-security-engineer.md`, and `09-game-movement-system.md` before building API framework pieces.
 - Current backend has module boundaries, Prisma service/module, health endpoint, internal virtual-office and compliance services, HS256 Bearer JWT verification, non-production `POST /auth/dev-token`, non-production header fallback, RBAC helper guard/decorator, initial protected business controllers, UUID param/query pipe validation, and summary-report scaffolding.
+- Current backend also has `GET /virtual-office/navigation`, a safe computed room destination endpoint from existing map/room/position data, and contact link provider objects while preserving old flat URL fields.
 - Current backend still has no production token issuance/login flow, DTO validation library, activity ingestion endpoint, Socket.IO gateway, Redis/BullMQ queue, or production-ready auth rollout.
 - Virtual Office workspace shell API proposal lives at `/docs/api/virtual-office-workspace-contract.md`.
+- Current backend endpoint map lives at `/docs/api/current-backend-endpoint-map.md`; validation plan at `/docs/api/backend-validation-plan.md`; activity ingestion contract at `/docs/api/activity-ingestion-contract.md`; production auth readiness at `/docs/api/auth-production-readiness.md`.
 - Workspace shell backend support is currently limited to existing People, company/departments, map/rooms, latest positions, compliance, reports, and link-based contact endpoints. Chat, Calendar, Notices, emoji/wave, Microsoft Graph, Socket.IO, and persistence for those surfaces are not implemented.
 - After every completed code/config/API modification, update the relevant `docs/ai-skills/*.md` files in the same turn so the project handoff stays current.
 - Frontend mock data is not a backend contract. Convert mock surfaces into APIs only after the relevant auth/RBAC/schema/API decisions are clear.

@@ -131,6 +131,8 @@ Backend framework handoff:
 
 - A backend/API chat may create controllers, guards, DTOs, and services without changing Prisma schema if it uses existing or mocked service responses.
 - Do not add database tables just to support the current frontend-only workflow state; real auth/onboarding persistence needs Director-approved schema and API contracts.
+- `GET /virtual-office/navigation` is computed from existing `OfficeRoom.zoneData` and `VirtualOfficePosition` counts; it did not require schema changes.
+- Future activity ingestion is documented at `/docs/api/activity-ingestion-contract.md`, but `POST /activity/batch`, queue behavior, deduplication keys, and any new indexes remain unimplemented until Director approval.
 - Any schema or migration for auth users, avatar profiles, office maps, rooms, activity ingestion, reports, integrations, compliance acknowledgements, or audit logs needs Director approval first.
 - When schema work is approved, keep it company-scoped, add indexes intentionally, and update shared API types when response shapes become public contracts.
 

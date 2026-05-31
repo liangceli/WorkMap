@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import type { ContactTarget } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
+import { OfficeIcon } from "./OfficeIcons";
 import type { RemoteOfficePlayer } from "./mockOfficeData";
 import { labelStatus, statusColors } from "./presence";
 
@@ -75,7 +76,9 @@ export function OfficeCommandPalette({
             placeholder="Find people, rooms, or actions..."
             style={styles.input}
           />
-          <button type="button" onClick={onClose} style={styles.closeButton}>Esc</button>
+          <button type="button" aria-label="Close office search" onClick={onClose} style={styles.closeButton}>
+            <OfficeIcon name="close" size={20} />
+          </button>
         </div>
 
         <ResultGroup title="People">
@@ -195,10 +198,15 @@ const styles = {
     fontSize: "15px",
   },
   closeButton: {
-    ...wmStyles.secondaryButton,
+    display: "grid",
+    placeItems: "center",
+    width: "42px",
+    height: "42px",
+    border: 0,
     borderRadius: wm.radius.xl,
-    background: wm.colors.background,
-    padding: "0 12px",
+    background: "transparent",
+    color: wm.colors.textSecondary,
+    cursor: "pointer",
   },
   group: {
     display: "grid",

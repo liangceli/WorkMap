@@ -5,6 +5,7 @@ type OfficeIconProps = {
     | "calendar"
     | "chat"
     | "chevronDown"
+    | "close"
     | "copy"
     | "go"
     | "mail"
@@ -51,6 +52,12 @@ const paths = {
   ),
   chevronDown: (
     <path d="M6 9l6 6 6-6" {...iconProps} />
+  ),
+  close: (
+    <>
+      <path d="M6 6l12 12" {...iconProps} />
+      <path d="M18 6L6 18" {...iconProps} />
+    </>
   ),
   copy: (
     <>

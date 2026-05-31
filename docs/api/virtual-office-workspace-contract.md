@@ -28,7 +28,7 @@ This document evaluates backend support for the new WorkMap virtual office works
 | Calendar panel / schedule meeting | None | No | Frontend-only mock/link launchers for MVP. Graph/OAuth required for real calendar writes. |
 | Notices/activity panel | None | No | Frontend-only mock for MVP. Persistence and safe notice taxonomy need approval. |
 | Emoji / wave quick interactions | None | No | Future ephemeral Socket.IO event or API; no persistence by default. |
-| Go to room / room search | `GET /virtual-office/map` | Partial | Existing rooms can seed search; future normalized `GET /virtual-office/navigation` is recommended. |
+| Go to room / room search | `GET /virtual-office/navigation` | Yes for safe room destinations | Derived from existing rooms/positions; no custom room descriptions yet. |
 | Go to person | `GET /users` + `GET /virtual-office/map/:officeMapId/positions` | Partial | Frontend can join directory and positions by `userId`; future composed endpoint may reduce client stitching. |
 
 ## 1. People Directory For Office Shell
@@ -93,7 +93,7 @@ Current endpoint:
 
 Current response includes map `id`, `name`, `slug`, `width`, `height`, `tileSize`, `mapData`, and rooms with `id`, `name`, `type`, `zoneData`, and `autoStatus`.
 
-Recommended future endpoint:
+Current computed endpoint:
 
 - `GET /virtual-office/navigation`
 
@@ -117,6 +117,7 @@ Mapping guidance from existing data:
 - `FOCUS`, `BREAK`, `MEETING`, and `OTHER` map to `room`.
 - `zoneData` may provide bounds if it has a rectangle shape.
 - `anchor` can be computed from bounds center when bounds exist.
+- If bounds are unavailable, the current implementation falls back to the map center anchor.
 
 Rules:
 
@@ -144,7 +145,7 @@ type CurrentContactLinksDto = {
 };
 ```
 
-Recommended future compatible DTO:
+Current backward-compatible DTO:
 
 ```ts
 type ContactLinksDto = {
@@ -153,6 +154,9 @@ type ContactLinksDto = {
   teams?: { label: string; href: string; enabled: boolean };
   outlook?: { label: string; href: string; enabled: boolean };
   threeCx?: { label: string; href: string; enabled: boolean };
+  teamsChatUrl: string;
+  outlookMailtoUrl: string;
+  threeCxUrl: string;
 };
 ```
 
@@ -401,22 +405,25 @@ Forbidden:
 - Raw app/domain activity in virtual office movement or notices.
 - Cross-company quick interactions.
 
-## Safe Implementation Decision For This Task
+## Safe Implementation Decision
 
-No backend code changes are required for this proposal. Current endpoints are enough for initial frontend shell scaffolding if the frontend treats:
+Current endpoints are enough for initial frontend shell scaffolding if the frontend treats:
 
 - Chat as frontend-only mock.
 - Calendar as frontend-only mock/link launcher.
 - Notices as frontend-only mock.
 - Emoji/wave as frontend-only mock until Socket.IO approval.
-- Room navigation as derived from `GET /virtual-office/map`.
+- Room navigation as derived from `GET /virtual-office/navigation`.
 - Go to person as client-side join of `GET /users` and `GET /virtual-office/map/:officeMapId/positions`.
 
-Recommended future small compatible improvements:
+Implemented small compatible improvements:
 
-1. Add wrapped provider objects to `GET /integrations/contact-links/:targetUserId` while keeping current flat URL fields.
-2. Add a dedicated `GET /virtual-office/navigation` endpoint that computes `OfficeDestinationDto` from existing `OfficeRoom.zoneData`.
-3. Add `currentRoomId/currentRoomName` to a future office-specific people endpoint, not the general `GET /users`, to avoid broadening existing contracts.
+1. `GET /integrations/contact-links/:targetUserId` returns wrapped provider objects while keeping current flat URL fields.
+2. `GET /virtual-office/navigation` computes `OfficeDestinationDto` from existing `OfficeRoom.zoneData` and latest positions.
+
+Recommended future compatible improvement:
+
+1. Add `currentRoomId/currentRoomName` to a future office-specific people endpoint, not the general `GET /users`, to avoid broadening existing contracts.
 
 ## Director Decisions Needed
 

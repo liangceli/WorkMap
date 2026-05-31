@@ -2,6 +2,7 @@
 
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { OfficeIcon } from "./OfficeIcons";
 
 type RoomContextCardProps = {
   destination: OfficeDestination;
@@ -18,7 +19,7 @@ export function RoomContextCard({ destination, peopleCount, onGoTo, onViewPeople
   return (
     <aside style={styles.card} aria-label={`${destination.name} context`}>
       <button type="button" aria-label="Close room context" onClick={onClose} style={styles.closeButton}>
-        x
+        <OfficeIcon name="close" size={18} />
       </button>
       <div style={styles.topRow}>
         <span style={styles.badge}>{roomBadge(destination, isFocusRoom, isMeetingRoom)}</span>
@@ -87,9 +88,9 @@ const styles = {
     placeItems: "center",
     width: "30px",
     height: "30px",
-    border: `1px solid ${wm.colors.border}`,
+    border: 0,
     borderRadius: wm.radius.md,
-    background: "rgba(255, 255, 255, 0.82)",
+    background: "transparent",
     color: wm.colors.textSecondary,
     cursor: "pointer",
     fontWeight: 700,

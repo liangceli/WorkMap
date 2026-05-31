@@ -216,6 +216,7 @@ Completed in current MVP:
   - `GET /users/:userId`
   - `GET /devices`
   - `GET /virtual-office/map`
+  - `GET /virtual-office/navigation`
   - `GET /virtual-office/map/:officeMapId/positions`
   - `GET /compliance/policy`
   - `POST /compliance/policy/:policyId/acknowledgement`
@@ -225,10 +226,24 @@ Completed in current MVP:
 - Manager-sensitive user detail and report reads call `AuditService.logSensitiveAction`.
 - Report APIs query summary tables, not raw `activity_events`.
 - UUID route parameters use Nest `ParseUUIDPipe`; optional report `userId` query uses `OptionalUuidPipe`.
+- Non-production header fallback verifies user/company/role against the database and is disabled in production.
 - Virtual Office workspace shell contract proposal exists at `/docs/api/virtual-office-workspace-contract.md`.
-- Current endpoints partially support People, room/department search sources, Go to person/room client stitching, and link-based contact actions. Chat, Calendar, Notices, emoji/wave, and realtime movement remain unimplemented backend features.
+- Current backend endpoint map exists at `/docs/api/current-backend-endpoint-map.md`.
+- Backend validation plan exists at `/docs/api/backend-validation-plan.md`.
+- Future activity ingestion contract exists at `/docs/api/activity-ingestion-contract.md`; `POST /activity/batch` is documented but not implemented.
+- Production auth readiness plan exists at `/docs/api/auth-production-readiness.md`.
+- Current endpoints support People, room/department search sources, `GET /virtual-office/navigation` for Go to room, Go to person client stitching, and link-based contact actions. Chat, Calendar, Notices, emoji/wave, and realtime movement remain unimplemented backend features.
+- `GET /integrations/contact-links/:targetUserId` returns backward-compatible flat URLs plus provider objects for Teams, Outlook, and 3CX.
 - API typecheck passes.
 - API build and lint pass after protected controller work.
+
+## Verified QA status - 2026-05-31
+
+- API typecheck, lint, and build pass.
+- Full monorepo typecheck, lint, and build pass.
+- Runtime endpoint QA is currently blocked: `npm run dev`, `pnpm --filter @workmap/api dev`, and `pnpm --filter @workmap/api exec nest start --debug` did not expose a reachable API server on the tested ports.
+- Directly running the nested built entrypoint failed with `Cannot find module '@workmap/auth'`, so the built API output is not currently a reliable standalone runtime path.
+- `BUG-001` in `docs/qa/workmap-qa-report-2026-05-31.md` tracks the API start/runtime blocker. Fix the Nest CLI/start path or workspace package resolution before claiming endpoint, RBAC, invalid JWT, invalid UUID, or production fallback tests pass.
 
 Recommended next backend/API sequence:
 
@@ -242,7 +257,7 @@ Recommended next backend/API sequence:
 8. Add Socket.IO gateway only after auth strategy, dependency install, and movement event contract are approved.
 9. Add Redis/BullMQ worker integration after queue contract is approved.
 10. Expand report APIs using summary tables and audit hooks as contracts are approved.
-11. If workspace shell needs backend changes, prefer compatible read/link endpoints such as `GET /virtual-office/navigation` before adding persistence.
+11. If workspace shell needs more backend changes, prefer compatible read/link endpoints before adding persistence.
 
 Known remaining backend work:
 

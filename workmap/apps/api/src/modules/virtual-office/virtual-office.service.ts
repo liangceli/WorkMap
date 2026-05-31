@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { AvatarDirection, UserStatus } from "@prisma/client";
+import { AvatarDirection, OfficeRoomType, UserStatus } from "@prisma/client";
 import type { PlayerDirection, UserPresenceStatus } from "@workmap/shared-types";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -73,6 +73,43 @@ export class VirtualOfficeService {
     });
   }
 
+  async listNavigationDestinations(companyId: string) {
+    const officeMap = await this.getDefaultOfficeMap(companyId);
+    const positionCounts = await this.prisma.virtualOfficePosition.groupBy({
+      by: ["officeRoomId"],
+      where: {
+        companyId,
+        officeMapId: officeMap.id,
+        officeRoomId: { not: null },
+      },
+      _count: {
+        _all: true,
+      },
+    });
+    const peopleCountByRoomId = new Map(
+      positionCounts
+        .filter((item) => item.officeRoomId)
+        .map((item) => [item.officeRoomId as string, item._count._all]),
+    );
+
+    return officeMap.rooms.map((room) => {
+      const bounds = parseRectangleBounds(room.zoneData);
+      const anchor = bounds
+        ? { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+        : { x: officeMap.width / 2, y: officeMap.height / 2 };
+
+      return {
+        id: room.id,
+        name: room.name,
+        type: toDestinationType(room.type),
+        anchor,
+        bounds,
+        autoStatus: room.autoStatus ? toApiStatus(room.autoStatus) : undefined,
+        peopleCount: peopleCountByRoomId.get(room.id) ?? 0,
+      };
+    });
+  }
+
   async persistLatestPosition(input: PersistPositionInput) {
     await this.assertMapAndRoomBelongToCompany(input.companyId, input.officeMapId, input.officeRoomId);
 
@@ -139,4 +176,47 @@ function toPrismaDirection(direction: PlayerDirection) {
 
 function toPrismaStatus(status: UserPresenceStatus) {
   return status.toUpperCase() as UserStatus;
+}
+
+function toApiStatus(status: UserStatus) {
+  return status.toLowerCase() as UserPresenceStatus;
+}
+
+function toDestinationType(type: OfficeRoomType) {
+  switch (type) {
+    case OfficeRoomType.DEPARTMENT_ZONE:
+      return "department";
+    case OfficeRoomType.OPEN_OFFICE:
+      return "common_area";
+    case OfficeRoomType.FOCUS:
+    case OfficeRoomType.BREAK:
+    case OfficeRoomType.MEETING:
+    case OfficeRoomType.OTHER:
+      return "room";
+  }
+}
+
+type RectangleBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function parseRectangleBounds(value: unknown): RectangleBounds | undefined {
+  if (!isRecord(value) || value.shape !== "rectangle") {
+    return undefined;
+  }
+
+  const { x, y, width, height } = value;
+
+  if (![x, y, width, height].every((item) => typeof item === "number" && Number.isFinite(item))) {
+    return undefined;
+  }
+
+  return { x, y, width, height } as RectangleBounds;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

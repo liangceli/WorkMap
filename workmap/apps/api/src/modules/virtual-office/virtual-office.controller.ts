@@ -32,6 +32,11 @@ export class VirtualOfficeController {
     };
   }
 
+  @Get("navigation")
+  listNavigation(@CurrentContext() context: RequestContext) {
+    return this.office.listNavigationDestinations(context.companyId);
+  }
+
   @Get("map/:officeMapId/positions")
   async listPositions(@CurrentContext() context: RequestContext, @Param("officeMapId", ParseUUIDPipe) officeMapId: string) {
     const positions = await this.office.listLatestPositions(context.companyId, officeMapId);

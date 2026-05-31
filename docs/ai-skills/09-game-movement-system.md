@@ -461,7 +461,7 @@ Current Canvas MVP behavior:
 - No realtime socket sync is implemented yet.
 - Frontend-only workflow now routes first-time employees through compliance acknowledgement, avatar creation, device setup, and then `/virtual-office`. This workflow state is stored under `workmap.userSetupState` and is not real auth/RBAC.
 - Virtual Office workspace shell API proposal lives at `/docs/api/virtual-office-workspace-contract.md`.
-- Current backend can provide map rooms and latest positions, but Go to room, Go to person, click-to-move, emoji/wave, chat, calendar, and notices should remain frontend-only or proposal-level until Socket.IO/API contracts are approved.
+- Current backend can provide map rooms, latest positions, and safe computed room destinations through `GET /virtual-office/navigation`, but Go to person client stitching, click-to-move, emoji/wave, chat, calendar, and notices should remain frontend-only or proposal-level until Socket.IO/API contracts are approved.
 - Chat, Calendar, Notices, schedule meeting, emoji/wave, and command-palette actions must not collect or display Teams message content, Outlook email body, full URLs, screenshots, keystrokes, camera, microphone, or private monitoring data.
 
 Map interaction zones
@@ -592,6 +592,15 @@ chair sit/stand behavior with avatar selected
 company room isolation
 socket disconnect/reconnect
 no private data in socket payload
+
+Verified QA status - 2026-05-31:
+
+- `/virtual-office` returned HTTP 200 on a fresh web dev server.
+- Frontend source still includes keyboard handlers, drag/pan, wheel zoom, recenter, double-click click-to-move, Go to person/room, command palette, side panels, room context card, mini map, bottom dock, and interaction drawer.
+- Tiled asset path inspection passed for `workmap2.tmx`, referenced external tilesets, and referenced PNG files.
+- Browser automation was unavailable, so movement feel, animation, collision, chair sit/stand, room zone detection, click-to-move behavior, overlay overlap, mini map visual output, and red-X tile checks remain `NEEDS_MANUAL_QA`.
+- Privacy scan found no private activity data in virtual-office UI payload/surface code.
+
 MVP acceptance criteria
 
 The MVP movement system is acceptable when:

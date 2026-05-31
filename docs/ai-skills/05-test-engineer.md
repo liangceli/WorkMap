@@ -35,6 +35,21 @@ When testing this phase, verify:
 - API helper failures return fallback-safe results and do not break local demo pages.
 - No backend code, Prisma schema, Socket.IO, Microsoft Graph, real chat persistence, calendar sync, or notices persistence is introduced by frontend stabilization work.
 
+## Verified QA pass - 2026-05-31
+
+Report: `docs/qa/workmap-qa-report-2026-05-31.md`
+
+- Root and workspace command checks passed: `pnpm typecheck`, `pnpm lint`, `pnpm build`, web/API typecheck, web/API lint, and web/API build.
+- Fresh web dev server on `http://127.0.0.1:3010` returned HTTP 200 for `/`, `/login`, `/onboarding/company`, `/onboarding/avatar`, `/onboarding/device-setup`, `/virtual-office`, `/dashboard`, `/employees`, `/employees/mia`, `/reports`, `/compliance`, `/integrations`, and `/settings`.
+- Browser automation was unavailable in this session, so visual and interaction-heavy checks are `NEEDS_MANUAL_QA`.
+- API endpoint tests are `BLOCKED`: API dev/start commands did not expose a reachable Nest server on the tested ports.
+- Privacy scan passed for current code: forbidden terms appeared only in explicit "not collected" docs/UI copy or benign names such as `cameraOffset`, not as collected/displayed employee data.
+- Tiled asset path inspection passed for `apps/web/public/maps/workmap2.tmx`, referenced tilesets, and referenced PNGs. Tiled/browser red-X visual checks still need manual QA.
+
+Known QA blocker:
+
+- `BUG-001`: API start commands do not expose a reachable server for endpoint QA. Backend owner should fix the Nest start path/configuration before RBAC/API runtime testing.
+
 ## Test scope
 
 Test these areas:

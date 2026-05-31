@@ -8,6 +8,12 @@ type DevTokenInput = {
   companySlug?: unknown;
 };
 
+type DevelopmentHeaderContextInput = {
+  companyId: string;
+  userId: string;
+  role: string;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -39,23 +45,50 @@ export class AuthService {
     };
   }
 
+  async resolveDevelopmentHeaderContext(input: DevelopmentHeaderContextInput): Promise<RequestContext> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: input.userId,
+        companyId: input.companyId,
+      },
+      select: {
+        id: true,
+        companyId: true,
+        role: true,
+      },
+    });
+
+    if (!user || user.role !== input.role) {
+      throw new UnauthorizedException("Invalid WorkMap development request context.");
+    }
+
+    return {
+      companyId: user.companyId,
+      userId: user.id,
+      role: user.role,
+    };
+  }
+
   async createDevelopmentToken(input: DevTokenInput) {
     if (process.env.NODE_ENV === "production") {
       throw new UnauthorizedException("Development token endpoint is disabled in production.");
     }
 
-    if (typeof input.email !== "string" || !input.email.includes("@")) {
+    const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+    const companySlug = typeof input.companySlug === "string" ? input.companySlug.trim() : input.companySlug;
+
+    if (!isValidEmail(email)) {
       throw new BadRequestException("A valid email is required.");
     }
 
-    if (input.companySlug !== undefined && typeof input.companySlug !== "string") {
+    if (companySlug !== undefined && (typeof companySlug !== "string" || !isValidCompanySlug(companySlug))) {
       throw new BadRequestException("companySlug must be a string when provided.");
     }
 
     const user = await this.prisma.user.findFirst({
       where: {
-        email: input.email,
-        company: input.companySlug ? { slug: input.companySlug } : undefined,
+        email,
+        company: companySlug ? { slug: companySlug } : undefined,
       },
       select: {
         id: true,
@@ -99,4 +132,12 @@ export class AuthService {
       },
     };
   }
+}
+
+function isValidEmail(value: string) {
+  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isValidCompanySlug(value: string) {
+  return value.length <= 80 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }

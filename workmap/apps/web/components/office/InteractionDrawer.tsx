@@ -2,6 +2,7 @@
 
 import type { ContactTarget } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { OfficeIcon } from "./OfficeIcons";
 import { labelStatus, statusColors } from "./presence";
 
 type InteractionDrawerProps = {
@@ -46,7 +47,7 @@ export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSched
   return (
     <section aria-label={`Interaction with ${target.displayName}`} style={styles.drawer}>
       <button aria-label="Close interaction drawer" style={styles.closeButton} onClick={onClose} type="button">
-        x
+        <OfficeIcon name="close" size={18} />
       </button>
 
       <div style={styles.identity}>
@@ -159,9 +160,9 @@ const styles = {
     placeItems: "center",
     width: "32px",
     height: "32px",
-    border: `1px solid ${wm.colors.border}`,
+    border: 0,
     borderRadius: wm.radius.md,
-    background: "rgba(255, 255, 255, 0.88)",
+    background: "transparent",
     color: wm.colors.textSecondary,
     cursor: "pointer",
     fontSize: "16px",

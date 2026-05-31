@@ -1,5 +1,6 @@
 import type { ContactTarget } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { OfficeIcon } from "./OfficeIcons";
 import { PresenceBadge } from "./PresenceBadge";
 
 type ContactMenuProps = {
@@ -11,7 +12,7 @@ export function ContactMenu({ target, onClose }: ContactMenuProps) {
   return (
     <section style={styles.contactCard}>
       <button aria-label="Close contact menu" style={styles.closeButton} onClick={onClose} type="button">
-        x
+        <OfficeIcon name="close" size={18} />
       </button>
       <p style={styles.panelLabel}>Contact</p>
       <h2 style={styles.panelTitle}>{target.displayName}</h2>
@@ -74,9 +75,13 @@ const styles = {
     position: "absolute" as const,
     top: "10px",
     right: "10px",
-    border: `1px solid ${wm.colors.border}`,
+    display: "grid",
+    placeItems: "center",
+    width: "32px",
+    height: "32px",
+    border: 0,
     borderRadius: wm.radius.md,
-    background: wm.colors.surface,
+    background: "transparent",
     color: wm.colors.text,
     cursor: "pointer",
   },

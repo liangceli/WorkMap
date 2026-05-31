@@ -188,6 +188,7 @@ Completed in current MVP:
 - `OfficeLeftRail` should use large clean icons and no persistent outline box around inactive action buttons; keep only a filled navy active state.
 - Office shell notification/status dots should stay visible: rail badge dots around 10px, dock/avatar online dots around 14px.
 - Top pill dropdown indicators use the `chevronDown` icon from `OfficeIcons.tsx`; avoid text `v` placeholders.
+- `/virtual-office` close controls use the `close` icon from `OfficeIcons.tsx`; avoid text `x`/`Esc` placeholders and avoid bordered square close buttons.
 - Map controls use a compact right-side vertical capsule with `+`, `-`, `target`, and zoom percent.
 - `OfficeBottomDock` action buttons should render icon-only controls with accessible `aria-label`s and hover/focus tooltips; avoid always-visible text labels under dock icons.
 - `OfficeCommandPalette` should close when users click the blurred backdrop outside the palette form, while clicks inside the palette must not close it.
@@ -250,6 +251,15 @@ Completed in current MVP:
 - A typed frontend API client foundation exists under `apps/web/lib/api/`: `apiClient.ts`, `apiTypes.ts`, `authApi.ts`, `usersApi.ts`, `virtualOfficeApi.ts`, `integrationsApi.ts`, `complianceApi.ts`, and `reportsApi.ts`. It uses `NEXT_PUBLIC_WORKMAP_API_URL` with a development localhost default, supports optional Bearer tokens, returns graceful fallback results, and does not auto-call `/auth/dev-token`.
 - Current API integration remains optional/fallback-safe. Existing SaaS pages still use mock data until auth/RBAC/API contracts are final enough to wire real data safely.
 - `/virtual-office` overlay z-index values now use shared theme layer tokens. No new Gather-like feature areas, Phaser migration, Canvas rewrite, backend changes, Socket.IO, Microsoft Graph, chat persistence, calendar sync, or notices persistence were added.
+
+## Verified QA status - 2026-05-31
+
+- Frontend typecheck, lint, and build pass.
+- Full monorepo typecheck, lint, and build pass.
+- Fresh web dev server on `http://127.0.0.1:3010` returned HTTP 200 for the current required frontend route set, including `/virtual-office` and `/employees/mia`.
+- Code inspection confirms current demo workflow routing remains localStorage-only through `workmap.userSetupState`, and avatar config remains localStorage-only through `workmap.avatarConfig`.
+- Browser automation was unavailable during this QA pass, so virtual-office movement, collision, overlay overlap, command palette, panel, drawer, and avatar localStorage interaction checks still require manual browser QA.
+- No frontend runtime path was found that auto-calls `/auth/dev-token`; API helpers remain fallback-safe.
 
 Current frontend-only workflow routes:
 

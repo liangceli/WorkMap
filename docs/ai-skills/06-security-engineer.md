@@ -86,11 +86,22 @@ Current frontend-only MVP:
 - `POST /auth/dev-token` exists only for non-production demo/local development. It must stay disabled in production and must not be presented as a real login flow.
 - Header context (`x-workmap-company-id`, `x-workmap-user-id`, `x-workmap-role`) remains only as a non-production fallback and must be removed/disabled for production deployment.
 - Existing protected controllers cover company profile, users, devices, virtual office map/positions, compliance policy/acknowledgement, link-based integrations/contact links, and report usage summaries.
+- `GET /virtual-office/navigation` is a protected company-scoped computed endpoint that exposes only safe room destination data and people counts, not monitoring metrics.
+- `GET /integrations/contact-links/:targetUserId` remains link-based and company-scoped; it returns flat URLs plus provider objects without Microsoft Graph or content access.
 - UUID route parameters and optional report `userId` query have built-in/custom pipe validation, but request bodies still need DTO validation once dependency strategy is approved.
 - Manager-sensitive user detail and report reads are audit logged.
 - API still has no production token issuance/login flow, activity ingestion endpoint, Socket.IO gateway, Redis/BullMQ queue, rate limiting, or DTO validation library.
 - Virtual Office workspace shell contract proposal exists at `/docs/api/virtual-office-workspace-contract.md`.
+- Endpoint map, validation plan, activity ingestion contract, and production auth readiness docs exist under `/docs/api/`.
 - Chat, Calendar, Notices, emoji/wave, message persistence, calendar persistence, notices persistence, Microsoft Graph, and Socket.IO remain unimplemented. Contact links remain link-based only.
+
+## Verified security QA status - 2026-05-31
+
+- Privacy scan of current `apps`, `packages`, `prisma`, and docs found forbidden terms only in explicit "not collected" copy/docs or benign implementation names such as `cameraOffset`; no collected/displayed forbidden employee data was found.
+- Frontend code inspection confirmed no automatic `/auth/dev-token` call and no use of frontend demo role state as real backend authorization.
+- Office shell source inspection found contact/collaboration data only in people/contact surfaces; no app/domain/idle/productivity summaries are exposed in normal virtual-office surfaces.
+- Backend route code still shows UUID validation through `ParseUUIDPipe` and optional report `userId` validation through `OptionalUuidPipe`.
+- Runtime RBAC/security tests are blocked until the API start/runtime issue in `docs/qa/workmap-qa-report-2026-05-31.md` is fixed.
 
 Review implications:
 
