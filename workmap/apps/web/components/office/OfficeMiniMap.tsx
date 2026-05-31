@@ -23,12 +23,13 @@ type OfficeMiniMapProps = {
   map: MiniMapData;
   player: PlayerState;
   tilesets: OfficeTileset[];
+  shifted?: boolean;
 };
 
-const MINI_MAP_WIDTH = 220;
-const MINI_MAP_HEIGHT = 132;
+const MINI_MAP_WIDTH = 238;
+const MINI_MAP_HEIGHT = 158;
 
-export function OfficeMiniMap({ map, player, tilesets }: OfficeMiniMapProps) {
+export function OfficeMiniMap({ map, player, tilesets, shifted }: OfficeMiniMapProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imagesRef = useRef(new Map<string, HTMLImageElement>());
 
@@ -72,7 +73,7 @@ export function OfficeMiniMap({ map, player, tilesets }: OfficeMiniMapProps) {
   }, [map, player, tilesets]);
 
   return (
-    <aside aria-label="Office mini map" style={styles.shell}>
+    <aside aria-label="Office mini map" style={{ ...styles.shell, ...(shifted ? styles.shellShifted : {}) }}>
       <div style={styles.header}>
         <span style={styles.title}>Office map</span>
         <span style={styles.legend}>You</span>
@@ -151,16 +152,20 @@ function drawMiniMap(
 const styles = {
   shell: {
     position: "absolute" as const,
-    right: "24px",
-    bottom: "24px",
+    left: "22px",
+    bottom: "52px",
     zIndex: 18,
-    width: "244px",
-    padding: "10px",
-    border: "1px solid rgba(203, 213, 225, 0.82)",
-    borderRadius: "16px",
-    background: "rgba(255, 255, 255, 0.82)",
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.16)",
-    backdropFilter: "blur(16px)",
+    width: "260px",
+    padding: "12px",
+    border: "1px solid rgba(216, 224, 236, 0.82)",
+    borderRadius: "18px",
+    background: "rgba(22, 35, 90, 0.96)",
+    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.2)",
+    backdropFilter: "blur(20px)",
+  },
+  shellShifted: {
+    opacity: 0,
+    pointerEvents: "none" as const,
   },
   header: {
     display: "flex",
@@ -169,7 +174,7 @@ const styles = {
     marginBottom: "8px",
   },
   title: {
-    color: "#0f172a",
+    color: "#ffffff",
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
@@ -178,7 +183,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",
-    color: "#334155",
+    color: "rgba(255, 255, 255, 0.78)",
     fontSize: "12px",
     fontWeight: 800,
   },
@@ -186,8 +191,8 @@ const styles = {
     display: "block",
     width: `${MINI_MAP_WIDTH}px`,
     height: `${MINI_MAP_HEIGHT}px`,
-    border: "1px solid rgba(148, 163, 184, 0.45)",
-    borderRadius: "10px",
-    background: "#e2e8f0",
+    border: "1px solid rgba(255, 255, 255, 0.16)",
+    borderRadius: "14px",
+    background: "#16235a",
   },
 };

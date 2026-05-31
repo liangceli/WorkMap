@@ -5,6 +5,7 @@ import { EmployeeAvatar } from "../dashboard/EmployeeAvatar";
 import type { DashboardEmployee } from "../dashboard/mockDashboardData";
 import { PresenceBadge } from "../office/PresenceBadge";
 import { getUserSetupState } from "../../lib/workflow/workflowState";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type EmployeeProfileProps = {
   employee: DashboardEmployee;
@@ -176,13 +177,14 @@ function formatDeviceHealth(health?: DashboardEmployee["deviceHealth"]) {
 }
 
 function getDeviceStyle(health?: DashboardEmployee["deviceHealth"]) {
-  const color = health === "offline" ? "#64748b" : health === "delayed" ? "#b45309" : "#15803d";
+  const color = health === "offline" ? wm.colors.textMuted : health === "delayed" ? wm.colors.warning : wm.colors.success;
 
   return {
     ...styles.deviceHealth,
     color,
-    borderColor: health === "offline" ? "#cbd5e1" : health === "delayed" ? "#fed7aa" : "#bbf7d0",
-    background: health === "offline" ? "#f8fafc" : health === "delayed" ? "#fff7ed" : "#f0fdf4",
+    borderColor:
+      health === "offline" ? wm.colors.borderStrong : health === "delayed" ? wm.colors.warningBorder : wm.colors.successBorder,
+    background: health === "offline" ? wm.colors.appBackground : health === "delayed" ? wm.colors.warningBg : wm.colors.successBg,
   };
 }
 
@@ -198,29 +200,25 @@ const styles = {
     alignItems: "stretch",
   },
   identityBlock: {
+    ...wmStyles.elevatedCard,
     display: "flex",
     alignItems: "center",
     gap: "18px",
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
     padding: "18px",
   },
   eyebrow: {
-    margin: "0 0 8px",
-    color: "#2563eb",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
   },
   title: {
     margin: "0 0 6px",
+    color: wm.colors.text,
     fontSize: "32px",
     lineHeight: 1.1,
+    fontWeight: 700,
   },
   subtitle: {
     margin: "0 0 12px",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "15px",
   },
   badgeRow: {
@@ -230,56 +228,51 @@ const styles = {
     alignItems: "center",
   },
   localTime: {
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    background: "#ffffff",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.md,
+    background: wm.colors.surface,
     padding: "8px 10px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
-    fontWeight: 800,
+    fontWeight: 700,
   },
   deviceHealth: {
     border: "1px solid",
     borderRadius: "999px",
     padding: "6px 10px",
     fontSize: "12px",
-    fontWeight: 900,
+    fontWeight: 700,
   },
   modeCard: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
   },
   panelLabel: {
-    margin: "0 0 8px",
-    color: "#64748b",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
+    color: wm.colors.textMuted,
   },
   segmented: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.md,
     overflow: "hidden",
   },
   segmentButton: {
     height: "40px",
     border: 0,
-    background: "#ffffff",
-    color: "#475569",
+    background: wm.colors.surface,
+    color: wm.colors.textSecondary,
     cursor: "pointer",
-    fontWeight: 900,
+    fontWeight: 700,
   },
   segmentButtonActive: {
-    background: "#0f172a",
-    color: "#ffffff",
+    background: wm.colors.primaryContainer,
+    color: wm.colors.surface,
   },
   modeText: {
     margin: "12px 0 0",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "13px",
     lineHeight: 1.45,
   },
@@ -298,9 +291,7 @@ const styles = {
     gap: "14px",
   },
   panel: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
   },
   panelHeader: {
@@ -311,7 +302,9 @@ const styles = {
   },
   panelTitle: {
     margin: 0,
+    color: wm.colors.text,
     fontSize: "18px",
+    fontWeight: 700,
   },
   contactGrid: {
     display: "grid",
@@ -319,22 +312,12 @@ const styles = {
     gap: "10px",
   },
   primaryAction: {
-    border: "1px solid #0f172a",
-    background: "#0f172a",
-    color: "#ffffff",
-    borderRadius: "6px",
+    ...wmStyles.primaryButton,
     padding: "10px",
-    cursor: "pointer",
-    fontWeight: 900,
   },
   actionButton: {
-    border: "1px solid #cbd5e1",
-    background: "#f8fafc",
-    color: "#0f172a",
-    borderRadius: "6px",
+    ...wmStyles.secondaryButton,
     padding: "10px",
-    cursor: "pointer",
-    fontWeight: 900,
   },
   metricGrid: {
     display: "grid",
@@ -343,22 +326,22 @@ const styles = {
     margin: 0,
   },
   metric: {
-    border: "1px solid #e2e8f0",
-    borderRadius: "8px",
-    background: "#f8fafc",
+    border: `1px solid ${wm.colors.borderSubtle}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.surfaceLow,
     padding: "12px",
   },
   metricLabel: {
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "11px",
-    fontWeight: 900,
+    fontWeight: 700,
     textTransform: "uppercase" as const,
   },
   metricValue: {
     margin: "6px 0 0",
-    color: "#0f172a",
+    color: wm.colors.text,
     fontSize: "17px",
-    fontWeight: 900,
+    fontWeight: 700,
   },
   privacyGrid: {
     display: "grid",
@@ -367,11 +350,12 @@ const styles = {
   },
   smallTitle: {
     margin: "0 0 6px",
+    color: wm.colors.text,
     fontSize: "15px",
   },
   bodyText: {
     margin: 0,
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "13px",
     lineHeight: 1.45,
   },
@@ -383,10 +367,10 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    border: "1px solid #e2e8f0",
-    borderRadius: "8px",
+    border: `1px solid ${wm.colors.borderSubtle}`,
+    borderRadius: wm.radius.md,
     padding: "8px",
-    color: "#0f172a",
+    color: wm.colors.text,
     textDecoration: "none",
   },
   teammateName: {
@@ -395,7 +379,7 @@ const styles = {
   },
   teammateRole: {
     display: "block",
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "12px",
   },
   navStack: {
@@ -403,22 +387,13 @@ const styles = {
     gap: "8px",
   },
   navLink: {
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
-    background: "#ffffff",
-    color: "#0f172a",
+    ...wmStyles.secondaryButton,
     padding: "10px",
     textAlign: "center" as const,
-    textDecoration: "none",
-    fontWeight: 900,
   },
   navLinkDark: {
-    borderRadius: "6px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "10px",
     textAlign: "center" as const,
-    textDecoration: "none",
-    fontWeight: 900,
   },
 };

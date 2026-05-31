@@ -1,3 +1,5 @@
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+
 export default function AvatarDebugPage() {
   return (
     <main style={styles.page}>
@@ -24,38 +26,34 @@ function DebugImage({ title, src }: { title: string; src: string }) {
 
 const styles = {
   page: {
-    minHeight: "100vh",
-    padding: "28px",
-    background: "#f3f7fb",
-    color: "#0f172a",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    ...wmStyles.page,
+    padding: "32px",
   },
   title: {
-    margin: "0 0 8px",
-    fontSize: "32px",
+    ...wmStyles.pageTitle,
   },
   text: {
-    margin: "0 0 20px",
-    color: "#475569",
+    ...wmStyles.pageSubtitle,
+    margin: "0 0 24px",
   },
   stack: {
     display: "grid",
     gap: "18px",
   },
   card: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
     overflow: "auto",
   },
   heading: {
     margin: "0 0 4px",
+    color: wm.colors.text,
     fontSize: "20px",
+    fontWeight: 700,
   },
   path: {
     margin: "0 0 12px",
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "13px",
   },
   image: {

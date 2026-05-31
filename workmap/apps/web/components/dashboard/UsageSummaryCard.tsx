@@ -1,14 +1,15 @@
 import type { UsageMetric } from "./mockDashboardData";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type UsageSummaryCardProps = {
   metric: UsageMetric;
 };
 
 const toneColors: Record<UsageMetric["tone"], string> = {
-  green: "#16a34a",
-  blue: "#2563eb",
+  green: wm.colors.success,
+  blue: wm.colors.secondary,
   amber: "#d97706",
-  slate: "#475569",
+  slate: wm.colors.textSecondary,
 };
 
 export function UsageSummaryCard({ metric }: UsageSummaryCardProps) {
@@ -25,9 +26,7 @@ export function UsageSummaryCard({ metric }: UsageSummaryCardProps) {
 const styles = {
   card: {
     position: "relative" as const,
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
     overflow: "hidden",
   },
@@ -40,20 +39,20 @@ const styles = {
   },
   label: {
     margin: "0 0 8px",
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "12px",
     fontWeight: 800,
     textTransform: "uppercase" as const,
   },
   value: {
     display: "block",
-    color: "#0f172a",
+    color: wm.colors.text,
     fontSize: "26px",
     lineHeight: 1,
   },
   detail: {
     margin: "10px 0 0",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "13px",
     lineHeight: 1.45,
   },

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { updateUserSetupState } from "../../../lib/workflow/workflowState";
 
 export default function CompanyOnboardingPage() {
@@ -48,9 +49,9 @@ const styles = {
     minHeight: "100vh",
     display: "grid",
     placeItems: "center",
-    background: "#f3f7fb",
-    color: "#0f172a",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    background: wm.colors.appBackground,
+    color: wm.colors.text,
+    fontFamily: wm.typography.fontFamily,
     padding: "24px",
   },
   shell: {
@@ -58,59 +59,51 @@ const styles = {
   },
   eyebrow: {
     margin: "0 0 8px",
-    color: "#2563eb",
+    color: wm.colors.secondary,
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
   },
   title: {
     margin: "0 0 10px",
-    fontSize: "38px",
-    lineHeight: 1.08,
+    fontSize: "32px",
+    lineHeight: 1.25,
+    fontWeight: 700,
+    letterSpacing: "-0.02em",
   },
   subtitle: {
     margin: "0 0 18px",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "16px",
   },
   card: {
     display: "grid",
     gap: "14px",
-    border: "1px solid #dbe3ef",
-    borderRadius: "10px",
-    background: "#ffffff",
+    ...wmStyles.elevatedCard,
     padding: "20px",
   },
   label: {
     display: "grid",
     gap: "6px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "13px",
     fontWeight: 900,
   },
   input: {
     height: "42px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "7px",
+    ...wmStyles.input,
     padding: "0 10px",
-    color: "#0f172a",
     fontSize: "14px",
   },
   note: {
     display: "grid",
     gap: "4px",
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    background: "#eff6ff",
-    color: "#1e3a8a",
+    ...wmStyles.infoNotice,
     padding: "12px",
     fontSize: "14px",
   },
   button: {
-    border: "1px solid #0f172a",
-    borderRadius: "8px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "12px 14px",
     cursor: "pointer",
     fontWeight: 900,

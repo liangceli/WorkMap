@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { AppShell } from "../../components/layout/AppShell";
 import { clearAvatarConfig } from "../../lib/avatar/avatarStorage";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { resetUserSetupState } from "../../lib/workflow/workflowState";
 
 const settingsSections = [
@@ -94,39 +95,23 @@ export default function SettingsPage() {
 
 const styles = {
   shell: {
-    display: "grid",
-    gap: "16px",
+    ...wmStyles.pageStack,
   },
   header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "16px",
+    ...wmStyles.pageHeader,
   },
   eyebrow: {
-    margin: "0 0 8px",
-    color: "#2563eb",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
   },
   title: {
-    margin: "0 0 8px",
-    fontSize: "34px",
-    lineHeight: 1.1,
+    ...wmStyles.pageTitle,
   },
   subtitle: {
-    margin: 0,
-    color: "#475569",
-    fontSize: "15px",
+    ...wmStyles.pageSubtitle,
   },
   primaryLink: {
-    borderRadius: "8px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "10px 14px",
-    textDecoration: "none",
-    fontWeight: 800,
   },
   grid: {
     display: "grid",
@@ -134,19 +119,17 @@ const styles = {
     gap: "14px",
   },
   card: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
     display: "grid",
     gap: "10px",
   },
   status: {
     justifySelf: "start",
-    border: "1px solid #bfdbfe",
+    border: `1px solid ${wm.colors.infoBorder}`,
     borderRadius: "999px",
-    background: "#eff6ff",
-    color: "#1d4ed8",
+    background: wm.colors.infoBg,
+    color: wm.colors.secondary,
     padding: "5px 9px",
     fontSize: "12px",
     fontWeight: 900,
@@ -157,16 +140,13 @@ const styles = {
   },
   cardText: {
     margin: 0,
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
   },
   cardLink: {
     justifySelf: "start",
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
-    background: "#f8fafc",
-    color: "#0f172a",
+    ...wmStyles.secondaryButton,
     padding: "9px 12px",
     textDecoration: "none",
     fontWeight: 900,
@@ -175,9 +155,9 @@ const styles = {
     display: "flex",
     gap: "10px",
     alignItems: "center",
-    border: "1px solid #fed7aa",
-    borderRadius: "8px",
-    background: "#fff7ed",
+    border: `1px solid ${wm.colors.warningBorder}`,
+    borderRadius: wm.radius.xl,
+    background: wm.colors.warningBg,
     color: "#7c2d12",
     padding: "12px 14px",
     fontSize: "14px",
@@ -188,14 +168,12 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "16px",
-    border: "1px solid #e2e8f0",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
   },
   panelLabel: {
     margin: "0 0 8px",
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
@@ -206,16 +184,13 @@ const styles = {
   },
   panelText: {
     margin: 0,
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
   },
   resetButton: {
     flex: "0 0 auto",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    background: "#f8fafc",
-    color: "#0f172a",
+    ...wmStyles.secondaryButton,
     padding: "10px 14px",
     cursor: "pointer",
     fontWeight: 900,

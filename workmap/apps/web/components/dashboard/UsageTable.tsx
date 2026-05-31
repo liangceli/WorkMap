@@ -1,4 +1,5 @@
 import type { UsageRow } from "./mockDashboardData";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type UsageTableProps = {
   title: string;
@@ -27,9 +28,7 @@ export function UsageTable({ title, rows }: UsageTableProps) {
 
 const styles = {
   card: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
   },
   title: {
@@ -45,7 +44,7 @@ const styles = {
     gridTemplateColumns: "minmax(0, 1fr) auto auto",
     gap: "12px",
     alignItems: "center",
-    borderTop: "1px solid #eef2f7",
+    borderTop: `1px solid ${wm.colors.borderSubtle}`,
     paddingTop: "10px",
   },
   name: {
@@ -55,17 +54,17 @@ const styles = {
   },
   category: {
     margin: 0,
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "12px",
   },
   duration: {
     fontSize: "14px",
   },
   share: {
-    border: "1px solid #dbe3ef",
+    border: `1px solid ${wm.colors.border}`,
     borderRadius: "999px",
     padding: "4px 8px",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "12px",
     fontWeight: 800,
   },

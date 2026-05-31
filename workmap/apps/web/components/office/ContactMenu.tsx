@@ -1,4 +1,5 @@
 import type { ContactTarget } from "@workmap/shared-types";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { PresenceBadge } from "./PresenceBadge";
 
 type ContactMenuProps = {
@@ -39,27 +40,23 @@ export function ContactMenu({ target, onClose }: ContactMenuProps) {
 
 const styles = {
   contactCard: {
+    ...wmStyles.elevatedCard,
     position: "relative" as const,
-    border: "1px solid #94a3b8",
-    background: "#ffffff",
-    borderRadius: "8px",
     padding: "14px",
-    boxShadow: "0 16px 35px rgba(15, 23, 42, 0.12)",
   },
   panelLabel: {
-    margin: "0 0 6px",
-    color: "#64748b",
-    fontSize: "12px",
-    fontWeight: 700,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
+    color: wm.colors.textMuted,
   },
   panelTitle: {
     margin: "0 0 8px",
+    color: wm.colors.text,
     fontSize: "20px",
+    fontWeight: 700,
   },
   panelText: {
     margin: "0 0 10px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
   },
@@ -70,20 +67,17 @@ const styles = {
     marginTop: "12px",
   },
   actionButton: {
-    border: "1px solid #cbd5e1",
-    background: "#f8fafc",
-    borderRadius: "6px",
+    ...wmStyles.secondaryButton,
     padding: "8px",
-    color: "#0f172a",
-    cursor: "pointer",
   },
   closeButton: {
     position: "absolute" as const,
     top: "10px",
     right: "10px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
-    background: "#ffffff",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.md,
+    background: wm.colors.surface,
+    color: wm.colors.text,
     cursor: "pointer",
   },
 };

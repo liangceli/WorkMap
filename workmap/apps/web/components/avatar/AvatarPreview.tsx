@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { AvatarPreset } from "../../lib/avatar/avatarAssets";
 import { body2FirstFourRowsFrameMap } from "../../lib/avatar/avatarFrameMaps";
+import { wm } from "../../lib/theme/workmapTheme";
 
 type AvatarPreviewProps = {
   preset: AvatarPreset;
@@ -57,9 +58,9 @@ const styles = {
     display: "grid",
     placeItems: "center",
     overflow: "hidden",
-    borderRadius: "8px",
-    border: "1px solid #dbe3ef",
-    background: "#f8fafc",
+    borderRadius: wm.radius.md,
+    border: `1px solid ${wm.colors.border}`,
+    background: wm.colors.surfaceLow,
   },
   loaderImage: {
     position: "absolute" as const,
@@ -74,9 +75,9 @@ const styles = {
     width: "58%",
     height: "58%",
     borderRadius: "999px",
-    background: "#e0f2fe",
-    color: "#075985",
-    fontWeight: 800,
+    background: wm.colors.surfaceContainer,
+    color: wm.colors.primaryContainer,
+    fontWeight: 700,
     fontSize: "28px",
   },
 };

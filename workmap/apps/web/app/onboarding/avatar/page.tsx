@@ -11,6 +11,7 @@ import {
   type LayeredAvatarConfig,
 } from "../../../lib/avatar/avatarLayerAssets";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
+import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
 const groups: Array<{ type: AvatarLayerType; title: string; optional?: boolean; multi?: boolean }> = [
@@ -115,8 +116,8 @@ function LayerGroup({
               onClick={() => onChange(selectLayer(config, asset, Boolean(group.multi)))}
               style={{
                 ...styles.optionButton,
-                borderColor: selected ? "#2563eb" : "#dbe3ef",
-                background: selected ? "#eff6ff" : "#ffffff",
+                borderColor: selected ? wm.colors.secondary : wm.colors.border,
+                background: selected ? wm.colors.infoBg : wm.colors.surface,
               }}
             >
               <LayeredAvatarPreview config={previewConfigFor(asset, config)} size={48} />
@@ -198,9 +199,9 @@ function getSelectedNames(config: LayeredAvatarConfig) {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "#f3f7fb",
-    color: "#0f172a",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    background: wm.colors.appBackground,
+    color: wm.colors.text,
+    fontFamily: wm.typography.fontFamily,
     padding: "32px 24px",
   },
   shell: {
@@ -212,19 +213,21 @@ const styles = {
   },
   eyebrow: {
     margin: "0 0 8px",
-    color: "#2563eb",
+    color: wm.colors.secondary,
     fontSize: "13px",
     fontWeight: 800,
     textTransform: "uppercase" as const,
   },
   title: {
     margin: 0,
-    fontSize: "38px",
-    lineHeight: 1.08,
+    fontSize: "32px",
+    lineHeight: 1.25,
+    fontWeight: 700,
+    letterSpacing: "-0.02em",
   },
   subtitle: {
     margin: "10px 0 0",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "17px",
   },
   layout: {
@@ -234,9 +237,7 @@ const styles = {
     alignItems: "start",
   },
   panel: {
-    border: "1px solid #dbe3ef",
-    background: "#ffffff",
-    borderRadius: "8px",
+    ...wmStyles.card,
     padding: "20px",
   },
   sectionTitle: {
@@ -245,13 +246,13 @@ const styles = {
   },
   bodyText: {
     margin: "0 0 16px",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.55,
   },
   trustNote: {
     margin: "0 0 16px",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "13px",
     lineHeight: 1.5,
   },
@@ -284,11 +285,11 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.surface,
     padding: "8px",
-    color: "#0f172a",
+    color: wm.colors.text,
     cursor: "pointer",
     textAlign: "left" as const,
   },
@@ -302,33 +303,25 @@ const styles = {
     placeItems: "center",
     minHeight: "220px",
     marginBottom: "14px",
-    borderRadius: "8px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
+    borderRadius: wm.radius.xl,
+    background: wm.colors.surfaceLow,
+    border: `1px solid ${wm.colors.borderSubtle}`,
   },
   saveButton: {
     width: "100%",
-    border: "1px solid #1d4ed8",
-    borderRadius: "8px",
-    background: "#2563eb",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "11px 14px",
     fontWeight: 800,
     cursor: "pointer",
   },
   clearButton: {
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
-    background: "#ffffff",
-    color: "#334155",
+    ...wmStyles.secondaryButton,
     padding: "5px 8px",
     cursor: "pointer",
     fontWeight: 700,
   },
   emptyState: {
-    border: "1px solid #dbe3ef",
-    background: "#ffffff",
-    borderRadius: "8px",
+    ...wmStyles.card,
     padding: "24px",
   },
 };

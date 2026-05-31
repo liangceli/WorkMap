@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { wm } from "../../lib/theme/workmapTheme";
 
 type VirtualOfficeShellProps = {
   children: ReactNode;
@@ -16,6 +17,6 @@ const styles = {
     width: "100vw",
     height: "100vh",
     overflow: "hidden",
-    background: "#cbd5e1",
+    background: wm.colors.surfaceHighest,
   },
 };

@@ -1,19 +1,23 @@
 "use client";
 
-export type OfficePanelKey = "people" | "search" | "chat" | "calendar" | "notices" | "settings";
+import { wm } from "../../lib/theme/workmapTheme";
+import { OfficeIcon } from "./OfficeIcons";
+
+export type OfficePanelKey = "search" | "rooms" | "people" | "chat" | "calendar" | "notices" | "settings";
 
 type OfficeLeftRailProps = {
   activePanel: OfficePanelKey | null;
   onSelectPanel: (panel: OfficePanelKey) => void;
 };
 
-const railItems: Array<{ key: OfficePanelKey; label: string; short: string }> = [
-  { key: "people", label: "People", short: "P" },
-  { key: "search", label: "Search", short: "K" },
-  { key: "chat", label: "Chat", short: "C" },
-  { key: "calendar", label: "Calendar", short: "S" },
-  { key: "notices", label: "Notices", short: "N" },
-  { key: "settings", label: "Settings", short: "G" },
+const railItems: Array<{ key: OfficePanelKey; label: string; icon: Parameters<typeof OfficeIcon>[0]["name"]; hasBadge?: boolean; bottom?: boolean }> = [
+  { key: "search", label: "Search", icon: "search" },
+  { key: "rooms", label: "Rooms and map", icon: "map" },
+  { key: "people", label: "People", icon: "people" },
+  { key: "chat", label: "Chat", icon: "chat", hasBadge: true },
+  { key: "calendar", label: "Calendar", icon: "calendar" },
+  { key: "notices", label: "Notices", icon: "chat", hasBadge: true },
+  { key: "settings", label: "Settings", icon: "settings", bottom: true },
 ];
 
 export function OfficeLeftRail({ activePanel, onSelectPanel }: OfficeLeftRailProps) {
@@ -29,9 +33,11 @@ export function OfficeLeftRail({ activePanel, onSelectPanel }: OfficeLeftRailPro
           style={{
             ...styles.button,
             ...(activePanel === item.key ? styles.buttonActive : {}),
+            ...(item.bottom ? styles.buttonBottom : {}),
           }}
         >
-          <span style={styles.short}>{item.short}</span>
+          <OfficeIcon name={item.icon} size={30} />
+          {item.hasBadge ? <span style={styles.badge} /> : null}
         </button>
       ))}
     </nav>
@@ -41,36 +47,50 @@ export function OfficeLeftRail({ activePanel, onSelectPanel }: OfficeLeftRailPro
 const styles = {
   rail: {
     position: "absolute" as const,
-    top: "96px",
-    left: "18px",
+    top: "124px",
+    left: "22px",
+    bottom: "300px",
     zIndex: 35,
-    display: "grid",
-    gap: "8px",
-    padding: "8px",
-    border: "1px solid rgba(203, 213, 225, 0.72)",
-    borderRadius: "18px",
-    background: "rgba(255, 255, 255, 0.82)",
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.14)",
-    backdropFilter: "blur(16px)",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "14px",
+    width: "74px",
+    padding: "16px 10px",
+    border: "1px solid rgba(216, 224, 236, 0.8)",
+    borderRadius: "22px",
+    background: "rgba(255, 255, 255, 0.78)",
+    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)",
+    backdropFilter: "blur(22px)",
   },
   button: {
+    position: "relative" as const,
     display: "grid",
     placeItems: "center",
-    width: "42px",
-    height: "42px",
-    border: "1px solid transparent",
-    borderRadius: "13px",
+    width: "54px",
+    height: "54px",
+    border: 0,
+    borderRadius: "16px",
     background: "transparent",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     cursor: "pointer",
+    outline: "none",
   },
   buttonActive: {
-    borderColor: "#bfdbfe",
-    background: "#eff6ff",
-    color: "#1d4ed8",
+    background: wm.colors.primaryContainer,
+    color: wm.colors.surface,
+    boxShadow: "0 14px 30px rgba(22, 35, 90, 0.18)",
   },
-  short: {
-    fontSize: "13px",
-    fontWeight: 900,
+  buttonBottom: {
+    marginTop: "auto",
+  },
+  badge: {
+    position: "absolute" as const,
+    right: "8px",
+    top: "8px",
+    width: "10px",
+    height: "10px",
+    borderRadius: "999px",
+    border: `2.5px solid ${wm.colors.surface}`,
+    background: "#ef4444",
   },
 };

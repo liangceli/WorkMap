@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PolicyAcknowledgementModal } from "./PolicyAcknowledgementModal";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 const collectedItems = [
   "App name",
@@ -64,7 +65,7 @@ export function CompliancePolicyPanel() {
 function PolicyList({ title, tone, items }: { title: string; tone: "blue" | "green"; items: string[] }) {
   return (
     <section style={styles.policyCard}>
-      <div style={{ ...styles.accent, background: tone === "blue" ? "#2563eb" : "#16a34a" }} />
+      <div style={{ ...styles.accent, background: tone === "blue" ? wm.colors.secondary : wm.colors.success }} />
       <h2 style={styles.policyTitle}>{title}</h2>
       <ul style={styles.list}>
         {items.map((item) => (
@@ -86,11 +87,9 @@ const styles = {
     gap: "14px",
   },
   policyCard: {
+    ...wmStyles.card,
     position: "relative" as const,
     overflow: "hidden",
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
     padding: "16px",
   },
   accent: {
@@ -102,50 +101,44 @@ const styles = {
   },
   policyTitle: {
     margin: "0 0 12px",
+    color: wm.colors.text,
     fontSize: "20px",
+    fontWeight: 700,
   },
   list: {
     margin: 0,
     paddingLeft: "18px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.8,
   },
   ackPanel: {
+    ...wmStyles.infoNotice,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "16px",
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    background: "#eff6ff",
     padding: "16px",
   },
   panelLabel: {
-    margin: "0 0 8px",
-    color: "#1d4ed8",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
+    color: wm.colors.infoText,
   },
   panelTitle: {
     margin: "0 0 6px",
+    color: wm.colors.text,
     fontSize: "19px",
+    fontWeight: 700,
   },
   panelText: {
     margin: 0,
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
   },
   primaryButton: {
+    ...wmStyles.primaryButton,
     flex: "0 0 auto",
-    border: "1px solid #0f172a",
-    borderRadius: "6px",
-    background: "#0f172a",
-    color: "#ffffff",
     padding: "10px 14px",
-    cursor: "pointer",
-    fontWeight: 900,
   },
 };

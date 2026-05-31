@@ -1,5 +1,7 @@
 "use client";
 
+import { wm } from "../../lib/theme/workmapTheme";
+
 type MovementHintProps = {
   hasInteractionTarget: boolean;
 };
@@ -28,7 +30,7 @@ const styles = {
     border: "1px solid rgba(30, 41, 59, 0.12)",
     borderRadius: "12px",
     background: "rgba(15, 23, 42, 0.78)",
-    color: "#f8fafc",
+    color: wm.colors.background,
     boxShadow: "0 16px 35px rgba(15, 23, 42, 0.2)",
     backdropFilter: "blur(14px)",
     fontSize: "13px",

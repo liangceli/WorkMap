@@ -1,4 +1,5 @@
 import type { IntegrationItem, IntegrationStatus } from "./mockIntegrationsData";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type IntegrationButtonProps = {
   integration: IntegrationItem;
@@ -11,9 +12,9 @@ const statusLabels: Record<IntegrationStatus, string> = {
 };
 
 const statusColors: Record<IntegrationStatus, { color: string; background: string; border: string }> = {
-  ready: { color: "#15803d", background: "#f0fdf4", border: "#bbf7d0" },
-  mock: { color: "#1d4ed8", background: "#eff6ff", border: "#bfdbfe" },
-  needs_setup: { color: "#b45309", background: "#fff7ed", border: "#fed7aa" },
+  ready: { color: wm.colors.success, background: wm.colors.successBg, border: wm.colors.successBorder },
+  mock: { color: wm.colors.infoText, background: wm.colors.infoBg, border: wm.colors.infoBorder },
+  needs_setup: { color: wm.colors.warning, background: wm.colors.warningBg, border: wm.colors.warningBorder },
 };
 
 export function IntegrationButton({ integration }: IntegrationButtonProps) {
@@ -50,9 +51,7 @@ export function IntegrationButton({ integration }: IntegrationButtonProps) {
 
 const styles = {
   card: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
     display: "grid",
     gap: "12px",
@@ -64,16 +63,14 @@ const styles = {
     alignItems: "flex-start",
   },
   category: {
-    margin: "0 0 6px",
-    color: "#64748b",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
+    color: wm.colors.textMuted,
   },
   name: {
     margin: 0,
-    color: "#0f172a",
+    color: wm.colors.text,
     fontSize: "19px",
+    fontWeight: 700,
   },
   status: {
     border: "1px solid",
@@ -81,29 +78,24 @@ const styles = {
     padding: "5px 9px",
     whiteSpace: "nowrap" as const,
     fontSize: "12px",
-    fontWeight: 900,
+    fontWeight: 700,
   },
   description: {
     margin: 0,
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
   },
   privacy: {
     margin: 0,
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "13px",
     lineHeight: 1.45,
   },
   action: {
+    ...wmStyles.primaryButton,
     display: "inline-flex",
     justifyContent: "center",
-    border: "1px solid #0f172a",
-    borderRadius: "6px",
-    background: "#0f172a",
-    color: "#ffffff",
     padding: "10px 12px",
-    textDecoration: "none",
-    fontWeight: 900,
   },
 };

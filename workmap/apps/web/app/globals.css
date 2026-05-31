@@ -1,0 +1,50 @@
+:root {
+  --wm-bg: #f4f7fb;
+  --wm-surface: #ffffff;
+  --wm-surface-low: #eff4ff;
+  --wm-surface-container: #e6eeff;
+  --wm-surface-high: #dce9ff;
+  --wm-text: #0d1c2e;
+  --wm-text-secondary: #454650;
+  --wm-text-muted: #64748b;
+  --wm-primary: #000c43;
+  --wm-primary-container: #16235a;
+  --wm-secondary: #0051d5;
+  --wm-border: #d8e0ec;
+  --wm-border-subtle: #e6ebf2;
+  --wm-radius-md: 8px;
+  --wm-radius-xl: 16px;
+  --wm-radius-2xl: 24px;
+  --wm-shadow-card: 0 4px 20px rgba(15, 23, 42, 0.05);
+  --wm-shadow-elevated: 0 12px 32px rgba(15, 23, 42, 0.12);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--wm-bg);
+  color: var(--wm-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 2px;
+}

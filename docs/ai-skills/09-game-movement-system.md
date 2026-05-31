@@ -47,7 +47,8 @@ The current Canvas MVP now supports:
 - Go to room/section
 - click room/section to open a room context card
 - command palette for people, rooms, and actions
-- left office rail with People, Search, Chat, Calendar, Notices, and Settings panels
+- left office rail with Search, Rooms/Map, People, Chat, Calendar, Notices, and Settings panels
+- persistent bottom action dock with contact launchers
 
 These features are local frontend affordances. They do not imply realtime sync, persisted chat/calendar/notices, or backend navigation APIs yet.
 
@@ -446,11 +447,13 @@ Current Canvas MVP behavior:
 - Mock remote players use deterministic randomized layered avatars.
 - Name/status UI is a compact dark bubble above the avatar with a small status dot.
 - Chair interaction is keyboard-driven: near a chair, press `E` to sit; press `E` again or move to stand.
-- `/virtual-office` uses a full-screen map-first UI with a lightweight top bar, floating room/chair status pill, movement hint, bottom interaction drawer, and mini map.
-- `/virtual-office` includes a WorkMap office shell: left rail, expandable side panels, command palette, room context card, drag/pan, zoom, recenter, double-click click-to-move, and Go to person/room.
+- `/virtual-office` uses a full-screen map-first UI with floating workspace/current-area/status pills, room/chair interaction hint, bottom action dock, bottom interaction drawer, map controls, and mini map.
+- `/virtual-office` includes a WorkMap office shell: left rail, expandable side panels, command palette, room context card, drag/pan, zoom, recenter, double-click click-to-move, and Go to person/room. The Stitch reference in `docs/designs/` is a state board and must not be implemented as all overlays visible by default.
 - The old right-side debug panel is removed.
 - The mini map is an overlay Canvas that draws the full TMX office and the local player dot. It must not affect movement, collision, or camera math.
 - Main Canvas display must preserve the 1120x680 aspect ratio; do not stretch the map to fit the browser viewport.
+- Main Canvas pixel art rendering disables image smoothing, uses CSS `image-rendering: pixelated`, and synchronizes the Canvas backing store to the displayed viewport size and device pixel ratio to prevent movement-time blur/flicker from browser resampling.
+- Do not use tile destination overlap on floor tiles; it can duplicate edge pixels and create visible grid lines that are not in the authored map.
 - The current Canvas camera keeps the local player centered during normal movement and auto-walk while the map moves underneath; temporary manual pan/zoom is allowed, and recenter must restore the user-centered camera.
 - Local movement treats mock remote players as lightweight blockers so avatars do not overlap.
 - The mini map currently shows the full office and local player dot only; the blue viewport range box was intentionally removed.

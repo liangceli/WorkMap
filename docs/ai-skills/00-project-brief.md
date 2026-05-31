@@ -100,8 +100,10 @@ Frontend MVP currently has:
 - `/onboarding/company` exists as a lightweight Owner workspace setup step.
 - `/onboarding/device-setup` exists as a lightweight Desktop Agent / Browser Extension transparency step.
 - `/virtual-office` using a Canvas renderer for the current Tiled TMX office map.
-- `/virtual-office` is now a full-screen map-first office UI with a lightweight top bar, floating current-area pill, movement hint, bottom coworker interaction drawer, and a right-bottom mini map showing the full office and player position.
-- `/virtual-office` now has a WorkMap-specific office workspace shell with a left vertical rail, People/Search/Chat/Calendar/Notices/Settings panels, command palette, and room context card.
+- `/virtual-office` is now a full-screen map-first office UI rebuilt from the Stitch state-board reference under `docs/designs/`.
+- `/virtual-office` uses floating workspace/current-area/status pills instead of a heavy page header, a persistent dark navy bottom action dock, a bottom coworker interaction drawer, map controls, and a bottom-left mini map showing the full office and player position.
+- `/virtual-office` now uses a lightweight inline SVG icon set for the office shell so rail and dock controls no longer rely on rough letter placeholders.
+- `/virtual-office` now has a WorkMap-specific office workspace shell with a left vertical rail, Rooms/People/Search/Chat/Calendar/Notices/Settings panels, command palette, and room context card.
 - The current `/virtual-office` camera keeps the local player centered while the map moves underneath.
 - Local movement treats mock remote players as blockers so avatars do not overlap.
 - The mini map now shows the full office and local player dot without a blue viewport range box.

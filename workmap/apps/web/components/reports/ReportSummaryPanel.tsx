@@ -1,4 +1,5 @@
 import type { ReportMetric, ReportRow } from "./mockReportsData";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type ReportSummaryPanelProps = {
   metrics: ReportMetric[];
@@ -12,9 +13,9 @@ const healthLabels: Record<ReportRow["health"], string> = {
 };
 
 const healthStyles: Record<ReportRow["health"], { color: string; background: string; border: string }> = {
-  normal: { color: "#15803d", background: "#f0fdf4", border: "#bbf7d0" },
-  watch: { color: "#b45309", background: "#fff7ed", border: "#fed7aa" },
-  quiet: { color: "#475569", background: "#f8fafc", border: "#cbd5e1" },
+  normal: { color: "#15803d", background: wm.colors.successBg, border: wm.colors.successBorder },
+  watch: { color: wm.colors.warning, background: wm.colors.warningBg, border: wm.colors.warningBorder },
+  quiet: { color: wm.colors.textSecondary, background: wm.colors.surfaceLow, border: wm.colors.border },
 };
 
 export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
@@ -78,43 +79,39 @@ const styles = {
     gap: "12px",
   },
   metricCard: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
   },
   metricLabel: {
     margin: "0 0 8px",
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
   },
   metricValue: {
     display: "block",
-    color: "#0f172a",
+    color: wm.colors.text,
     fontSize: "26px",
     lineHeight: 1,
   },
   metricDetail: {
     margin: "10px 0 0",
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "13px",
     lineHeight: 1.45,
   },
   tablePanel: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     overflow: "hidden",
   },
   tableHeader: {
     display: "grid",
     gridTemplateColumns: "1.3fr repeat(4, 1fr) 100px",
     gap: "12px",
-    borderBottom: "1px solid #e2e8f0",
-    background: "#f8fafc",
-    color: "#64748b",
+    borderBottom: `1px solid ${wm.colors.borderSubtle}`,
+    background: wm.colors.surfaceLow,
+    color: wm.colors.textMuted,
     padding: "11px 14px",
     fontSize: "12px",
     fontWeight: 900,
@@ -125,9 +122,9 @@ const styles = {
     gridTemplateColumns: "1.3fr repeat(4, 1fr) 100px",
     gap: "12px",
     alignItems: "center",
-    borderBottom: "1px solid #eef2f7",
+    borderBottom: `1px solid ${wm.colors.borderSubtle}`,
     padding: "13px 14px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
   },
   health: {

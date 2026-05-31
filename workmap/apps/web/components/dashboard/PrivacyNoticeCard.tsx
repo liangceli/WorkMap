@@ -1,3 +1,5 @@
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+
 export function PrivacyNoticeCard() {
   return (
     <section style={styles.card}>
@@ -19,21 +21,18 @@ export function PrivacyNoticeCard() {
 
 const styles = {
   card: {
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    background: "#eff6ff",
+    ...wmStyles.infoNotice,
     padding: "16px",
   },
   label: {
-    margin: "0 0 6px",
-    color: "#1d4ed8",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
+    color: wm.colors.infoText,
   },
   title: {
     margin: "0 0 12px",
+    color: wm.colors.text,
     fontSize: "18px",
+    fontWeight: 700,
   },
   grid: {
     display: "grid",
@@ -42,11 +41,12 @@ const styles = {
   },
   subhead: {
     margin: "0 0 6px",
-    fontWeight: 800,
+    color: wm.colors.text,
+    fontWeight: 700,
   },
   text: {
     margin: 0,
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "13px",
     lineHeight: 1.45,
   },

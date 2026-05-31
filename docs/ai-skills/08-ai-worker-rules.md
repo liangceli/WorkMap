@@ -66,8 +66,9 @@ Frontend:
 - `/onboarding/avatar` is a layered avatar builder.
 - `/virtual-office` is a Canvas MVP, not Phaser.
 - `/virtual-office` is now a full-screen map-first UI with no fixed right-side debug panel.
-- `/virtual-office` includes a lightweight top bar, floating current-area pill, movement hint, bottom coworker interaction drawer, and right-bottom mini map.
-- `/virtual-office` includes a WorkMap office shell with `OfficeLeftRail`, `OfficeSidePanel`, `OfficeCommandPalette`, `RoomContextCard`, and `VirtualOfficeShell`.
+- `/virtual-office` includes floating workspace/current-area/status pills, a bottom action dock, bottom coworker interaction drawer, map controls, and a bottom-left mini map.
+- `/virtual-office` includes a WorkMap office shell with `VirtualOfficeTopBar`, `OfficeLeftRail`, `OfficeSidePanel`, `OfficeCommandPalette`, `RoomContextCard`, `OfficeBottomDock`, `OfficeIcons`, `InteractionDrawer`, and `VirtualOfficeShell`.
+- `/virtual-office` currently follows the Stitch state-board reference under `docs/designs/`; do not treat that screenshot as a default state with all overlays visible.
 - `/virtual-office` supports frontend-only People, Search, Chat, Calendar, Notices, and Settings panels. These are mock/link-only collaboration surfaces, not backend-backed messaging, calendar sync, or employee monitoring.
 - `/virtual-office` supports drag/pan, wheel zoom, recenter, double-click click-to-move, room context selection, and Go to person/room actions through frontend-only Canvas/pathfinding helpers.
 - The main Canvas must preserve its 1120x680 aspect ratio and must not be stretched to fit the browser.

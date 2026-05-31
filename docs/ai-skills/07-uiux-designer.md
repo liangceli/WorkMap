@@ -85,13 +85,23 @@ Avoid:
 - `/onboarding/avatar` is a layered avatar builder with body, eyes, hairstyle, outfit, and accessories.
 - `/virtual-office` shows composed avatars, deterministic varied mock NPC avatars, status rings, and compact dark name/status bubbles above avatars.
 - `/virtual-office` is now a full-screen, map-first office experience rather than a dashboard page.
-- Current `/virtual-office` UI includes a translucent top bar, floating room/chair status pill, bottom movement hint, bottom coworker interaction drawer, and a right-bottom mini map.
-- Current `/virtual-office` also includes a Gather-inspired but WorkMap-specific office shell: a slim left rail, expandable People/Search/Chat/Calendar/Notices/Settings panels, command palette, room context card, drag/pan, wheel zoom, recenter, double-click click-to-move, and "Go to" actions.
+- Current `/virtual-office` UI follows the Stitch reference in `docs/designs/`, but the reference must be interpreted as a state board. Do not show every overlay at once by default.
+- Current `/virtual-office` UI includes floating workspace/current-area/status pills, a slim left rail, bottom dark navy action dock, bottom coworker interaction drawer, room/chair interaction hint, map controls, and a bottom-left mini map.
+- Current `/virtual-office` visual polish should stay close to the 2026-05-31 reference: 20-24px rounded floating glass panels, navy active rail items, line icons, compact top pills, dark navy dock, soft shadows, and no rough letter-only tool buttons.
+- Left rail and mini map must never overlap. Reserve vertical space for the bottom-left mini map; keep rail actions above it.
+- Bottom-left mini map and the bottom coworker interaction drawer must never overlap. When the drawer is open, start it to the right of the mini map and keep space for right-side map controls.
+- Left rail action icons should be large and clean, with no persistent black outline boxes around inactive buttons. Only the active item may use a filled navy state.
+- Notification/status dots in the office shell should be readable at a glance: rail notification dots are around 10px with a light stroke, and dock/avatar online dots are around 14px with a navy stroke.
+- Dropdown indicators in top pills must use a clean chevron-down icon, not a text `v`.
+- Right-side map controls must stay as a small vertical white capsule with compact `+`, `-`, recenter target icon, and zoom percent label.
+- Bottom action dock should show large icons only for actions. Do not show persistent labels under the icons; reveal the action name in a compact dark tooltip on hover/focus.
+- Current `/virtual-office` also includes a WorkMap-specific office shell: a slim left rail, expandable Rooms/People/Search/Chat/Calendar/Notices/Settings panels, command palette, room context card, drag/pan, wheel zoom, recenter, double-click click-to-move, and "Go to" actions.
 - The bottom coworker interaction drawer should feel like a professional SaaS version of a life-sim dialogue panel: clear, friendly, and contact-action focused, without fantasy/game styling.
 - The main map must not be stretched. Preserve the Canvas aspect ratio and avoid distorted tiles.
 - Chat, Calendar, Notices, emoji/wave, scheduling, and room/person navigation are currently frontend-only mock or launcher surfaces. Design them as collaboration tools, not as monitoring or content-capture surfaces.
 - The left rail should stay lightweight and map-first: no heavy dashboard cards, no manager analytics, and no private activity data inside the virtual office shell.
 - The command palette should help users find people, rooms, and primary actions quickly. It must not expose manager-only reporting data.
+- The command palette is modal-like: clicking outside the palette on the blurred backdrop should dismiss it.
 - Room context cards should appear only when a room/section is selected and should offer simple actions like Go to, View people, or Copy link.
 - Drag/zoom controls are productivity affordances. Keyboard movement should still feel primary for avatar control, and recenter should restore the user-centered camera.
 - `/dashboard` exists as a manager overview mock with usage cards, employee cards, a privacy notice, app summaries, and domain summaries.

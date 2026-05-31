@@ -1,164 +1,192 @@
 "use client";
 
 import type { UserPresenceStatus } from "@workmap/shared-types";
+import { wm } from "../../lib/theme/workmapTheme";
+import { OfficeIcon } from "./OfficeIcons";
 import { labelStatus, statusColors } from "./presence";
 
 type VirtualOfficeTopBarProps = {
   status: UserPresenceStatus;
+  currentArea?: string;
+  onSearch?: () => void;
 };
 
-export function VirtualOfficeTopBar({ status }: VirtualOfficeTopBarProps) {
+export function VirtualOfficeTopBar({ status, currentArea = "Office", onSearch }: VirtualOfficeTopBarProps) {
   return (
-    <header style={styles.bar}>
-      <div style={styles.brandGroup}>
+    <>
+      <header style={styles.workspacePill}>
         <div style={styles.logo} aria-hidden="true">
           WM
         </div>
         <div style={styles.titleWrap}>
           <span style={styles.title}>WorkMap Office</span>
-          <span style={styles.chevron}>v</span>
+          <span style={styles.caption}>Current workspace</span>
         </div>
-      </div>
+        <span style={styles.chevron}><OfficeIcon name="chevronDown" size={18} /></span>
+      </header>
 
-      <div style={styles.rightGroup}>
-        <span style={styles.statusPill}>
+      <button type="button" onClick={onSearch} style={styles.areaPill} aria-label="Find people, rooms, or actions">
+        <span style={styles.areaIcon}><OfficeIcon name="room" size={22} /></span>
+        <span>{currentArea}</span>
+        <span style={styles.chevron}><OfficeIcon name="chevronDown" size={18} /></span>
+      </button>
+
+      <div style={styles.statusPill}>
+        <button type="button" style={styles.searchButton} onClick={onSearch} aria-label="Find people, rooms, or actions">
+          <OfficeIcon name="search" size={20} />
+          <span>Search</span>
+        </button>
+        <span style={styles.statusDivider} />
+        <span style={styles.statusText}>
           <span style={{ ...styles.statusDot, background: statusColors[status] }} />
           {labelStatus(status)}
-          <span style={styles.chevron}>v</span>
         </span>
-        <span style={styles.divider} />
-        <button aria-label="Team" style={styles.iconButton} type="button">
-          Team
-        </button>
-        <button aria-label="Search" style={styles.iconButton} type="button">
-          Search
-        </button>
-        <button aria-label="Settings" style={styles.iconButton} type="button">
-          Settings
-        </button>
-        <button aria-label="Help" style={styles.iconButton} type="button">
-          Help
-        </button>
         <button aria-label="Current user" style={styles.avatarButton} type="button">
           You
           <span style={styles.avatarDot} />
         </button>
       </div>
-    </header>
+    </>
   );
 }
 
 const styles = {
-  bar: {
+  workspacePill: {
     position: "absolute" as const,
-    top: "18px",
-    left: "24px",
-    right: "24px",
+    top: "22px",
+    left: "22px",
     zIndex: 20,
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: "16px",
-    minHeight: "58px",
-    padding: "10px 14px",
-    border: "1px solid rgba(203, 213, 225, 0.7)",
-    borderRadius: "18px",
-    background: "rgba(255, 255, 255, 0.78)",
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.14)",
-    backdropFilter: "blur(18px)",
-  },
-  brandGroup: {
-    display: "flex",
-    alignItems: "center",
     gap: "12px",
-    minWidth: 0,
+    minHeight: "76px",
+    padding: "12px 18px 12px 12px",
+    border: "1px solid rgba(216, 224, 236, 0.82)",
+    borderRadius: "22px",
+    background: "rgba(255, 255, 255, 0.86)",
+    boxShadow: "0 20px 48px rgba(15, 23, 42, 0.14)",
+    backdropFilter: "blur(24px)",
   },
   logo: {
     display: "grid",
     placeItems: "center",
-    width: "38px",
-    height: "38px",
-    borderRadius: "12px",
-    background: "#25346f",
-    color: "#ffffff",
-    fontSize: "12px",
-    fontWeight: 800,
+    width: "52px",
+    height: "52px",
+    borderRadius: "14px",
+    background: wm.colors.primaryContainer,
+    color: wm.colors.surface,
+    fontSize: "13px",
+    fontWeight: 700,
     letterSpacing: 0,
   },
   titleWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
+    display: "grid",
+    gap: "2px",
     minWidth: 0,
   },
   title: {
-    color: "#111827",
-    fontSize: "18px",
-    fontWeight: 800,
+    color: wm.colors.text,
+    fontSize: "16px",
+    fontWeight: 700,
     whiteSpace: "nowrap" as const,
   },
+  caption: {
+    color: wm.colors.textMuted,
+    fontSize: "11px",
+    fontWeight: 700,
+  },
   chevron: {
-    color: "#475569",
-    fontSize: "12px",
-    fontWeight: 800,
+    display: "grid",
+    placeItems: "center",
+    color: wm.colors.textSecondary,
   },
-  rightGroup: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-  },
-  statusPill: {
+  areaPill: {
+    position: "absolute" as const,
+    top: "29px",
+    left: "306px",
+    zIndex: 20,
     display: "inline-flex",
     alignItems: "center",
-    gap: "9px",
-    minHeight: "38px",
+    gap: "11px",
+    minHeight: "58px",
+    border: "1px solid rgba(216, 224, 236, 0.82)",
+    borderRadius: "20px",
+    background: "rgba(255, 255, 255, 0.86)",
+    color: wm.colors.text,
+    padding: "0 22px",
+    cursor: "pointer",
+    fontSize: "16px",
+    fontWeight: 700,
+    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.14)",
+    backdropFilter: "blur(22px)",
+  },
+  areaIcon: {
+    color: wm.colors.secondary,
+    fontSize: "13px",
+    fontWeight: 900,
+  },
+  statusPill: {
+    position: "absolute" as const,
+    top: "22px",
+    right: "22px",
+    zIndex: 20,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "12px",
+    minHeight: "68px",
+    padding: "8px 10px 8px 12px",
+    border: "1px solid rgba(216, 224, 236, 0.82)",
+    borderRadius: "22px",
+    background: "rgba(255, 255, 255, 0.88)",
+    color: wm.colors.text,
+    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.16)",
+    backdropFilter: "blur(22px)",
+  },
+  searchButton: {
+    border: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "10px",
+    minHeight: "44px",
+    borderRadius: "14px",
+    background: "rgba(255, 255, 255, 0.64)",
+    color: wm.colors.textSecondary,
+    cursor: "pointer",
     padding: "0 14px",
-    border: "1px solid rgba(203, 213, 225, 0.85)",
-    borderRadius: "12px",
-    background: "rgba(255, 255, 255, 0.9)",
-    color: "#1f2937",
     fontSize: "14px",
     fontWeight: 700,
-    textTransform: "capitalize" as const,
-    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
   },
-  statusDot: {
-    width: "9px",
-    height: "9px",
-    borderRadius: "999px",
-  },
-  divider: {
+  statusDivider: {
     width: "1px",
     height: "30px",
     background: "rgba(148, 163, 184, 0.5)",
-    margin: "0 4px",
   },
-  iconButton: {
-    display: "grid",
-    placeItems: "center",
-    minWidth: "38px",
-    height: "38px",
-    border: 0,
-    borderRadius: "12px",
-    background: "transparent",
-    color: "#1f2937",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: 800,
+  statusText: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "14px",
+    fontWeight: 900,
+    textTransform: "capitalize" as const,
+  },
+  statusDot: {
+    width: "10px",
+    height: "10px",
+    borderRadius: "999px",
   },
   avatarButton: {
     position: "relative" as const,
     display: "grid",
     placeItems: "center",
-    width: "40px",
-    height: "40px",
+    width: "48px",
+    height: "48px",
     border: "1px solid rgba(203, 213, 225, 0.9)",
     borderRadius: "999px",
-    background: "#f8fafc",
-    color: "#1f2937",
+    background: wm.colors.surfaceLow,
+    color: wm.colors.text,
     cursor: "pointer",
     fontSize: "11px",
-    fontWeight: 800,
+    fontWeight: 700,
   },
   avatarDot: {
     position: "absolute" as const,
@@ -167,7 +195,7 @@ const styles = {
     width: "10px",
     height: "10px",
     borderRadius: "999px",
-    border: "2px solid #ffffff",
+    border: `2px solid ${wm.colors.surface}`,
     background: "#22c55e",
   },
 };

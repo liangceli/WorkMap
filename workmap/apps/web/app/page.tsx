@@ -10,6 +10,7 @@ import {
   type UserSetupState,
   type WorkMapRole,
 } from "../lib/workflow/workflowState";
+import { wm, wmStyles } from "../lib/theme/workmapTheme";
 
 const roles: Array<{ role: WorkMapRole; title: string; description: string }> = [
   { role: "EMPLOYEE", title: "Employee", description: "Create an avatar, acknowledge the policy, and enter the virtual office." },
@@ -89,8 +90,8 @@ export default function HomePage() {
                     onClick={() => setSelectedRole(item.role)}
                     style={{
                       ...styles.roleButton,
-                      borderColor: selectedRole === item.role ? "#2563eb" : "#dbe3ef",
-                      background: selectedRole === item.role ? "#eff6ff" : "#ffffff",
+                      borderColor: selectedRole === item.role ? wm.colors.secondary : wm.colors.border,
+                      background: selectedRole === item.role ? wm.colors.infoBg : wm.colors.surface,
                     }}
                   >
                     <strong>{item.title}</strong>
@@ -125,9 +126,9 @@ const styles = {
     minHeight: "100vh",
     display: "grid",
     placeItems: "center",
-    background: "#f3f7fb",
-    color: "#0f172a",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    background: wm.colors.appBackground,
+    color: wm.colors.text,
+    fontFamily: wm.typography.fontFamily,
     padding: "28px",
   },
   shell: {
@@ -143,45 +144,41 @@ const styles = {
   },
   eyebrow: {
     margin: 0,
-    color: "#2563eb",
+    color: wm.colors.secondary,
     fontSize: "13px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
   },
   title: {
     margin: 0,
-    fontSize: "46px",
-    lineHeight: 1.04,
+    fontSize: "48px",
+    lineHeight: 1.2,
+    fontWeight: 700,
+    letterSpacing: "-0.02em",
   },
   subtitle: {
     margin: 0,
-    color: "#475569",
-    fontSize: "17px",
+    color: wm.colors.textSecondary,
+    fontSize: "18px",
     lineHeight: 1.55,
   },
   privacyBox: {
     display: "grid",
     gap: "6px",
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    background: "#eff6ff",
-    color: "#1e3a8a",
+    ...wmStyles.infoNotice,
     padding: "14px",
     fontSize: "14px",
     lineHeight: 1.45,
   },
   card: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "12px",
-    background: "#ffffff",
+    ...wmStyles.elevatedCard,
     padding: "20px",
     display: "grid",
     gap: "14px",
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
   },
   cardLabel: {
     margin: 0,
-    color: "#2563eb",
+    color: wm.colors.secondary,
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
@@ -192,7 +189,7 @@ const styles = {
   },
   cardText: {
     margin: 0,
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.5,
   },
@@ -203,9 +200,9 @@ const styles = {
   roleButton: {
     display: "grid",
     gap: "5px",
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    color: "#0f172a",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.lg,
+    color: wm.colors.text,
     padding: "12px",
     textAlign: "left" as const,
     cursor: "pointer",
@@ -213,10 +210,7 @@ const styles = {
     lineHeight: 1.4,
   },
   primaryButton: {
-    border: "1px solid #0f172a",
-    borderRadius: "8px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "12px 14px",
     cursor: "pointer",
     fontWeight: 900,
@@ -224,22 +218,19 @@ const styles = {
   secondaryLink: {
     display: "grid",
     placeItems: "center",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    background: "#f8fafc",
-    color: "#0f172a",
+    ...wmStyles.secondaryButton,
     padding: "11px",
     textDecoration: "none",
     fontWeight: 900,
   },
   devLinks: {
     gridColumn: "1 / -1",
-    borderTop: "1px solid #dbe3ef",
+    borderTop: `1px solid ${wm.colors.border}`,
     paddingTop: "14px",
   },
   devTitle: {
     margin: "0 0 8px",
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
@@ -250,10 +241,10 @@ const styles = {
     gap: "8px",
   },
   quickLink: {
-    border: "1px solid #dbe3ef",
+    border: `1px solid ${wm.colors.border}`,
     borderRadius: "999px",
-    background: "#ffffff",
-    color: "#334155",
+    background: wm.colors.surface,
+    color: wm.colors.textSecondary,
     padding: "7px 10px",
     textDecoration: "none",
     fontSize: "12px",

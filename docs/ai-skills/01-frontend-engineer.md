@@ -172,14 +172,30 @@ Completed in current MVP:
 - Office map renders with Canvas using current Tiled TMX layers and copied tileset images.
 - `/virtual-office` uses a full-screen map-first layout: lightweight top bar, full-viewport Canvas, floating current-area pill, movement hint, bottom interaction drawer, and a right-bottom mini map.
 - `/virtual-office` now includes a WorkMap office shell:
+  - floating workspace/current-area/status pills in `VirtualOfficeTopBar.tsx`
   - left vertical rail in `OfficeLeftRail.tsx`
   - expandable office panel in `OfficeSidePanel.tsx`
   - search/command palette in `OfficeCommandPalette.tsx`
   - room/section context card in `RoomContextCard.tsx`
+  - persistent bottom action dock in `OfficeBottomDock.tsx`
+  - bottom coworker drawer in `InteractionDrawer.tsx`
+  - lightweight inline SVG icon set in `OfficeIcons.tsx`
   - wrapper shell in `VirtualOfficeShell.tsx`
+- The current `/virtual-office` visual direction follows the Stitch state-board reference in `docs/designs/`: treat the design as separate interactive states, not as an always-visible static composition.
+- Current `/virtual-office` styling has been pixel-polished closer to the 2026-05-31 reference: larger rounded floating pills, SVG rail/action icons, navy bottom dock, bottom-left mini map, and right-side stacked map controls.
+- Keep the left rail clear of the bottom-left mini map; do not let the settings button or rail background overlap the mini map.
+- Keep `InteractionDrawer` clear of the bottom-left mini map and right-side map controls; position the drawer between those utilities instead of centering it over them.
+- `OfficeLeftRail` should use large clean icons and no persistent outline box around inactive action buttons; keep only a filled navy active state.
+- Office shell notification/status dots should stay visible: rail badge dots around 10px, dock/avatar online dots around 14px.
+- Top pill dropdown indicators use the `chevronDown` icon from `OfficeIcons.tsx`; avoid text `v` placeholders.
+- Map controls use a compact right-side vertical capsule with `+`, `-`, `target`, and zoom percent.
+- `OfficeBottomDock` action buttons should render icon-only controls with accessible `aria-label`s and hover/focus tooltips; avoid always-visible text labels under dock icons.
+- `OfficeCommandPalette` should close when users click the blurred backdrop outside the palette form, while clicks inside the palette must not close it.
 - The previous right-side debug/test panel has been removed. Do not bring it back unless explicitly asked.
-- The mini map is implemented as a small overlay Canvas in `OfficeMiniMap.tsx`; it reuses the parsed TMX map data and tileset images, draws the whole office, and marks the local player position.
+- The mini map is implemented as a small bottom-left overlay Canvas in `OfficeMiniMap.tsx`; it reuses the parsed TMX map data and tileset images, draws the whole office, and marks the local player position. It hides when the left side panel would overlap it.
 - Main Canvas display must preserve the original 1120x680 aspect ratio. Do not stretch the map to fit the browser viewport.
+- Main Canvas pixel rendering should keep `imageSmoothingEnabled = false`, CSS `image-rendering: pixelated`, and a backing store synchronized to the displayed viewport size/device pixel ratio so map clarity stays stable while the player/camera moves.
+- Avoid tile destination overlap on floor tiles; it can create repeated edge pixels and visible grid lines not present in the authored map.
 - The local player should remain centered on screen while the map moves underneath. The camera is intentionally not clamped to the map edges.
 - The local player cannot overlap mock remote players; remote player positions act as lightweight movement blockers.
 - The mini map shows the full office and local player dot only. Do not draw the previous blue viewport range box.

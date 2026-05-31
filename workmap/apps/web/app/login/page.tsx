@@ -1,4 +1,5 @@
 import { MockLoginPanel } from "../../components/login/MockLoginPanel";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 export default function LoginPage() {
   return (
@@ -24,9 +25,9 @@ export default function LoginPage() {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "#f3f7fb",
-    color: "#0f172a",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    background: wm.colors.appBackground,
+    color: wm.colors.text,
+    fontFamily: wm.typography.fontFamily,
     padding: "24px",
     display: "grid",
     placeItems: "center",
@@ -44,30 +45,29 @@ const styles = {
   },
   eyebrow: {
     margin: 0,
-    color: "#2563eb",
+    color: wm.colors.secondary,
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
   },
   title: {
     margin: 0,
-    color: "#0f172a",
-    fontSize: "42px",
-    lineHeight: 1.05,
+    color: wm.colors.text,
+    fontSize: "48px",
+    lineHeight: 1.2,
+    fontWeight: 700,
+    letterSpacing: "-0.02em",
   },
   subtitle: {
     margin: 0,
-    color: "#475569",
-    fontSize: "16px",
+    color: wm.colors.textSecondary,
+    fontSize: "18px",
     lineHeight: 1.55,
   },
   privacyBox: {
     display: "grid",
     gap: "6px",
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    background: "#eff6ff",
-    color: "#1e3a8a",
+    ...wmStyles.infoNotice,
     padding: "14px",
     fontSize: "14px",
     lineHeight: 1.45,

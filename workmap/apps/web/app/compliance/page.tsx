@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CompliancePolicyPanel } from "../../components/compliance/CompliancePolicyPanel";
 import { AppShell } from "../../components/layout/AppShell";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import {
   getNextRouteForUser,
   getUserSetupState,
@@ -75,32 +76,19 @@ export default function CompliancePage() {
 
 const styles = {
   shell: {
-    display: "grid",
-    gap: "16px",
+    ...wmStyles.pageStack,
   },
   header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "16px",
+    ...wmStyles.pageHeader,
   },
   eyebrow: {
-    margin: "0 0 8px",
-    color: "#2563eb",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
   },
   title: {
-    margin: "0 0 8px",
-    fontSize: "34px",
-    lineHeight: 1.1,
+    ...wmStyles.pageTitle,
   },
   subtitle: {
-    margin: 0,
-    color: "#475569",
-    fontSize: "15px",
-    lineHeight: 1.45,
+    ...wmStyles.pageSubtitle,
   },
   nav: {
     display: "flex",
@@ -108,30 +96,18 @@ const styles = {
     flexWrap: "wrap" as const,
   },
   primaryLink: {
-    borderRadius: "8px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "10px 14px",
-    textDecoration: "none",
-    fontWeight: 800,
   },
   secondaryLink: {
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    background: "#ffffff",
-    color: "#0f172a",
+    ...wmStyles.secondaryButton,
     padding: "10px 14px",
-    textDecoration: "none",
-    fontWeight: 800,
   },
   notice: {
     display: "flex",
     gap: "10px",
     alignItems: "center",
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    background: "#eff6ff",
-    color: "#1e3a8a",
+    ...wmStyles.infoNotice,
     padding: "12px 14px",
     fontSize: "14px",
     lineHeight: 1.45,
@@ -141,9 +117,9 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "16px",
-    border: "1px solid #bbf7d0",
-    borderRadius: "8px",
-    background: "#f0fdf4",
+    border: `1px solid ${wm.colors.successBorder}`,
+    borderRadius: wm.radius.xl,
+    background: wm.colors.successBg,
     color: "#14532d",
     padding: "16px",
   },
@@ -158,9 +134,9 @@ const styles = {
   },
   ackButton: {
     flex: "0 0 auto",
-    border: "1px solid #166534",
-    borderRadius: "8px",
-    background: "#166534",
+    border: `1px solid ${wm.colors.success}`,
+    borderRadius: wm.radius.md,
+    background: wm.colors.success,
     color: "#ffffff",
     padding: "11px 14px",
     cursor: "pointer",

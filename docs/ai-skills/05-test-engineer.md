@@ -66,9 +66,10 @@ Always test:
 - Confirm mock remote players use varied deterministic avatars, not the local user's avatar.
 - Open `/virtual-office` and confirm the page is full-screen, map-first, and has no fixed right-side debug panel.
 - Confirm the main map is not visually stretched; tiles and avatars should keep their expected proportions.
-- Confirm the top bar, floating room/chair pill, movement hint, bottom interaction drawer, and right-bottom mini map render.
-- Confirm the left office rail renders with People, Search, Chat, Calendar, Notices, and Settings.
+- Confirm the floating workspace/current-area/status pills, bottom action dock, room/chair hint, bottom interaction drawer, map controls, and bottom-left mini map render.
+- Confirm the left office rail renders with Search, Rooms/Map, People, Chat, Calendar, Notices, and Settings.
 - Open People panel and confirm it lists mock coworkers with contact and Go to actions.
+- Open Rooms/Map panel and confirm it lists room destinations with Go to room actions.
 - Open Search or press Ctrl/Cmd+K and confirm people, rooms/sections, and actions appear.
 - Open Chat panel, send a local quick message, and confirm it stays frontend-only.
 - Open Calendar panel, add a local meeting, and confirm Teams/room actions are placeholders.

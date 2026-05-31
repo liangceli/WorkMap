@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ContactTarget } from "@workmap/shared-types";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import type { RemoteOfficePlayer } from "./mockOfficeData";
+import { labelStatus, statusColors } from "./presence";
 
 type OfficeCommandPaletteProps = {
   open: boolean;
@@ -63,14 +65,14 @@ export function OfficeCommandPalette({
   }
 
   return (
-    <div style={styles.backdrop} role="dialog" aria-label="Office search">
-      <section style={styles.palette}>
+    <div style={styles.backdrop} role="dialog" aria-label="Office search" onMouseDown={onClose}>
+      <section style={styles.palette} onMouseDown={(event) => event.stopPropagation()}>
         <div style={styles.header}>
           <input
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search people, rooms, departments, or actions"
+            placeholder="Find people, rooms, or actions..."
             style={styles.input}
           />
           <button type="button" onClick={onClose} style={styles.closeButton}>Esc</button>
@@ -94,7 +96,11 @@ export function OfficeCommandPalette({
               <span style={styles.avatar}>{person.displayName.slice(0, 1)}</span>
               <span style={styles.resultText}>
                 <strong>{person.displayName}</strong>
-                <span>{person.role} / {person.status.replace("_", " ")}</span>
+                <span>{person.role} / {person.roomId?.replaceAll("-", " ") ?? "Office area"}</span>
+              </span>
+              <span style={styles.statusPill}>
+                <span style={{ ...styles.statusDot, background: statusColors[person.status] }} />
+                {labelStatus(person.status)}
               </span>
               <span style={styles.actionText} onClick={(event) => { event.stopPropagation(); onGoToPerson(person); }}>Go to</span>
             </button>
@@ -109,7 +115,7 @@ export function OfficeCommandPalette({
               style={styles.resultRow}
               onClick={() => onSelectDestination(destination)}
             >
-              <span style={styles.avatar}>{destination.name.slice(0, 1)}</span>
+              <span style={styles.roomAvatar}>{destination.name.slice(0, 1)}</span>
               <span style={styles.resultText}>
                 <strong>{destination.name}</strong>
                 <span>{destination.type.replace("_", " ")} / {destination.description}</span>
@@ -132,7 +138,7 @@ export function OfficeCommandPalette({
                 onClose();
               }}
             >
-              <span style={styles.avatar}>A</span>
+              <span style={styles.roomAvatar}>A</span>
               <span style={styles.resultText}>
                 <strong>{action.title}</strong>
                 <span>{action.subtitle}</span>
@@ -162,19 +168,18 @@ const styles = {
     zIndex: 60,
     display: "grid",
     placeItems: "start center",
-    paddingTop: "92px",
-    background: "rgba(15, 23, 42, 0.18)",
-    backdropFilter: "blur(2px)",
+    paddingTop: "112px",
+    background: "rgba(15, 23, 42, 0.24)",
+    backdropFilter: "blur(4px)",
   },
   palette: {
-    width: "min(720px, calc(100vw - 48px))",
+    ...wmStyles.elevatedCard,
+    width: "min(700px, calc(100vw - 48px))",
     maxHeight: "min(720px, calc(100vh - 128px))",
     overflow: "auto",
-    border: "1px solid rgba(203, 213, 225, 0.9)",
-    borderRadius: "18px",
-    background: "#ffffff",
-    boxShadow: "0 28px 70px rgba(15, 23, 42, 0.24)",
-    padding: "14px",
+    background: "rgba(255, 255, 255, 0.92)",
+    backdropFilter: "blur(24px)",
+    padding: "16px",
   },
   header: {
     display: "grid",
@@ -183,21 +188,17 @@ const styles = {
     marginBottom: "14px",
   },
   input: {
-    height: "46px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "12px",
+    ...wmStyles.input,
+    height: "52px",
+    borderRadius: wm.radius.xl,
     padding: "0 14px",
-    color: "#0f172a",
     fontSize: "15px",
   },
   closeButton: {
-    border: "1px solid #cbd5e1",
-    borderRadius: "12px",
-    background: "#f8fafc",
-    color: "#475569",
+    ...wmStyles.secondaryButton,
+    borderRadius: wm.radius.xl,
+    background: wm.colors.background,
     padding: "0 12px",
-    cursor: "pointer",
-    fontWeight: 900,
   },
   group: {
     display: "grid",
@@ -205,11 +206,9 @@ const styles = {
     marginBottom: "14px",
   },
   groupTitle: {
+    ...wmStyles.eyebrow,
+    color: wm.colors.textMuted,
     margin: 0,
-    color: "#64748b",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
   },
   resultStack: {
     display: "grid",
@@ -217,25 +216,35 @@ const styles = {
   },
   resultRow: {
     display: "grid",
-    gridTemplateColumns: "38px minmax(0, 1fr) auto",
-    gap: "10px",
+    gridTemplateColumns: "42px minmax(0, 1fr) auto auto",
+    gap: "12px",
     alignItems: "center",
-    border: "1px solid #e2e8f0",
-    borderRadius: "12px",
-    background: "#ffffff",
-    padding: "9px",
-    color: "#0f172a",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.xl,
+    background: "rgba(255, 255, 255, 0.86)",
+    padding: "10px",
+    color: wm.colors.text,
     cursor: "pointer",
     textAlign: "left" as const,
   },
   avatar: {
     display: "grid",
     placeItems: "center",
-    width: "38px",
-    height: "38px",
-    borderRadius: "12px",
-    background: "#eff6ff",
-    color: "#1d4ed8",
+    width: "42px",
+    height: "42px",
+    borderRadius: "999px",
+    background: wm.colors.surfaceContainer,
+    color: wm.colors.primaryContainer,
+    fontWeight: 900,
+  },
+  roomAvatar: {
+    display: "grid",
+    placeItems: "center",
+    width: "42px",
+    height: "42px",
+    borderRadius: "14px",
+    background: wm.colors.surfaceContainer,
+    color: wm.colors.primaryContainer,
     fontWeight: 900,
   },
   resultText: {
@@ -243,14 +252,28 @@ const styles = {
     gap: "3px",
     minWidth: 0,
     fontSize: "13px",
-    color: "#64748b",
+    color: wm.colors.textMuted,
   },
   actionText: {
     borderRadius: "999px",
-    background: "#f1f5f9",
-    color: "#334155",
+    background: wm.colors.background,
+    color: wm.colors.primaryContainer,
     padding: "6px 9px",
     fontSize: "12px",
     fontWeight: 900,
+  },
+  statusPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    color: wm.colors.textSecondary,
+    fontSize: "12px",
+    fontWeight: 900,
+  },
+  statusDot: {
+    width: "9px",
+    height: "9px",
+    borderRadius: "999px",
+    border: `2px solid ${wm.colors.surface}`,
   },
 };

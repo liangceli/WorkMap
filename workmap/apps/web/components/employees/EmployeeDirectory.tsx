@@ -6,6 +6,7 @@ import { EmployeeAvatar } from "../dashboard/EmployeeAvatar";
 import type { DashboardEmployee } from "../dashboard/mockDashboardData";
 import { PresenceBadge } from "../office/PresenceBadge";
 import { getUserSetupState } from "../../lib/workflow/workflowState";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type EmployeeDirectoryProps = {
   employees: DashboardEmployee[];
@@ -189,13 +190,14 @@ function formatDeviceHealth(health?: DashboardEmployee["deviceHealth"]) {
 }
 
 function getDeviceStyle(health?: DashboardEmployee["deviceHealth"]) {
-  const color = health === "offline" ? "#64748b" : health === "delayed" ? "#b45309" : "#15803d";
+  const color = health === "offline" ? wm.colors.textMuted : health === "delayed" ? wm.colors.warning : wm.colors.success;
 
   return {
     ...styles.deviceHealth,
     color,
-    borderColor: health === "offline" ? "#cbd5e1" : health === "delayed" ? "#fed7aa" : "#bbf7d0",
-    background: health === "offline" ? "#f8fafc" : health === "delayed" ? "#fff7ed" : "#f0fdf4",
+    borderColor:
+      health === "offline" ? wm.colors.borderStrong : health === "delayed" ? wm.colors.warningBorder : wm.colors.successBorder,
+    background: health === "offline" ? wm.colors.appBackground : health === "delayed" ? wm.colors.warningBg : wm.colors.successBg,
   };
 }
 
@@ -205,14 +207,12 @@ const styles = {
     gap: "14px",
   },
   toolbar: {
+    ...wmStyles.card,
     display: "grid",
     gridTemplateColumns: "minmax(260px, 1fr) 190px 170px auto",
     gap: "12px",
     alignItems: "end",
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
-    padding: "14px",
+    padding: "16px",
   },
   searchLabel: {
     display: "grid",
@@ -223,71 +223,62 @@ const styles = {
     gap: "6px",
   },
   labelText: {
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "12px",
-    fontWeight: 800,
+    fontWeight: 700,
     textTransform: "uppercase" as const,
   },
   searchInput: {
+    ...wmStyles.input,
     height: "38px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
     padding: "0 10px",
-    color: "#0f172a",
-    fontSize: "14px",
   },
   select: {
+    ...wmStyles.input,
     height: "40px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
-    background: "#ffffff",
-    color: "#0f172a",
     padding: "0 10px",
-    fontSize: "14px",
   },
   segmented: {
     display: "inline-grid",
     gridTemplateColumns: "1fr 1fr",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.md,
     overflow: "hidden",
   },
   segmentButton: {
     height: "40px",
     border: 0,
-    background: "#ffffff",
-    color: "#475569",
+    background: wm.colors.surface,
+    color: wm.colors.textSecondary,
     padding: "0 12px",
     cursor: "pointer",
-    fontWeight: 800,
+    fontWeight: 700,
   },
   segmentButtonActive: {
-    background: "#0f172a",
-    color: "#ffffff",
+    background: wm.colors.primaryContainer,
+    color: wm.colors.surface,
   },
   summaryBar: {
     display: "flex",
     flexWrap: "wrap" as const,
     gap: "8px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "13px",
   },
   tablePanel: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     overflow: "hidden",
   },
   tableHeader: {
     display: "grid",
     gridTemplateColumns: "minmax(260px, 1.35fr) 210px 230px minmax(260px, 1fr)",
     gap: "14px",
-    borderBottom: "1px solid #e2e8f0",
-    background: "#f8fafc",
-    color: "#64748b",
+    borderBottom: `1px solid ${wm.colors.borderSubtle}`,
+    background: wm.colors.surfaceLow,
+    color: wm.colors.textMuted,
     padding: "11px 14px",
     fontSize: "12px",
-    fontWeight: 900,
+    fontWeight: 700,
     textTransform: "uppercase" as const,
   },
   row: {
@@ -295,7 +286,7 @@ const styles = {
     gridTemplateColumns: "minmax(260px, 1.35fr) 210px 230px minmax(260px, 1fr)",
     gap: "14px",
     alignItems: "center",
-    borderBottom: "1px solid #eef2f7",
+    borderBottom: `1px solid ${wm.colors.borderSubtle}`,
     padding: "13px 14px",
   },
   identityCell: {
@@ -309,11 +300,12 @@ const styles = {
   },
   name: {
     margin: "0 0 4px",
+    color: wm.colors.text,
     fontSize: "16px",
   },
   meta: {
     margin: "0 0 2px",
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "13px",
   },
   statusCell: {
@@ -326,7 +318,7 @@ const styles = {
     borderRadius: "999px",
     padding: "4px 8px",
     fontSize: "12px",
-    fontWeight: 800,
+    fontWeight: 700,
   },
   actions: {
     display: "grid",
@@ -334,24 +326,14 @@ const styles = {
     gap: "8px",
   },
   actionButton: {
-    border: "1px solid #cbd5e1",
-    background: "#f8fafc",
-    borderRadius: "6px",
+    ...wmStyles.secondaryButton,
     padding: "8px",
-    color: "#0f172a",
-    cursor: "pointer",
-    fontWeight: 800,
   },
   actionLink: {
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
-    borderRadius: "6px",
+    ...wmStyles.secondaryButton,
     padding: "8px",
-    color: "#0f172a",
     textAlign: "center" as const,
-    textDecoration: "none",
     fontSize: "13px",
-    fontWeight: 800,
   },
   managerSummary: {
     display: "grid",
@@ -360,16 +342,16 @@ const styles = {
     margin: 0,
   },
   statLabel: {
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "11px",
-    fontWeight: 800,
+    fontWeight: 700,
     textTransform: "uppercase" as const,
   },
   statValue: {
     margin: "3px 0 0",
-    color: "#0f172a",
+    color: wm.colors.text,
     fontSize: "13px",
-    fontWeight: 900,
+    fontWeight: 700,
   },
   emptyState: {
     padding: "34px",
@@ -381,6 +363,6 @@ const styles = {
   },
   emptyText: {
     margin: 0,
-    color: "#64748b",
+    color: wm.colors.textSecondary,
   },
 };

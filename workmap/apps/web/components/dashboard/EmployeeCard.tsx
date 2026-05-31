@@ -1,6 +1,7 @@
 import { PresenceBadge } from "../office/PresenceBadge";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import type { DashboardEmployee } from "./mockDashboardData";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type EmployeeCardProps = {
   employee: DashboardEmployee;
@@ -41,9 +42,7 @@ export function EmployeeCard({ employee }: EmployeeCardProps) {
 
 const styles = {
   card: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "14px",
     display: "grid",
     gap: "12px",
@@ -62,7 +61,7 @@ const styles = {
   },
   meta: {
     margin: "0 0 2px",
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "13px",
   },
   stats: {
@@ -72,14 +71,14 @@ const styles = {
     margin: 0,
   },
   statLabel: {
-    color: "#64748b",
+    color: wm.colors.textMuted,
     fontSize: "12px",
     fontWeight: 700,
     textTransform: "uppercase" as const,
   },
   statValue: {
     margin: "4px 0 0",
-    color: "#0f172a",
+    color: wm.colors.text,
     fontSize: "15px",
     fontWeight: 800,
   },
@@ -89,11 +88,11 @@ const styles = {
     gap: "8px",
   },
   actionButton: {
-    border: "1px solid #cbd5e1",
-    background: "#f8fafc",
-    borderRadius: "6px",
+    border: `1px solid ${wm.colors.border}`,
+    background: wm.colors.surfaceLow,
+    borderRadius: wm.radius.md,
     padding: "8px",
-    color: "#0f172a",
+    color: wm.colors.primaryContainer,
     cursor: "pointer",
     fontWeight: 700,
   },

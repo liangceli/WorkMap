@@ -1,4 +1,5 @@
 import type { UserPresenceStatus } from "@workmap/shared-types";
+import { wm } from "../../lib/theme/workmapTheme";
 import { labelStatus, statusColors } from "./presence";
 
 type PresenceBadgeProps = {
@@ -19,10 +20,11 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     gap: "8px",
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
-    borderRadius: "8px",
+    border: `1px solid ${wm.colors.border}`,
+    background: wm.colors.surface,
+    borderRadius: wm.radius.md,
     padding: "8px 12px",
+    color: wm.colors.text,
     textTransform: "capitalize" as const,
     fontSize: "14px",
   },

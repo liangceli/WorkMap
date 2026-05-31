@@ -1,5 +1,7 @@
 "use client";
 
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+
 type PolicyAcknowledgementModalProps = {
   open: boolean;
   onClose: () => void;
@@ -76,11 +78,9 @@ const styles = {
     padding: "20px",
   },
   modal: {
+    ...wmStyles.elevatedCard,
     width: "min(760px, 100%)",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    background: "#ffffff",
-    boxShadow: "0 24px 70px rgba(15, 23, 42, 0.28)",
+    boxShadow: wm.shadow.overlay,
     padding: "18px",
   },
   header: {
@@ -90,30 +90,27 @@ const styles = {
     marginBottom: "12px",
   },
   eyebrow: {
-    margin: "0 0 6px",
-    color: "#2563eb",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
   },
   title: {
     margin: 0,
-    color: "#0f172a",
+    color: wm.colors.text,
     fontSize: "24px",
+    fontWeight: 700,
   },
   closeButton: {
     width: "32px",
     height: "32px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
-    background: "#ffffff",
-    color: "#0f172a",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.md,
+    background: wm.colors.surface,
+    color: wm.colors.text,
     cursor: "pointer",
-    fontWeight: 900,
+    fontWeight: 700,
   },
   bodyText: {
     margin: "0 0 14px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.5,
   },
@@ -123,19 +120,21 @@ const styles = {
     gap: "12px",
   },
   panel: {
-    border: "1px solid #e2e8f0",
-    borderRadius: "8px",
-    background: "#f8fafc",
+    border: `1px solid ${wm.colors.borderSubtle}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.surfaceLow,
     padding: "14px",
   },
   smallTitle: {
     margin: "0 0 8px",
+    color: wm.colors.text,
     fontSize: "16px",
+    fontWeight: 700,
   },
   list: {
     margin: 0,
     paddingLeft: "18px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.7,
   },
@@ -146,21 +145,11 @@ const styles = {
     marginTop: "16px",
   },
   primaryButton: {
-    border: "1px solid #0f172a",
-    borderRadius: "6px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "10px 14px",
-    cursor: "pointer",
-    fontWeight: 900,
   },
   secondaryButton: {
-    border: "1px solid #cbd5e1",
-    borderRadius: "6px",
-    background: "#ffffff",
-    color: "#0f172a",
+    ...wmStyles.secondaryButton,
     padding: "10px 14px",
-    cursor: "pointer",
-    fontWeight: 900,
   },
 };

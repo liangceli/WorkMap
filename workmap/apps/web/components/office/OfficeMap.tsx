@@ -13,10 +13,12 @@ import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/ava
 import { getAvatarConfigForOffice } from "../../lib/avatar/avatarStorage";
 import { findDestinationAtPoint, officeDestinations, type OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { findGridPath, type PathPoint } from "../../lib/office/pathfinding";
+import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { FloatingRoomPill } from "./FloatingRoomPill";
 import { InteractionDrawer } from "./InteractionDrawer";
-import { MovementHint } from "./MovementHint";
+import { OfficeBottomDock } from "./OfficeBottomDock";
 import { OfficeCommandPalette } from "./OfficeCommandPalette";
+import { OfficeIcon } from "./OfficeIcons";
 import { OfficeLeftRail, type OfficePanelKey } from "./OfficeLeftRail";
 import { OfficeMiniMap } from "./OfficeMiniMap";
 import { OfficeSidePanel } from "./OfficeSidePanel";
@@ -55,6 +57,12 @@ type LoadedAvatar = {
 };
 
 type LoadedAvatarMap = Record<string, LoadedAvatar>;
+
+type ViewportSize = {
+  width: number;
+  height: number;
+  dpr?: number;
+};
 
 const MAP_URL = "/maps/workmap2.tmx";
 const MAP_DEV_POLL_MS = 1500;
@@ -218,6 +226,8 @@ export function OfficeMap() {
         autoPathRef.current = [];
         autoDestinationRef.current = null;
         setCommandOpen(false);
+        setActivePanel(null);
+        setSelectedDestination(null);
         return;
       }
 
@@ -540,13 +550,14 @@ export function OfficeMap() {
 
   const getWorldPointFromEvent = (event: MouseEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>, pixels = mapPixels) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const scaleX = CANVAS_WIDTH / rect.width;
-    const scaleY = CANVAS_HEIGHT / rect.height;
-    const camera = getCamera(playerRef.current, pixels, zoomRef.current, cameraOffsetRef.current);
+    const camera = getCamera(playerRef.current, pixels, zoomRef.current, cameraOffsetRef.current, {
+      width: rect.width,
+      height: rect.height,
+    });
 
     return {
-      x: ((event.clientX - rect.left) * scaleX) / zoomRef.current + camera.x,
-      y: ((event.clientY - rect.top) * scaleY) / zoomRef.current + camera.y,
+      x: (event.clientX - rect.left) / zoomRef.current + camera.x,
+      y: (event.clientY - rect.top) / zoomRef.current + camera.y,
     };
   };
 
@@ -624,6 +635,11 @@ export function OfficeMap() {
     setZoom(zoomRef.current);
   };
 
+  const setOfficeZoom = (nextZoom: number) => {
+    zoomRef.current = clamp(nextZoom, 0.4, 2);
+    setZoom(zoomRef.current);
+  };
+
   const openPanel = (panel: OfficePanelKey) => {
     if (panel === "search") {
       setCommandOpen(true);
@@ -651,7 +667,11 @@ export function OfficeMap() {
   return (
     <main style={styles.page}>
       <VirtualOfficeShell>
-        <VirtualOfficeTopBar status={player.status} />
+        <VirtualOfficeTopBar
+          status={player.status}
+          currentArea={activeRoom?.name ?? "Office"}
+          onSearch={() => setCommandOpen(true)}
+        />
         <OfficeLeftRail activePanel={activePanel} onSelectPanel={openPanel} />
         <OfficeSidePanel
           activePanel={activePanel}
@@ -682,9 +702,14 @@ export function OfficeMap() {
           />
         </div>
 
-        <button type="button" onClick={recenterCamera} style={styles.recenterButton}>
-          Recenter / {Math.round(zoom * 100)}%
-        </button>
+        <div style={styles.mapControls}>
+          <button type="button" onClick={() => setOfficeZoom(zoomRef.current + 0.1)} style={styles.mapControlButton} aria-label="Zoom in">+</button>
+          <button type="button" onClick={() => setOfficeZoom(zoomRef.current - 0.1)} style={styles.mapControlButton} aria-label="Zoom out">-</button>
+          <button type="button" onClick={recenterCamera} style={styles.mapControlButton} aria-label="Recenter map">
+            <OfficeIcon name="target" size={22} />
+          </button>
+          <span style={styles.zoomLabel}>{Math.round(zoom * 100)}%</span>
+        </div>
 
         <FloatingRoomPill
           room={activeRoom}
@@ -697,9 +722,19 @@ export function OfficeMap() {
             map={map}
             player={player}
             tilesets={officeTilesets}
+            shifted={Boolean(activePanel)}
           />
         ) : null}
-        <MovementHint hasInteractionTarget={Boolean(drawerTarget)} />
+        <OfficeBottomDock
+          status={player.status}
+          hidden={Boolean(drawerTarget)}
+          onSearch={() => setCommandOpen(true)}
+          onOpenChat={() => setActivePanel("chat")}
+          onOpenCalendar={() => setActivePanel("calendar")}
+          onWave={() => setToast("You waved to nearby teammates.")}
+          onEmoji={() => setToast("Emoji options are frontend-only in this MVP.")}
+          onToast={setToast}
+        />
         {drawerTarget ? (
           <InteractionDrawer
             target={drawerTarget}
@@ -819,11 +854,15 @@ function drawScene(
     return;
   }
 
-  const camera = getCamera(player, mapPixels, zoom, cameraOffset);
-  context.clearRect(0, 0, canvas.width, canvas.height);
+  const viewport = syncCanvasViewport(canvas);
+  const camera = getCamera(player, mapPixels, zoom, cameraOffset, viewport);
+  context.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
+  context.imageSmoothingEnabled = false;
+  context.clearRect(0, 0, viewport.width, viewport.height);
   context.fillStyle = "#eef2f7";
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillRect(0, 0, viewport.width, viewport.height);
   context.save();
+  context.imageSmoothingEnabled = false;
   context.scale(zoom, zoom);
   context.translate(-Math.round(camera.x), -Math.round(camera.y));
 
@@ -886,8 +925,34 @@ function drawLayer(
     const targetX = (index % layer.width) * map.tileWidth;
     const targetY = Math.floor(index / layer.width) * map.tileHeight;
 
-    context.drawImage(image, sourceX, sourceY, map.tileWidth, map.tileHeight, targetX, targetY, map.tileWidth, map.tileHeight);
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      map.tileWidth,
+      map.tileHeight,
+      targetX,
+      targetY,
+      map.tileWidth,
+      map.tileHeight,
+    );
   }
+}
+
+function syncCanvasViewport(canvas: HTMLCanvasElement) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+  const backingWidth = Math.max(1, Math.round(width * dpr));
+  const backingHeight = Math.max(1, Math.round(height * dpr));
+
+  if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+    canvas.width = backingWidth;
+    canvas.height = backingHeight;
+  }
+
+  return { width, height, dpr };
 }
 
 function drawPlayer(
@@ -912,16 +977,16 @@ function drawPlayer(
   const hasAvatarImage = Boolean(avatar?.layers.some((layer) => layer.image));
 
   if (hasAvatarImage && avatar) {
-    context.strokeStyle = highlighted ? "#0f172a" : statusColors[player.status];
+    context.strokeStyle = highlighted ? wm.colors.text : statusColors[player.status];
     context.lineWidth = highlighted ? 3 : 2;
     context.beginPath();
     context.ellipse(player.x, player.y + 17, highlighted ? 25 : 22, highlighted ? 10 : 8, 0, 0, Math.PI * 2);
     context.stroke();
     drawAvatarSprite(context, player, drawY, seated, avatar);
   } else {
-    context.strokeStyle = highlighted ? "#0f172a" : statusColors[player.status];
+    context.strokeStyle = highlighted ? wm.colors.text : statusColors[player.status];
     context.lineWidth = highlighted ? 4 : 3;
-    context.fillStyle = local ? "#1d4ed8" : "#f8fafc";
+    context.fillStyle = local ? wm.colors.secondary : wm.colors.background;
     if (seated) {
       context.beginPath();
       context.roundRect(player.x - 18, drawY - 10, 36, 25, 7);
@@ -934,7 +999,7 @@ function drawPlayer(
       context.stroke();
     }
 
-    context.fillStyle = local ? "#ffffff" : "#0f172a";
+    context.fillStyle = local ? wm.colors.surface : wm.colors.text;
     context.font = "700 14px Arial";
     context.fillText(seated ? "SIT" : local ? "YOU" : "WM", player.x, drawY + 5);
 
@@ -975,7 +1040,7 @@ function drawNameBubble(
   context.arc(bubbleX + 13, y, 5, 0, Math.PI * 2);
   context.fill();
 
-  context.fillStyle = "#f8fafc";
+  context.fillStyle = wm.colors.background;
   context.fillText(label, bubbleX + 24, y + 0.5);
 
   context.fillStyle = "rgba(15, 23, 42, 0.92)";
@@ -1077,13 +1142,13 @@ function drawDirectionCue(context: CanvasRenderingContext2D, x: number, y: numbe
 
 function drawChairHint(context: CanvasRenderingContext2D, chair: ChairSpot, label: string) {
   context.save();
-  context.strokeStyle = "#0f172a";
+  context.strokeStyle = wm.colors.text;
   context.fillStyle = "rgba(255, 255, 255, 0.9)";
   context.lineWidth = 2;
   context.beginPath();
   context.roundRect(chair.x - 20, chair.y - 20, 40, 40, 8);
   context.stroke();
-  context.fillStyle = "#0f172a";
+  context.fillStyle = wm.colors.text;
   context.textAlign = "center";
   context.font = "700 11px Arial";
   context.fillText(label, chair.x, chair.y - 25);
@@ -1092,14 +1157,14 @@ function drawChairHint(context: CanvasRenderingContext2D, chair: ChairSpot, labe
 
 function drawDestinationMarker(context: CanvasRenderingContext2D, point: PathPoint) {
   context.save();
-  context.strokeStyle = "#2563eb";
+  context.strokeStyle = wm.colors.secondary;
   context.fillStyle = "rgba(37, 99, 235, 0.16)";
   context.lineWidth = 2;
   context.beginPath();
   context.arc(point.x, point.y, 14, 0, Math.PI * 2);
   context.fill();
   context.stroke();
-  context.fillStyle = "#2563eb";
+  context.fillStyle = wm.colors.secondary;
   context.beginPath();
   context.arc(point.x, point.y, 4, 0, Math.PI * 2);
   context.fill();
@@ -1312,12 +1377,13 @@ function getCamera(
   mapPixels: { width: number; height: number },
   zoom = 1,
   offset = { x: 0, y: 0 },
+  viewport: ViewportSize = { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
 ) {
   void mapPixels;
 
   return {
-    x: player.x - CANVAS_WIDTH / (2 * zoom) + offset.x,
-    y: player.y - CANVAS_HEIGHT / (2 * zoom) + offset.y,
+    x: player.x - viewport.width / (2 * zoom) + offset.x,
+    y: player.y - viewport.height / (2 * zoom) + offset.y,
   };
 }
 
@@ -1370,9 +1436,9 @@ const styles = {
     height: "100vh",
     minHeight: "100vh",
     overflow: "hidden",
-    background: "#dbe4ef",
-    color: "#0f172a",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    background: wm.colors.appBackground,
+    color: wm.colors.text,
+    fontFamily: wm.typography.fontFamily,
     padding: 0,
   },
   shell: {
@@ -1386,23 +1452,42 @@ const styles = {
     width: "100vw",
     height: "100vh",
     overflow: "hidden",
-    background: "#cbd5e1",
+    background: wm.colors.surfaceHighest,
   },
-  recenterButton: {
+  mapControls: {
     position: "absolute" as const,
-    right: "284px",
-    bottom: "24px",
+    right: "22px",
+    bottom: "72px",
     zIndex: 19,
-    border: "1px solid rgba(203, 213, 225, 0.82)",
-    borderRadius: "12px",
-    background: "rgba(255, 255, 255, 0.86)",
-    color: "#0f172a",
-    padding: "10px 12px",
+    display: "grid",
+    justifyItems: "center",
+    gap: "8px",
+    width: "62px",
+    padding: "8px 6px 12px",
+    border: "1px solid rgba(216, 224, 236, 0.88)",
+    borderRadius: "18px",
+    background: "rgba(255, 255, 255, 0.9)",
+    boxShadow: "0 18px 44px rgba(15, 23, 42, 0.16)",
+    backdropFilter: "blur(18px)",
+  },
+  mapControlButton: {
+    display: "grid",
+    placeItems: "center",
+    width: "46px",
+    height: "46px",
+    border: "1px solid #d8e0ec",
+    borderRadius: "13px",
+    background: "#ffffff",
+    color: "#16235a",
     cursor: "pointer",
-    fontSize: "12px",
+    fontSize: "16px",
     fontWeight: 900,
-    boxShadow: "0 14px 35px rgba(15, 23, 42, 0.14)",
-    backdropFilter: "blur(14px)",
+  },
+  zoomLabel: {
+    color: wm.colors.textSecondary,
+    fontSize: "13px",
+    fontWeight: 900,
+    textAlign: "center" as const,
   },
   toast: {
     position: "absolute" as const,
@@ -1424,7 +1509,7 @@ const styles = {
     inset: 0,
     display: "grid",
     placeItems: "center",
-    background: "#f8fafc",
+    background: wm.colors.background,
     border: 0,
     borderRadius: "8px",
     overflow: "hidden",
@@ -1435,28 +1520,25 @@ const styles = {
     width: "max(100vw, calc(100vh * 1.647))",
     height: "max(100vh, calc(100vw / 1.647))",
     flex: "0 0 auto",
-    background: "#f8fafc",
+    background: wm.colors.background,
+    imageRendering: "pixelated" as const,
   },
   card: {
-    border: "1px solid #cbd5e1",
-    background: "#ffffff",
-    borderRadius: "8px",
+    ...wmStyles.card,
     padding: "14px",
   },
   panelLabel: {
-    margin: "0 0 6px",
-    color: "#64748b",
-    fontSize: "12px",
-    fontWeight: 700,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
+    color: wm.colors.textMuted,
   },
   panelTitle: {
     margin: "0 0 8px",
+    color: wm.colors.text,
     fontSize: "20px",
   },
   panelText: {
     margin: "0 0 6px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
   },

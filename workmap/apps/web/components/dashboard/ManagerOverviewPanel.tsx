@@ -3,6 +3,7 @@ import { AppUsageTable } from "./AppUsageTable";
 import { PrivacyNoticeCard } from "./PrivacyNoticeCard";
 import { UsageSummaryCard } from "./UsageSummaryCard";
 import { WebsiteUsageTable } from "./WebsiteUsageTable";
+import { wmStyles } from "../../lib/theme/workmapTheme";
 import { appUsageRows, dashboardEmployees, usageMetrics, websiteUsageRows } from "./mockDashboardData";
 
 export function ManagerOverviewPanel() {
@@ -59,36 +60,22 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "16px",
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.elevatedCard,
     padding: "20px",
   },
   eyebrow: {
-    margin: "0 0 8px",
-    color: "#2563eb",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
   },
   title: {
-    margin: "0 0 8px",
-    fontSize: "30px",
-    lineHeight: 1.1,
+    ...wmStyles.pageTitle,
   },
   subtitle: {
-    margin: 0,
-    color: "#475569",
-    fontSize: "15px",
+    ...wmStyles.pageSubtitle,
   },
   officeLink: {
     flex: "0 0 auto",
-    borderRadius: "8px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "10px 14px",
-    textDecoration: "none",
-    fontWeight: 800,
   },
   heroActions: {
     display: "flex",
@@ -98,14 +85,9 @@ const styles = {
   },
   secondaryLink: {
     flex: "0 0 auto",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    background: "#ffffff",
-    color: "#0f172a",
+    ...wmStyles.secondaryButton,
     padding: "10px 12px",
-    textDecoration: "none",
     fontSize: "13px",
-    fontWeight: 800,
   },
   metricGrid: {
     display: "grid",
@@ -119,9 +101,7 @@ const styles = {
     alignItems: "start",
   },
   panel: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
   },
   panelTitle: {

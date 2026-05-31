@@ -1,6 +1,7 @@
 "use client";
 
 import type { OfficeRoomZone } from "@workmap/shared-types";
+import { wm } from "../../lib/theme/workmapTheme";
 
 type FloatingRoomPillProps = {
   room?: OfficeRoomZone;
@@ -12,9 +13,13 @@ type FloatingRoomPillProps = {
 export function FloatingRoomPill({ room, seated, chairNearby, elevated }: FloatingRoomPillProps) {
   const context = seated ? "Seated at desk" : chairNearby ? "Press E to sit" : room?.name ?? "Open Area";
 
+  if (!seated && !chairNearby) {
+    return null;
+  }
+
   return (
-    <div style={{ ...styles.pill, bottom: elevated ? "198px" : "24px" }}>
-      <span style={styles.kicker}>Current area</span>
+    <div style={{ ...styles.pill, bottom: elevated ? "198px" : "154px" }}>
+      <span style={styles.kicker}>Interaction</span>
       <span style={styles.label}>{context}</span>
     </div>
   );
@@ -23,7 +28,7 @@ export function FloatingRoomPill({ room, seated, chairNearby, elevated }: Floati
 const styles = {
   pill: {
     position: "absolute" as const,
-    left: "24px",
+    left: "50%",
     zIndex: 18,
     display: "flex",
     alignItems: "center",
@@ -33,10 +38,11 @@ const styles = {
     border: "1px solid rgba(203, 213, 225, 0.72)",
     borderRadius: "999px",
     background: "rgba(15, 23, 42, 0.78)",
-    color: "#f8fafc",
+    color: wm.colors.background,
     boxShadow: "0 16px 35px rgba(15, 23, 42, 0.24)",
     backdropFilter: "blur(16px)",
     transition: "bottom 160ms ease",
+    transform: "translateX(-50%)",
   },
   kicker: {
     color: "rgba(226, 232, 240, 0.8)",

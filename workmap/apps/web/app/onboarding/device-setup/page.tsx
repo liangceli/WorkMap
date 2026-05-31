@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
 const desktopItems = ["Active app name", "Idle state", "Device heartbeat"];
@@ -69,9 +70,9 @@ const styles = {
     minHeight: "100vh",
     display: "grid",
     placeItems: "center",
-    background: "#f3f7fb",
-    color: "#0f172a",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    background: wm.colors.appBackground,
+    color: wm.colors.text,
+    fontFamily: wm.typography.fontFamily,
     padding: "24px",
   },
   shell: {
@@ -81,19 +82,21 @@ const styles = {
   },
   eyebrow: {
     margin: 0,
-    color: "#2563eb",
+    color: wm.colors.secondary,
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
   },
   title: {
     margin: 0,
-    fontSize: "38px",
-    lineHeight: 1.08,
+    fontSize: "32px",
+    lineHeight: 1.25,
+    fontWeight: 700,
+    letterSpacing: "-0.02em",
   },
   subtitle: {
     margin: 0,
-    color: "#475569",
+    color: wm.colors.textSecondary,
     fontSize: "16px",
     lineHeight: 1.5,
   },
@@ -103,9 +106,7 @@ const styles = {
     gap: "14px",
   },
   card: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "8px",
-    background: "#ffffff",
+    ...wmStyles.card,
     padding: "16px",
   },
   cardTitle: {
@@ -115,26 +116,20 @@ const styles = {
   list: {
     margin: 0,
     paddingLeft: "18px",
-    color: "#334155",
+    color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.8,
   },
   notice: {
     display: "grid",
     gap: "5px",
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    background: "#eff6ff",
-    color: "#1e3a8a",
+    ...wmStyles.infoNotice,
     padding: "12px 14px",
     fontSize: "14px",
   },
   button: {
     justifySelf: "start",
-    border: "1px solid #0f172a",
-    borderRadius: "8px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "12px 16px",
     cursor: "pointer",
     fontWeight: 900,

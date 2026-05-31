@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { PlayerDirection } from "@workmap/shared-types";
 import { getLayeredAvatarAssets, type LayeredAvatarConfig } from "../../lib/avatar/avatarLayerAssets";
 import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/avatarFrameMaps";
+import { wm } from "../../lib/theme/workmapTheme";
 
 type LayeredAvatarPreviewProps = {
   config: LayeredAvatarConfig;
@@ -87,8 +88,8 @@ export function LayeredAvatarPreview({ config, size = 128, direction = "down", i
 const styles = {
   canvas: {
     display: "block",
-    borderRadius: "8px",
-    border: "1px solid #dbe3ef",
-    background: "#f8fafc",
+    borderRadius: wm.radius.md,
+    border: `1px solid ${wm.colors.border}`,
+    background: wm.colors.surfaceLow,
   },
 };

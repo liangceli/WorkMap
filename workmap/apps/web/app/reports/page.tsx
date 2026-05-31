@@ -1,6 +1,7 @@
 import { ReportSummaryPanel } from "../../components/reports/ReportSummaryPanel";
 import { reportMetrics, reportRows } from "../../components/reports/mockReportsData";
 import { AppShell } from "../../components/layout/AppShell";
+import { wmStyles } from "../../lib/theme/workmapTheme";
 
 export default function ReportsPage() {
   return (
@@ -37,32 +38,19 @@ export default function ReportsPage() {
 
 const styles = {
   shell: {
-    display: "grid",
-    gap: "16px",
+    ...wmStyles.pageStack,
   },
   header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "16px",
+    ...wmStyles.pageHeader,
   },
   eyebrow: {
-    margin: "0 0 8px",
-    color: "#2563eb",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    ...wmStyles.eyebrow,
   },
   title: {
-    margin: "0 0 8px",
-    fontSize: "34px",
-    lineHeight: 1.1,
+    ...wmStyles.pageTitle,
   },
   subtitle: {
-    margin: 0,
-    color: "#475569",
-    fontSize: "15px",
-    lineHeight: 1.45,
+    ...wmStyles.pageSubtitle,
   },
   nav: {
     display: "flex",
@@ -70,30 +58,18 @@ const styles = {
     flexWrap: "wrap" as const,
   },
   primaryLink: {
-    borderRadius: "8px",
-    background: "#0f172a",
-    color: "#ffffff",
+    ...wmStyles.primaryButton,
     padding: "10px 14px",
-    textDecoration: "none",
-    fontWeight: 800,
   },
   secondaryLink: {
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    background: "#ffffff",
-    color: "#0f172a",
+    ...wmStyles.secondaryButton,
     padding: "10px 14px",
-    textDecoration: "none",
-    fontWeight: 800,
   },
   notice: {
     display: "flex",
     gap: "10px",
     alignItems: "center",
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    background: "#eff6ff",
-    color: "#1e3a8a",
+    ...wmStyles.infoNotice,
     padding: "12px 14px",
     fontSize: "14px",
     lineHeight: 1.45,
