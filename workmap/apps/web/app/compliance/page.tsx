@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CompliancePolicyPanel } from "../../components/compliance/CompliancePolicyPanel";
 import { AppShell } from "../../components/layout/AppShell";
+import { WorkMapButton } from "../../components/ui/WorkMapButton";
+import { WorkMapPageHeader } from "../../components/ui/WorkMapPageHeader";
+import { WorkMapPrivacyNotice } from "../../components/ui/WorkMapPrivacyNotice";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import {
   getNextRouteForUser,
@@ -31,28 +34,23 @@ export default function CompliancePage() {
   return (
     <AppShell>
       <section style={styles.shell}>
-        <header style={styles.header}>
-          <div>
-            <p style={styles.eyebrow}>Compliance</p>
-            <h1 style={styles.title}>Monitoring policy</h1>
-            <p style={styles.subtitle}>
-              Make WorkMap visibility explicit, role-based, and easy for employees to understand.
-            </p>
-          </div>
-          <nav style={styles.nav}>
-            <a href="/settings" style={styles.secondaryLink}>Settings</a>
-            <a href="/employees" style={styles.primaryLink}>Employees</a>
-          </nav>
-        </header>
+        <WorkMapPageHeader
+          eyebrow="Compliance"
+          title="Monitoring policy"
+          subtitle="Make WorkMap visibility explicit, role-based, and easy for employees to understand."
+          actions={
+            <>
+              <WorkMapButton href="/settings">Settings</WorkMapButton>
+              <WorkMapButton href="/employees" tone="primary">Employees</WorkMapButton>
+            </>
+          }
+        />
 
-        <section style={styles.notice}>
-          <strong>{onboardingMode ? "First-time transparency step" : "Frontend MVP"}</strong>
-          <span>
-            {onboardingMode
-              ? "Review what WorkMap does and does not collect before entering the workspace."
-              : "This page previews policy copy and acknowledgement behavior. Real acknowledgements require backend identity, company scope, and audit logging."}
-          </span>
-        </section>
+        <WorkMapPrivacyNotice title={onboardingMode ? "First-time transparency step" : "Frontend MVP"}>
+          {onboardingMode
+            ? "Review what WorkMap does and does not collect before entering the workspace."
+            : "This page previews policy copy and acknowledgement behavior. Real acknowledgements require backend identity, company scope, and audit logging."}
+        </WorkMapPrivacyNotice>
 
         <CompliancePolicyPanel />
 
@@ -77,40 +75,6 @@ export default function CompliancePage() {
 const styles = {
   shell: {
     ...wmStyles.pageStack,
-  },
-  header: {
-    ...wmStyles.pageHeader,
-  },
-  eyebrow: {
-    ...wmStyles.eyebrow,
-  },
-  title: {
-    ...wmStyles.pageTitle,
-  },
-  subtitle: {
-    ...wmStyles.pageSubtitle,
-  },
-  nav: {
-    display: "flex",
-    gap: "10px",
-    flexWrap: "wrap" as const,
-  },
-  primaryLink: {
-    ...wmStyles.primaryButton,
-    padding: "10px 14px",
-  },
-  secondaryLink: {
-    ...wmStyles.secondaryButton,
-    padding: "10px 14px",
-  },
-  notice: {
-    display: "flex",
-    gap: "10px",
-    alignItems: "center",
-    ...wmStyles.infoNotice,
-    padding: "12px 14px",
-    fontSize: "14px",
-    lineHeight: 1.45,
   },
   ackCta: {
     display: "flex",

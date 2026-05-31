@@ -114,6 +114,10 @@ Avoid:
 - The current office renderer is Canvas MVP; keep UI guidance compatible with this until Phaser migration is explicitly approved.
 - The current design uses inline styles and simple SaaS panels; do not assume Tailwind/shadcn components exist yet.
 - Do not reintroduce fixed right-side debug panels on `/virtual-office`; use floating UI and bottom drawers for interaction.
+- A small WorkMap theme foundation now exists in `apps/web/lib/theme/workmapTheme.ts`. Use it for inline-style color, status, privacy/compliance, spacing, radius, shadow, border, z-index, typography, and component-size consistency.
+- Shared UI primitives now exist for SaaS page consistency: `WorkMapButton`, `WorkMapCard`, `WorkMapBadge`, `WorkMapStatusDot`, `WorkMapPageHeader`, `WorkMapPrivacyNotice`, and `WorkMapEmptyState`.
+- SaaS pages should keep using shared page headers, buttons, notices, cards, badges, and empty states where practical. Do not broaden this into a heavy design system until the product needs it.
+- `/employees`, `/reports`, `/integrations`, `/settings`, and `/compliance` have started moving onto the shared visual primitives while preserving the existing workflows and mock/fallback behavior.
 
 ### Current map UX note
 

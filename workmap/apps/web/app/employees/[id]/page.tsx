@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { EmployeeProfile } from "../../../components/employees/EmployeeProfile";
-import { employeeDirectoryRows } from "../../../components/dashboard/mockDashboardData";
 import { AppShell } from "../../../components/layout/AppShell";
+import { employeeDirectoryRows } from "../../../lib/mock/mockPeople";
 
 type EmployeeDetailPageProps = {
   params: Promise<{

@@ -5,6 +5,7 @@ import type { UserPresenceStatus } from "@workmap/shared-types";
 import { EmployeeAvatar } from "../dashboard/EmployeeAvatar";
 import type { DashboardEmployee } from "../dashboard/mockDashboardData";
 import { PresenceBadge } from "../office/PresenceBadge";
+import { WorkMapEmptyState } from "../ui/WorkMapEmptyState";
 import { getUserSetupState } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
@@ -119,10 +120,9 @@ export function EmployeeDirectory({ employees }: EmployeeDirectoryProps) {
         </div>
 
         {filteredEmployees.length === 0 ? (
-          <div style={styles.emptyState}>
-            <h2 style={styles.emptyTitle}>No employees match these filters</h2>
-            <p style={styles.emptyText}>Try clearing the search or choosing a different department/status.</p>
-          </div>
+          <WorkMapEmptyState title="No employees match these filters">
+            Try clearing the search or choosing a different department/status.
+          </WorkMapEmptyState>
         ) : (
           filteredEmployees.map((employee) => (
             <article key={employee.id} style={styles.row}>
@@ -352,17 +352,5 @@ const styles = {
     color: wm.colors.text,
     fontSize: "13px",
     fontWeight: 700,
-  },
-  emptyState: {
-    padding: "34px",
-    textAlign: "center" as const,
-  },
-  emptyTitle: {
-    margin: "0 0 8px",
-    fontSize: "18px",
-  },
-  emptyText: {
-    margin: 0,
-    color: wm.colors.textSecondary,
   },
 };

@@ -243,6 +243,13 @@ Completed in current MVP:
 - The reports page uses mock aggregated department data and shows app names/domains only, with no private content or full URLs.
 - The login page is a placeholder and does not authenticate, create sessions, or grant permissions.
 - The avatar builder still stores the avatar config under `workmap.avatarConfig`, and now marks `hasAvatar = true` in frontend workflow state before routing to the next step.
+- `apps/web/lib/theme/workmapTheme.ts` is now the shared frontend theme token foundation for the inline-style MVP. It includes base colors plus status, privacy, compliance, spacing, radius, shadow, border, z-index, typography, and component-size tokens.
+- Shared UI primitives now live in `apps/web/components/ui/`: `WorkMapButton`, `WorkMapCard`, `WorkMapBadge`, `WorkMapStatusDot`, `WorkMapPageHeader`, `WorkMapPrivacyNotice`, and `WorkMapEmptyState`.
+- `/employees`, `/reports`, `/integrations`, `/settings`, and `/compliance` now use shared page header/button/privacy primitives where practical. `/settings` also uses shared card and badge primitives. `/employees` uses the shared empty state.
+- Frontend mock data has labelled boundary exports under `apps/web/lib/mock/mockPeople.ts`, `mockReports.ts`, `mockIntegrations.ts`, and `mockOffice.ts`. These exports are frontend demo/fallback data only.
+- A typed frontend API client foundation exists under `apps/web/lib/api/`: `apiClient.ts`, `apiTypes.ts`, `authApi.ts`, `usersApi.ts`, `virtualOfficeApi.ts`, `integrationsApi.ts`, `complianceApi.ts`, and `reportsApi.ts`. It uses `NEXT_PUBLIC_WORKMAP_API_URL` with a development localhost default, supports optional Bearer tokens, returns graceful fallback results, and does not auto-call `/auth/dev-token`.
+- Current API integration remains optional/fallback-safe. Existing SaaS pages still use mock data until auth/RBAC/API contracts are final enough to wire real data safely.
+- `/virtual-office` overlay z-index values now use shared theme layer tokens. No new Gather-like feature areas, Phaser migration, Canvas rewrite, backend changes, Socket.IO, Microsoft Graph, chat persistence, calendar sync, or notices persistence were added.
 
 Current frontend-only workflow routes:
 

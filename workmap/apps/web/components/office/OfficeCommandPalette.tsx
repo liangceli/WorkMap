@@ -165,7 +165,7 @@ const styles = {
   backdrop: {
     position: "absolute" as const,
     inset: 0,
-    zIndex: 60,
+    zIndex: wm.zIndex.officeModal,
     display: "grid",
     placeItems: "start center",
     paddingTop: "112px",

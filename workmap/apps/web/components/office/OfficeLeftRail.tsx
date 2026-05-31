@@ -50,7 +50,7 @@ const styles = {
     top: "124px",
     left: "22px",
     bottom: "300px",
-    zIndex: 35,
+    zIndex: wm.zIndex.officePanel,
     display: "flex",
     flexDirection: "column" as const,
     gap: "14px",

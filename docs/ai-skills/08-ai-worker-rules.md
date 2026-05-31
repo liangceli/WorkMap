@@ -97,6 +97,10 @@ Backend/database:
 - After every completed code/config/API modification, update the relevant `docs/ai-skills/*.md` files in the same turn so the project handoff stays current.
 - Frontend mock data is not a backend contract. Convert mock surfaces into APIs only after the relevant auth/RBAC/schema/API decisions are clear.
 - Dashboard and employee-directory mock data must stay clearly named and must not be mistaken for real tracking data.
+- Frontend mock data now has labelled exports under `apps/web/lib/mock/`. Treat these files as demo/fallback data only, not backend API contracts or real monitoring records.
+- A typed, fallback-safe frontend API client foundation now exists under `apps/web/lib/api/`. It may use `NEXT_PUBLIC_WORKMAP_API_URL` and optional Bearer tokens, but pages must keep mock fallback behavior until auth/RBAC/API contracts are safe to rely on.
+- Do not auto-call `/auth/dev-token` from frontend runtime flows unless a future Director-approved dev-only design explicitly asks for it.
+- SaaS pages can use the shared inline-style theme tokens in `apps/web/lib/theme/workmapTheme.ts` and the small UI primitives under `apps/web/components/ui/`.
 - Integration mock data must stay link-based until backend/API/security decisions are approved.
 - Compliance acknowledgement has API scaffolding, but frontend use should remain mock/local until token issuance/login and final API contracts are approved.
 - Login and frontend reports must remain mock-only until Auth/JWT, final RBAC, report contracts, and audit logging flows are approved.

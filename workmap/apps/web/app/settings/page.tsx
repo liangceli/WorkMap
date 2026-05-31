@@ -2,6 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { AppShell } from "../../components/layout/AppShell";
+import { WorkMapBadge } from "../../components/ui/WorkMapBadge";
+import { WorkMapButton } from "../../components/ui/WorkMapButton";
+import { WorkMapCard } from "../../components/ui/WorkMapCard";
+import { WorkMapPageHeader } from "../../components/ui/WorkMapPageHeader";
+import { WorkMapPrivacyNotice } from "../../components/ui/WorkMapPrivacyNotice";
 import { clearAvatarConfig } from "../../lib/avatar/avatarStorage";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { resetUserSetupState } from "../../lib/workflow/workflowState";
@@ -48,33 +53,28 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <section style={styles.shell}>
-        <header style={styles.header}>
-          <div>
-            <p style={styles.eyebrow}>Admin</p>
-            <h1 style={styles.title}>Settings</h1>
-            <p style={styles.subtitle}>Central settings entry points for the current WorkMap frontend MVP.</p>
-          </div>
-          <a href="/dashboard" style={styles.primaryLink}>Dashboard</a>
-        </header>
+        <WorkMapPageHeader
+          eyebrow="Admin"
+          title="Settings"
+          subtitle="Central settings entry points for the current WorkMap frontend MVP."
+          actions={<WorkMapButton href="/dashboard" tone="primary">Dashboard</WorkMapButton>}
+        />
 
         <section style={styles.grid}>
           {settingsSections.map((section) => (
-            <article key={section.title} style={styles.card}>
-              <span style={styles.status}>{section.status}</span>
+            <WorkMapCard key={section.title} as="article" style={styles.card}>
+              <WorkMapBadge tone="info" style={{ justifySelf: "start" }}>{section.status}</WorkMapBadge>
               <h2 style={styles.cardTitle}>{section.title}</h2>
               <p style={styles.cardText}>{section.description}</p>
-              <a href={section.href} style={styles.cardLink}>Open</a>
-            </article>
+              <WorkMapButton href={section.href} tone="secondary" style={{ justifySelf: "start" }}>Open</WorkMapButton>
+            </WorkMapCard>
           ))}
         </section>
 
-        <section style={styles.notice}>
-          <strong>Backend boundary</strong>
-          <span>
-            These settings are frontend-only entry points. Real tenant settings, RBAC, audit logging, and API persistence
-            still need Director-approved backend contracts.
-          </span>
-        </section>
+        <WorkMapPrivacyNotice title="Backend boundary" tone="warning">
+          These settings are frontend-only entry points. Real tenant settings, RBAC, audit logging, and API persistence
+          still need Director-approved backend contracts.
+        </WorkMapPrivacyNotice>
 
         <section style={styles.resetPanel}>
           <div>
@@ -84,9 +84,9 @@ export default function SettingsPage() {
               Clears `workmap.userSetupState` for workflow testing. You can optionally clear the local avatar config too.
             </p>
           </div>
-          <button type="button" onClick={resetDemo} style={styles.resetButton}>
+          <WorkMapButton type="button" onClick={resetDemo}>
             Reset demo workflow
-          </button>
+          </WorkMapButton>
         </section>
       </section>
     </AppShell>
@@ -97,42 +97,14 @@ const styles = {
   shell: {
     ...wmStyles.pageStack,
   },
-  header: {
-    ...wmStyles.pageHeader,
-  },
-  eyebrow: {
-    ...wmStyles.eyebrow,
-  },
-  title: {
-    ...wmStyles.pageTitle,
-  },
-  subtitle: {
-    ...wmStyles.pageSubtitle,
-  },
-  primaryLink: {
-    ...wmStyles.primaryButton,
-    padding: "10px 14px",
-  },
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
     gap: "14px",
   },
   card: {
-    ...wmStyles.card,
-    padding: "16px",
     display: "grid",
     gap: "10px",
-  },
-  status: {
-    justifySelf: "start",
-    border: `1px solid ${wm.colors.infoBorder}`,
-    borderRadius: "999px",
-    background: wm.colors.infoBg,
-    color: wm.colors.secondary,
-    padding: "5px 9px",
-    fontSize: "12px",
-    fontWeight: 900,
   },
   cardTitle: {
     margin: 0,
@@ -141,25 +113,6 @@ const styles = {
   cardText: {
     margin: 0,
     color: wm.colors.textSecondary,
-    fontSize: "14px",
-    lineHeight: 1.45,
-  },
-  cardLink: {
-    justifySelf: "start",
-    ...wmStyles.secondaryButton,
-    padding: "9px 12px",
-    textDecoration: "none",
-    fontWeight: 900,
-  },
-  notice: {
-    display: "flex",
-    gap: "10px",
-    alignItems: "center",
-    border: `1px solid ${wm.colors.warningBorder}`,
-    borderRadius: wm.radius.xl,
-    background: wm.colors.warningBg,
-    color: "#7c2d12",
-    padding: "12px 14px",
     fontSize: "14px",
     lineHeight: 1.45,
   },
@@ -187,12 +140,5 @@ const styles = {
     color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
-  },
-  resetButton: {
-    flex: "0 0 auto",
-    ...wmStyles.secondaryButton,
-    padding: "10px 14px",
-    cursor: "pointer",
-    fontWeight: 900,
   },
 };

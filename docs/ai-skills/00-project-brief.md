@@ -109,6 +109,7 @@ Frontend MVP currently has:
 - The mini map now shows the full office and local player dot without a blue viewport range box.
 - The Canvas MVP now supports mouse drag pan, mouse wheel zoom, recenter, double-click click-to-move, and frontend-only Go to person/room navigation using a small grid pathfinding utility.
 - Chat, Calendar, Notices, and People office panels are frontend-only mock collaboration surfaces. They do not connect to Teams/Outlook content or backend persistence.
+- `/virtual-office` overlay z-index values are now tied to shared theme layer tokens for the rail, panels, drawer, controls, mini map, and command palette. No Canvas renderer rewrite, Phaser migration, Socket.IO, Graph, chat/calendar/notices persistence, or backend/schema change was made.
 - `/onboarding/avatar` as a layered avatar builder using local sprite sheet assets.
 - `/dashboard` as a manager overview mock UI with privacy-forward app/domain summaries.
 - `/employees` as a frontend mock employee directory with search, filters, manager summary view, and employee contact-only view.
@@ -123,6 +124,11 @@ Frontend MVP currently has:
 - Local avatar config stored in `localStorage` under `workmap.avatarConfig`.
 - The old right-side debug/test panel has been removed from `/virtual-office`; interaction state is now surfaced through the bottom drawer and small floating hints.
 - SaaS pages now use a shared `AppShell` navigation component for dashboard, employees, employee detail, reports, compliance, integrations, and settings. `/virtual-office` keeps its dedicated map-first UI.
+- The frontend now has a small inline-style-compatible theme token foundation in `apps/web/lib/theme/workmapTheme.ts`, including status/privacy/compliance colors, spacing, radius, shadows, borders, z-index layers, and shared component sizes.
+- Shared frontend UI primitives now exist under `apps/web/components/ui/` for buttons, cards, badges, status dots, page headers, privacy notices, and empty states. These are intentionally small and compatible with the current inline-style MVP; Tailwind/shadcn are still not introduced project-wide.
+- SaaS pages have started using shared page header, button, privacy notice, card, badge, and empty-state primitives while preserving their existing mock/demo behavior.
+- Frontend mock boundaries are now clearer under `apps/web/lib/mock/` with labelled people, reports, integrations, and office mock exports. These remain frontend demo data and are not backend API contracts.
+- A typed, fallback-safe frontend API client foundation now exists under `apps/web/lib/api/`. It supports `NEXT_PUBLIC_WORKMAP_API_URL`, optional Bearer tokens, graceful fallback results, and typed helpers for auth/current user, users, virtual office, integrations, compliance, and reports. Existing pages still keep mock fallback behavior.
 - Demo role flow is frontend-only and must not be treated as real authentication or RBAC.
 
 Backend MVP currently has:

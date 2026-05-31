@@ -4,7 +4,7 @@ import { PrivacyNoticeCard } from "./PrivacyNoticeCard";
 import { UsageSummaryCard } from "./UsageSummaryCard";
 import { WebsiteUsageTable } from "./WebsiteUsageTable";
 import { wmStyles } from "../../lib/theme/workmapTheme";
-import { appUsageRows, dashboardEmployees, usageMetrics, websiteUsageRows } from "./mockDashboardData";
+import { appUsageRows, dashboardEmployees, usageMetrics, websiteUsageRows } from "../../lib/mock/mockPeople";
 
 export function ManagerOverviewPanel() {
   return (

@@ -14,6 +14,27 @@ You own:
 - manual QA checklists
 - bug reproduction steps
 
+## Current frontend test focus - 2026-05-31
+
+Recent frontend stabilization added:
+
+- shared inline-style theme tokens in `apps/web/lib/theme/workmapTheme.ts`
+- shared UI primitives in `apps/web/components/ui/`
+- labelled frontend mock exports in `apps/web/lib/mock/`
+- typed fallback-safe API helpers in `apps/web/lib/api/`
+- SaaS page reuse of shared headers, buttons, notices, cards, badges, and empty states
+- virtual-office overlay z-index tokens without changing Canvas movement or backend behavior
+
+When testing this phase, verify:
+
+- `/virtual-office` still supports WASD/arrow movement, click-to-move, drag/pan, zoom, recenter, mini map, panels, command palette, and bottom interaction drawer.
+- Office panels and command palette do not expose app/domain/activity summaries or private monitoring data.
+- `/dashboard`, `/employees`, `/employees/[id]`, `/reports`, `/compliance`, `/integrations`, and `/settings` still render with mock fallback data when the API is not running.
+- Employee-mode views remain contact-only for other employees and do not show manager-only active/idle/app/domain summaries.
+- Reports show aggregated app names and domains only; no full URLs or private content appear.
+- API helper failures return fallback-safe results and do not break local demo pages.
+- No backend code, Prisma schema, Socket.IO, Microsoft Graph, real chat persistence, calendar sync, or notices persistence is introduced by frontend stabilization work.
+
 ## Test scope
 
 Test these areas:

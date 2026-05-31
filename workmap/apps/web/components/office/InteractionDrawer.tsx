@@ -140,7 +140,7 @@ const styles = {
     left: "342px",
     right: "96px",
     bottom: "30px",
-    zIndex: 32,
+    zIndex: wm.zIndex.officeDrawer,
     display: "grid",
     gridTemplateColumns: "minmax(220px, 0.8fr) minmax(250px, 0.85fr) minmax(430px, 1.35fr)",
     gap: "24px",

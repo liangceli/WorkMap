@@ -1,34 +1,32 @@
 import { IntegrationButton } from "../../components/integrations/IntegrationButton";
-import { integrationItems } from "../../components/integrations/mockIntegrationsData";
+import { WorkMapButton } from "../../components/ui/WorkMapButton";
+import { WorkMapPageHeader } from "../../components/ui/WorkMapPageHeader";
+import { WorkMapPrivacyNotice } from "../../components/ui/WorkMapPrivacyNotice";
 import { AppShell } from "../../components/layout/AppShell";
+import { integrationItems } from "../../lib/mock/mockIntegrations";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 export default function IntegrationsPage() {
   return (
     <AppShell>
       <section style={styles.shell}>
-        <header style={styles.header}>
-          <div>
-            <p style={styles.eyebrow}>Admin settings</p>
-            <h1 style={styles.title}>Integrations</h1>
-            <p style={styles.subtitle}>
-              Configure lightweight contact launchers for Teams, Outlook, calendar scheduling, and 3CX.
-            </p>
-          </div>
-          <nav style={styles.nav}>
-            <a href="/dashboard" style={styles.secondaryLink}>Dashboard</a>
-            <a href="/settings" style={styles.secondaryLink}>Settings</a>
-            <a href="/virtual-office" style={styles.primaryLink}>Open office</a>
-          </nav>
-        </header>
+        <WorkMapPageHeader
+          eyebrow="Admin settings"
+          title="Integrations"
+          subtitle="Configure lightweight contact launchers for Teams, Outlook, calendar scheduling, and 3CX."
+          actions={
+            <>
+              <WorkMapButton href="/dashboard">Dashboard</WorkMapButton>
+              <WorkMapButton href="/settings">Settings</WorkMapButton>
+              <WorkMapButton href="/virtual-office" tone="primary">Open office</WorkMapButton>
+            </>
+          }
+        />
 
-        <section style={styles.notice}>
-          <strong>Current MVP scope</strong>
-          <span>
-            These are link-based integration entry points. WorkMap does not request Microsoft Graph permissions, read message
-            content, read email bodies, or record call audio.
-          </span>
-        </section>
+        <WorkMapPrivacyNotice title="Current MVP scope">
+          These are link-based integration entry points. WorkMap does not request Microsoft Graph permissions, read message
+          content, read email bodies, or record call audio.
+        </WorkMapPrivacyNotice>
 
         <section style={styles.grid}>
           {integrationItems.map((integration) => (
@@ -52,40 +50,6 @@ export default function IntegrationsPage() {
 const styles = {
   shell: {
     ...wmStyles.pageStack,
-  },
-  header: {
-    ...wmStyles.pageHeader,
-  },
-  eyebrow: {
-    ...wmStyles.eyebrow,
-  },
-  title: {
-    ...wmStyles.pageTitle,
-  },
-  subtitle: {
-    ...wmStyles.pageSubtitle,
-  },
-  nav: {
-    display: "flex",
-    gap: "10px",
-    flexWrap: "wrap" as const,
-  },
-  primaryLink: {
-    ...wmStyles.primaryButton,
-    padding: "10px 14px",
-  },
-  secondaryLink: {
-    ...wmStyles.secondaryButton,
-    padding: "10px 14px",
-  },
-  notice: {
-    display: "flex",
-    gap: "10px",
-    alignItems: "center",
-    ...wmStyles.infoNotice,
-    padding: "12px 14px",
-    fontSize: "14px",
-    lineHeight: 1.45,
   },
   grid: {
     display: "grid",

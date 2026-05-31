@@ -450,6 +450,7 @@ Current Canvas MVP behavior:
 - `/virtual-office` uses a full-screen map-first UI with floating workspace/current-area/status pills, room/chair interaction hint, bottom action dock, bottom interaction drawer, map controls, and mini map.
 - `/virtual-office` includes a WorkMap office shell: left rail, expandable side panels, command palette, room context card, drag/pan, zoom, recenter, double-click click-to-move, and Go to person/room. The Stitch reference in `docs/designs/` is a state board and must not be implemented as all overlays visible by default.
 - The old right-side debug panel is removed.
+- Office overlay layer order is now centralized through `apps/web/lib/theme/workmapTheme.ts` z-index tokens for office chrome, panels, drawer, controls, and modal/palette surfaces.
 - The mini map is an overlay Canvas that draws the full TMX office and the local player dot. It must not affect movement, collision, or camera math.
 - Main Canvas display must preserve the 1120x680 aspect ratio; do not stretch the map to fit the browser viewport.
 - Main Canvas pixel art rendering disables image smoothing, uses CSS `image-rendering: pixelated`, and synchronizes the Canvas backing store to the displayed viewport size and device pixel ratio to prevent movement-time blur/flicker from browser resampling.

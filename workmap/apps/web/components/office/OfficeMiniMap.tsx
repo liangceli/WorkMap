@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { PlayerState } from "@workmap/shared-types";
+import { wm } from "../../lib/theme/workmapTheme";
 import type { OfficeTileset } from "./mockOfficeData";
 
 type MiniMapLayer = {
@@ -154,7 +155,7 @@ const styles = {
     position: "absolute" as const,
     left: "22px",
     bottom: "52px",
-    zIndex: 18,
+    zIndex: wm.zIndex.officeChrome,
     width: "260px",
     padding: "12px",
     border: "1px solid rgba(216, 224, 236, 0.82)",
