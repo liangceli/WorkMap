@@ -45,7 +45,23 @@ Authentication/context:
 
 - `userId`, `displayName`, `avatarId`, `x`, `y`, `direction`, `isMoving`, `status`, optional `roomId`, `updatedAt`
 
+## Frontend Virtual Office Read Loader
+
+Accepted in commit `abe673c`: `/virtual-office` now has a read-only frontend loader that attempts:
+
+- `GET /virtual-office/map`
+- `GET /virtual-office/navigation`
+- `GET /virtual-office/map/:officeMapId/positions`
+
+The loader validates response shapes before adapting them into frontend rooms, navigation destinations, and remote players. It keeps `mockOfficeData.ts` fallback for failed, unauthorized, invalid, empty, or partial API responses.
+
+Important contract assumptions:
+
+- Backend `zoneData`, navigation `anchor`, and navigation `bounds` must use the same pixel coordinate space as the current TMX map.
+- Backend `OfficeMap.mapData` is not used for frontend canvas rendering.
+- API positions do not currently include frontend role/profile-route metadata; frontend maps role to `Team member`.
+
 ## Important Gaps
 
 - No public controller route currently exposes `persistLatestPosition`.
-- Frontend virtual office wrapper exists, but current `OfficeMap` canvas implementation does not appear wired to the virtual-office API client.
+- No write, polling, websocket, or realtime position sync contract has been added.
