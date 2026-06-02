@@ -2,85 +2,97 @@
 
 ## 1. Original Task Brief
 
-Add Development API Auth Bridge for Frontend Virtual Office Verification
+Complete Local API-Backed Virtual Office Verification Loop
 
-Goal: enable the frontend in development to authenticate against the existing backend API so `/virtual-office` can visually verify real API-backed map/navigation/positions data instead of always falling back to mock data.
+Goal: make the local development environment able to run the backend on `http://localhost:3001`, successfully issue a development auth token, and visually verify that `/virtual-office` can use real backend virtual-office read data instead of only mock fallback.
 
 Important boundaries:
 
-- Development/local verification only.
-- Do not implement production auth.
-- Do not modify backend auth implementation, backend controllers/services, Prisma schema/migrations/seed, login/onboarding UI flow, virtual office movement/collision/pathfinding/chair/contact drawer behavior, TMX rendering, assets, websocket/polling/realtime presence, or position persistence.
-- Preserve mock fallback if development auth fails.
+- Local pilot-readiness only.
+- Do not implement production auth/session architecture.
+- Do not add websocket, polling presence, realtime presence, or position persistence.
+- Do not change movement, collision, pathfinding, TMX rendering, avatar assets, dashboard/report/compliance product features, or UI design.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/apps/web/lib/api/apiTypes.ts` | Added `WorkMapApiDevelopmentToken` to type the existing backend `POST /auth/dev-token` response. |
-| `workmap/apps/web/lib/api/authApi.ts` | Added `createDevelopmentToken()` wrapper using the existing `workMapApiPost` client pattern. |
-| `workmap/apps/web/lib/api/developmentApiAuth.ts` | Added a development-only auth helper that obtains/caches a dev Bearer token from `/auth/dev-token`, using seeded demo users and optional dev env overrides. |
-| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | Updated virtual-office API loading to request development auth options first and pass the token to map/navigation/positions read calls when available. |
+| `workmap/.env.example` | Added `WORKMAP_JWT_SECRET` so local dev-token signing requirements are documented. The local `.env` was also updated with a development-only value, but `.env` is not tracked. |
+| `workmap/apps/api/package.json` | Changed `dev` script to reliably build and run the actual compiled API entry: `nest build && node dist/apps/api/src/main.js`. The previous `nest start --watch` compiled but did not produce a working local server in this workspace layout. |
+| `workmap/apps/api/src/load-local-env.ts` | Added a small local startup helper that loads the nearest `.env` file and registers compiled workspace package aliases for `@workmap/auth` and `@workmap/shared-types`. This lets the compiled API entry run locally from the nested Nest output. |
+| `workmap/apps/api/src/main.ts` | Imports `load-local-env.js` before loading `AppModule`, ensuring env and local compiled aliases are available before Prisma/auth/module imports execute. |
+| `workmap/apps/api/src/modules/auth/auth.module.ts` | Marked `AuthModule` as global so `RequestContextGuard` used by other modules can resolve exported `AuthService` and `JwtService` at runtime. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA and Project Context & Docs. |
 
 Pre-existing workspace note:
 
-- `docs/references/` remains untracked and was not part of this implementation.
+- `docs/references/` remains untracked and was not part of this task.
 
 ## 3. Implementation Summary
 
-Implemented the smallest frontend-only development auth bridge for virtual-office API verification.
+The local backend startup path now works on `http://localhost:3001`.
 
-What changed:
+The previous local failures were caused by several setup/runtime mismatches:
 
-- Added a frontend wrapper for existing `POST /auth/dev-token`.
-- Added `getDevelopmentApiAuthOptions()`:
-  - no-ops outside `NODE_ENV === "development"`
-  - runs only in the browser
-  - chooses a seeded demo user email based on existing frontend demo workflow role
-  - defaults to `engineer@workmap.demo` and `workmap-demo-company`
-  - supports optional overrides via `NEXT_PUBLIC_WORKMAP_DEV_AUTH_EMAIL` and `NEXT_PUBLIC_WORKMAP_DEV_AUTH_COMPANY_SLUG`
-  - stores the returned token only in `localStorage` under `workmap.devApiAuth`
-  - reuses cached token until it is near expiry
-- Updated `/virtual-office` data loading to pass `{ token }` into:
-  - `GET /virtual-office/map`
-  - `GET /virtual-office/navigation`
-  - `GET /virtual-office/map/:officeMapId/positions`
-- If dev auth is unavailable or token creation fails, the existing API calls continue without token and still fall back to mock data.
+- API process did not load root `.env`, so local runtime config such as `DATABASE_URL`, `API_PORT`, and JWT secret were not reliably available.
+- `.env.example` did not document `WORKMAP_JWT_SECRET`, which is required by existing dev-token signing.
+- Nest build output is nested at `apps/api/dist/apps/api/src/main.js`, while plain `nest start` expected `dist/main`.
+- The compiled API output included workspace package JS under `apps/api/dist/packages/...`, but runtime `require("@workmap/auth")` / `require("@workmap/shared-types")` could not resolve those paths.
+- `RequestContextGuard` is used in multiple feature modules; making `AuthModule` global allows its exported auth providers to resolve consistently.
 
-No production auth/session model was created. No backend code was modified.
+No backend controllers/services, Prisma schema, seed data, virtual-office movement/rendering logic, websocket, polling, or persistence logic was changed.
 
 ## 4. User-Visible Changes
 
-In local development, `/virtual-office` can now authenticate against the backend read APIs if the backend is running and seeded demo data exists. This should allow real API-backed rooms/navigation/positions to be visually verified.
+For local development, running the backend with the documented command now starts an API on `http://localhost:3001`.
 
-If the backend is stopped, unseeded, unauthorized, or otherwise unavailable, the page should continue rendering with mock fallback as before.
+With backend and frontend both running, `/virtual-office` can use API-backed virtual-office room/navigation/positions data. In browser verification, the current workspace changed to `Sales Zone`, which matches the backend room zone for the local player's initial coordinates. After stopping the backend and refreshing `/virtual-office`, the page still rendered with mock fallback and showed `Current workspace: Office`.
 
-There are no visible UI changes, no new login/onboarding flow, and no new production behavior.
+There are no production UI changes.
 
 ## 5. Technical Notes
 
-- Backend contract inspected:
-  - `POST /auth/dev-token`
-  - body: `{ email: string, companySlug?: string }`
-  - disabled in backend production mode
-  - returns `{ accessToken, tokenType, expiresAt, user }`
-- Backend `RequestContextGuard` prefers Bearer token when present, then falls back to development headers only outside production.
-- The bridge uses Bearer token, not development headers.
-- Existing frontend workflow state remains explicitly frontend-only demo state; it is used only to choose a seeded dev email.
-- Default seeded identity mapping:
-  - `EMPLOYEE` -> `engineer@workmap.demo`
-  - `MANAGER` -> `manager@workmap.demo`
-  - `OWNER` -> `owner@workmap.demo`
-  - `IT_ADMIN` -> `it.admin@workmap.demo`
-- Default company slug: `workmap-demo-company`.
-- Development-only logging added:
-  - `virtual-office API auth available: yes (cache)`
-  - `virtual-office API auth available: yes (dev-token)`
-  - `virtual-office API auth available: no`
-- Existing data-source logging remains in place:
-  - `virtual-office data source: api`
-  - `virtual-office data source: mock fallback`
+Correct local backend command:
+
+```powershell
+pnpm --filter @workmap/api dev
+```
+
+This now runs:
+
+```text
+nest build && node dist/apps/api/src/main.js
+```
+
+Correct local frontend command:
+
+```powershell
+pnpm --filter @workmap/web dev
+```
+
+Local environment requirements:
+
+- `DATABASE_URL`
+- `API_PORT="3001"`
+- `NEXT_PUBLIC_APP_URL="http://localhost:3000"`
+- `WORKMAP_JWT_SECRET`
+
+Confirmed dev-token request:
+
+```http
+POST http://localhost:3001/auth/dev-token
+Content-Type: application/json
+
+{"email":"engineer@workmap.demo","companySlug":"workmap-demo-company"}
+```
+
+Confirmed authenticated read endpoints:
+
+- `GET http://localhost:3001/virtual-office/map`
+- `GET http://localhost:3001/virtual-office/navigation`
+- `GET http://localhost:3001/virtual-office/map/:officeMapId/positions`
+
+The shell API checks used `Authorization: Bearer <token>` headers. Browser tooling did not expose full network headers directly, but `/virtual-office` visual state matched API room data, and backend read endpoints require a valid request context.
 
 ## 6. Verification Results
 
@@ -88,65 +100,70 @@ Commands run from `workmap/`:
 
 | Command / Check | Result | Notes |
 |---|---|---|
-| `pnpm --filter @workmap/web lint` | Passed | Frontend lint passed. |
-| `pnpm --filter @workmap/web typecheck` | Passed | Frontend TypeScript passed. |
-| `pnpm --filter @workmap/web build` | Passed | Frontend production build passed. Existing warning: Next.js plugin was not detected in ESLint config. |
+| `pnpm --filter @workmap/api lint` | Passed | API lint passed. |
+| `pnpm --filter @workmap/api typecheck` | Passed | API TypeScript passed. |
+| `pnpm --filter @workmap/api build` | Passed | API Nest build passed. |
+| `pnpm --filter @workmap/web lint` | Passed | Web lint passed. |
+| `pnpm --filter @workmap/web typecheck` | Passed | Web TypeScript passed. |
+| `pnpm --filter @workmap/web build` | Passed | Web Next build passed. Existing warning: Next.js plugin not detected in ESLint config. |
 | `pnpm lint` | Passed | Turborepo lint passed for all packages. |
 | `pnpm typecheck` | Passed | Turborepo typecheck passed for all packages. |
-| `pnpm build` | Passed | Turborepo build passed for all packages. Existing web ESLint plugin warning repeated during build. |
-| `pnpm --filter @workmap/api lint` | Passed | Backend lint passed; backend code was inspected but not modified. |
-| `pnpm --filter @workmap/api typecheck` | Passed | Backend TypeScript passed. |
-| `pnpm --filter @workmap/api build` | Passed | Backend Nest build passed. |
-| `GET http://localhost:3001/health` | Not available | Backend was not running on port 3001 during verification. |
-| Browser/manual API-data verification | Not completed | No long-running dev server verification was performed after workflow correction. Human should run backend/frontend manually for visual confirmation. |
-
-Note: `pnpm --filter @workmap/api dev` was briefly attempted and then stopped because it is a long-running watch server, not a blocking verification command. Any leftover API watch process from that attempt was killed.
+| `pnpm build` | Passed | Turborepo build passed for all packages. Existing web ESLint plugin warning repeated. |
+| `GET http://localhost:3001/health` | Passed | Returned `200` with `{"status":"ok","service":"workmap-api",...}`. |
+| `POST http://localhost:3001/auth/dev-token` | Passed | Returned Bearer token for `engineer@workmap.demo`. |
+| `GET /virtual-office/map` with Bearer token | Passed | Returned map id `6a3742d6-dfb5-4487-94dc-da0ecf65ec9d`, 6 rooms, width 1280, height 720. |
+| `GET /virtual-office/navigation` with Bearer token | Passed | Returned 6 navigation destinations. |
+| `GET /virtual-office/map/:officeMapId/positions` with Bearer token | Passed | Returned 5 positions; first observed position: Mia Manager at `x=220`, `y=180`. |
+| Browser `/virtual-office` with backend running | Passed with observations | Page rendered with 2 canvases and `Current workspace: Sales Zone`, matching backend room data. |
+| Browser `/virtual-office` after backend stopped | Passed with observations | Page still rendered with 2 canvases and fallback state `Current workspace: Office`. |
 
 ## 7. Manual QA Suggestions
 
-Run these manually for full verification:
+Recommended manual checks:
 
-1. Start backend manually in one terminal:
+1. Start backend:
    - `pnpm --filter @workmap/api dev`
-2. Start frontend manually in another terminal:
+2. Start frontend:
    - `pnpm --filter @workmap/web dev`
-3. Confirm backend health:
-   - `GET http://localhost:3001/health`
-4. Make sure demo seed data exists.
-5. Complete or simulate the existing demo login/onboarding flow so a demo workflow role and avatar exist.
-6. Open `/virtual-office`.
-7. In browser DevTools, confirm:
-   - `POST /auth/dev-token` is attempted in development
-   - virtual-office requests include `Authorization: Bearer <token>`
-   - `GET /virtual-office/map`
-   - `GET /virtual-office/navigation`
-   - `GET /virtual-office/map/:officeMapId/positions`
-8. Confirm console logs show whether auth was available and whether data source was API or mock fallback.
-9. Confirm API data is used when valid, or mock fallback is used safely when auth/backend fails.
-10. Stop backend or break auth intentionally and confirm `/virtual-office` still renders with mock fallback.
-11. Regression-check movement, collision, double-click auto-walk, chair interaction, contact drawer, and desktop/mobile layout.
+3. Open `http://localhost:3000/virtual-office`.
+4. If redirected, complete demo avatar/compliance steps.
+5. In DevTools Network:
+   - confirm `POST /auth/dev-token`
+   - confirm `GET /virtual-office/map`
+   - confirm `GET /virtual-office/navigation`
+   - confirm `GET /virtual-office/map/:officeMapId/positions`
+   - confirm virtual-office read requests include `Authorization: Bearer <token>`
+6. In console:
+   - confirm dev auth/data source logs if visible in the browser.
+7. Confirm UI still works:
+   - canvas renders
+   - local avatar renders
+   - WASD/arrow movement works
+   - collision still blocks walls/furniture/chairs/plants
+   - double-click auto-walk works or shows existing `No clear path`
+   - chair interaction with `E` still works
+   - contact drawer still opens for remote users
+   - desktop and narrow layouts remain usable
+8. Stop backend and refresh `/virtual-office`.
+9. Confirm mock fallback still renders and no unhandled runtime crash appears.
 
 ## 8. Risks / Notes
 
-- API auth was not confirmed visually in browser during this run because backend was not running and long-running dev server verification was intentionally avoided.
-- The bridge assumes seeded demo users from `prisma/seed.ts` exist in the local database.
-- If local DB seed differs, set:
-  - `NEXT_PUBLIC_WORKMAP_DEV_AUTH_EMAIL`
-  - `NEXT_PUBLIC_WORKMAP_DEV_AUTH_COMPANY_SLUG`
-- Token is stored in browser `localStorage` only for development under `workmap.devApiAuth`.
-- Production behavior is intended to remain unchanged because the helper returns unavailable outside `NODE_ENV === "development"`.
-- The helper imports frontend workflow state only to pick a local demo identity; it does not make workflow state into production auth.
-- Existing mock fallback remains mandatory and unchanged if token acquisition or API reads fail.
-- No backend, Prisma, TMX, assets, movement, collision, pathfinding, chair interaction, contact drawer, websocket, polling, realtime, or position persistence code was modified.
+- Browser tooling in this environment did not expose network request headers directly, so Authorization header confirmation was done via shell API requests and by visual inference from API-backed room state.
+- Backend seed data must exist locally. The verified demo identity was `engineer@workmap.demo` in `workmap-demo-company`.
+- Backend API room coordinates do not visually match the current TMX mock zones perfectly. Example: the player's initial position maps to backend `Sales Zone`, while mock fallback shows a generic `Office` state at the same location after backend is stopped. This was documented rather than redesigning the map.
+- The API `dev` script is now a build-then-run command, not a watch process. It is reliable for local verification but does not provide hot reload.
+- Local `.env` was updated with a development JWT secret; `.env` is ignored and not included in git diff.
+- No production auth behavior was faked.
 
 ## 9. Docs Update Suggestions
 
 Recommended documentation updates:
 
-- `docs/skills/api-contract-skill.md`: record the frontend development auth bridge and `POST /auth/dev-token` usage for local verification.
-- `docs/skills/project-summary.md`: note that production auth is still not implemented, while development virtual-office API verification can use dev-token.
-- Frontend/virtual-office skill docs: document `workmap.devApiAuth`, seeded user defaults, env overrides, and mock fallback behavior.
-- QA docs: add a local verification checklist for confirming Authorization headers and API-vs-mock data source logs.
+- `docs/skills/deployment-skill.md` or local setup docs: record that local backend startup requires `WORKMAP_JWT_SECRET` and uses `pnpm --filter @workmap/api dev`.
+- `docs/skills/api-contract-skill.md`: record the confirmed dev-token request and the verified virtual-office read endpoints.
+- `docs/skills/project-summary.md`: note that local API-backed `/virtual-office` verification now works, but backend room coordinates may not match the TMX map zones exactly.
+- QA docs: add a repeatable local verification loop covering backend start, health, dev-token, authenticated virtual-office reads, browser API-backed state, and backend-stopped fallback.
 
 Input for next chat:
 

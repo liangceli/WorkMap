@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "nest start --watch",
+    "dev": "nest build && node dist/apps/api/src/main.js",
     "build": "nest build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
