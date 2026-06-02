@@ -18,6 +18,20 @@ export type WorkMapApiUser = {
   status?: UserPresenceStatus;
 };
 
+export type WorkMapApiDevelopmentToken = {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresAt: string;
+  user: {
+    id: string;
+    companyId: string;
+    companySlug: string;
+    email: string;
+    displayName: string;
+    role: string;
+  };
+};
+
 export type WorkMapApiOfficeRoom = {
   id: string;
   name: string;

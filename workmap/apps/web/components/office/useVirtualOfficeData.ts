@@ -7,6 +7,7 @@ import {
   listVirtualOfficeNavigation,
   listVirtualOfficePositions,
 } from "../../lib/api/virtualOfficeApi";
+import { getDevelopmentApiAuthOptions } from "../../lib/api/developmentApiAuth";
 import type {
   WorkMapApiNavigationDestination,
   WorkMapApiOfficeMap,
@@ -44,9 +45,16 @@ export function useVirtualOfficeData(): VirtualOfficeData {
     let cancelled = false;
 
     async function loadVirtualOfficeData() {
+      const auth = await getDevelopmentApiAuthOptions();
+
+      if (process.env.NODE_ENV === "development") {
+        console.info(`virtual-office API auth available: ${auth.available ? `yes (${auth.source})` : "no"}`);
+      }
+
+      const apiOptions = auth.available ? auth.options : undefined;
       const [mapResult, navigationResult] = await Promise.all([
-        getVirtualOfficeMap(),
-        listVirtualOfficeNavigation(),
+        getVirtualOfficeMap(apiOptions),
+        listVirtualOfficeNavigation(apiOptions),
       ]);
 
       if (cancelled) {
@@ -68,7 +76,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
           usedMockPart = true;
         }
 
-        const positionsResult = await listVirtualOfficePositions(mapResult.data.id);
+        const positionsResult = await listVirtualOfficePositions(mapResult.data.id, apiOptions);
         if (cancelled) {
           return;
         }
