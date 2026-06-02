@@ -37,6 +37,11 @@ Confirmed behavior:
 
 This bridge is not production auth. It exists only to let local development verify backend-backed virtual-office reads.
 
+Local verification status:
+
+- Commit `d7152dd` confirmed dev-token issuance against `http://localhost:3001/auth/dev-token` when `WORKMAP_JWT_SECRET` and seed data are available.
+- Browser QA confirmed virtual-office read requests can include `Authorization: Bearer ...`.
+
 ## Roles
 
 Prisma roles include:
@@ -54,4 +59,4 @@ Frontend demo workflow role union currently includes only `EMPLOYEE`, `MANAGER`,
 
 - Production session handling and frontend token storage are not confirmed.
 - Frontend route access is demo-state-based, not backend-auth-based.
-- Authenticated virtual-office API success still depends on the local backend listening on `localhost:3001` and demo seed data existing.
+- Authenticated virtual-office API success depends on the local backend listening on `localhost:3001`, `WORKMAP_JWT_SECRET` being configured, and demo seed data existing.

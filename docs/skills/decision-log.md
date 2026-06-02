@@ -24,6 +24,14 @@ Reason: The read API integration needed a safe way to verify real backend-backed
 
 Trade-off: The bridge stores a dev token in browser `localStorage` and depends on seeded demo users, so it is explicitly disabled outside development and must not be treated as production session handling.
 
+## 2026-06-02 - Reliable Local API Startup
+
+Decision: Change API `dev` to a reliable build-then-run command and add a local startup helper for env loading and compiled workspace alias resolution.
+
+Reason: In this workspace layout, the previous watch-based local API startup compiled but did not produce a listening server on `localhost:3001`, blocking local virtual-office API verification.
+
+Trade-off: `pnpm --filter @workmap/api dev` no longer provides hot reload. `load-local-env.ts` is imported by the API entry, so deployment/startup expectations must remain explicit even though existing env vars are preserved.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

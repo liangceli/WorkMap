@@ -33,11 +33,21 @@ Development verification support added in commit `2a4a269`:
 - If auth is unavailable, the virtual office continues with unauthenticated reads and mock fallback.
 - Console logging reports whether API auth was available and whether data came from API or mock fallback.
 
+Local API-backed verification completed in commit `d7152dd`:
+
+- Backend health on `localhost:3001` was verified.
+- `POST /auth/dev-token` returned a Bearer token for the seeded demo identity.
+- Authenticated map, navigation, and positions reads returned real backend data.
+- Browser `/virtual-office` with backend running rendered API-backed state.
+- Browser `/virtual-office` after backend stopped still rendered mock fallback.
+
 ## Current Boundary
 
 The API integration is read-only. It does not add position persistence, polling, websocket, realtime presence, backend map rendering, or production auth/session changes.
 
 The canvas source remains `/maps/workmap2.tmx`; do not use backend `OfficeMap.mapData` as the frontend canvas source unless a future task explicitly changes that architecture.
+
+Known coordinate caveat: backend room coordinates currently do not perfectly match the TMX/mock room zones. The same local player coordinate can show API-backed `Sales Zone` while fallback shows generic `Office`.
 
 ## Product Rules to Preserve
 

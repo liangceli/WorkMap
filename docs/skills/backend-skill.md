@@ -21,9 +21,18 @@ Modules confirmed in `AppModule`:
 - `AuditModule`
 - `HealthController`
 
+Runtime/local startup notes:
+
+- `apps/api/src/main.ts` imports `load-local-env.js` before `AppModule`.
+- `load-local-env.ts` loads the nearest `.env` without overwriting existing environment variables.
+- It also registers compiled local aliases for `@workmap/auth` and `@workmap/shared-types` so the nested Nest build output can run locally.
+- The API `dev` script is `nest build && node dist/apps/api/src/main.js`.
+
 ## Request Context
 
 Most business endpoints use `RequestContextGuard`.
+
+`AuthModule` is marked `@Global()` and exports `AuthService`, `JwtService`, `RequestContextGuard`, and `RolesGuard` so guards/providers resolve across feature modules at runtime.
 
 Context can come from:
 

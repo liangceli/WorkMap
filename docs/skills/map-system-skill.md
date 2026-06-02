@@ -41,3 +41,4 @@ Collision grid is built from non-empty tiles in these layers:
 
 - Database `OfficeMap.mapData` is not the source for current canvas rendering.
 - TMX parsing/rendering is implemented locally in the component; no dedicated map engine/library was confirmed.
+- Backend office room coordinates currently do not perfectly match the frontend TMX/mock zones; API-backed current workspace can differ from fallback current workspace at the same player coordinate.

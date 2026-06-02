@@ -26,6 +26,17 @@ Expected response type:
 - `expiresAt`
 - `user`: includes `id`, `companyId`, `companySlug`, `email`, `displayName`, `role`
 
+Confirmed local request:
+
+```http
+POST http://localhost:3001/auth/dev-token
+Content-Type: application/json
+
+{"email":"engineer@workmap.demo","companySlug":"workmap-demo-company"}
+```
+
+QA confirmed this returns a Bearer token when local API and seed data are available.
+
 Frontend behavior:
 
 - `createDevelopmentToken()` wraps `POST /auth/dev-token`.
@@ -80,6 +91,13 @@ Development overrides:
 `GET /virtual-office/map/:officeMapId/positions` returns:
 
 - `userId`, `displayName`, `avatarId`, `x`, `y`, `direction`, `isMoving`, `status`, optional `roomId`, `updatedAt`
+
+QA-confirmed local API reads with Bearer token:
+
+- `GET http://localhost:3001/virtual-office/map` returned 200, `Default Office Map`, width 1280, height 720, and 6 rooms.
+- `GET http://localhost:3001/virtual-office/navigation` returned 200 and 6 destinations.
+- `GET http://localhost:3001/virtual-office/map/:officeMapId/positions` returned 200 and 5 positions.
+- Browser DevTools confirmed `/virtual-office/map` and `/virtual-office/navigation` requests included `Authorization: Bearer ...`.
 
 ## Frontend Virtual Office Read Loader
 

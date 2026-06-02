@@ -4,6 +4,12 @@ Last updated: 2026-06-02.
 
 ## Latest Accepted Work
 
+- Commit `d7152dd` (`Fix local API startup for virtual office verification`) completed the local API-backed virtual office verification loop.
+- `pnpm --filter @workmap/api dev` now runs `nest build && node dist/apps/api/src/main.js`, giving a reliable local API on `http://localhost:3001` for verification. This trades away API hot reload/watch behavior.
+- `.env.example` now documents `WORKMAP_JWT_SECRET`, required for local dev-token signing.
+- API startup imports `load-local-env.js`, which loads the nearest `.env` without overwriting existing env vars and registers compiled workspace aliases for `@workmap/auth` and `@workmap/shared-types`.
+- `AuthModule` is now global so auth providers resolve consistently for guards used across feature modules.
+- Local verification confirmed health, dev-token, authenticated virtual-office map/navigation/positions reads, browser API-backed state, and backend-stopped mock fallback.
 - Commit `2a4a269` (`Add development API auth bridge for virtual office`) added a frontend-only development auth bridge so `/virtual-office` can request a dev Bearer token from the existing backend `POST /auth/dev-token` endpoint for local API-data verification.
 - The bridge is browser-only, development-only, stores cached token data in `localStorage` under `workmap.devApiAuth`, chooses seeded demo identities from the current frontend demo workflow role, and supports `NEXT_PUBLIC_WORKMAP_DEV_AUTH_EMAIL` / `NEXT_PUBLIC_WORKMAP_DEV_AUTH_COMPANY_SLUG` overrides.
 - `/virtual-office` now asks for development API auth before its read-only map/navigation/positions API calls and passes `{ token }` when available. If token creation or API reads fail, existing mock fallback remains active.
@@ -24,7 +30,9 @@ Last updated: 2026-06-02.
 
 ## Known Issues / Risks
 
-- Authenticated API success path is still not fully verified because the backend was not listening on `localhost:3001` during QA. Fallback behavior was verified when backend/API was unavailable.
+- Backend API room coordinates do not perfectly match the current TMX mock zones. API-backed state can show a different current workspace than fallback at the same player coordinates.
+- API `dev` script is now build-then-run, not watch/hot reload.
+- `load-local-env.ts` is imported unconditionally by the API entry. It preserves existing env vars, but deployment expectations should stay explicit.
 - Production auth/session remains unimplemented; the dev auth bridge is explicitly local-development verification only.
 - The dev auth bridge assumes seeded demo users from `prisma/seed.ts` exist locally, unless public dev env overrides are supplied.
 - Backend `zoneData`, navigation `anchor`, and navigation `bounds` must match the current TMX pixel coordinate system to be accepted safely.
@@ -36,7 +44,8 @@ Last updated: 2026-06-02.
 
 ## Recommended Next Tasks
 
-- Start/fix the backend so it listens on `http://localhost:3001`, then visually verify dev-token success and API-backed virtual office data in a browser.
+- Decide whether a separate API hot-reload command is needed alongside the reliable build-then-run `dev` command.
+- Align backend office room coordinate data with the current TMX map zones, or document the mismatch as accepted MVP behavior.
 - Decide the production auth/session model separately from the development auth bridge.
 - Add or decide against an API route for persisting current player position.
 - Define real-time presence strategy: polling, websocket, or another transport.

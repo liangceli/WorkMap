@@ -24,6 +24,13 @@ App-specific commands:
 - Web: `pnpm --filter @workmap/web dev`, `build`, `lint`, `typecheck`.
 - API: `pnpm --filter @workmap/api dev`, `build`, `lint`, `typecheck`.
 
+API local development note:
+
+- As of commit `d7152dd`, `pnpm --filter @workmap/api dev` runs `nest build && node dist/apps/api/src/main.js`.
+- This is a reliable build-then-run local startup path for `http://localhost:3001`.
+- It is not a watch/hot-reload process.
+- The compiled API entry imports `load-local-env.js` before `AppModule` so local `.env` values and compiled workspace package aliases are available.
+
 ## Environment Variables
 
 From `.env.example`:
@@ -32,6 +39,7 @@ From `.env.example`:
 - `REDIS_URL`
 - `NEXT_PUBLIC_APP_URL`
 - `API_PORT`
+- `WORKMAP_JWT_SECRET`
 
 Frontend API client also uses:
 
@@ -43,6 +51,19 @@ Development-only virtual-office API verification can also use:
 - `NEXT_PUBLIC_WORKMAP_DEV_AUTH_COMPANY_SLUG`
 
 These override the seeded demo identity used by the frontend development auth bridge for `POST /auth/dev-token`.
+
+## Local API Verification Loop
+
+1. Ensure local `.env` contains `DATABASE_URL`, `API_PORT="3001"`, `NEXT_PUBLIC_APP_URL="http://localhost:3000"`, and `WORKMAP_JWT_SECRET`.
+2. Start API from `workmap/`: `pnpm --filter @workmap/api dev`.
+3. Confirm `GET http://localhost:3001/health` returns 200.
+4. Start web from `workmap/`: `pnpm --filter @workmap/web dev`.
+5. Open `http://localhost:3000/virtual-office`.
+6. Confirm development auth and virtual-office read requests target backend port 3001.
+
+## Deployment Caution
+
+`load-local-env.ts` is imported by the API main entry and registers compiled workspace aliases when the compiled local paths exist. It does not overwrite existing environment variables. Production/deployed startup should provide required env vars explicitly and should be reviewed if deployment uses the same compiled entry path.
 
 ## Deployment Unknowns
 

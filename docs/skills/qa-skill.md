@@ -46,6 +46,23 @@ Database setup:
 - API `GET /health` responds when backend is running.
 - Dev token endpoint works against seeded demo users outside production.
 
+## Local API-Backed Virtual Office Verification Loop
+
+Use this repeatable loop after backend/local-startup changes:
+
+- Start backend from `workmap/`: `pnpm --filter @workmap/api dev`.
+- Confirm API health: `GET http://localhost:3001/health`.
+- Confirm dev token: `POST http://localhost:3001/auth/dev-token` with `engineer@workmap.demo` and `workmap-demo-company`.
+- Confirm Bearer-authenticated reads:
+  - `GET http://localhost:3001/virtual-office/map`
+  - `GET http://localhost:3001/virtual-office/navigation`
+  - `GET http://localhost:3001/virtual-office/map/:officeMapId/positions`
+- Start frontend from `workmap/`: `pnpm --filter @workmap/web dev`.
+- Open `http://localhost:3000/virtual-office`.
+- Confirm browser Network shows virtual-office API reads on backend port 3001 with Bearer authorization.
+- Confirm canvas, avatar, movement, collision, double-click auto-walk, chair `E` interaction, contact drawer, desktop layout, and narrow layout still work.
+- Stop backend and refresh `/virtual-office`; confirm mock fallback still renders without runtime crash.
+
 ## Test Gaps
 
 - No automated test files were found during intake.
@@ -83,3 +100,16 @@ Additional QA notes for `2a4a269`:
 - User-confirmed visual/interaction checks passed for canvas, movement, auto-walk, chair interaction, contact drawer, desktop layout, and narrow layout.
 - Fallback was verified when `localhost:3001` was unavailable: `POST /auth/dev-token`, `/virtual-office/map`, and `/virtual-office/navigation` were attempted and failed with connection refused while the page stayed on mock fallback.
 - Authenticated API success path remains blocked until the backend listens on `http://localhost:3001`.
+
+For commit `d7152dd`, QA reports these passed:
+
+- `pnpm --filter @workmap/api lint`
+- `pnpm --filter @workmap/api typecheck`
+- `pnpm --filter @workmap/api build`
+- `pnpm --filter @workmap/api dev` started API successfully on `localhost:3001`.
+- `GET http://localhost:3001/health` returned 200.
+- `POST http://localhost:3001/auth/dev-token` returned 201 with Bearer token.
+- Authenticated virtual-office map/navigation/positions reads returned 200.
+- Browser `/virtual-office` with backend running showed API-backed state.
+- Browser `/virtual-office` after backend stopped showed fallback state.
+- User browser QA confirmed `/virtual-office/map` and `/virtual-office/navigation` returned 200 and included Bearer authorization headers.
