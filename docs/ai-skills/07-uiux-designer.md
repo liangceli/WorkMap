@@ -89,6 +89,7 @@ Avoid:
 - Current `/virtual-office` UI includes floating workspace/current-area/status pills, a slim left rail, bottom dark navy action dock, bottom coworker interaction drawer, room/chair interaction hint, map controls, and a bottom-left mini map.
 - Current `/virtual-office` visual polish should stay close to the 2026-05-31 reference: 20-24px rounded floating glass panels, navy active rail items, line icons, compact top pills, dark navy dock, soft shadows, and no rough letter-only tool buttons.
 - Left rail and mini map must never overlap. Reserve vertical space for the bottom-left mini map; keep rail actions above it.
+- Rooms/People side panels should keep rounded right corners while scrolling; the scrollbar must not make the panel edge look squared off.
 - Bottom-left mini map and the bottom coworker interaction drawer must never overlap. When the drawer is open, start it to the right of the mini map and keep space for right-side map controls.
 - Left rail action icons should be large and clean, with no persistent black outline boxes around inactive buttons. Only the active item may use a filled navy state.
 - Notification/status dots in the office shell should be readable at a glance: rail notification dots are around 10px with a light stroke, and dock/avatar online dots are around 14px with a navy stroke.
@@ -105,6 +106,7 @@ Avoid:
 - The command palette is modal-like: clicking outside the palette on the blurred backdrop should dismiss it.
 - Room context cards should appear only when a room/section is selected and should offer simple actions like Go to, View people, or Copy link.
 - Drag/zoom controls are productivity affordances. Keyboard movement should still feel primary for avatar control, and recenter should restore the user-centered camera.
+- Avatars may pass through each other to avoid blocking narrow corridors. When the local avatar overlaps another avatar, show the local avatar as semi-transparent but still readable.
 - `/dashboard` exists as a manager overview mock with usage cards, employee cards, a privacy notice, app summaries, and domain summaries.
 - `/employees` exists as a mock employee directory with search, filters, manager summary mode, and employee contact-only mode.
 - `/employees/[id]` exists as a mock employee profile with contact actions, privacy note, manager summary mode, employee contact-only mode, and same-department teammate navigation.

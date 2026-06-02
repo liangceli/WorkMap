@@ -184,6 +184,7 @@ Completed in current MVP:
 - The current `/virtual-office` visual direction follows the Stitch state-board reference in `docs/designs/`: treat the design as separate interactive states, not as an always-visible static composition.
 - Current `/virtual-office` styling has been pixel-polished closer to the 2026-05-31 reference: larger rounded floating pills, SVG rail/action icons, navy bottom dock, bottom-left mini map, and right-side stacked map controls.
 - Keep the left rail clear of the bottom-left mini map; do not let the settings button or rail background overlap the mini map.
+- Office side panels such as Rooms and People should preserve rounded right-side corners even when their content scrolls; keep scrolling on an inner body and clip with the rounded outer panel.
 - Keep `InteractionDrawer` clear of the bottom-left mini map and right-side map controls; position the drawer between those utilities instead of centering it over them.
 - `OfficeLeftRail` should use large clean icons and no persistent outline box around inactive action buttons; keep only a filled navy active state.
 - Office shell notification/status dots should stay visible: rail badge dots around 10px, dock/avatar online dots around 14px.
@@ -198,7 +199,9 @@ Completed in current MVP:
 - Main Canvas pixel rendering should keep `imageSmoothingEnabled = false`, CSS `image-rendering: pixelated`, and a backing store synchronized to the displayed viewport size/device pixel ratio so map clarity stays stable while the player/camera moves.
 - Avoid tile destination overlap on floor tiles; it can create repeated edge pixels and visible grid lines not present in the authored map.
 - The local player should remain centered on screen while the map moves underneath. The camera is intentionally not clamped to the map edges.
-- The local player cannot overlap mock remote players; remote player positions act as lightweight movement blockers.
+- The local player can pass through mock remote players. Remote avatars should not act as hard blockers; when the local avatar overlaps a remote avatar, the local avatar renders semi-transparent but remains clearly visible.
+- Go to room pathfinding should resolve to a walkable tile inside the selected destination bounds, not just the nearest walkable tile outside a blocked room anchor.
+- Automatic click-to-move and Go to movement is intentionally faster than keyboard walking at about 1.5x normal movement speed.
 - The mini map shows the full office and local player dot only. Do not draw the previous blue viewport range box.
 - Canvas interaction now supports drag-to-pan, wheel zoom, recenter, double-click click-to-move, and Go to person/room.
 - Click-to-move uses frontend-only grid pathfinding in `apps/web/lib/office/pathfinding.ts`; room/section anchors live in `apps/web/lib/office/officeNavigationConfig.ts`.
@@ -206,7 +209,7 @@ Completed in current MVP:
 - `workmap2.tmx` tileset references are normalized under `apps/web/public/maps/tilesets/`, and `public/**/*.tsx` is excluded from TypeScript compilation because Tiled tilesets are XML files.
 - In development, `/virtual-office` polls `workmap2.tmx` and reloads the Canvas map when the TMX XML changes, so Tiled saves can appear without restarting the dev server.
 - Local player supports WASD / arrow-key movement.
-- Basic collision exists for walls, tools, furniture, chairs, and plants.
+- Basic collision exists for walls, wallpaper/corner wall edges, tools, furniture, chairs, plants, and tabletop objects.
 - Room zone detection updates local presence status.
 - Remote placeholder players render on the map with deterministic randomized layered avatars.
 - Proximity detection supports opening a contact menu.

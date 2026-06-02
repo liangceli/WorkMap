@@ -115,7 +115,7 @@ Always test:
 - Drag the map and confirm camera pans; press WASD and confirm camera recenters on the local player.
 - Use mouse wheel and confirm map zooms without stretching.
 - Move the local player and confirm the avatar remains centered while the map scrolls underneath.
-- Move toward a mock remote player and confirm the local player cannot overlap that avatar.
+- Move through a mock remote player in a narrow corridor and confirm movement is not blocked. The local avatar should become semi-transparent while overlapping and return to normal opacity after passing through.
 - Confirm the mini map shows the full office and local player dot, with no blue viewport rectangle.
 - Close the bottom interaction drawer and confirm movement still works.
 - Open `/dashboard` and confirm the page renders mock manager data without full URLs or private content.
@@ -181,7 +181,7 @@ Always test:
   - bottom interaction drawer opens near/clicked coworkers and closes with `x`
   - mini map shows full office and local position without a blue viewport box
   - local player remains centered while moving
-  - local player cannot overlap mock remote players
+  - local player can pass through mock remote players and becomes semi-transparent while overlapping
   - full-screen UI does not stretch the map
   - name/status bubble remains above the avatar without clipping
   - no map debug collision rectangles are visible

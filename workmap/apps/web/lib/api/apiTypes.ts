@@ -37,6 +37,16 @@ export type WorkMapApiOfficeMap = {
   rooms: WorkMapApiOfficeRoom[];
 };
 
+export type WorkMapApiNavigationDestination = {
+  id: string;
+  name: string;
+  type: string;
+  anchor?: unknown;
+  bounds?: unknown;
+  autoStatus?: UserPresenceStatus | null;
+  peopleCount?: number;
+};
+
 export type WorkMapApiPlayerPosition = {
   userId: string;
   displayName: string;

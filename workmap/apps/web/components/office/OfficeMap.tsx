@@ -11,8 +11,8 @@ import {
 } from "../../lib/avatar/avatarLayerAssets";
 import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/avatarFrameMaps";
 import { getAvatarConfigForOffice } from "../../lib/avatar/avatarStorage";
-import { findDestinationAtPoint, officeDestinations, type OfficeDestination } from "../../lib/office/officeNavigationConfig";
-import { findGridPath, type PathPoint } from "../../lib/office/pathfinding";
+import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
+import { findGridPath, type PathBounds, type PathPoint } from "../../lib/office/pathfinding";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { FloatingRoomPill } from "./FloatingRoomPill";
 import { InteractionDrawer } from "./InteractionDrawer";
@@ -22,9 +22,10 @@ import { OfficeIcon } from "./OfficeIcons";
 import { OfficeLeftRail, type OfficePanelKey } from "./OfficeLeftRail";
 import { OfficeMiniMap } from "./OfficeMiniMap";
 import { OfficeSidePanel } from "./OfficeSidePanel";
-import { officeTilesets, remotePlayers, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
+import { officeTilesets, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
 import { RoomContextCard } from "./RoomContextCard";
 import { statusColors } from "./presence";
+import { useVirtualOfficeData } from "./useVirtualOfficeData";
 import { VirtualOfficeTopBar } from "./VirtualOfficeTopBar";
 import { VirtualOfficeShell } from "./VirtualOfficeShell";
 
@@ -71,6 +72,7 @@ const CANVAS_HEIGHT = 680;
 const PLAYER_RADIUS = 14;
 const PLAYER_COLLISION_DISTANCE = 34;
 const PLAYER_SPEED = 180;
+const AUTO_WALK_SPEED = PLAYER_SPEED * 1.5;
 const PROXIMITY_DISTANCE = 80;
 const CHAIR_INTERACTION_DISTANCE = 46;
 const MAP_LAYER_ORDER = [
@@ -86,7 +88,7 @@ const MAP_LAYER_ORDER = [
   "chairs",
   "some ons on table",
 ] as const;
-const COLLISION_LAYERS = new Set(["Walls", "Tools", "furniture", "chairs", "plants", "some ons on table"]);
+const COLLISION_LAYERS = new Set(["WallsPaper", "corner", "Walls", "Tools", "furniture", "chairs", "plants", "some ons on table"]);
 const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {
   "demo-manager": createRandomRemoteAvatarConfig("demo-manager"),
   "demo-engineer": createRandomRemoteAvatarConfig("demo-engineer"),
@@ -100,6 +102,10 @@ const remoteProfileRouteIds: Record<string, string> = {
 
 export function OfficeMap() {
   const router = useRouter();
+  const officeData = useVirtualOfficeData();
+  const officeRooms = officeData.rooms;
+  const officePeople = officeData.remotePlayers;
+  const officeNavigation = officeData.destinations;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const keysRef = useRef(new Set<string>());
   const nearestChairRef = useRef<ChairSpot | null>(null);
@@ -392,8 +398,8 @@ export function OfficeMap() {
           : wantsToMove
             ? movePlayer(playerRef.current, keysRef.current, deltaSeconds, map, collision)
             : moveAlongAutoPath(playerRef.current, deltaSeconds, map, collision, autoPathRef, autoDestinationRef);
-        const room = findRoom(nextPlayer.x, nextPlayer.y);
-        const nearest = findNearbyPlayer(nextPlayer);
+        const room = findRoom(nextPlayer.x, nextPlayer.y, officeRooms);
+        const nearest = findNearbyPlayer(nextPlayer, officePeople);
         const chair = seatedChairRef.current ? null : findNearestChair(nextPlayer, chairs);
 
         nextPlayer.roomId = room?.id;
@@ -417,6 +423,7 @@ export function OfficeMap() {
           chair,
           seatedChairRef.current,
           loadedAvatars,
+          officePeople,
           selectedRemoteId,
           autoDestinationRef.current,
           zoomRef.current,
@@ -430,7 +437,7 @@ export function OfficeMap() {
     });
 
     return () => cancelAnimationFrame(animationFrame);
-  }, [map, mapPixels, selectedAvatar, selectedRemoteId]);
+  }, [map, mapPixels, officePeople, officeRooms, selectedAvatar, selectedRemoteId]);
 
   const standUpFromChair = useCallback(() => {
     const fallback = seatedChairRef.current
@@ -467,7 +474,7 @@ export function OfficeMap() {
       }
 
       const { x, y } = getWorldPointFromEvent(event, mapPixels);
-      const remote = remotePlayers.find((candidate) => distance(candidate, { x, y }) <= 28);
+      const remote = officePeople.find((candidate) => distance(candidate, { x, y }) <= 28);
 
       if (remote) {
         setDismissedContactTargetId(null);
@@ -481,12 +488,12 @@ export function OfficeMap() {
         return;
       }
 
-      const destination = findDestinationAtPoint(x, y);
+      const destination = findDestinationAtPoint(x, y, officeNavigation);
       if (destination) {
         setSelectedDestination(destination);
       }
     },
-    [map, mapPixels],
+    [map, mapPixels, officeNavigation, officePeople],
   );
 
   const handleCanvasDoubleClick = useCallback(
@@ -572,21 +579,9 @@ export function OfficeMap() {
     setContactTarget(null);
   };
 
-  const startAutoWalk = (destination: PathPoint, options?: { nearRemoteId?: string }) => {
+  const startAutoWalk = (destination: PathPoint, options?: { endBounds?: PathBounds }) => {
     if (!latestMapRef.current) {
       return false;
-    }
-
-    const blocked = [...latestCollisionRef.current];
-    for (const remote of remotePlayers) {
-      if (remote.userId === options?.nearRemoteId) {
-        continue;
-      }
-      const tileX = Math.floor(remote.x / latestMapRef.current.tileWidth);
-      const tileY = Math.floor(remote.y / latestMapRef.current.tileHeight);
-      if (tileX >= 0 && tileY >= 0 && tileX < latestMapRef.current.width && tileY < latestMapRef.current.height) {
-        blocked[tileY * latestMapRef.current.width + tileX] = true;
-      }
     }
 
     const path = findGridPath(
@@ -595,10 +590,11 @@ export function OfficeMap() {
         height: latestMapRef.current.height,
         tileWidth: latestMapRef.current.tileWidth,
         tileHeight: latestMapRef.current.tileHeight,
-        blocked,
+        blocked: latestCollisionRef.current,
       },
       playerRef.current,
       destination,
+      { endBounds: options?.endBounds },
     );
 
     if (!path || path.length === 0) {
@@ -616,12 +612,12 @@ export function OfficeMap() {
 
   const goToRemotePlayer = (remote: RemoteOfficePlayer) => {
     setSelectedRemoteId(remote.userId);
-    startAutoWalk({ x: remote.x - 48, y: remote.y + 12 }, { nearRemoteId: remote.userId });
+    startAutoWalk({ x: remote.x - 48, y: remote.y + 12 });
   };
 
   const goToDestination = (destination: OfficeDestination) => {
     setSelectedDestination(destination);
-    startAutoWalk(destination.anchor);
+    startAutoWalk(destination.anchor, { endBounds: destination.bounds });
   };
 
   const handleSelectRemote = (target: ContactTarget) => {
@@ -649,7 +645,7 @@ export function OfficeMap() {
   };
 
   const peopleInDestination = (destination: OfficeDestination) =>
-    remotePlayers.filter((remote) => destination.bounds && remote.x >= destination.bounds.x && remote.x <= destination.bounds.x + destination.bounds.width && remote.y >= destination.bounds.y && remote.y <= destination.bounds.y + destination.bounds.height).length;
+    officePeople.filter((remote) => destination.bounds && remote.x >= destination.bounds.x && remote.x <= destination.bounds.x + destination.bounds.width && remote.y >= destination.bounds.y && remote.y <= destination.bounds.y + destination.bounds.height).length;
 
   if (!avatarChecked || !selectedAvatar) {
     return (
@@ -675,8 +671,8 @@ export function OfficeMap() {
         <OfficeLeftRail activePanel={activePanel} onSelectPanel={openPanel} />
         <OfficeSidePanel
           activePanel={activePanel}
-          people={remotePlayers}
-          destinations={officeDestinations}
+          people={officePeople}
+          destinations={officeNavigation}
           onClose={() => setActivePanel(null)}
           onSelectPerson={handleSelectRemote}
           onGoToPerson={goToRemotePlayer}
@@ -740,7 +736,7 @@ export function OfficeMap() {
             target={drawerTarget}
             onClose={closeInteractionDrawer}
             onGoTo={() => {
-              const remote = remotePlayers.find((candidate) => candidate.userId === drawerTarget.userId);
+              const remote = officePeople.find((candidate) => candidate.userId === drawerTarget.userId);
               if (remote) goToRemotePlayer(remote);
             }}
             onOpenChat={() => {
@@ -765,8 +761,8 @@ export function OfficeMap() {
         ) : null}
         <OfficeCommandPalette
           open={commandOpen}
-          people={remotePlayers}
-          destinations={officeDestinations}
+          people={officePeople}
+          destinations={officeNavigation}
           onClose={() => setCommandOpen(false)}
           onSelectPerson={(target) => {
             handleSelectRemote(target);
@@ -839,6 +835,7 @@ function drawScene(
   nearestChair?: ChairSpot | null,
   seatedChair?: ChairSpot | null,
   avatars?: LoadedAvatarMap,
+  remotePlayers: RemoteOfficePlayer[] = [],
   selectedRemoteId?: string | null,
   destinationMarker?: PathPoint | null,
   zoom = 1,
@@ -863,8 +860,10 @@ function drawScene(
   context.fillRect(0, 0, viewport.width, viewport.height);
   context.save();
   context.imageSmoothingEnabled = false;
+  const snappedCameraX = Math.round(camera.x * zoom * viewport.dpr) / (zoom * viewport.dpr);
+  const snappedCameraY = Math.round(camera.y * zoom * viewport.dpr) / (zoom * viewport.dpr);
   context.scale(zoom, zoom);
-  context.translate(-Math.round(camera.x), -Math.round(camera.y));
+  context.translate(-snappedCameraX, -snappedCameraY);
 
   for (const layer of map.layers) {
     drawLayer(context, layer, map, images);
@@ -882,6 +881,8 @@ function drawScene(
     drawDestinationMarker(context, destinationMarker);
   }
 
+  const localOverRemote = isOverlappingRemotePlayer(player.x, player.y, remotePlayers);
+
   for (const remote of remotePlayers) {
     drawPlayer(
       context,
@@ -894,7 +895,7 @@ function drawScene(
     );
   }
 
-  drawPlayer(context, player, "You", false, true, Boolean(seatedChair), avatars?.[player.userId]);
+  drawPlayer(context, player, "You", false, true, Boolean(seatedChair), avatars?.[player.userId], localOverRemote);
   context.restore();
 }
 
@@ -963,6 +964,7 @@ function drawPlayer(
   local = false,
   seated = false,
   avatar?: LoadedAvatar,
+  translucent = false,
 ) {
   context.save();
   const bob = player.isMoving && !seated ? Math.sin(Date.now() / 95) * 2 : 0;
@@ -973,6 +975,9 @@ function drawPlayer(
   context.beginPath();
   context.ellipse(player.x, player.y + 17, player.isMoving ? 22 : 20, player.isMoving ? 8 : 7, 0, 0, Math.PI * 2);
   context.fill();
+  if (translucent) {
+    context.globalAlpha = 0.58;
+  }
 
   const hasAvatarImage = Boolean(avatar?.layers.some((layer) => layer.image));
 
@@ -1008,6 +1013,7 @@ function drawPlayer(
     }
   }
 
+  context.globalAlpha = 1;
   drawNameBubble(context, player.x, hasAvatarImage ? drawY - 58 : drawY - 38, label, player.status);
   context.restore();
 }
@@ -1205,10 +1211,10 @@ function movePlayer(
   const nextX = player.x + (dx / length) * step;
   const nextY = player.y + (dy / length) * step;
 
-  if (!isBlocked(nextX, player.y, map, collision) && !isBlockedByRemotePlayer(nextX, player.y)) {
+  if (!isBlocked(nextX, player.y, map, collision)) {
     next.x = clamp(nextX, PLAYER_RADIUS, map.width * map.tileWidth - PLAYER_RADIUS);
   }
-  if (!isBlocked(next.x, nextY, map, collision) && !isBlockedByRemotePlayer(next.x, nextY)) {
+  if (!isBlocked(next.x, nextY, map, collision)) {
     next.y = clamp(nextY, PLAYER_RADIUS, map.height * map.tileHeight - PLAYER_RADIUS);
   }
 
@@ -1242,12 +1248,12 @@ function moveAlongAutoPath(
     return { ...player, x: target.x, y: target.y, isMoving: pathRef.current.length > 0 };
   }
 
-  const step = Math.min(PLAYER_SPEED * deltaSeconds, distanceToTarget);
+  const step = Math.min(AUTO_WALK_SPEED * deltaSeconds, distanceToTarget);
   const nextX = player.x + (dx / distanceToTarget) * step;
   const nextY = player.y + (dy / distanceToTarget) * step;
   const direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
 
-  if (isBlocked(nextX, nextY, map, collision) || isBlockedByRemotePlayer(nextX, nextY)) {
+  if (isBlocked(nextX, nextY, map, collision)) {
     pathRef.current = [];
     destinationRef.current = null;
     return { ...player, isMoving: false };
@@ -1313,15 +1319,15 @@ function isBlocked(x: number, y: number, map: ParsedMap, collision: boolean[]) {
   });
 }
 
-function isBlockedByRemotePlayer(x: number, y: number) {
+function isOverlappingRemotePlayer(x: number, y: number, remotePlayers: RemoteOfficePlayer[]) {
   return remotePlayers.some((remote) => distance({ x, y }, remote) < PLAYER_COLLISION_DISTANCE);
 }
 
-function findRoom(x: number, y: number) {
+function findRoom(x: number, y: number, roomZones: OfficeRoomZone[]) {
   return roomZones.find((room) => x >= room.x && x <= room.x + room.width && y >= room.y && y <= room.y + room.height);
 }
 
-function findNearbyPlayer(player: PlayerState): ContactTarget | null {
+function findNearbyPlayer(player: PlayerState, remotePlayers: RemoteOfficePlayer[]): ContactTarget | null {
   const nearby = remotePlayers.find((candidate) => distance(player, candidate) <= PROXIMITY_DISTANCE);
 
   if (!nearby) {
@@ -1334,6 +1340,13 @@ function findNearbyPlayer(player: PlayerState): ContactTarget | null {
     role: nearby.role,
     status: nearby.status,
   };
+}
+
+function findDestinationAtPoint(x: number, y: number, destinations: OfficeDestination[]) {
+  return destinations.find((destination) => {
+    const bounds = destination.bounds;
+    return bounds && x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height;
+  });
 }
 
 function findChairSpots(map: ParsedMap) {

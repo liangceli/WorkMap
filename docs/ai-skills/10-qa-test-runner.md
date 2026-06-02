@@ -522,12 +522,13 @@ Verify player cannot pass through:
 * plants
 * cabinets
 * meeting tables
-* mock remote players
+* wall wallpaper/corner edges
 
 Expected:
 
 * Collision works consistently.
-* Remote avatars act as lightweight blockers.
+* Remote avatars do not hard-block corridors.
+* The local avatar becomes semi-transparent while overlapping a remote avatar and returns to normal after passing through.
 
 ---
 
@@ -631,13 +632,13 @@ Steps:
 2. Select a coworker.
 3. Click Go to.
 4. Verify player walks near target.
-5. Verify player does not overlap target.
+5. Verify player can pass through the target if needed and becomes semi-transparent while overlapping.
 6. Verify interaction drawer can open.
 
 Expected:
 
 * Go to person works or gives safe feedback.
-* No collision violation.
+* No wall/furniture collision violation.
 
 ---
 
@@ -652,8 +653,8 @@ Steps:
 
 Expected:
 
-* Player walks to room anchor.
-* Anchor is not inside blocked object.
+* Player walks to a walkable tile inside the selected room/area bounds.
+* Authored anchor may be blocked, but the resolved destination must not be inside a blocked object or outside the selected room/area.
 * Current area updates when entering zone.
 
 ---

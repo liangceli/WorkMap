@@ -11,16 +11,32 @@ export type PathPoint = {
   y: number;
 };
 
+export type PathBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type FindGridPathOptions = {
+  endBounds?: PathBounds;
+};
+
 type GridNode = {
   x: number;
   y: number;
 };
 
-export function findGridPath(map: GridPathMap, start: PathPoint, end: PathPoint): PathPoint[] | null {
-  const startNode = toNode(map, start);
-  const endNode = nearestWalkableNode(map, toNode(map, end));
+export function findGridPath(
+  map: GridPathMap,
+  start: PathPoint,
+  end: PathPoint,
+  options: FindGridPathOptions = {},
+): PathPoint[] | null {
+  const startNode = nearestWalkableNode(map, toNode(map, start));
+  const endNode = nearestWalkableNode(map, toNode(map, end), options.endBounds);
 
-  if (!endNode || isBlocked(map, startNode.x, startNode.y)) {
+  if (!startNode || !endNode) {
     return null;
   }
 
@@ -66,18 +82,29 @@ function toNode(map: GridPathMap, point: PathPoint): GridNode {
   };
 }
 
-function nearestWalkableNode(map: GridPathMap, node: GridNode): GridNode | null {
-  if (!isBlocked(map, node.x, node.y)) {
+function nearestWalkableNode(map: GridPathMap, node: GridNode, bounds?: PathBounds): GridNode | null {
+  if (isWithinBounds(map, node.x, node.y, bounds) && !isBlocked(map, node.x, node.y)) {
     return node;
   }
 
   for (let radius = 1; radius <= 8; radius += 1) {
+    let best: GridNode | null = null;
+    let bestScore = Infinity;
+
     for (let y = node.y - radius; y <= node.y + radius; y += 1) {
       for (let x = node.x - radius; x <= node.x + radius; x += 1) {
-        if (!isBlocked(map, x, y)) {
-          return { x, y };
+        if (isWithinBounds(map, x, y, bounds) && !isBlocked(map, x, y)) {
+          const score = Math.abs(x - node.x) + Math.abs(y - node.y);
+          if (score < bestScore) {
+            best = { x, y };
+            bestScore = score;
+          }
         }
       }
+    }
+
+    if (best) {
+      return best;
     }
   }
 
@@ -132,6 +159,19 @@ function isBlocked(map: GridPathMap, x: number, y: number) {
   }
 
   return map.blocked[y * map.width + x];
+}
+
+function isWithinBounds(map: GridPathMap, x: number, y: number, bounds?: PathBounds) {
+  if (!bounds) {
+    return true;
+  }
+
+  const minX = clamp(Math.floor(bounds.x / map.tileWidth), 0, map.width - 1);
+  const minY = clamp(Math.floor(bounds.y / map.tileHeight), 0, map.height - 1);
+  const maxX = clamp(Math.floor((bounds.x + bounds.width - 1) / map.tileWidth), 0, map.width - 1);
+  const maxY = clamp(Math.floor((bounds.y + bounds.height - 1) / map.tileHeight), 0, map.height - 1);
+
+  return x >= minX && x <= maxX && y >= minY && y <= maxY;
 }
 
 function heuristic(left: GridNode, right: GridNode) {

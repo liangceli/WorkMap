@@ -456,7 +456,10 @@ Current Canvas MVP behavior:
 - Main Canvas pixel art rendering disables image smoothing, uses CSS `image-rendering: pixelated`, and synchronizes the Canvas backing store to the displayed viewport size and device pixel ratio to prevent movement-time blur/flicker from browser resampling.
 - Do not use tile destination overlap on floor tiles; it can duplicate edge pixels and create visible grid lines that are not in the authored map.
 - The current Canvas camera keeps the local player centered during normal movement and auto-walk while the map moves underneath; temporary manual pan/zoom is allowed, and recenter must restore the user-centered camera.
-- Local movement treats mock remote players as lightweight blockers so avatars do not overlap.
+- Local movement no longer treats mock remote players as hard blockers. Avatars can pass through each other to avoid corridor deadlocks; the local avatar becomes semi-transparent while overlapping another avatar.
+- Go to room navigation uses bounded pathfinding so the final target is a walkable tile inside the selected room/area bounds. If an authored anchor is blocked, choose the nearest walkable tile inside that destination, not outside the room.
+- Auto-walk for click-to-move and Go to actions is faster than keyboard walking at about 1.5x normal player speed.
+- Canvas collision now includes wall, wallpaper/corner wall edges, tools, furniture, chairs, plants, and tabletop object layers.
 - The mini map currently shows the full office and local player dot only; the blue viewport range box was intentionally removed.
 - No realtime socket sync is implemented yet.
 - Frontend-only workflow now routes first-time employees through compliance acknowledgement, avatar creation, device setup, and then `/virtual-office`. This workflow state is stored under `workmap.userSetupState` and is not real auth/RBAC.

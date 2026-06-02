@@ -105,7 +105,7 @@ Frontend MVP currently has:
 - `/virtual-office` now uses a lightweight inline SVG icon set for the office shell so rail and dock controls no longer rely on rough letter placeholders.
 - `/virtual-office` now has a WorkMap-specific office workspace shell with a left vertical rail, Rooms/People/Search/Chat/Calendar/Notices/Settings panels, command palette, and room context card.
 - The current `/virtual-office` camera keeps the local player centered while the map moves underneath.
-- Local movement treats mock remote players as blockers so avatars do not overlap.
+- Local movement no longer treats mock remote players as hard blockers. Avatars can pass through each other, and the local avatar becomes semi-transparent while overlapping another avatar.
 - The mini map now shows the full office and local player dot without a blue viewport range box.
 - The Canvas MVP now supports mouse drag pan, mouse wheel zoom, recenter, double-click click-to-move, and frontend-only Go to person/room navigation using a small grid pathfinding utility.
 - Chat, Calendar, Notices, and People office panels are frontend-only mock collaboration surfaces. They do not connect to Teams/Outlook content or backend persistence.
@@ -120,6 +120,8 @@ Frontend MVP currently has:
 - `/reports` as a frontend mock aggregated department summary page.
 - Layered avatar rendering in the virtual office for the local player and deterministic randomized mock remote players.
 - WASD / arrow-key movement, basic collision, room zone detection, proximity contact menu, and chair sit/stand interaction.
+- Canvas collision now includes wall, wallpaper, corner, tools, furniture, chairs, plants, and tabletop object layers so authored wall edges block movement more reliably.
+- Frontend Go to room navigation uses bounded pathfinding so room destinations resolve to a walkable tile inside the selected destination bounds instead of a nearby point outside the room.
 - Compact dark name/status bubbles above avatars.
 - Local avatar config stored in `localStorage` under `workmap.avatarConfig`.
 - The old right-side debug/test panel has been removed from `/virtual-office`; interaction state is now surfaced through the bottom drawer and small floating hints.

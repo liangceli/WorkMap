@@ -81,147 +81,149 @@ export function OfficeSidePanel({
         </button>
       </header>
 
-      {activePanel === "people" ? (
-        <section style={styles.stack}>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search team..." style={styles.input} />
-          <div style={styles.filterRow}>
-            {(["all", "available", "focus", "busy", "break"] as StatusFilter[]).map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                onClick={() => setStatusFilter(filter)}
-                style={{ ...styles.filterButton, ...(statusFilter === filter ? styles.filterButtonActive : {}) }}
-              >
-                {filter === "all" ? "All" : labelStatus(filter as UserPresenceStatus)}
-              </button>
-            ))}
-          </div>
-          <div style={styles.personList}>
-            {filteredPeople.map((person) => (
-              <article key={person.userId} style={styles.personCard}>
-                <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.personMain}>
-                  <span style={styles.avatar}>{person.displayName.slice(0, 1)}</span>
-                  <span style={styles.personText}>
-                    <strong>{person.displayName}</strong>
-                    <span>{person.role}</span>
-                    <span>{friendlyRoom(person.roomId)}</span>
-                  </span>
-                  <span style={styles.statusWrap}>
-                    <span style={{ ...styles.statusDot, background: statusColors[person.status] }} />
-                    {labelStatus(person.status)}
-                  </span>
+      <div style={styles.panelBody}>
+        {activePanel === "people" ? (
+          <section style={styles.stack}>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search team..." style={styles.input} />
+            <div style={styles.filterRow}>
+              {(["all", "available", "focus", "busy", "break"] as StatusFilter[]).map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setStatusFilter(filter)}
+                  style={{ ...styles.filterButton, ...(statusFilter === filter ? styles.filterButtonActive : {}) }}
+                >
+                  {filter === "all" ? "All" : labelStatus(filter as UserPresenceStatus)}
                 </button>
-                <div style={styles.actionGrid}>
-                  <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.smallButton}>Message</button>
-                  <button type="button" onClick={() => toast(`You waved to ${person.displayName}.`)} style={styles.smallButton}>Wave</button>
-                  <button type="button" onClick={() => onGoToPerson(person)} style={styles.smallButton}>Go to</button>
-                  <button type="button" onClick={() => toast("Teams launcher placeholder.")} style={styles.smallButton}>Teams</button>
-                  <button type="button" onClick={() => { window.location.href = `mailto:${person.userId}@workmap.local`; }} style={styles.smallButton}>Outlook</button>
-                  <button type="button" onClick={() => toast("3CX launcher placeholder.")} style={styles.smallButton}>3CX</button>
+              ))}
+            </div>
+            <div style={styles.personList}>
+              {filteredPeople.map((person) => (
+                <article key={person.userId} style={styles.personCard}>
+                  <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.personMain}>
+                    <span style={styles.avatar}>{person.displayName.slice(0, 1)}</span>
+                    <span style={styles.personText}>
+                      <strong>{person.displayName}</strong>
+                      <span>{person.role}</span>
+                      <span>{friendlyRoom(person.roomId)}</span>
+                    </span>
+                    <span style={styles.statusWrap}>
+                      <span style={{ ...styles.statusDot, background: statusColors[person.status] }} />
+                      {labelStatus(person.status)}
+                    </span>
+                  </button>
+                  <div style={styles.actionGrid}>
+                    <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.smallButton}>Message</button>
+                    <button type="button" onClick={() => toast(`You waved to ${person.displayName}.`)} style={styles.smallButton}>Wave</button>
+                    <button type="button" onClick={() => onGoToPerson(person)} style={styles.smallButton}>Go to</button>
+                    <button type="button" onClick={() => toast("Teams launcher placeholder.")} style={styles.smallButton}>Teams</button>
+                    <button type="button" onClick={() => { window.location.href = `mailto:${person.userId}@workmap.local`; }} style={styles.smallButton}>Outlook</button>
+                    <button type="button" onClick={() => toast("3CX launcher placeholder.")} style={styles.smallButton}>3CX</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {activePanel === "rooms" ? (
+          <section style={styles.stack}>
+            {destinations.map((destination) => (
+              <article key={destination.id} style={styles.roomCard}>
+                <span style={styles.roomBadge}>{destination.type.replace("_", " ")}</span>
+                <h3 style={styles.cardTitle}>{destination.name}</h3>
+                <p style={styles.cardText}>{destination.description ?? "WorkMap office area."}</p>
+                <div style={styles.twoActions}>
+                  <button type="button" onClick={() => onGoToDestination(destination)} style={styles.primaryButton}>Go to room</button>
+                  <button type="button" onClick={() => onOpenPanel("people")} style={styles.secondaryButton}>View people</button>
                 </div>
               </article>
             ))}
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
 
-      {activePanel === "rooms" ? (
-        <section style={styles.stack}>
-          {destinations.map((destination) => (
-            <article key={destination.id} style={styles.roomCard}>
-              <span style={styles.roomBadge}>{destination.type.replace("_", " ")}</span>
-              <h3 style={styles.cardTitle}>{destination.name}</h3>
-              <p style={styles.cardText}>{destination.description ?? "WorkMap office area."}</p>
-              <div style={styles.twoActions}>
-                <button type="button" onClick={() => onGoToDestination(destination)} style={styles.primaryButton}>Go to room</button>
-                <button type="button" onClick={() => onOpenPanel("people")} style={styles.secondaryButton}>View people</button>
-              </div>
-            </article>
-          ))}
-        </section>
-      ) : null}
+        {activePanel === "chat" ? (
+          <section style={styles.stack}>
+            <p style={styles.note}>WorkMap quick messages are frontend-only in this MVP. They do not read Teams or Outlook content.</p>
+            <select value={chatTarget} onChange={(event) => setChatTarget(event.target.value)} style={styles.input}>
+              <option value="general"># general</option>
+              <option value="announcements"># announcements</option>
+              <option value="support"># support</option>
+              {people.map((person) => (
+                <option key={person.userId} value={person.userId}>DM: {person.displayName}</option>
+              ))}
+            </select>
+            <div style={styles.messageList}>
+              {messages.filter((message) => message.channel === chatTarget).map((message, index) => (
+                <p key={`${message.channel}-${index}`} style={styles.message}>{message.text}</p>
+              ))}
+            </div>
+            <div style={styles.composer}>
+              <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Send quiet message" style={styles.input} />
+              <button type="button" onClick={sendMessage} style={styles.primaryButton}>Send</button>
+            </div>
+          </section>
+        ) : null}
 
-      {activePanel === "chat" ? (
-        <section style={styles.stack}>
-          <p style={styles.note}>WorkMap quick messages are frontend-only in this MVP. They do not read Teams or Outlook content.</p>
-          <select value={chatTarget} onChange={(event) => setChatTarget(event.target.value)} style={styles.input}>
-            <option value="general"># general</option>
-            <option value="announcements"># announcements</option>
-            <option value="support"># support</option>
-            {people.map((person) => (
-              <option key={person.userId} value={person.userId}>DM: {person.displayName}</option>
+        {activePanel === "calendar" ? (
+          <section style={styles.stack}>
+            <p style={styles.note}>Calendar is a schedule launcher in this MVP. WorkMap does not sync calendar content yet.</p>
+            <button
+              type="button"
+              style={styles.primaryButton}
+              onClick={() => setMeetings((current) => [...current, { title: "New WorkMap meeting", time: "15:30", room: "Focus Room", attendees: "Selected teammates" }])}
+            >
+              Schedule meeting
+            </button>
+            {meetings.map((meeting) => (
+              <article key={`${meeting.title}-${meeting.time}`} style={styles.roomCard}>
+                <h3 style={styles.cardTitle}>{meeting.title}</h3>
+                <p style={styles.cardText}>{meeting.time} / {meeting.room}</p>
+                <p style={styles.cardText}>{meeting.attendees}</p>
+                <div style={styles.twoActions}>
+                  <button type="button" onClick={() => toast("Teams launcher placeholder.")} style={styles.smallButton}>Open Teams</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const destination = destinations.find((item) => item.name === meeting.room);
+                      if (destination) onGoToDestination(destination);
+                    }}
+                    style={styles.smallButton}
+                  >
+                    Go to room
+                  </button>
+                </div>
+              </article>
             ))}
-          </select>
-          <div style={styles.messageList}>
-            {messages.filter((message) => message.channel === chatTarget).map((message, index) => (
-              <p key={`${message.channel}-${index}`} style={styles.message}>{message.text}</p>
+          </section>
+        ) : null}
+
+        {activePanel === "notices" ? (
+          <section style={styles.stack}>
+            {[
+              "Mia waved at you",
+              "Sofia is available",
+              "Your desk is ready",
+              "Policy acknowledgement completed",
+              "Desktop Agent setup pending",
+              "Meeting starts in 10 minutes",
+              "Teams launcher ready",
+            ].map((notice) => (
+              <button key={notice} type="button" onClick={() => toast(notice)} style={styles.noticeRow}>{notice}</button>
             ))}
-          </div>
-          <div style={styles.composer}>
-            <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Send quiet message" style={styles.input} />
-            <button type="button" onClick={sendMessage} style={styles.primaryButton}>Send</button>
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
 
-      {activePanel === "calendar" ? (
-        <section style={styles.stack}>
-          <p style={styles.note}>Calendar is a schedule launcher in this MVP. WorkMap does not sync calendar content yet.</p>
-          <button
-            type="button"
-            style={styles.primaryButton}
-            onClick={() => setMeetings((current) => [...current, { title: "New WorkMap meeting", time: "15:30", room: "Focus Room", attendees: "Selected teammates" }])}
-          >
-            Schedule meeting
-          </button>
-          {meetings.map((meeting) => (
-            <article key={`${meeting.title}-${meeting.time}`} style={styles.roomCard}>
-              <h3 style={styles.cardTitle}>{meeting.title}</h3>
-              <p style={styles.cardText}>{meeting.time} / {meeting.room}</p>
-              <p style={styles.cardText}>{meeting.attendees}</p>
-              <div style={styles.twoActions}>
-                <button type="button" onClick={() => toast("Teams launcher placeholder.")} style={styles.smallButton}>Open Teams</button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const destination = destinations.find((item) => item.name === meeting.room);
-                    if (destination) onGoToDestination(destination);
-                  }}
-                  style={styles.smallButton}
-                >
-                  Go to room
-                </button>
-              </div>
-            </article>
-          ))}
-        </section>
-      ) : null}
-
-      {activePanel === "notices" ? (
-        <section style={styles.stack}>
-          {[
-            "Mia waved at you",
-            "Sofia is available",
-            "Your desk is ready",
-            "Policy acknowledgement completed",
-            "Desktop Agent setup pending",
-            "Meeting starts in 10 minutes",
-            "Teams launcher ready",
-          ].map((notice) => (
-            <button key={notice} type="button" onClick={() => toast(notice)} style={styles.noticeRow}>{notice}</button>
-          ))}
-        </section>
-      ) : null}
-
-      {activePanel === "settings" ? (
-        <section style={styles.stack}>
-          <p style={styles.note}>Office preferences and shortcuts only. Admin settings stay outside the map.</p>
-          <a href="/settings" style={styles.linkButton}>Open settings</a>
-          <a href="/onboarding/avatar" style={styles.linkButton}>Edit avatar</a>
-          <a href="/compliance" style={styles.linkButton}>Review privacy policy</a>
-          <button type="button" onClick={() => onOpenPanel("people")} style={styles.primaryButton}>Back to people</button>
-        </section>
-      ) : null}
+        {activePanel === "settings" ? (
+          <section style={styles.stack}>
+            <p style={styles.note}>Office preferences and shortcuts only. Admin settings stay outside the map.</p>
+            <a href="/settings" style={styles.linkButton}>Open settings</a>
+            <a href="/onboarding/avatar" style={styles.linkButton}>Edit avatar</a>
+            <a href="/compliance" style={styles.linkButton}>Review privacy policy</a>
+            <button type="button" onClick={() => onOpenPanel("people")} style={styles.primaryButton}>Back to people</button>
+          </section>
+        ) : null}
+      </div>
     </aside>
   );
 }
@@ -276,18 +278,26 @@ const styles = {
     bottom: "150px",
     zIndex: 34,
     width: "360px",
-    overflow: "auto",
+    overflow: "hidden",
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr)",
     background: "rgba(255, 255, 255, 0.78)",
     color: wm.colors.text,
     backdropFilter: "blur(24px)",
-    padding: "24px",
+    padding: 0,
   },
   header: {
     display: "flex",
     justifyContent: "space-between",
     gap: "10px",
     alignItems: "flex-start",
-    marginBottom: "20px",
+    padding: "24px 24px 20px",
+  },
+  panelBody: {
+    minHeight: 0,
+    overflowY: "auto" as const,
+    padding: "0 24px 24px",
+    scrollbarGutter: "stable" as const,
   },
   title: {
     margin: 0,
