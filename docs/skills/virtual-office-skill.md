@@ -26,9 +26,16 @@ Frontend support added in commit `abe673c`:
 - Valid API positions can replace mock remote players.
 - Invalid or missing API parts remain mock-backed.
 
+Development verification support added in commit `2a4a269`:
+
+- Before read API calls, the frontend attempts to obtain a development Bearer token through the existing `POST /auth/dev-token` endpoint.
+- The token is used only in browser development builds.
+- If auth is unavailable, the virtual office continues with unauthenticated reads and mock fallback.
+- Console logging reports whether API auth was available and whether data came from API or mock fallback.
+
 ## Current Boundary
 
-The API integration is read-only. It does not add position persistence, polling, websocket, realtime presence, backend map rendering, or auth/session changes.
+The API integration is read-only. It does not add position persistence, polling, websocket, realtime presence, backend map rendering, or production auth/session changes.
 
 The canvas source remains `/maps/workmap2.tmx`; do not use backend `OfficeMap.mapData` as the frontend canvas source unless a future task explicitly changes that architecture.
 

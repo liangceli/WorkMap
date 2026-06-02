@@ -16,6 +16,14 @@ Reason: This lets the frontend safely consume backend map, navigation, and posit
 
 Trade-off: The integration remains read-only and one-time-on-mount. It intentionally does not add position persistence, polling, websocket realtime presence, backend map rendering, or auth/session changes.
 
+## 2026-06-02 - Development API Auth Bridge
+
+Decision: Add a frontend-only development auth bridge that requests existing backend dev tokens for local `/virtual-office` API verification.
+
+Reason: The read API integration needed a safe way to verify real backend-backed map, navigation, and positions data in local development without implementing production auth.
+
+Trade-off: The bridge stores a dev token in browser `localStorage` and depends on seeded demo users, so it is explicitly disabled outside development and must not be treated as production session handling.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

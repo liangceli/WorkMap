@@ -39,13 +39,15 @@ Important areas:
 
 Known API wrappers include auth, users, reports, integrations, compliance, and virtual office. Some pages/components still rely on mock data instead of API calls.
 
-For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts read-only virtual-office API loading and falls back to mock data. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
+For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts read-only virtual-office API loading and falls back to mock data. It first asks `lib/api/developmentApiAuth.ts` for browser-only development auth options, then passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
 
 ## State Management
 
 No Redux/Zustand/global state library was confirmed. Current state is mostly React local state plus localStorage helpers for demo workflow and avatar selection.
 
 `useVirtualOfficeData.ts` performs a one-time async load on mount with a cancellation flag. It does not introduce polling, websocket listeners, or position writes.
+
+Development API auth token data is cached in localStorage under `workmap.devApiAuth`. The normal login/onboarding workflow remains demo-only and is not production auth.
 
 ## UI Rules
 

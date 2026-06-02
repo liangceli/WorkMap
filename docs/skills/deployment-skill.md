@@ -37,6 +37,13 @@ Frontend API client also uses:
 
 - `NEXT_PUBLIC_WORKMAP_API_URL`
 
+Development-only virtual-office API verification can also use:
+
+- `NEXT_PUBLIC_WORKMAP_DEV_AUTH_EMAIL`
+- `NEXT_PUBLIC_WORKMAP_DEV_AUTH_COMPANY_SLUG`
+
+These override the seeded demo identity used by the frontend development auth bridge for `POST /auth/dev-token`.
+
 ## Deployment Unknowns
 
 - No concrete hosting target was confirmed.

@@ -16,6 +16,6 @@ Shared packages include:
 - `packages/auth`: shared auth context and JWT payload types.
 - `packages/config`, `packages/domain-utils`, `packages/ui`: small shared package scaffolds.
 
-The project already contains a virtual-office data model in Prisma, a NestJS backend with guarded endpoints, and a Next.js frontend with a canvas-based virtual office experience. `/virtual-office` now attempts read-only virtual-office API loading with mock fallback, while canvas rendering remains based on `/maps/workmap2.tmx` rather than backend `OfficeMap.mapData`. Some frontend surfaces still use mock or localStorage state, so production readiness should be evaluated per feature.
+The project already contains a virtual-office data model in Prisma, a NestJS backend with guarded endpoints, and a Next.js frontend with a canvas-based virtual office experience. `/virtual-office` now attempts read-only virtual-office API loading with mock fallback, while canvas rendering remains based on `/maps/workmap2.tmx` rather than backend `OfficeMap.mapData`. A frontend-only development auth bridge can request seeded dev tokens for local virtual-office API verification, but production auth is still not implemented. Some frontend surfaces still use mock or localStorage state, so production readiness should be evaluated per feature.
 
 Reference material exists under `docs/references/SkyOffice` and `workmap/docs/references`. It is reference-only and should not be copied directly into WorkMap.
