@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { OfficeRoomZone, PlayerDirection, UserPresenceStatus } from "@workmap/shared-types";
+import type { OfficeRoomZone, PlayerDirection, PlayerState, UserPresenceStatus } from "@workmap/shared-types";
 import {
   getVirtualOfficeMap,
   listVirtualOfficeNavigation,
@@ -9,6 +9,7 @@ import {
 } from "../../lib/api/virtualOfficeApi";
 import { getDevelopmentApiAuthOptions } from "../../lib/api/developmentApiAuth";
 import type {
+  ApiClientOptions,
   WorkMapApiNavigationDestination,
   WorkMapApiOfficeMap,
   WorkMapApiOfficeRoom,
@@ -24,6 +25,9 @@ export type VirtualOfficeData = {
   rooms: OfficeRoomZone[];
   destinations: OfficeDestination[];
   remotePlayers: RemoteOfficePlayer[];
+  officeMapId?: string;
+  apiOptions?: ApiClientOptions;
+  currentUserPosition?: PlayerState;
   source: VirtualOfficeDataSource;
 };
 
@@ -64,10 +68,13 @@ export function useVirtualOfficeData(): VirtualOfficeData {
       let nextRooms = MOCK_DATA.rooms;
       let nextDestinations = MOCK_DATA.destinations;
       let nextRemotePlayers = MOCK_DATA.remotePlayers;
+      let nextOfficeMapId: string | undefined;
+      let nextCurrentUserPosition: PlayerState | undefined;
       let usedApiPart = false;
       let usedMockPart = false;
 
       if (mapResult.ok && isApiOfficeMap(mapResult.data)) {
+        nextOfficeMapId = mapResult.data.id;
         const rooms = mapResult.data.rooms.map(toRoomZone).filter((room): room is OfficeRoomZone => Boolean(room));
         if (rooms.length > 0) {
           nextRooms = rooms;
@@ -82,7 +89,12 @@ export function useVirtualOfficeData(): VirtualOfficeData {
         }
 
         if (positionsResult.ok && Array.isArray(positionsResult.data)) {
+          const apiPlayers = positionsResult.data.map(toPlayerState).filter((player): player is PlayerState => Boolean(player));
+          nextCurrentUserPosition = auth.available
+            ? apiPlayers.find((position) => position.userId === auth.userId)
+            : undefined;
           const players = positionsResult.data
+            .filter((position) => !auth.available || position.userId !== auth.userId)
             .map(toRemoteOfficePlayer)
             .filter((player): player is RemoteOfficePlayer => Boolean(player));
 
@@ -119,6 +131,9 @@ export function useVirtualOfficeData(): VirtualOfficeData {
         rooms: nextRooms,
         destinations: nextDestinations,
         remotePlayers: nextRemotePlayers,
+        officeMapId: nextOfficeMapId,
+        apiOptions,
+        currentUserPosition: nextCurrentUserPosition,
         source,
       };
 
@@ -188,9 +203,20 @@ function toOfficeDestination(destination: WorkMapApiNavigationDestination): Offi
 }
 
 function toRemoteOfficePlayer(position: WorkMapApiPlayerPosition): RemoteOfficePlayer | null {
+  const player = toPlayerState(position);
+  if (!player) {
+    return null;
+  }
+
+  return {
+    ...player,
+    role: "Team member",
+  };
+}
+
+function toPlayerState(position: WorkMapApiPlayerPosition): PlayerState | null {
   if (
     typeof position.userId !== "string" ||
-    position.userId === "local-user" ||
     typeof position.displayName !== "string" ||
     !Number.isFinite(position.x) ||
     !Number.isFinite(position.y)
@@ -209,7 +235,6 @@ function toRemoteOfficePlayer(position: WorkMapApiPlayerPosition): RemoteOfficeP
     status: toStatus(position.status, "available"),
     roomId: typeof position.roomId === "string" ? position.roomId : undefined,
     updatedAt: typeof position.updatedAt === "string" ? position.updatedAt : new Date().toISOString(),
-    role: "Team member",
   };
 }
 

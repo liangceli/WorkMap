@@ -1,8 +1,9 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Put, UseGuards } from "@nestjs/common";
 import type { RequestContext } from "@workmap/auth";
 import { CurrentContext } from "../auth/current-context.decorator.js";
 import { toApiDirection, toApiStatus } from "../common/enum-mappers.js";
 import { RequestContextGuard } from "../auth/request-context.guard.js";
+import { parseSavePositionBody } from "./save-position.dto.js";
 import { VirtualOfficeService } from "./virtual-office.service.js";
 
 @Controller("virtual-office")
@@ -53,5 +54,36 @@ export class VirtualOfficeController {
       roomId: position.officeRoomId ?? undefined,
       updatedAt: position.updatedAt.toISOString(),
     }));
+  }
+
+  @Put("map/:officeMapId/positions/me")
+  async saveCurrentUserPosition(
+    @CurrentContext() context: RequestContext,
+    @Param("officeMapId", ParseUUIDPipe) officeMapId: string,
+    @Body() body: unknown,
+  ) {
+    const position = parseSavePositionBody(body);
+    const saved = await this.office.persistLatestPosition({
+      companyId: context.companyId,
+      userId: context.userId,
+      officeMapId,
+      officeRoomId: position.roomId,
+      x: position.x,
+      y: position.y,
+      direction: position.direction,
+      isMoving: position.isMoving,
+      status: position.status,
+    });
+
+    return {
+      userId: saved.userId,
+      x: saved.x,
+      y: saved.y,
+      direction: toApiDirection(saved.direction),
+      isMoving: saved.isMoving,
+      status: toApiStatus(saved.status),
+      roomId: saved.officeRoomId ?? undefined,
+      updatedAt: saved.updatedAt.toISOString(),
+    };
   }
 }

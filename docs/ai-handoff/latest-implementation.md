@@ -2,169 +2,183 @@
 
 ## 1. Original Task Brief
 
-Complete Local API-Backed Virtual Office Verification Loop
+Implement Player Position Persistence Closed Loop
 
-Goal: make the local development environment able to run the backend on `http://localhost:3001`, successfully issue a development auth token, and visually verify that `/virtual-office` can use real backend virtual-office read data instead of only mock fallback.
+Goal: close the current-user position loop for `/virtual-office` in local/development verification.
 
-Important boundaries:
+Required behavior:
 
-- Local pilot-readiness only.
-- Do not implement production auth/session architecture.
-- Do not add websocket, polling presence, realtime presence, or position persistence.
-- Do not change movement, collision, pathfinding, TMX rendering, avatar assets, dashboard/report/compliance product features, or UI design.
+- Backend exposes a guarded current-user position persistence route.
+- Frontend saves the local player's latest position safely, with throttle/debounce behavior.
+- On `/virtual-office` load, restore the current user's saved backend position when API data is available.
+- Preserve backend-off mock fallback and local movement.
+- Do not add polling, websocket, realtime presence, or broader position persistence beyond the current user's latest position save.
+- Do not modify production auth architecture, backend auth implementation, Prisma schema/migrations/seed, TMX rendering, assets, movement/collision/pathfinding/chair/contact drawer behavior, login/onboarding UI, or unrelated app features.
+- After implementation, update `docs/ai-handoff/latest-implementation.md`.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/.env.example` | Added `WORKMAP_JWT_SECRET` so local dev-token signing requirements are documented. The local `.env` was also updated with a development-only value, but `.env` is not tracked. |
-| `workmap/apps/api/package.json` | Changed `dev` script to reliably build and run the actual compiled API entry: `nest build && node dist/apps/api/src/main.js`. The previous `nest start --watch` compiled but did not produce a working local server in this workspace layout. |
-| `workmap/apps/api/src/load-local-env.ts` | Added a small local startup helper that loads the nearest `.env` file and registers compiled workspace package aliases for `@workmap/auth` and `@workmap/shared-types`. This lets the compiled API entry run locally from the nested Nest output. |
-| `workmap/apps/api/src/main.ts` | Imports `load-local-env.js` before loading `AppModule`, ensuring env and local compiled aliases are available before Prisma/auth/module imports execute. |
-| `workmap/apps/api/src/modules/auth/auth.module.ts` | Marked `AuthModule` as global so `RequestContextGuard` used by other modules can resolve exported `AuthService` and `JwtService` at runtime. |
+| `workmap/apps/api/src/modules/virtual-office/save-position.dto.ts` | Added a small request-body parser/validator for the current-user position save route. It validates `x`, `y`, `direction`, `isMoving`, `status`, and optional `roomId`, and returns `BadRequestException` for invalid input. |
+| `workmap/apps/api/src/modules/virtual-office/virtual-office.controller.ts` | Added guarded `PUT /virtual-office/map/:officeMapId/positions/me`. The route uses `RequestContextGuard`, takes `companyId` and `userId` from the request context, validates the body, calls the existing `persistLatestPosition` service method, and returns the saved position in API enum shape. |
+| `workmap/apps/web/lib/api/apiClient.ts` | Added `workMapApiPut` so frontend API wrappers can issue typed PUT requests through the same fallback-safe API client path. |
+| `workmap/apps/web/lib/api/apiTypes.ts` | Added request/response types for saving the current user's virtual-office position. |
+| `workmap/apps/web/lib/api/virtualOfficeApi.ts` | Added `saveCurrentVirtualOfficePosition`, targeting the new current-user positions route. |
+| `workmap/apps/web/lib/api/developmentApiAuth.ts` | Extended the development auth cache/result to include `userId`, so the frontend can identify the current user's position from the positions list without creating a production session model. |
+| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | Exposes `officeMapId`, authenticated API options, and the current user's API position. It also filters the current user out of remote players so the local player is not duplicated. Mock fallback remains unchanged. |
+| `workmap/apps/web/components/office/OfficeMap.tsx` | Restores the local player from the current user's saved API position on first load when available, tracks local interaction so later API data does not overwrite user movement, and saves meaningful local position changes through a throttled/debounced PUT call. Review follow-up added a restore/save guard so stale default player state from the same render cannot immediately overwrite the restored backend position. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA and Project Context & Docs. |
 
 Pre-existing workspace note:
 
-- `docs/references/` remains untracked and was not part of this task.
+- `docs/references/` is still untracked and was not modified for this task.
 
 ## 3. Implementation Summary
 
-The local backend startup path now works on `http://localhost:3001`.
+The backend now has a guarded current-user latest-position save endpoint:
 
-The previous local failures were caused by several setup/runtime mismatches:
+```text
+PUT /virtual-office/map/:officeMapId/positions/me
+```
 
-- API process did not load root `.env`, so local runtime config such as `DATABASE_URL`, `API_PORT`, and JWT secret were not reliably available.
-- `.env.example` did not document `WORKMAP_JWT_SECRET`, which is required by existing dev-token signing.
-- Nest build output is nested at `apps/api/dist/apps/api/src/main.js`, while plain `nest start` expected `dist/main`.
-- The compiled API output included workspace package JS under `apps/api/dist/packages/...`, but runtime `require("@workmap/auth")` / `require("@workmap/shared-types")` could not resolve those paths.
-- `RequestContextGuard` is used in multiple feature modules; making `AuthModule` global allows its exported auth providers to resolve consistently.
+The endpoint does not accept or trust a body `userId`; it saves against the authenticated request context. The existing `VirtualOfficeService.persistLatestPosition` handles company/map/room validation and upserts the latest position.
 
-No backend controllers/services, Prisma schema, seed data, virtual-office movement/rendering logic, websocket, polling, or persistence logic was changed.
+The frontend now:
+
+- obtains development auth as before, now including the current `userId`;
+- loads map/navigation/positions through the existing fallback-safe API path;
+- identifies the current user's saved position from the positions response;
+- restores the local player once on `/virtual-office` load if no local movement has already happened;
+- excludes the current user's API position from remote players;
+- saves meaningful local player changes to the backend with throttling/debouncing;
+- logs development-only save failures and continues local/mock behavior if API auth/backend is unavailable.
+
+Review follow-up:
+
+- Fixed a restore/save sequencing risk in `OfficeMap.tsx`.
+- When the API saved position arrives, the restore effect now records a restore guard snapshot.
+- The save effect skips any stale render snapshot that does not yet match the restored snapshot.
+- Once the restored player state is rendered, the guard clears and normal save behavior resumes.
+- This prevents an old/default local coordinate from being PUT after restore and racing against the restored coordinate.
 
 ## 4. User-Visible Changes
 
-For local development, running the backend with the documented command now starts an API on `http://localhost:3001`.
+In local development, a user opening `/virtual-office` with a working backend/dev-token path can now return to their previously saved position instead of always starting from the default local mock coordinate.
 
-With backend and frontend both running, `/virtual-office` can use API-backed virtual-office room/navigation/positions data. In browser verification, the current workspace changed to `Sales Zone`, which matches the backend room zone for the local player's initial coordinates. After stopping the backend and refreshing `/virtual-office`, the page still rendered with mock fallback and showed `Current workspace: Office`.
+After moving, interacting with chairs, or changing direction/status in the virtual office, the current user's latest position can be persisted to the backend. If the backend is down or auth fails, the page still renders and local movement continues with mock/fallback behavior.
 
-There are no production UI changes.
+No production auth UI, login/onboarding flow, map rendering, movement rules, websocket/realtime behavior, or position-sharing model was added.
 
 ## 5. Technical Notes
 
-Correct local backend command:
-
-```powershell
-pnpm --filter @workmap/api dev
-```
-
-This now runs:
-
-```text
-nest build && node dist/apps/api/src/main.js
-```
-
-Correct local frontend command:
-
-```powershell
-pnpm --filter @workmap/web dev
-```
-
-Local environment requirements:
-
-- `DATABASE_URL`
-- `API_PORT="3001"`
-- `NEXT_PUBLIC_APP_URL="http://localhost:3000"`
-- `WORKMAP_JWT_SECRET`
-
-Confirmed dev-token request:
-
-```http
-POST http://localhost:3001/auth/dev-token
-Content-Type: application/json
-
-{"email":"engineer@workmap.demo","companySlug":"workmap-demo-company"}
-```
-
-Confirmed authenticated read endpoints:
-
-- `GET http://localhost:3001/virtual-office/map`
-- `GET http://localhost:3001/virtual-office/navigation`
-- `GET http://localhost:3001/virtual-office/map/:officeMapId/positions`
-
-The shell API checks used `Authorization: Bearer <token>` headers. Browser tooling did not expose full network headers directly, but `/virtual-office` visual state matched API room data, and backend read endpoints require a valid request context.
+- Save route is guarded by `RequestContextGuard` and scoped to `context.companyId` / `context.userId`.
+- DTO validation is intentionally minimal and local to the virtual-office module; no new dependencies were added.
+- `workMapApiPut` mirrors the existing GET/POST client behavior and returns `ApiResult<T>` so failed saves can degrade without breaking the page.
+- Position saves are skipped until both `officeMapId` and authenticated `apiOptions` are available.
+- Save snapshots round `x` and `y`, compare against the last persisted snapshot, and only save when distance changes by at least `8px` or direction/status/movement/room changes.
+- Save attempts are throttled at `2500ms`; pending saves are rescheduled as the player changes.
+- Restore is one-time per mount and is skipped if the local player has already been touched by keyboard movement, auto-walk, or chair interaction.
+- Current-user restore preserves the local frontend player identity/avatar and applies saved `x`, `y`, `direction`, `status`, and optional `roomId`.
+- Restore/save ordering is protected by `restorePersistGuardRef`: after restore, stale snapshots from the pre-restore render are ignored until the rendered `player` matches the restored snapshot.
 
 ## 6. Verification Results
 
 Commands run from `workmap/`:
 
-| Command / Check | Result | Notes |
-|---|---|---|
-| `pnpm --filter @workmap/api lint` | Passed | API lint passed. |
-| `pnpm --filter @workmap/api typecheck` | Passed | API TypeScript passed. |
-| `pnpm --filter @workmap/api build` | Passed | API Nest build passed. |
-| `pnpm --filter @workmap/web lint` | Passed | Web lint passed. |
-| `pnpm --filter @workmap/web typecheck` | Passed | Web TypeScript passed. |
-| `pnpm --filter @workmap/web build` | Passed | Web Next build passed. Existing warning: Next.js plugin not detected in ESLint config. |
-| `pnpm lint` | Passed | Turborepo lint passed for all packages. |
-| `pnpm typecheck` | Passed | Turborepo typecheck passed for all packages. |
-| `pnpm build` | Passed | Turborepo build passed for all packages. Existing web ESLint plugin warning repeated. |
-| `GET http://localhost:3001/health` | Passed | Returned `200` with `{"status":"ok","service":"workmap-api",...}`. |
-| `POST http://localhost:3001/auth/dev-token` | Passed | Returned Bearer token for `engineer@workmap.demo`. |
-| `GET /virtual-office/map` with Bearer token | Passed | Returned map id `6a3742d6-dfb5-4487-94dc-da0ecf65ec9d`, 6 rooms, width 1280, height 720. |
-| `GET /virtual-office/navigation` with Bearer token | Passed | Returned 6 navigation destinations. |
-| `GET /virtual-office/map/:officeMapId/positions` with Bearer token | Passed | Returned 5 positions; first observed position: Mia Manager at `x=220`, `y=180`. |
-| Browser `/virtual-office` with backend running | Passed with observations | Page rendered with 2 canvases and `Current workspace: Sales Zone`, matching backend room data. |
-| Browser `/virtual-office` after backend stopped | Passed with observations | Page still rendered with 2 canvases and fallback state `Current workspace: Office`. |
+```powershell
+pnpm --filter @workmap/api lint
+pnpm --filter @workmap/api typecheck
+pnpm --filter @workmap/api build
+pnpm --filter @workmap/web lint
+pnpm --filter @workmap/web typecheck
+pnpm --filter @workmap/web build
+pnpm lint
+pnpm typecheck
+pnpm build
+```
+
+Results:
+
+- All commands passed.
+- `pnpm --filter @workmap/web build` and `pnpm build` both emitted the existing warning that the Next.js ESLint plugin was not detected in ESLint config.
+
+API closed-loop verification:
+
+- Started the built API temporarily on `http://127.0.0.1:3001`.
+- Confirmed `GET /health` returned `ok`.
+- Requested `POST /auth/dev-token` for `engineer@workmap.demo` / `workmap-demo-company`.
+- Requested `GET /virtual-office/map`.
+- Requested `PUT /virtual-office/map/:officeMapId/positions/me` with `x=333`, `y=444`, `direction=right`, `isMoving=false`, `status=available`.
+- Requested `GET /virtual-office/map/:officeMapId/positions`.
+- Confirmed the same `userId` read back `x=333`, `y=444`, `direction=right`.
+- `closedLoopOk=true`.
+
+Browser/runtime verification:
+
+- No in-app Browser or Playwright dependency was available in this session.
+- A short-lived web startup probe on port `3000` was attempted but timed out in the local `npx next start` startup chain.
+- Port/process cleanup was checked afterward; no `3000` listener remained, and the temporary `3001` process was cleaned up.
+- Full browser movement/save/restore verification remains a manual QA item.
+
+Review follow-up verification:
+
+```powershell
+pnpm --filter @workmap/web lint
+pnpm --filter @workmap/web typecheck
+pnpm --filter @workmap/web build
+```
+
+Results:
+
+- All three commands passed after the restore/save guard fix.
+- `pnpm --filter @workmap/web build` again emitted the existing Next.js ESLint plugin warning.
 
 ## 7. Manual QA Suggestions
 
-Recommended manual checks:
+Run manually:
 
-1. Start backend:
-   - `pnpm --filter @workmap/api dev`
-2. Start frontend:
-   - `pnpm --filter @workmap/web dev`
-3. Open `http://localhost:3000/virtual-office`.
-4. If redirected, complete demo avatar/compliance steps.
-5. In DevTools Network:
-   - confirm `POST /auth/dev-token`
-   - confirm `GET /virtual-office/map`
-   - confirm `GET /virtual-office/navigation`
-   - confirm `GET /virtual-office/map/:officeMapId/positions`
-   - confirm virtual-office read requests include `Authorization: Bearer <token>`
-6. In console:
-   - confirm dev auth/data source logs if visible in the browser.
-7. Confirm UI still works:
-   - canvas renders
-   - local avatar renders
-   - WASD/arrow movement works
-   - collision still blocks walls/furniture/chairs/plants
-   - double-click auto-walk works or shows existing `No clear path`
-   - chair interaction with `E` still works
-   - contact drawer still opens for remote users
-   - desktop and narrow layouts remain usable
-8. Stop backend and refresh `/virtual-office`.
-9. Confirm mock fallback still renders and no unhandled runtime crash appears.
+```powershell
+pnpm --filter @workmap/api dev
+pnpm --filter @workmap/web dev
+```
+
+Use frontend at:
+
+```text
+http://localhost:3000/virtual-office
+```
+
+Suggested checks:
+
+- Confirm backend `GET http://localhost:3001/health` returns `ok`.
+- Complete or simulate the existing demo onboarding/login flow.
+- Open `/virtual-office`.
+- Confirm network requests include development auth:
+  - `GET /virtual-office/map`
+  - `GET /virtual-office/navigation`
+  - `GET /virtual-office/map/:officeMapId/positions`
+  - `PUT /virtual-office/map/:officeMapId/positions/me`
+- Move the local player, wait at least `2.5s`, and confirm the PUT save occurs.
+- Refresh `/virtual-office` and confirm the local player restores to the saved backend position.
+- Confirm the current user is not duplicated as a remote player.
+- Stop or break the backend/auth and confirm `/virtual-office` still renders with mock fallback.
+- Re-check movement, collision, double-click auto-walk, chair sit/stand interaction, and contact drawer behavior.
 
 ## 8. Risks / Notes
 
-- Browser tooling in this environment did not expose network request headers directly, so Authorization header confirmation was done via shell API requests and by visual inference from API-backed room state.
-- Backend seed data must exist locally. The verified demo identity was `engineer@workmap.demo` in `workmap-demo-company`.
-- Backend API room coordinates do not visually match the current TMX mock zones perfectly. Example: the player's initial position maps to backend `Sales Zone`, while mock fallback shows a generic `Office` state at the same location after backend is stopped. This was documented rather than redesigning the map.
-- The API `dev` script is now a build-then-run command, not a watch process. It is reliable for local verification but does not provide hot reload.
-- Local `.env` was updated with a development JWT secret; `.env` is ignored and not included in git diff.
-- No production auth behavior was faked.
+- Browser-level save/restore was not fully automated in this session because no Browser/Playwright tool was available and the local web startup probe timed out.
+- The review-identified restore/save race has been addressed with a guard, but should still be manually confirmed in browser Network timing by ensuring no immediate PUT of the old/default coordinate occurs after API restore.
+- Position persistence is latest-position only for the current user; no realtime sharing, polling, websocket, or historical trail was added.
+- Save cadence is conservative but still writes direction/status/room changes even if distance is small.
+- Restore only happens once per mount. If backend data changes after the user starts moving locally, it intentionally does not overwrite the local player.
+- The implementation assumes `POST /auth/dev-token` returns a stable seeded user id in local development.
+- The task's API closed-loop test updated the local dev database position for `engineer@workmap.demo` to `x=333`, `y=444`, `direction=right`.
+- `docs/references/` remains an unrelated untracked workspace change.
 
 ## 9. Docs Update Suggestions
 
-Recommended documentation updates:
-
-- `docs/skills/deployment-skill.md` or local setup docs: record that local backend startup requires `WORKMAP_JWT_SECRET` and uses `pnpm --filter @workmap/api dev`.
-- `docs/skills/api-contract-skill.md`: record the confirmed dev-token request and the verified virtual-office read endpoints.
-- `docs/skills/project-summary.md`: note that local API-backed `/virtual-office` verification now works, but backend room coordinates may not match the TMX map zones exactly.
-- QA docs: add a repeatable local verification loop covering backend start, health, dev-token, authenticated virtual-office reads, browser API-backed state, and backend-stopped fallback.
-
-Input for next chat:
-
-Review the current implementation using `docs/ai-handoff/latest-implementation.md` and the current git diff. Update `docs/ai-handoff/latest-qa.md`.
+- `docs/skills/api-contract-skill.md`: record the new guarded `PUT /virtual-office/map/:officeMapId/positions/me` contract, request body, response body, and auth requirement.
+- `docs/skills/backend-skill.md`: note that virtual-office latest-position persistence uses `RequestContextGuard` and existing `persistLatestPosition` upsert semantics.
+- `docs/skills/deployment-skill.md`: note manual local verification commands and that frontend should be verified on `localhost:3000` while backend API remains `localhost:3001`.
+- `docs/skills/project-summary.md`: record that `/virtual-office` now supports API-backed current-user restore/save in development while preserving mock fallback.

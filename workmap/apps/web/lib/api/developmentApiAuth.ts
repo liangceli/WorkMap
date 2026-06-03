@@ -16,12 +16,13 @@ const DEFAULT_EMAIL_BY_ROLE: Record<WorkMapRole, string> = {
 type StoredDevelopmentAuth = {
   accessToken: string;
   expiresAt: string;
+  userId: string;
   email: string;
   companySlug: string;
 };
 
 export type DevelopmentApiAuthResult =
-  | { available: true; options: ApiClientOptions; email: string; companySlug: string; source: "cache" | "dev-token" }
+  | { available: true; options: ApiClientOptions; userId: string; email: string; companySlug: string; source: "cache" | "dev-token" }
   | { available: false; reason: string };
 
 export async function getDevelopmentApiAuthOptions(): Promise<DevelopmentApiAuthResult> {
@@ -40,6 +41,7 @@ export async function getDevelopmentApiAuthOptions(): Promise<DevelopmentApiAuth
     return {
       available: true,
       options: { token: cached.accessToken },
+      userId: cached.userId,
       email: cached.email,
       companySlug: cached.companySlug,
       source: "cache",
@@ -59,6 +61,7 @@ export async function getDevelopmentApiAuthOptions(): Promise<DevelopmentApiAuth
   const stored = {
     accessToken: tokenResult.data.accessToken,
     expiresAt: tokenResult.data.expiresAt,
+    userId: tokenResult.data.user.id,
     email: tokenResult.data.user.email,
     companySlug: tokenResult.data.user.companySlug,
   };
@@ -67,6 +70,7 @@ export async function getDevelopmentApiAuthOptions(): Promise<DevelopmentApiAuth
   return {
     available: true,
     options: { token: stored.accessToken },
+    userId: stored.userId,
     email: stored.email,
     companySlug: stored.companySlug,
     source: "dev-token",
@@ -129,6 +133,7 @@ function isStoredDevelopmentAuth(value: unknown): value is StoredDevelopmentAuth
     isObject(value) &&
     typeof value.accessToken === "string" &&
     typeof value.expiresAt === "string" &&
+    typeof value.userId === "string" &&
     typeof value.email === "string" &&
     typeof value.companySlug === "string"
   );
@@ -140,6 +145,7 @@ function isDevelopmentToken(value: unknown): value is WorkMapApiDevelopmentToken
     typeof value.accessToken === "string" &&
     typeof value.expiresAt === "string" &&
     isObject(value.user) &&
+    typeof value.user.id === "string" &&
     typeof value.user.email === "string" &&
     typeof value.user.companySlug === "string"
   );

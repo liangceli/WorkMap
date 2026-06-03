@@ -74,6 +74,20 @@ export type WorkMapApiPlayerPosition = {
   updatedAt: string;
 };
 
+export type WorkMapApiSavePlayerPositionInput = {
+  x: number;
+  y: number;
+  direction: PlayerDirection;
+  isMoving: boolean;
+  status: UserPresenceStatus;
+  roomId?: string;
+};
+
+export type WorkMapApiSavedPlayerPosition = WorkMapApiSavePlayerPositionInput & {
+  userId: string;
+  updatedAt: string;
+};
+
 export type WorkMapApiIntegration = {
   id: string;
   provider: string;

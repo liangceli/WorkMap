@@ -27,6 +27,17 @@ export async function workMapApiPost<T>(path: string, body?: unknown, options: A
   );
 }
 
+export async function workMapApiPut<T>(path: string, body?: unknown, options: ApiClientOptions = {}): Promise<ApiResult<T>> {
+  return workMapApiRequest<T>(
+    path,
+    {
+      method: "PUT",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    },
+    options,
+  );
+}
+
 async function workMapApiRequest<T>(
   path: string,
   init: RequestInit,

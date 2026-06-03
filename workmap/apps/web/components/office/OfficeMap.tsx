@@ -11,6 +11,7 @@ import {
 } from "../../lib/avatar/avatarLayerAssets";
 import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/avatarFrameMaps";
 import { getAvatarConfigForOffice } from "../../lib/avatar/avatarStorage";
+import { saveCurrentVirtualOfficePosition } from "../../lib/api/virtualOfficeApi";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { findGridPath, type PathBounds, type PathPoint } from "../../lib/office/pathfinding";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
@@ -65,6 +66,15 @@ type ViewportSize = {
   dpr?: number;
 };
 
+type PositionSnapshot = {
+  x: number;
+  y: number;
+  direction: PlayerDirection;
+  isMoving: boolean;
+  status: UserPresenceStatus;
+  roomId?: string;
+};
+
 const MAP_URL = "/maps/workmap2.tmx";
 const MAP_DEV_POLL_MS = 1500;
 const CANVAS_WIDTH = 1120;
@@ -75,6 +85,8 @@ const PLAYER_SPEED = 180;
 const AUTO_WALK_SPEED = PLAYER_SPEED * 1.5;
 const PROXIMITY_DISTANCE = 80;
 const CHAIR_INTERACTION_DISTANCE = 46;
+const POSITION_SAVE_THROTTLE_MS = 2500;
+const POSITION_SAVE_MIN_DISTANCE = 8;
 const MAP_LAYER_ORDER = [
   "Floor",
   "Carpet",
@@ -119,6 +131,12 @@ export function OfficeMap() {
   const latestCollisionRef = useRef<boolean[]>([]);
   const latestMapRef = useRef<ParsedMap | null>(null);
   const dragRef = useRef<{ dragging: boolean; x: number; y: number; moved: boolean }>({ dragging: false, x: 0, y: 0, moved: false });
+  const restoredPositionRef = useRef(false);
+  const localPlayerTouchedRef = useRef(false);
+  const lastPersistedPositionRef = useRef<PositionSnapshot | null>(null);
+  const restorePersistGuardRef = useRef<PositionSnapshot | null>(null);
+  const lastPersistAttemptAtRef = useRef(0);
+  const pendingPersistTimeoutRef = useRef<number | null>(null);
   const playerRef = useRef<PlayerState>({
     userId: "local-user",
     displayName: "You",
@@ -176,6 +194,30 @@ export function OfficeMap() {
     setSelectedAvatar(avatarConfig);
     setAvatarChecked(true);
   }, [router]);
+
+  useEffect(() => {
+    if (!officeData.currentUserPosition || restoredPositionRef.current || localPlayerTouchedRef.current) {
+      return;
+    }
+
+    restoredPositionRef.current = true;
+    const restoredPlayer = {
+      ...playerRef.current,
+      x: officeData.currentUserPosition.x,
+      y: officeData.currentUserPosition.y,
+      direction: officeData.currentUserPosition.direction,
+      isMoving: false,
+      status: officeData.currentUserPosition.status,
+      roomId: officeData.currentUserPosition.roomId,
+      updatedAt: new Date().toISOString(),
+    };
+
+    playerRef.current = restoredPlayer;
+    const restoredSnapshot = toPositionSnapshot(restoredPlayer);
+    lastPersistedPositionRef.current = restoredSnapshot;
+    restorePersistGuardRef.current = restoredSnapshot;
+    setPlayer(restoredPlayer);
+  }, [officeData.currentUserPosition]);
 
   useEffect(() => {
     if (!avatarChecked || !selectedAvatar) {
@@ -243,17 +285,20 @@ export function OfficeMap() {
 
       keysRef.current.add(event.key.toLowerCase());
       if (hasMovementInput(keysRef.current)) {
+        localPlayerTouchedRef.current = true;
         autoPathRef.current = [];
         autoDestinationRef.current = null;
         cameraOffsetRef.current = { x: 0, y: 0 };
       }
 
       if (event.key.toLowerCase() === "e" && seatedChairRef.current) {
+        localPlayerTouchedRef.current = true;
         standUpFromChair();
         return;
       }
 
       if (event.key.toLowerCase() === "e" && nearestChairRef.current) {
+        localPlayerTouchedRef.current = true;
         const chair = nearestChairRef.current;
         const nextPlayer = {
           ...playerRef.current,
@@ -307,6 +352,69 @@ export function OfficeMap() {
       setDismissedContactTargetId(null);
     }
   }, [nearbyTarget]);
+
+  useEffect(() => {
+    if (!officeData.officeMapId || !officeData.apiOptions) {
+      return undefined;
+    }
+
+    const snapshot = toPositionSnapshot(player);
+    const restoredSnapshot = restorePersistGuardRef.current;
+
+    if (restoredSnapshot) {
+      if (!isSamePositionSnapshot(snapshot, restoredSnapshot)) {
+        return undefined;
+      }
+
+      restorePersistGuardRef.current = null;
+    }
+
+    const lastSnapshot = lastPersistedPositionRef.current;
+
+    if (!lastSnapshot) {
+      lastPersistedPositionRef.current = snapshot;
+      return undefined;
+    }
+
+    if (!isMeaningfulPositionChange(lastSnapshot, snapshot)) {
+      return undefined;
+    }
+
+    const persist = () => {
+      pendingPersistTimeoutRef.current = null;
+      lastPersistAttemptAtRef.current = Date.now();
+      lastPersistedPositionRef.current = snapshot;
+
+      saveCurrentVirtualOfficePosition(officeData.officeMapId!, snapshot, officeData.apiOptions).then((result) => {
+        if (!result.ok && process.env.NODE_ENV === "development") {
+          console.info("virtual-office position save fallback", result.error);
+        }
+      }).catch((error: unknown) => {
+        if (process.env.NODE_ENV === "development") {
+          console.info("virtual-office position save fallback", error);
+        }
+      });
+    };
+
+    if (pendingPersistTimeoutRef.current) {
+      window.clearTimeout(pendingPersistTimeoutRef.current);
+    }
+
+    const elapsed = Date.now() - lastPersistAttemptAtRef.current;
+    if (elapsed >= POSITION_SAVE_THROTTLE_MS || !player.isMoving) {
+      persist();
+      return undefined;
+    }
+
+    pendingPersistTimeoutRef.current = window.setTimeout(persist, POSITION_SAVE_THROTTLE_MS - elapsed);
+
+    return () => {
+      if (pendingPersistTimeoutRef.current) {
+        window.clearTimeout(pendingPersistTimeoutRef.current);
+        pendingPersistTimeoutRef.current = null;
+      }
+    };
+  }, [officeData.apiOptions, officeData.officeMapId, player]);
 
   useEffect(() => {
     if (!map) {
@@ -583,6 +691,8 @@ export function OfficeMap() {
     if (!latestMapRef.current) {
       return false;
     }
+
+    localPlayerTouchedRef.current = true;
 
     const path = findGridPath(
       {
@@ -1347,6 +1457,38 @@ function findDestinationAtPoint(x: number, y: number, destinations: OfficeDestin
     const bounds = destination.bounds;
     return bounds && x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height;
   });
+}
+
+function toPositionSnapshot(player: PlayerState): PositionSnapshot {
+  return {
+    x: Math.round(player.x),
+    y: Math.round(player.y),
+    direction: player.direction,
+    isMoving: player.isMoving,
+    status: player.status,
+    roomId: player.roomId,
+  };
+}
+
+function isSamePositionSnapshot(previous: PositionSnapshot, next: PositionSnapshot) {
+  return (
+    previous.x === next.x &&
+    previous.y === next.y &&
+    previous.direction === next.direction &&
+    previous.isMoving === next.isMoving &&
+    previous.status === next.status &&
+    previous.roomId === next.roomId
+  );
+}
+
+function isMeaningfulPositionChange(previous: PositionSnapshot, next: PositionSnapshot) {
+  return (
+    Math.hypot(previous.x - next.x, previous.y - next.y) >= POSITION_SAVE_MIN_DISTANCE ||
+    previous.direction !== next.direction ||
+    previous.isMoving !== next.isMoving ||
+    previous.status !== next.status ||
+    previous.roomId !== next.roomId
+  );
 }
 
 function findChairSpots(map: ParsedMap) {
