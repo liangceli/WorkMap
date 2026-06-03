@@ -87,6 +87,7 @@ const PROXIMITY_DISTANCE = 80;
 const CHAIR_INTERACTION_DISTANCE = 46;
 const POSITION_SAVE_THROTTLE_MS = 2500;
 const POSITION_SAVE_MIN_DISTANCE = 8;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAP_LAYER_ORDER = [
   "Floor",
   "Carpet",
@@ -126,6 +127,8 @@ export function OfficeMap() {
   const mapXmlRef = useRef<string | null>(null);
   const zoomRef = useRef(1);
   const cameraOffsetRef = useRef({ x: 0, y: 0 });
+  const officePeopleRef = useRef<RemoteOfficePlayer[]>(officePeople);
+  const selectedRemoteIdRef = useRef<string | null>(null);
   const autoPathRef = useRef<PathPoint[]>([]);
   const autoDestinationRef = useRef<PathPoint | null>(null);
   const latestCollisionRef = useRef<boolean[]>([]);
@@ -176,6 +179,14 @@ export function OfficeMap() {
     }),
     [map],
   );
+
+  useEffect(() => {
+    officePeopleRef.current = officePeople;
+  }, [officePeople]);
+
+  useEffect(() => {
+    selectedRemoteIdRef.current = selectedRemoteId;
+  }, [selectedRemoteId]);
 
   useEffect(() => {
     const avatarConfig = getAvatarConfigForOffice();
@@ -507,7 +518,7 @@ export function OfficeMap() {
             ? movePlayer(playerRef.current, keysRef.current, deltaSeconds, map, collision)
             : moveAlongAutoPath(playerRef.current, deltaSeconds, map, collision, autoPathRef, autoDestinationRef);
         const room = findRoom(nextPlayer.x, nextPlayer.y, officeRooms);
-        const nearest = findNearbyPlayer(nextPlayer, officePeople);
+        const nearest = findNearbyPlayer(nextPlayer, officePeopleRef.current);
         const chair = seatedChairRef.current ? null : findNearestChair(nextPlayer, chairs);
 
         nextPlayer.roomId = room?.id;
@@ -531,8 +542,8 @@ export function OfficeMap() {
           chair,
           seatedChairRef.current,
           loadedAvatars,
-          officePeople,
-          selectedRemoteId,
+          officePeopleRef.current,
+          selectedRemoteIdRef.current,
           autoDestinationRef.current,
           zoomRef.current,
           cameraOffsetRef.current,
@@ -545,7 +556,7 @@ export function OfficeMap() {
     });
 
     return () => cancelAnimationFrame(animationFrame);
-  }, [map, mapPixels, officePeople, officeRooms, selectedAvatar, selectedRemoteId]);
+  }, [map, mapPixels, officeRooms, selectedAvatar]);
 
   const standUpFromChair = useCallback(() => {
     const fallback = seatedChairRef.current
@@ -782,6 +793,8 @@ export function OfficeMap() {
         <OfficeSidePanel
           activePanel={activePanel}
           people={officePeople}
+          currentUser={player}
+          presenceSource={officeData.source}
           destinations={officeNavigation}
           onClose={() => setActivePanel(null)}
           onSelectPerson={handleSelectRemote}
@@ -1466,7 +1479,7 @@ function toPositionSnapshot(player: PlayerState): PositionSnapshot {
     direction: player.direction,
     isMoving: player.isMoving,
     status: player.status,
-    roomId: player.roomId,
+    roomId: player.roomId && UUID_PATTERN.test(player.roomId) ? player.roomId : undefined,
   };
 }
 

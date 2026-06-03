@@ -12,6 +12,7 @@ export type SavePositionBody = {
 
 const directions = new Set<PlayerDirection>(["up", "down", "left", "right"]);
 const statuses = new Set<UserPresenceStatus>(["available", "busy", "focus", "idle", "break", "offline", "on_call"]);
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function parseSavePositionBody(value: unknown): SavePositionBody {
   if (!isRecord(value)) {
@@ -38,6 +39,10 @@ export function parseSavePositionBody(value: unknown): SavePositionBody {
 
   if (roomId !== undefined && typeof roomId !== "string") {
     throw new BadRequestException("Position roomId must be a string when provided.");
+  }
+
+  if (typeof roomId === "string" && !uuidPattern.test(roomId)) {
+    throw new BadRequestException("Position roomId must be a valid UUID when provided.");
   }
 
   return {

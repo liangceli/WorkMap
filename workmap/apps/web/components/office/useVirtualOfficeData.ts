@@ -18,6 +18,7 @@ import type {
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { officeDestinations } from "../../lib/office/officeNavigationConfig";
 import { remotePlayers, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
+import { statusFromFreshness } from "./presence";
 
 type VirtualOfficeDataSource = "mock" | "api" | "partial-api";
 
@@ -44,8 +45,6 @@ const statuses: UserPresenceStatus[] = ["available", "busy", "focus", "idle", "b
 const directions: PlayerDirection[] = ["up", "down", "left", "right"];
 const PRESENCE_POLL_VISIBLE_MS = 4000;
 const PRESENCE_POLL_HIDDEN_MS = 15000;
-const PRESENCE_RECENT_MS = 30 * 1000;
-const PRESENCE_STALE_MS = 5 * 60 * 1000;
 
 export function useVirtualOfficeData(): VirtualOfficeData {
   const [data, setData] = useState<VirtualOfficeData>(MOCK_DATA);
@@ -319,7 +318,7 @@ function toRemoteOfficePlayer(position: WorkMapApiPlayerPosition): RemoteOfficeP
 
   return {
     ...player,
-    status: toFreshnessStatus(player.status, player.updatedAt),
+    status: statusFromFreshness(player.status, player.updatedAt),
     role: "Team member",
   };
 }
@@ -379,24 +378,6 @@ function toStatus<TFallback extends UserPresenceStatus | undefined>(
   fallback: TFallback,
 ): UserPresenceStatus | TFallback {
   return value && statuses.includes(value) ? value : fallback;
-}
-
-function toFreshnessStatus(status: UserPresenceStatus, updatedAt: string): UserPresenceStatus {
-  const updatedTime = Date.parse(updatedAt);
-  if (!Number.isFinite(updatedTime)) {
-    return status;
-  }
-
-  const ageMs = Math.max(0, Date.now() - updatedTime);
-  if (ageMs > PRESENCE_STALE_MS) {
-    return "offline";
-  }
-
-  if (ageMs > PRESENCE_RECENT_MS) {
-    return status === "offline" ? "offline" : "idle";
-  }
-
-  return status;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

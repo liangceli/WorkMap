@@ -15,6 +15,8 @@ type PersistPositionInput = {
   status: UserPresenceStatus;
 };
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class VirtualOfficeService {
   constructor(private readonly prisma: PrismaService) {}
@@ -153,6 +155,10 @@ export class VirtualOfficeService {
 
     if (!officeRoomId) {
       return;
+    }
+
+    if (!uuidPattern.test(officeRoomId)) {
+      throw new BadRequestException("Office room id must be a valid UUID.");
     }
 
     const officeRoom = await this.prisma.officeRoom.findFirst({

@@ -1,17 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ContactTarget, UserPresenceStatus } from "@workmap/shared-types";
+import type { ContactTarget, PlayerState, UserPresenceStatus } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import type { OfficePanelKey } from "./OfficeLeftRail";
 import { OfficeIcon } from "./OfficeIcons";
 import type { RemoteOfficePlayer } from "./mockOfficeData";
-import { labelStatus, statusColors } from "./presence";
+import { labelStatus, presenceFreshnessLabel, statusColors } from "./presence";
 
 type OfficeSidePanelProps = {
   activePanel: OfficePanelKey | null;
   people: RemoteOfficePlayer[];
+  currentUser: PlayerState;
+  presenceSource: "mock" | "api" | "partial-api";
   destinations: OfficeDestination[];
   onClose: () => void;
   onSelectPerson: (target: ContactTarget) => void;
@@ -21,11 +23,13 @@ type OfficeSidePanelProps = {
   toast: (message: string) => void;
 };
 
-type StatusFilter = "all" | "available" | "focus" | "busy" | "break";
+type StatusFilter = "all" | "available" | "focus" | "busy" | "idle" | "offline";
 
 export function OfficeSidePanel({
   activePanel,
   people,
+  currentUser,
+  presenceSource,
   destinations,
   onClose,
   onSelectPerson,
@@ -46,15 +50,18 @@ export function OfficeSidePanel({
     { title: "Product sync", time: "10:30", room: "Main Meeting Room", attendees: "Mia, Ethan, Sofia" },
     { title: "Support handoff", time: "14:00", room: "IT Support", attendees: "Ava, Ethan" },
   ]);
+  const presenceSummary = useMemo(() => summarizePresence(people), [people]);
+  const roomNameById = useMemo(() => createRoomNameMap(destinations), [destinations]);
 
   const filteredPeople = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return people.filter((person) => {
-      const matchesQuery = `${person.displayName} ${person.role} ${person.roomId ?? ""}`.toLowerCase().includes(normalized);
+      const roomName = friendlyRoom(person.roomId, roomNameById);
+      const matchesQuery = `${person.displayName} ${person.role} ${roomName}`.toLowerCase().includes(normalized);
       const matchesStatus = statusFilter === "all" || person.status === statusFilter;
       return matchesQuery && matchesStatus;
     });
-  }, [people, query, statusFilter]);
+  }, [people, query, roomNameById, statusFilter]);
 
   if (!activePanel || activePanel === "search") {
     return null;
@@ -84,9 +91,38 @@ export function OfficeSidePanel({
       <div style={styles.panelBody}>
         {activePanel === "people" ? (
           <section style={styles.stack}>
+            <article style={styles.selfCard}>
+              <span style={styles.avatar}>Y</span>
+              <span style={styles.personText}>
+                <strong>You</strong>
+                <span>Local controls stay with you</span>
+                <span>{friendlyRoom(currentUser.roomId, roomNameById)}</span>
+              </span>
+              <span style={styles.statusWrap}>
+                <span style={{ ...styles.statusDot, background: statusColors[currentUser.status] }} />
+                {labelStatus(currentUser.status)}
+              </span>
+            </article>
+
+            <div style={styles.summaryGrid} aria-label="Team presence summary">
+              <span style={styles.summaryItem}>
+                <strong>{presenceSummary.active}</strong>
+                active
+              </span>
+              <span style={styles.summaryItem}>
+                <strong>{presenceSummary.idle}</strong>
+                idle
+              </span>
+              <span style={styles.summaryItem}>
+                <strong>{presenceSummary.offline}</strong>
+                offline
+              </span>
+            </div>
+
+            <p style={styles.presenceNote}>{presenceNote(presenceSource, people.length)}</p>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search team..." style={styles.input} />
             <div style={styles.filterRow}>
-              {(["all", "available", "focus", "busy", "break"] as StatusFilter[]).map((filter) => (
+              {(["all", "available", "focus", "busy", "idle", "offline"] as StatusFilter[]).map((filter) => (
                 <button
                   key={filter}
                   type="button"
@@ -98,30 +134,47 @@ export function OfficeSidePanel({
               ))}
             </div>
             <div style={styles.personList}>
-              {filteredPeople.map((person) => (
-                <article key={person.userId} style={styles.personCard}>
-                  <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.personMain}>
-                    <span style={styles.avatar}>{person.displayName.slice(0, 1)}</span>
-                    <span style={styles.personText}>
-                      <strong>{person.displayName}</strong>
-                      <span>{person.role}</span>
-                      <span>{friendlyRoom(person.roomId)}</span>
-                    </span>
-                    <span style={styles.statusWrap}>
-                      <span style={{ ...styles.statusDot, background: statusColors[person.status] }} />
-                      {labelStatus(person.status)}
-                    </span>
-                  </button>
-                  <div style={styles.actionGrid}>
-                    <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.smallButton}>Message</button>
-                    <button type="button" onClick={() => toast(`You waved to ${person.displayName}.`)} style={styles.smallButton}>Wave</button>
-                    <button type="button" onClick={() => onGoToPerson(person)} style={styles.smallButton}>Go to</button>
-                    <button type="button" onClick={() => toast("Teams launcher placeholder.")} style={styles.smallButton}>Teams</button>
-                    <button type="button" onClick={() => { window.location.href = `mailto:${person.userId}@workmap.local`; }} style={styles.smallButton}>Outlook</button>
-                    <button type="button" onClick={() => toast("3CX launcher placeholder.")} style={styles.smallButton}>3CX</button>
-                  </div>
+              {filteredPeople.length > 0 ? (
+                filteredPeople.map((person) => {
+                  const freshness = presenceFreshnessLabel(person.updatedAt, person.status);
+                  return (
+                    <article key={person.userId} style={styles.personCard}>
+                      <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.personMain}>
+                        <span style={styles.avatar}>{person.displayName.slice(0, 1)}</span>
+                        <span style={styles.personText}>
+                          <strong>{person.displayName}</strong>
+                          <span>{person.role}</span>
+                          <span>{friendlyRoom(person.roomId, roomNameById)}</span>
+                        </span>
+                        <span style={styles.statusColumn}>
+                          <span style={styles.statusWrap}>
+                            <span style={{ ...styles.statusDot, background: statusColors[person.status] }} />
+                            {freshness.label}
+                          </span>
+                          <span style={styles.lastSeen}>{freshness.detail}</span>
+                        </span>
+                      </button>
+                      <div style={styles.actionGrid}>
+                        <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.smallButton}>Message</button>
+                        <button type="button" onClick={() => toast(`You waved to ${person.displayName}.`)} style={styles.smallButton}>Wave</button>
+                        <button type="button" onClick={() => onGoToPerson(person)} style={styles.smallButton}>Go to</button>
+                        <button type="button" onClick={() => toast("Teams launcher placeholder.")} style={styles.smallButton}>Teams</button>
+                        <button type="button" onClick={() => { window.location.href = `mailto:${person.userId}@workmap.local`; }} style={styles.smallButton}>Outlook</button>
+                        <button type="button" onClick={() => toast("3CX launcher placeholder.")} style={styles.smallButton}>3CX</button>
+                      </div>
+                    </article>
+                  );
+                })
+              ) : (
+                <article style={styles.emptyState}>
+                  <strong>{people.length === 0 ? "No teammates visible yet" : "No matching teammates"}</strong>
+                  <span>
+                    {people.length === 0
+                      ? "Your own position is still local. Remote teammates will appear here when the API has safe presence data."
+                      : "Try a different name or presence filter."}
+                  </span>
                 </article>
-              ))}
+              )}
             </div>
           </section>
         ) : null}
@@ -265,8 +318,45 @@ function panelSubtitle(panel: OfficePanelKey) {
   return subtitles[panel];
 }
 
-function friendlyRoom(roomId?: string) {
-  return roomId?.replaceAll("-", " ") ?? "Office area";
+function createRoomNameMap(destinations: OfficeDestination[]) {
+  return new Map(destinations.map((destination) => [destination.id, destination.name]));
+}
+
+function friendlyRoom(roomId: string | undefined, roomNameById: Map<string, string>) {
+  if (!roomId) {
+    return "Office area";
+  }
+
+  return roomNameById.get(roomId) ?? "Office area";
+}
+
+function summarizePresence(people: RemoteOfficePlayer[]) {
+  return people.reduce(
+    (summary, person) => {
+      if (person.status === "offline") {
+        summary.offline += 1;
+      } else if (person.status === "idle" || person.status === "break") {
+        summary.idle += 1;
+      } else {
+        summary.active += 1;
+      }
+
+      return summary;
+    },
+    { active: 0, idle: 0, offline: 0 },
+  );
+}
+
+function presenceNote(source: OfficeSidePanelProps["presenceSource"], peopleCount: number) {
+  if (source === "mock") {
+    return "Demo team shown while backend presence is unavailable.";
+  }
+
+  if (peopleCount === 0) {
+    return "Backend presence is connected. No other teammates are visible yet.";
+  }
+
+  return "Backend presence is connected. Teammates refresh automatically.";
 }
 
 const styles = {
@@ -327,6 +417,44 @@ const styles = {
     display: "grid",
     gap: "14px",
   },
+  selfCard: {
+    display: "grid",
+    gridTemplateColumns: "46px minmax(0, 1fr) auto",
+    gap: "12px",
+    alignItems: "center",
+    border: `1px solid ${wm.colors.primaryContainer}`,
+    borderRadius: "18px",
+    background: "rgba(219, 225, 255, 0.68)",
+    padding: "12px",
+  },
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "8px",
+  },
+  summaryItem: {
+    display: "grid",
+    gap: "2px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: "14px",
+    background: "rgba(255, 255, 255, 0.76)",
+    color: wm.colors.textMuted,
+    padding: "10px",
+    fontSize: "11px",
+    fontWeight: 800,
+    textTransform: "uppercase" as const,
+  },
+  presenceNote: {
+    margin: 0,
+    border: `1px solid ${wm.colors.surfaceHigh}`,
+    borderRadius: "14px",
+    background: "rgba(248, 249, 255, 0.78)",
+    color: wm.colors.textSecondary,
+    padding: "11px 12px",
+    fontSize: "12px",
+    lineHeight: 1.35,
+    fontWeight: 800,
+  },
   input: {
     ...wmStyles.input,
     minHeight: "46px",
@@ -341,7 +469,9 @@ const styles = {
     flexWrap: "wrap" as const,
   },
   filterButton: {
-    border: `1px solid ${wm.colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: wm.colors.border,
     borderRadius: "999px",
     background: "rgba(255, 255, 255, 0.72)",
     color: wm.colors.textSecondary,
@@ -405,6 +535,18 @@ const styles = {
     fontWeight: 700,
     textTransform: "capitalize" as const,
   },
+  statusColumn: {
+    display: "grid",
+    justifyItems: "end",
+    gap: "3px",
+    minWidth: "92px",
+  },
+  lastSeen: {
+    color: wm.colors.textMuted,
+    fontSize: "10px",
+    fontWeight: 800,
+    whiteSpace: "nowrap" as const,
+  },
   statusDot: {
     width: "9px",
     height: "9px",
@@ -416,6 +558,17 @@ const styles = {
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: "8px",
     marginTop: "12px",
+  },
+  emptyState: {
+    display: "grid",
+    gap: "6px",
+    border: `1px dashed ${wm.colors.border}`,
+    borderRadius: "18px",
+    background: "rgba(255, 255, 255, 0.64)",
+    color: wm.colors.textMuted,
+    padding: "16px",
+    fontSize: "13px",
+    lineHeight: 1.4,
   },
   smallButton: {
     ...wmStyles.secondaryButton,

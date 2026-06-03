@@ -7,7 +7,7 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { OfficeIcon } from "./OfficeIcons";
 import type { RemoteOfficePlayer } from "./mockOfficeData";
-import { labelStatus, statusColors } from "./presence";
+import { presenceFreshnessLabel, statusColors } from "./presence";
 
 type OfficeCommandPaletteProps = {
   open: boolean;
@@ -41,13 +41,14 @@ export function OfficeCommandPalette({
 }: OfficeCommandPaletteProps) {
   const [query, setQuery] = useState("");
   const normalized = query.trim().toLowerCase();
+  const roomNameById = useMemo(() => createRoomNameMap(destinations), [destinations]);
 
   const filteredPeople = useMemo(
     () =>
       people.filter((person) =>
-        `${person.displayName} ${person.role} ${person.roomId ?? ""}`.toLowerCase().includes(normalized),
+        `${person.displayName} ${person.role} ${friendlyRoom(person.roomId, roomNameById)}`.toLowerCase().includes(normalized),
       ),
-    [normalized, people],
+    [normalized, people, roomNameById],
   );
   const filteredDestinations = useMemo(
     () =>
@@ -82,32 +83,42 @@ export function OfficeCommandPalette({
         </div>
 
         <ResultGroup title="People">
-          {filteredPeople.map((person) => (
-            <button
-              key={person.userId}
-              type="button"
-              style={styles.resultRow}
-              onClick={() =>
-                onSelectPerson({
-                  userId: person.userId,
-                  displayName: person.displayName,
-                  role: person.role,
-                  status: person.status,
-                })
-              }
-            >
-              <span style={styles.avatar}>{person.displayName.slice(0, 1)}</span>
-              <span style={styles.resultText}>
-                <strong>{person.displayName}</strong>
-                <span>{person.role} / {person.roomId?.replaceAll("-", " ") ?? "Office area"}</span>
-              </span>
-              <span style={styles.statusPill}>
-                <span style={{ ...styles.statusDot, background: statusColors[person.status] }} />
-                {labelStatus(person.status)}
-              </span>
-              <span style={styles.actionText} onClick={(event) => { event.stopPropagation(); onGoToPerson(person); }}>Go to</span>
-            </button>
-          ))}
+          {filteredPeople.length > 0 ? (
+            filteredPeople.map((person) => {
+              const freshness = presenceFreshnessLabel(person.updatedAt, person.status);
+              return (
+                <button
+                  key={person.userId}
+                  type="button"
+                  style={styles.resultRow}
+                  onClick={() =>
+                    onSelectPerson({
+                      userId: person.userId,
+                      displayName: person.displayName,
+                      role: person.role,
+                      status: person.status,
+                    })
+                  }
+                >
+                  <span style={styles.avatar}>{person.displayName.slice(0, 1)}</span>
+                  <span style={styles.resultText}>
+                    <strong>{person.displayName}</strong>
+                    <span>{person.role} / {friendlyRoom(person.roomId, roomNameById)}</span>
+                  </span>
+                  <span style={styles.statusColumn}>
+                    <span style={styles.statusPill}>
+                      <span style={{ ...styles.statusDot, background: statusColors[person.status] }} />
+                      {freshness.label}
+                    </span>
+                    <span style={styles.lastSeen}>{freshness.detail}</span>
+                  </span>
+                  <span style={styles.actionText} onClick={(event) => { event.stopPropagation(); onGoToPerson(person); }}>Go to</span>
+                </button>
+              );
+            })
+          ) : (
+            <div style={styles.emptyRow}>No teammates match this search.</div>
+          )}
         </ResultGroup>
 
         <ResultGroup title="Rooms and sections">
@@ -153,6 +164,18 @@ export function OfficeCommandPalette({
       </section>
     </div>
   );
+}
+
+function createRoomNameMap(destinations: OfficeDestination[]) {
+  return new Map(destinations.map((destination) => [destination.id, destination.name]));
+}
+
+function friendlyRoom(roomId: string | undefined, roomNameById: Map<string, string>) {
+  if (!roomId) {
+    return "Office area";
+  }
+
+  return roomNameById.get(roomId) ?? "Office area";
 }
 
 function ResultGroup({ title, children }: { title: string; children: ReactNode }) {
@@ -278,10 +301,31 @@ const styles = {
     fontSize: "12px",
     fontWeight: 900,
   },
+  statusColumn: {
+    display: "grid",
+    justifyItems: "end",
+    gap: "2px",
+    minWidth: "104px",
+  },
+  lastSeen: {
+    color: wm.colors.textMuted,
+    fontSize: "10px",
+    fontWeight: 800,
+    whiteSpace: "nowrap" as const,
+  },
   statusDot: {
     width: "9px",
     height: "9px",
     borderRadius: "999px",
     border: `2px solid ${wm.colors.surface}`,
+  },
+  emptyRow: {
+    border: `1px dashed ${wm.colors.border}`,
+    borderRadius: wm.radius.xl,
+    background: "rgba(255, 255, 255, 0.72)",
+    color: wm.colors.textMuted,
+    padding: "14px",
+    fontSize: "13px",
+    fontWeight: 800,
   },
 };
