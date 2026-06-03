@@ -39,15 +39,26 @@ Important areas:
 
 Known API wrappers include auth, users, reports, integrations, compliance, and virtual office. Some pages/components still rely on mock data instead of API calls.
 
-For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts read-only virtual-office API loading and falls back to mock data. It first asks `lib/api/developmentApiAuth.ts` for browser-only development auth options, then passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
+For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It first asks `lib/api/developmentApiAuth.ts` for browser-only development auth options, then passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
+
+Current-user position persistence:
+
+- `apiClient.ts` includes `workMapApiPut`.
+- `virtualOfficeApi.ts` exposes `saveCurrentVirtualOfficePosition`.
+- `useVirtualOfficeData.ts` exposes `officeMapId`, authenticated `apiOptions`, and `currentUserPosition`; it filters the current user out of remote players.
+- `OfficeMap.tsx` restores the local player once from the current user's saved API position when available and local movement/interactions have not already touched the player.
+- `OfficeMap.tsx` saves meaningful local changes with throttled/debounced PUT calls.
+- Restore/save guard logic prevents stale default position snapshots from overwriting a just-restored backend position.
 
 ## State Management
 
 No Redux/Zustand/global state library was confirmed. Current state is mostly React local state plus localStorage helpers for demo workflow and avatar selection.
 
-`useVirtualOfficeData.ts` performs a one-time async load on mount with a cancellation flag. It does not introduce polling, websocket listeners, or position writes.
+`useVirtualOfficeData.ts` performs a one-time async load on mount with a cancellation flag. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; no polling or websocket listeners were added.
 
 Development API auth token data is cached in localStorage under `workmap.devApiAuth`. The normal login/onboarding workflow remains demo-only and is not production auth.
+
+Position save writes are movement-driven and latest-position-only. They are not realtime sharing and do not create position history.
 
 ## UI Rules
 

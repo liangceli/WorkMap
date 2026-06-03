@@ -60,6 +60,7 @@ These override the seeded demo identity used by the frontend development auth br
 4. Start web from `workmap/`: `pnpm --filter @workmap/web dev`.
 5. Open `http://localhost:3000/virtual-office`.
 6. Confirm development auth and virtual-office read requests target backend port 3001.
+7. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
 
 ## Deployment Caution
 

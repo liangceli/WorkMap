@@ -28,6 +28,18 @@ Runtime/local startup notes:
 - It also registers compiled local aliases for `@workmap/auth` and `@workmap/shared-types` so the nested Nest build output can run locally.
 - The API `dev` script is `nest build && node dist/apps/api/src/main.js`.
 
+## Virtual Office Persistence
+
+Current-user latest-position persistence was added in commit `1a0a19f`.
+
+- Route: `PUT /virtual-office/map/:officeMapId/positions/me`.
+- Guard: `RequestContextGuard`.
+- Scope: authenticated `context.companyId` and `context.userId`; body `userId` is not accepted.
+- Body parser: `save-position.dto.ts` validates finite `x`/`y`, supported direction/status, boolean `isMoving`, and optional string `roomId`.
+- Service path: existing `VirtualOfficeService.persistLatestPosition`.
+- Persistence behavior: upserts one latest `VirtualOfficePosition` row for the authenticated user.
+- Validation: existing service checks map/company ownership and optional room/map/company consistency.
+
 ## Request Context
 
 Most business endpoints use `RequestContextGuard`.

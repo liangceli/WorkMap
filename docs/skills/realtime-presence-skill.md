@@ -24,13 +24,16 @@ Backend stores:
 - `VirtualOfficePosition.status`
 - `VirtualOfficePosition.updatedAt`
 
-Backend exposes latest positions through `GET /virtual-office/map/:officeMapId/positions`. The frontend virtual office now attempts this endpoint once on mount through the read-only loader and adapts valid positions into remote players. In browser development, this read can use the development Bearer token bridge when available.
+Backend exposes latest positions through `GET /virtual-office/map/:officeMapId/positions`. The frontend virtual office now attempts this endpoint once on mount through the loader and adapts valid positions into remote players. In browser development, this read can use the development Bearer token bridge when available.
+
+Current-user latest position can now be saved through `PUT /virtual-office/map/:officeMapId/positions/me`. This is a latest-position persistence loop for the authenticated current user only.
 
 ## Not Confirmed
 
 - No websocket or server-sent events implementation was found.
 - No frontend polling of backend virtual-office positions was added.
-- No API route was found for frontend position updates, though service support exists internally.
+- No realtime broadcast/sharing of position updates was added.
+- No historical position trail was added.
 
 ## Recommended Presence Direction
 

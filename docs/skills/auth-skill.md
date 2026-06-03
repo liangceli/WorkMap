@@ -27,6 +27,7 @@ Confirmed behavior:
 - `lib/api/developmentApiAuth.ts` exposes `getDevelopmentApiAuthOptions()`.
 - The helper no-ops outside `NODE_ENV === "development"` and requires browser `localStorage`.
 - It stores cached token data under `workmap.devApiAuth`.
+- As of commit `1a0a19f`, cached/result auth data includes the current `userId` so `/virtual-office` can identify the current user's saved position without adding production session state.
 - It chooses seeded demo users from frontend demo workflow role:
   - `EMPLOYEE`: `engineer@workmap.demo`
   - `MANAGER`: `manager@workmap.demo`

@@ -41,9 +41,18 @@ Local API-backed verification completed in commit `d7152dd`:
 - Browser `/virtual-office` with backend running rendered API-backed state.
 - Browser `/virtual-office` after backend stopped still rendered mock fallback.
 
+Current-user latest-position persistence added in commit `1a0a19f`:
+
+- On load, the frontend can restore the local player from the authenticated user's saved backend position.
+- The current user's API position is filtered out of remote players to avoid duplicate rendering.
+- Local movement, chair/status changes, direction changes, and room changes can trigger latest-position saves.
+- Saves use a throttled/debounced cadence and require `officeMapId` plus authenticated API options.
+- Backend-off/auth-off paths continue to render with mock fallback and local movement.
+- Restore happens once per mount and does not overwrite local movement after the player has been touched.
+
 ## Current Boundary
 
-The API integration is read-only. It does not add position persistence, polling, websocket, realtime presence, backend map rendering, or production auth/session changes.
+The API integration now includes current-user latest-position restore/save. It still does not add polling, websocket, realtime presence, backend map rendering, arbitrary user mutation, historical trails, or production auth/session changes.
 
 The canvas source remains `/maps/workmap2.tmx`; do not use backend `OfficeMap.mapData` as the frontend canvas source unless a future task explicitly changes that architecture.
 

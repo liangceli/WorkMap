@@ -32,6 +32,14 @@ Reason: In this workspace layout, the previous watch-based local API startup com
 
 Trade-off: `pnpm --filter @workmap/api dev` no longer provides hot reload. `load-local-env.ts` is imported by the API entry, so deployment/startup expectations must remain explicit even though existing env vars are preserved.
 
+## 2026-06-03 - Current-User Position Persistence
+
+Decision: Add a guarded current-user latest-position save route and frontend restore/save loop for `/virtual-office`.
+
+Reason: Local virtual-office verification needed a complete loop where the authenticated current user can return to a saved backend position and persist meaningful local movement changes.
+
+Trade-off: This is latest-position-only and scoped to the current request context. It intentionally avoids polling, websocket realtime presence, historical position trails, arbitrary user mutation, production auth changes, and TMX/movement behavior changes.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

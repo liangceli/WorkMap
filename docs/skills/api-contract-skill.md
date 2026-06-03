@@ -72,6 +72,7 @@ Development overrides:
 - `GET /virtual-office/map`
 - `GET /virtual-office/navigation`
 - `GET /virtual-office/map/:officeMapId/positions`
+- `PUT /virtual-office/map/:officeMapId/positions/me`
 - `GET /integrations`
 - `GET /integrations/contact-links/:targetUserId`
 - `GET /compliance/policy`
@@ -92,16 +93,54 @@ Development overrides:
 
 - `userId`, `displayName`, `avatarId`, `x`, `y`, `direction`, `isMoving`, `status`, optional `roomId`, `updatedAt`
 
+`PUT /virtual-office/map/:officeMapId/positions/me` saves the authenticated current user's latest position.
+
+Auth rule:
+
+- Guarded by `RequestContextGuard`.
+- `companyId` and `userId` come from request context.
+- Request body does not accept or trust `userId`.
+
+Request body:
+
+- `x: number`
+- `y: number`
+- `direction: "up" | "down" | "left" | "right"`
+- `isMoving: boolean`
+- `status: "available" | "busy" | "focus" | "idle" | "break" | "offline" | "on_call"`
+- optional `roomId: string`
+
+Response body:
+
+- `userId`
+- `x`
+- `y`
+- `direction`
+- `isMoving`
+- `status`
+- optional `roomId`
+- `updatedAt`
+
+Validation:
+
+- `officeMapId` uses UUID parsing.
+- Body must be an object.
+- Coordinates must be finite numbers.
+- Direction/status must be supported enum values.
+- `roomId`, when present, must be a string.
+- Service validation ensures the map and optional room belong to the authenticated company.
+
 QA-confirmed local API reads with Bearer token:
 
 - `GET http://localhost:3001/virtual-office/map` returned 200, `Default Office Map`, width 1280, height 720, and 6 rooms.
 - `GET http://localhost:3001/virtual-office/navigation` returned 200 and 6 destinations.
 - `GET http://localhost:3001/virtual-office/map/:officeMapId/positions` returned 200 and 5 positions.
 - Browser DevTools confirmed `/virtual-office/map` and `/virtual-office/navigation` requests included `Authorization: Bearer ...`.
+- API closed-loop verification for `1a0a19f` confirmed `PUT /virtual-office/map/:officeMapId/positions/me` saved `x=333`, `y=444`, `direction=right` and a follow-up positions read returned the same values for the same user.
 
-## Frontend Virtual Office Read Loader
+## Frontend Virtual Office Data Loader
 
-Accepted in commit `abe673c` and updated in `2a4a269`: `/virtual-office` now has a read-only frontend loader that asks for development auth in local browser development, then attempts:
+Accepted in commit `abe673c` and updated in later commits: `/virtual-office` has a frontend data loader that asks for development auth in local browser development, then attempts:
 
 - `GET /virtual-office/map`
 - `GET /virtual-office/navigation`
@@ -117,5 +156,4 @@ Important contract assumptions:
 
 ## Important Gaps
 
-- No public controller route currently exposes `persistLatestPosition`.
-- No write, polling, websocket, or realtime position sync contract has been added.
+- No polling, websocket, realtime position sync, historical position trail, or arbitrary-user position mutation contract has been added.

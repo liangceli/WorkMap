@@ -2,16 +2,18 @@
 
 ## 1. Completed Task
 
-The local API-backed virtual office verification loop was completed.
+Current-user position persistence closed loop was implemented for `/virtual-office`.
 
 ## 2. Accepted Changes
 
-- Added `WORKMAP_JWT_SECRET` to `.env.example`.
-- Changed API `dev` script to `nest build && node dist/apps/api/src/main.js`.
-- Added `load-local-env.ts` to load local `.env` and register compiled workspace aliases for local API runtime.
-- Imported the local startup helper before `AppModule`.
-- Marked `AuthModule` as global so auth providers resolve across feature modules.
-- Preserved backend business logic, Prisma schema, production auth/session scope, TMX rendering, movement, realtime, and persistence boundaries.
+- Added guarded `PUT /virtual-office/map/:officeMapId/positions/me`.
+- Added backend body validation for current-user position saves.
+- Added frontend `PUT` API support and `saveCurrentVirtualOfficePosition`.
+- Extended dev auth result/cache with current `userId`.
+- Frontend now restores local player from the current user's saved backend position when available.
+- Frontend filters current user out of remote players.
+- Frontend saves meaningful local position/status/direction/room changes with throttled/debounced PUT calls.
+- Added restore/save guard to avoid stale default coordinates overwriting restored backend state.
 
 ## 3. Verification Summary
 
@@ -27,34 +29,26 @@ Reported passing from `workmap/`:
 - `pnpm --filter @workmap/api typecheck`
 - `pnpm --filter @workmap/api build`
 
-`GET http://localhost:3000/virtual-office` returned 200 while frontend dev server was running. User-confirmed manual interaction checks passed for canvas, movement, auto-walk, chair interaction, contact drawer, and desktop/narrow layouts. Backend-unavailable fallback was verified: dev-token and virtual-office API calls were attempted against `localhost:3001`, failed with connection refused, and the page stayed on mock fallback.
-
-Latest verification for `d7152dd` also passed:
-
-- `pnpm --filter @workmap/api dev` started API on `localhost:3001`.
-- `GET /health` returned 200.
-- `POST /auth/dev-token` returned Bearer token for `engineer@workmap.demo`.
-- Bearer-authenticated virtual-office map/navigation/positions reads returned real data.
-- Browser `/virtual-office` showed API-backed state with backend running and mock fallback after backend stopped.
-- User DevTools QA confirmed `/virtual-office/map` and `/virtual-office/navigation` returned 200 with Bearer authorization.
+API closed-loop verification passed: dev token was obtained, `PUT /virtual-office/map/:officeMapId/positions/me` saved `x=333`, `y=444`, `direction=right`, and a follow-up positions read returned the same values for the same user. Follow-up web lint/typecheck/build also passed after the restore/save guard fix.
 
 ## 4. Remaining Risks
 
-- API dev command is now build-then-run, not hot reload.
-- Backend room coordinates do not perfectly match current TMX/mock zones; API-backed current workspace can differ from fallback.
-- `load-local-env.ts` is imported unconditionally by the API entry; deployment startup expectations should be explicit.
-- Seed data and `WORKMAP_JWT_SECRET` are required for local dev-token verification.
-- No production auth, polling, websocket, realtime presence, or position persistence was added.
+- Browser-level save/restore remains a manual QA item because browser automation was unavailable.
+- Confirm no immediate stale PUT of old/default coordinates after restore.
+- Failed identical save snapshots may not retry until another meaningful change occurs.
+- Local dev DB for `engineer@workmap.demo` may now contain the test position `x=333`, `y=444`, `direction=right`.
+- No production auth, polling, websocket, realtime presence, historical trail, or arbitrary-user mutation was added.
 
 ## 5. Updated Docs
 
 - `docs/skills/current-status.md`
 - `docs/skills/api-contract-skill.md`
-- `docs/skills/auth-skill.md`
 - `docs/skills/backend-skill.md`
 - `docs/skills/deployment-skill.md`
 - `docs/skills/virtual-office-skill.md`
-- `docs/skills/map-system-skill.md`
+- `docs/skills/frontend-skill.md`
+- `docs/skills/realtime-presence-skill.md`
+- `docs/skills/data-model-skill.md`
 - `docs/skills/qa-skill.md`
 - `docs/skills/project-summary.md`
 - `docs/skills/decision-log.md`
@@ -62,9 +56,9 @@ Latest verification for `d7152dd` also passed:
 
 ## 6. Recommended Next Tasks
 
-- Decide whether to add a separate API watch/hot-reload command.
-- Align backend room coordinate data with the TMX map, or document the mismatch as accepted MVP behavior.
+- Manually verify save-after-move and refresh-restore in the browser.
+- Confirm no stale/default coordinate PUT happens immediately after restore.
+- Decide retry behavior for failed identical save snapshots.
 - Decide the real production auth/session path separately.
-- Decide whether to add a player position persistence endpoint.
 - Decide the future realtime presence strategy: polling, websocket, or another transport.
-- Add automated tests for local API startup assumptions, development auth helper, and virtual-office data adapter/fallback behavior.
+- Add automated tests for save-position DTO validation, current-user save route, and frontend restore/save guard behavior.

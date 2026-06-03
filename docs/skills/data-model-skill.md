@@ -28,4 +28,5 @@ Confirmed enums include user roles/statuses, device OS, activity event type, bro
 ## Data Model Gaps
 
 - Office map database `mapData` exists, but current frontend canvas loads `/maps/workmap2.tmx` directly.
-- Virtual office positions are modeled, but live position sync from frontend to backend is not confirmed.
+- Virtual office positions now support current-user latest-position restore/save through API-backed local development flows.
+- Live realtime sync, historical trails, and arbitrary-user position mutation are not implemented.

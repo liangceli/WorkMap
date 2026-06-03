@@ -1,9 +1,14 @@
 # Current Status
 
-Last updated: 2026-06-02.
+Last updated: 2026-06-03.
 
 ## Latest Accepted Work
 
+- Commit `1a0a19f` (`feat(virtual-office): persist current player position`) closed the current-user latest-position loop for `/virtual-office`.
+- Backend now exposes guarded `PUT /virtual-office/map/:officeMapId/positions/me`. It uses request context for `companyId`/`userId`, validates the body, and calls the existing latest-position upsert service path.
+- Frontend now restores the local player once from the current user's saved API position when available, filters the current user out of remote players, and saves meaningful local player changes through throttled/debounced PUT requests.
+- A restore/save guard prevents stale default local coordinates from being immediately saved over a restored backend position.
+- Backend-off/auth-off mock fallback and local movement remain supported. No polling, websocket, realtime presence, historical trail, or broad user-position mutation was added.
 - Commit `d7152dd` (`Fix local API startup for virtual office verification`) completed the local API-backed virtual office verification loop.
 - `pnpm --filter @workmap/api dev` now runs `nest build && node dist/apps/api/src/main.js`, giving a reliable local API on `http://localhost:3001` for verification. This trades away API hot reload/watch behavior.
 - `.env.example` now documents `WORKMAP_JWT_SECRET`, required for local dev-token signing.
@@ -17,7 +22,7 @@ Last updated: 2026-06-02.
 - The frontend now attempts `GET /virtual-office/map`, `GET /virtual-office/navigation`, and then `GET /virtual-office/map/:officeMapId/positions` after a valid map id is available.
 - `useVirtualOfficeData.ts` starts from mock data, validates API response shapes, adapts safe rooms/navigation/remote player fields, and keeps mock fallback for unavailable, unauthorized, invalid, empty, or partial API responses.
 - Canvas rendering still uses `/maps/workmap2.tmx`; backend `OfficeMap.mapData` is not used as the frontend canvas source.
-- No backend changes, Prisma changes, polling, websocket, realtime presence, or position persistence were added.
+- No backend business logic outside current-user latest-position persistence, Prisma changes, polling, websocket, or realtime presence were added.
 
 ## Confirmed Current State
 
@@ -31,14 +36,17 @@ Last updated: 2026-06-02.
 ## Known Issues / Risks
 
 - Backend API room coordinates do not perfectly match the current TMX mock zones. API-backed state can show a different current workspace than fallback at the same player coordinates.
+- Browser-level save/restore closed-loop QA still needs manual confirmation; implementation verified API closed loop through shell, but browser automation was unavailable.
+- Failed identical save snapshots may not retry until another meaningful player position/status/direction/room change happens.
+- The implementation test updated local dev DB position for `engineer@workmap.demo` to `x=333`, `y=444`, `direction=right`.
 - API `dev` script is now build-then-run, not watch/hot reload.
 - `load-local-env.ts` is imported unconditionally by the API entry. It preserves existing env vars, but deployment expectations should stay explicit.
 - Production auth/session remains unimplemented; the dev auth bridge is explicitly local-development verification only.
 - The dev auth bridge assumes seeded demo users from `prisma/seed.ts` exist locally, unless public dev env overrides are supplied.
 - Backend `zoneData`, navigation `anchor`, and navigation `bounds` must match the current TMX pixel coordinate system to be accepted safely.
 - API-derived remote players use fallback role text (`Team member`) and may route profiles by raw user id.
-- Local player position updates are not currently persisted through an exposed API endpoint; `VirtualOfficeService.persistLatestPosition` exists but no controller route calls it.
-- Presence remains read-only/client-side for the virtual office; no websocket, polling loop, or real-time backend sync was added.
+- Current user's latest local position can now be restored from and saved to the backend in development/API-backed mode.
+- Presence remains non-realtime; no websocket, polling loop, or real-time backend sync was added.
 - Web onboarding/login flow uses frontend-only localStorage workflow state and is not real authentication.
 - `docs/references/` remains untracked reference material and should not be committed accidentally.
 
@@ -46,8 +54,8 @@ Last updated: 2026-06-02.
 
 - Decide whether a separate API hot-reload command is needed alongside the reliable build-then-run `dev` command.
 - Align backend office room coordinate data with the current TMX map zones, or document the mismatch as accepted MVP behavior.
+- Manually verify browser save-after-move and refresh-restore behavior, including no immediate stale PUT after restore.
 - Decide the production auth/session model separately from the development auth bridge.
-- Add or decide against an API route for persisting current player position.
 - Define real-time presence strategy: polling, websocket, or another transport.
 - Replace frontend-only demo workflow state with real auth/session wiring when ready.
 - Add tests for pathfinding, API contracts, auth guard behavior, and key UI routing workflows.

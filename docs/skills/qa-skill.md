@@ -57,11 +57,25 @@ Use this repeatable loop after backend/local-startup changes:
   - `GET http://localhost:3001/virtual-office/map`
   - `GET http://localhost:3001/virtual-office/navigation`
   - `GET http://localhost:3001/virtual-office/map/:officeMapId/positions`
+- Confirm Bearer-authenticated current-user save:
+  - `PUT http://localhost:3001/virtual-office/map/:officeMapId/positions/me`
 - Start frontend from `workmap/`: `pnpm --filter @workmap/web dev`.
 - Open `http://localhost:3000/virtual-office`.
 - Confirm browser Network shows virtual-office API reads on backend port 3001 with Bearer authorization.
 - Confirm canvas, avatar, movement, collision, double-click auto-walk, chair `E` interaction, contact drawer, desktop layout, and narrow layout still work.
 - Stop backend and refresh `/virtual-office`; confirm mock fallback still renders without runtime crash.
+
+## Position Persistence Manual QA
+
+- Open `http://localhost:3000/virtual-office` with backend running on `localhost:3001`.
+- Confirm initial API reads include Bearer authorization.
+- Confirm the local player restores to the saved backend position when one exists.
+- Confirm the current user does not appear as a duplicate remote player.
+- After restore, confirm there is no immediate PUT of an old/default coordinate.
+- Move with WASD/arrow keys, wait at least 2.5 seconds, and confirm `PUT /virtual-office/map/:officeMapId/positions/me` saves the current coordinate.
+- Refresh `/virtual-office` and confirm the player restores to the newly saved position.
+- Test chair sit/stand and room/status changes; confirm saves remain reasonable and page stays stable.
+- Stop backend or break auth; confirm page still renders with mock fallback and local movement.
 
 ## Test Gaps
 
@@ -113,3 +127,11 @@ For commit `d7152dd`, QA reports these passed:
 - Browser `/virtual-office` with backend running showed API-backed state.
 - Browser `/virtual-office` after backend stopped showed fallback state.
 - User browser QA confirmed `/virtual-office/map` and `/virtual-office/navigation` returned 200 and included Bearer authorization headers.
+
+For commit `1a0a19f`, implementation verification reports:
+
+- API/web lint, typecheck, and build commands passed.
+- Root `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- API closed-loop test passed: dev token, PUT current-user position, and GET positions readback returned matching `x=333`, `y=444`, `direction=right` for the same user.
+- Follow-up web lint/typecheck/build passed after the restore/save guard fix.
+- Browser movement/save/restore remains a manual QA item because browser automation was unavailable and local web startup probe timed out.
