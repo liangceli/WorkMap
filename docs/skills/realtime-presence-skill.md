@@ -48,6 +48,20 @@ Freshness mapping for remote users:
 - Updated between 30 seconds and 5 minutes: show `idle`, unless already `offline`.
 - Older than 5 minutes: show `offline`.
 
+## People Presence UX
+
+Commit `b68dd49` added the 5-person People/Presence MVP UI.
+
+- Shared helpers live in `components/office/presence.ts`.
+- `statusFromFreshness(status, updatedAt)` centralizes freshness-based status mapping.
+- `presenceFreshnessLabel(updatedAt, status)` provides readable labels/details such as active now, idle / away, offline, updated just now, and last seen relative times.
+- People panel separates current user from remote teammates.
+- People panel shows active / idle / offline summary counts.
+- Remote cards show role, readable room/area, freshness label, last-seen detail, and actions.
+- People filters include `available`, `focus`, `busy`, `idle`, and `offline`; `break` users remain visible in all/search.
+- Command palette People results use the same freshness and room/area context.
+- Backend/mock/fallback/empty states are described in UI copy.
+
 ## Not Confirmed
 
 - No websocket or server-sent events implementation was found.

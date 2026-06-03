@@ -129,6 +129,7 @@ Validation:
 - Direction/status must be supported enum values.
 - `roomId`, when present, must be a string.
 - Service validation ensures the map and optional room belong to the authenticated company.
+- As of commit `b68dd49`, optional `roomId` must be a backend OfficeRoom UUID shape. Invalid values such as local/mock ids return a controlled `400 BadRequestException` instead of reaching Prisma.
 
 QA-confirmed local API reads with Bearer token:
 
@@ -138,6 +139,7 @@ QA-confirmed local API reads with Bearer token:
 - Browser DevTools confirmed `/virtual-office/map` and `/virtual-office/navigation` requests included `Authorization: Bearer ...`.
 - API closed-loop verification for `1a0a19f` confirmed `PUT /virtual-office/map/:officeMapId/positions/me` saved `x=333`, `y=444`, `direction=right` and a follow-up positions read returned the same values for the same user.
 - Commit `effb188` reuses repeated `GET /virtual-office/map/:officeMapId/positions` calls for basic polling presence; no new backend route was added.
+- Commit `b68dd49` verified invalid save `roomId=open-office-north` returns controlled 400 and omitted `roomId` save succeeds.
 
 ## Frontend Virtual Office Data Loader
 

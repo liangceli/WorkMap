@@ -60,6 +60,17 @@ Basic polling presence added in commit `effb188`:
 - Stale remote users map to `idle` or `offline` using `updatedAt` freshness.
 - Failed polling keeps the last good state or initial mock fallback.
 
+5-person People/Presence MVP added in commit `b68dd49`:
+
+- People panel shows a current-user `You` card separately from remote teammates.
+- People panel summarizes active, idle, and offline counts.
+- Remote teammate cards show role, readable room/area, freshness label, last-seen detail, and actions.
+- People filters and search have friendly empty states.
+- Command palette People search rows show the same freshness and room context.
+- Mock/fallback mode is labeled as demo team mode; API-connected empty remote state is shown as healthy empty state.
+- Room labels are resolved from destinations or shown as `Office area`; raw UUIDs are not displayed.
+- Polling remote presence no longer visibly reloads/flashes the TMX canvas loop.
+
 ## Current Boundary
 
 The API integration now includes current-user latest-position restore/save and basic polling presence. It still does not add websocket/SSE realtime infrastructure, backend map rendering, arbitrary user mutation, historical trails, or production auth/session changes.

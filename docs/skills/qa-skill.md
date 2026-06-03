@@ -92,6 +92,20 @@ Use this repeatable loop after backend/local-startup changes:
 - Stop or break the backend and confirm the page does not crash and keeps last good remote state or initial mock fallback.
 - Confirm current-user save/restore still works and polling does not overwrite local movement.
 
+## People / Team Experience Manual QA
+
+- Open People panel and confirm the current user appears in a separate `You` card.
+- Confirm the current user does not appear as a remote teammate in the list or map.
+- Confirm active / idle / offline summary counts match visible remote teammate statuses.
+- Confirm remote cards show role, readable room/area, freshness label, last-seen detail, and expected actions.
+- Confirm room labels resolve to destination names or `Office area`, never raw UUIDs.
+- Confirm command palette People results show readable room/area and freshness context.
+- Confirm People filters (`available`, `focus`, `busy`, `idle`, `offline`) work and do not trigger React/Next style overlay errors.
+- Confirm search empty states and API-valid empty remote state are clear and not presented as broken UI.
+- Confirm backend-off refresh shows fallback/demo mode gracefully.
+- Watch the map for at least 15 seconds with polling active and confirm remote presence updates do not cause visible full-map/canvas refresh or flashing.
+- Confirm current-user position save omits non-UUID frontend/mock `roomId`; backend should return controlled 400 for invalid UUID-shaped errors instead of Prisma crashes.
+
 ## Test Gaps
 
 - No automated test files were found during intake.
@@ -156,3 +170,10 @@ For commit `effb188`, implementation verification reports:
 - API/web lint, typecheck, and build commands passed.
 - Root `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - User manual QA passed for visible 4s polling, hidden 15s polling, prompt visible refresh, current-user filtering, remote update after another user's API position changes, existing virtual-office regressions, and current-user save/restore not being overwritten.
+
+For commit `b68dd49`, handoff/QA reports:
+
+- Web/API lint, typecheck, and build passed.
+- Direct HTTP verification passed: invalid `roomId=open-office-north` returned controlled 400; omitted `roomId` save succeeded.
+- User manual QA passed for current-user card, no duplicate current user, UUID-free room labels, People summary/filters/empty states, command palette People context, contact drawer, backend-off fallback, remote update after API change, and no visible canvas refresh during polling.
+- Full final regression remains recommended for movement, collision, auto-walk, chair interaction, room/zone status, and narrow layout overflow.

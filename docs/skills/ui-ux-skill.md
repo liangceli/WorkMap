@@ -22,6 +22,17 @@ UI primitives:
 
 The virtual office is designed as the primary first-screen experience for `/virtual-office`, not a marketing page. It uses full viewport canvas rendering with overlay chrome: top bar, left rail, side panels, minimap, bottom dock, and command palette.
 
+People/Presence UX added for the 5-person pilot:
+
+- Keep current user visually separate from remote teammates.
+- Use `You` labeling for the local player context.
+- Show team summary counts for active, idle, and offline states.
+- Show readable freshness labels and last-seen detail instead of raw timestamps.
+- Show readable room/destination names or `Office area`; never show raw backend UUIDs as user-facing room labels.
+- Show explicit empty/search/fallback states so API-empty, mock fallback, and search-empty cases do not look broken.
+- Command palette People rows should carry the same presence context as People panel cards.
+- Presence UI should not depend on fixed map coordinates or unfinished TMX decorations.
+
 ## UX Boundaries
 
 - Many workflow surfaces are demo-oriented and use mock/localStorage state.

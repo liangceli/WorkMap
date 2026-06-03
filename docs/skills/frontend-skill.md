@@ -60,6 +60,14 @@ Basic polling presence:
 - API-valid empty remote results are treated as an empty remote list rather than reverting to mock remote people.
 - Remote freshness maps `updatedAt` to existing statuses: recent keeps backend status, 30 seconds to 5 minutes maps to `idle`, and older than 5 minutes maps to `offline`.
 
+People/Presence UI:
+
+- `presence.ts` exposes shared status color, status label, freshness status, and freshness label helpers.
+- `OfficeSidePanel.tsx` renders the current-user card, team summary, filters, source notes, empty/search states, readable room labels, and last-seen text.
+- `OfficeCommandPalette.tsx` shows freshness/last-seen context and readable room labels in People results.
+- `OfficeMap.tsx` passes local player and presence source to the side panel.
+- `OfficeMap.tsx` stores latest remote people and selected remote id in refs so polling updates do not restart the canvas animation/image-loading effect.
+
 ## State Management
 
 No Redux/Zustand/global state library was confirmed. Current state is mostly React local state plus localStorage helpers for demo workflow and avatar selection.

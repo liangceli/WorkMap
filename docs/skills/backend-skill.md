@@ -36,6 +36,7 @@ Current-user latest-position persistence was added in commit `1a0a19f`.
 - Guard: `RequestContextGuard`.
 - Scope: authenticated `context.companyId` and `context.userId`; body `userId` is not accepted.
 - Body parser: `save-position.dto.ts` validates finite `x`/`y`, supported direction/status, boolean `isMoving`, and optional string `roomId`.
+- As of commit `b68dd49`, optional `roomId` must be UUID-shaped before persistence. DTO validation returns controlled 400 for invalid values, and service-level guard prevents invalid room ids from reaching Prisma if a future caller bypasses the DTO.
 - Service path: existing `VirtualOfficeService.persistLatestPosition`.
 - Persistence behavior: upserts one latest `VirtualOfficePosition` row for the authenticated user.
 - Validation: existing service checks map/company ownership and optional room/map/company consistency.

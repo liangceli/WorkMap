@@ -4,6 +4,13 @@ Last updated: 2026-06-03.
 
 ## Latest Accepted Work
 
+- Commit `b68dd49` (`feat(virtual-office): improve team presence experience`) completed the 5-person presence/team UX MVP around the existing polling sync.
+- People panel now separates the current user (`You`) from remote teammates, shows active/idle/offline summary counts, readable freshness/last-seen text, status filters, search/empty states, and backend/fallback/empty source notes.
+- Command palette People results now show freshness/last-seen context and friendly empty search rows.
+- Presence freshness logic is centralized in `presence.ts` through `statusFromFreshness` and `presenceFreshnessLabel`.
+- Room labels in People panel and command palette resolve through known destinations and fall back to `Office area`; raw room UUIDs are not shown.
+- Current-user position saves now omit frontend/mock non-UUID `roomId` values; backend DTO and service validation reject invalid optional `roomId` before Prisma.
+- Polling-driven remote updates no longer restart/reload the TMX canvas animation loop; `OfficeMap` reads latest remote people and selected remote id from refs.
 - Commit `effb188` (`feat(virtual-office): add polling presence sync`) added basic polling presence for the 5-person `/virtual-office` pilot.
 - `useVirtualOfficeData.ts` now periodically refreshes `GET /virtual-office/map/:officeMapId/positions` when `officeMapId`, authenticated API options, and `currentUserId` are available.
 - Visible tabs poll about every `4000ms`; hidden tabs poll about every `15000ms`, with prompt refresh when returning to visible.
@@ -44,6 +51,8 @@ Last updated: 2026-06-03.
 - Backend API room coordinates do not perfectly match the current TMX mock zones. API-backed state can show a different current workspace than fallback at the same player coordinates.
 - Browser-level save/restore closed-loop QA still needs manual confirmation; implementation verified API closed loop through shell, but browser automation was unavailable.
 - Polling presence manual QA passed, but future regression should keep checking cadence, hidden-tab behavior, current-user filtering, empty API remote list behavior, and backend failure last-good fallback.
+- Browser/manual QA passed for the People/Presence UI follow-up fixes, including UUID-free room labels, filter style overlay fix, contact drawer, remote update after API change, backend-off fallback, and no visible map refresh during polling.
+- Full final regression for movement/collision/auto-walk/chair interaction and full desktop/narrow layout sweep remains recommended.
 - Failed identical save snapshots may not retry until another meaningful player position/status/direction/room change happens.
 - The implementation test updated local dev DB position for `engineer@workmap.demo` to `x=333`, `y=444`, `direction=right`.
 - API `dev` script is now build-then-run, not watch/hot reload.
@@ -62,6 +71,8 @@ Last updated: 2026-06-03.
 - Decide whether a separate API hot-reload command is needed alongside the reliable build-then-run `dev` command.
 - Align backend office room coordinate data with the current TMX map zones, or document the mismatch as accepted MVP behavior.
 - Manually verify browser save-after-move and refresh-restore behavior, including no immediate stale PUT after restore.
+- Decide whether `break` needs a dedicated People filter or should remain visible only in all/search.
+- Consider explicit last-seen UI refresh cadence if labels need to update independently of polling.
 - Decide the production auth/session model separately from the development auth bridge.
 - Decide whether polling is sufficient for MVP or whether websocket/SSE realtime presence is needed later.
 - Replace frontend-only demo workflow state with real auth/session wiring when ready.

@@ -48,6 +48,14 @@ Reason: The 5-person pilot needs other users to appear/update without requiring 
 
 Trade-off: Polling is simple and adequate for the pilot but adds recurring API requests: about every 4 seconds when visible and 15 seconds when hidden. It reuses existing statuses for freshness instead of adding new UI labels.
 
+## 2026-06-03 - 5-Person People/Presence MVP
+
+Decision: Build the first small-team People/Presence UX around the existing polling presence model.
+
+Reason: The 5-person pilot needs readable team status, current-user clarity, last-seen context, empty/fallback states, and command-palette people context without adding realtime infrastructure.
+
+Trade-off: The UI reuses polling and existing statuses rather than adding websocket/SSE or a separate live monitoring model. Freshness labels update when polling/renders occur, not from a separate minute ticker.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.
