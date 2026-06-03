@@ -27,6 +27,7 @@ export type VirtualOfficeData = {
   remotePlayers: RemoteOfficePlayer[];
   officeMapId?: string;
   apiOptions?: ApiClientOptions;
+  currentUserId?: string;
   currentUserPosition?: PlayerState;
   source: VirtualOfficeDataSource;
 };
@@ -41,6 +42,10 @@ const MOCK_DATA: VirtualOfficeData = {
 const destinationTypes: OfficeDestination["type"][] = ["department", "room", "common_area", "desk_area", "support"];
 const statuses: UserPresenceStatus[] = ["available", "busy", "focus", "idle", "break", "offline", "on_call"];
 const directions: PlayerDirection[] = ["up", "down", "left", "right"];
+const PRESENCE_POLL_VISIBLE_MS = 4000;
+const PRESENCE_POLL_HIDDEN_MS = 15000;
+const PRESENCE_RECENT_MS = 30 * 1000;
+const PRESENCE_STALE_MS = 5 * 60 * 1000;
 
 export function useVirtualOfficeData(): VirtualOfficeData {
   const [data, setData] = useState<VirtualOfficeData>(MOCK_DATA);
@@ -56,6 +61,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
       }
 
       const apiOptions = auth.available ? auth.options : undefined;
+      const currentUserId = auth.available ? auth.userId : undefined;
       const [mapResult, navigationResult] = await Promise.all([
         getVirtualOfficeMap(apiOptions),
         listVirtualOfficeNavigation(apiOptions),
@@ -88,22 +94,11 @@ export function useVirtualOfficeData(): VirtualOfficeData {
           return;
         }
 
-        if (positionsResult.ok && Array.isArray(positionsResult.data)) {
-          const apiPlayers = positionsResult.data.map(toPlayerState).filter((player): player is PlayerState => Boolean(player));
-          nextCurrentUserPosition = auth.available
-            ? apiPlayers.find((position) => position.userId === auth.userId)
-            : undefined;
-          const players = positionsResult.data
-            .filter((position) => !auth.available || position.userId !== auth.userId)
-            .map(toRemoteOfficePlayer)
-            .filter((player): player is RemoteOfficePlayer => Boolean(player));
-
-          if (players.length > 0) {
-            nextRemotePlayers = players;
-            usedApiPart = true;
-          } else {
-            usedMockPart = true;
-          }
+        const positionsData = readPositionsData(positionsResult, currentUserId);
+        if (positionsData.ok) {
+          nextCurrentUserPosition = positionsData.currentUserPosition;
+          nextRemotePlayers = positionsData.remotePlayers;
+          usedApiPart = true;
         } else {
           usedMockPart = true;
         }
@@ -133,6 +128,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
         remotePlayers: nextRemotePlayers,
         officeMapId: nextOfficeMapId,
         apiOptions,
+        currentUserId,
         currentUserPosition: nextCurrentUserPosition,
         source,
       };
@@ -158,7 +154,120 @@ export function useVirtualOfficeData(): VirtualOfficeData {
     };
   }, []);
 
+  useEffect(() => {
+    if (!data.officeMapId || !data.apiOptions || !data.currentUserId) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let inFlight = false;
+    let requestCounter = 0;
+    let latestAppliedRequest = 0;
+    let timeoutId: number | undefined;
+    const officeMapId = data.officeMapId;
+    const apiOptions = data.apiOptions;
+    const currentUserId = data.currentUserId;
+
+    const getPollDelay = () => (document.visibilityState === "hidden" ? PRESENCE_POLL_HIDDEN_MS : PRESENCE_POLL_VISIBLE_MS);
+
+    const scheduleNextPoll = (delay = getPollDelay()) => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+
+      timeoutId = window.setTimeout(() => {
+        void refreshPositions();
+      }, delay);
+    };
+
+    const refreshPositions = async () => {
+      if (cancelled) {
+        return;
+      }
+
+      if (inFlight) {
+        scheduleNextPoll();
+        return;
+      }
+
+      inFlight = true;
+      const requestId = ++requestCounter;
+      const positionsResult = await listVirtualOfficePositions(officeMapId, apiOptions);
+
+      if (cancelled) {
+        return;
+      }
+
+      inFlight = false;
+      const positionsData = readPositionsData(positionsResult, currentUserId);
+
+      if (positionsData.ok && requestId > latestAppliedRequest) {
+        latestAppliedRequest = requestId;
+        setData((current) => {
+          if (current.officeMapId !== officeMapId || current.currentUserId !== currentUserId) {
+            return current;
+          }
+
+          return {
+            ...current,
+            remotePlayers: positionsData.remotePlayers,
+            currentUserPosition: positionsData.currentUserPosition ?? current.currentUserPosition,
+            source: current.source === "mock" ? "partial-api" : current.source,
+          };
+        });
+      } else if (!positionsData.ok && process.env.NODE_ENV === "development") {
+        console.info("virtual-office positions polling fallback", positionsData.error);
+      }
+
+      scheduleNextPoll();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+          timeoutId = undefined;
+        }
+
+        void refreshPositions();
+      } else {
+        scheduleNextPoll(PRESENCE_POLL_HIDDEN_MS);
+      }
+    };
+
+    scheduleNextPoll();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [data.apiOptions, data.currentUserId, data.officeMapId]);
+
   return data;
+}
+
+function readPositionsData(
+  positionsResult: Awaited<ReturnType<typeof listVirtualOfficePositions>>,
+  currentUserId?: string,
+):
+  | { ok: true; remotePlayers: RemoteOfficePlayer[]; currentUserPosition?: PlayerState }
+  | { ok: false; error: string } {
+  if (!positionsResult.ok || !Array.isArray(positionsResult.data)) {
+    return { ok: false, error: positionsResult.ok ? "Invalid positions response." : positionsResult.error };
+  }
+
+  const apiPlayers = positionsResult.data.map(toPlayerState).filter((player): player is PlayerState => Boolean(player));
+  const currentUserPosition = currentUserId ? apiPlayers.find((position) => position.userId === currentUserId) : undefined;
+  const remotePlayers = positionsResult.data
+    .filter((position) => !currentUserId || position.userId !== currentUserId)
+    .map(toRemoteOfficePlayer)
+    .filter((player): player is RemoteOfficePlayer => Boolean(player));
+
+  return { ok: true, remotePlayers, currentUserPosition };
 }
 
 function isApiOfficeMap(value: unknown): value is WorkMapApiOfficeMap {
@@ -210,6 +319,7 @@ function toRemoteOfficePlayer(position: WorkMapApiPlayerPosition): RemoteOfficeP
 
   return {
     ...player,
+    status: toFreshnessStatus(player.status, player.updatedAt),
     role: "Team member",
   };
 }
@@ -269,6 +379,24 @@ function toStatus<TFallback extends UserPresenceStatus | undefined>(
   fallback: TFallback,
 ): UserPresenceStatus | TFallback {
   return value && statuses.includes(value) ? value : fallback;
+}
+
+function toFreshnessStatus(status: UserPresenceStatus, updatedAt: string): UserPresenceStatus {
+  const updatedTime = Date.parse(updatedAt);
+  if (!Number.isFinite(updatedTime)) {
+    return status;
+  }
+
+  const ageMs = Math.max(0, Date.now() - updatedTime);
+  if (ageMs > PRESENCE_STALE_MS) {
+    return "offline";
+  }
+
+  if (ageMs > PRESENCE_RECENT_MS) {
+    return status === "offline" ? "offline" : "idle";
+  }
+
+  return status;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

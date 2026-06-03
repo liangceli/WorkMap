@@ -2,97 +2,109 @@
 
 ## 1. Original Task Brief
 
-Implement Player Position Persistence Closed Loop
+Implement Basic Polling Presence for 5-Person Virtual Office Pilot
 
-Goal: close the current-user position loop for `/virtual-office` in local/development verification.
+Goal: implement a complete basic presence sync feature for `/virtual-office` suitable for a 5-person small company pilot.
 
 Required behavior:
 
-- Backend exposes a guarded current-user position persistence route.
-- Frontend saves the local player's latest position safely, with throttle/debounce behavior.
-- On `/virtual-office` load, restore the current user's saved backend position when API data is available.
-- Preserve backend-off mock fallback and local movement.
-- Do not add polling, websocket, realtime presence, or broader position persistence beyond the current user's latest position save.
-- Do not modify production auth architecture, backend auth implementation, Prisma schema/migrations/seed, TMX rendering, assets, movement/collision/pathfinding/chair/contact drawer behavior, login/onboarding UI, or unrelated app features.
-- After implementation, update `docs/ai-handoff/latest-implementation.md`.
+- `/virtual-office` periodically refreshes backend positions.
+- Other users appear/update as remote players.
+- Current user remains locally controlled and must not duplicate as a remote player.
+- Remote users show sensible presence freshness based on `updatedAt`.
+- Backend/API failure gracefully keeps the last good state or fallback state.
+- No websocket, server-sent events, complex realtime infrastructure, historical trail, arbitrary-user mutation, or production auth/session work.
+- Keep movement, collision, pathfinding, chair interaction, contact drawer behavior, TMX rendering, and unrelated app surfaces unchanged.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/apps/api/src/modules/virtual-office/save-position.dto.ts` | Added a small request-body parser/validator for the current-user position save route. It validates `x`, `y`, `direction`, `isMoving`, `status`, and optional `roomId`, and returns `BadRequestException` for invalid input. |
-| `workmap/apps/api/src/modules/virtual-office/virtual-office.controller.ts` | Added guarded `PUT /virtual-office/map/:officeMapId/positions/me`. The route uses `RequestContextGuard`, takes `companyId` and `userId` from the request context, validates the body, calls the existing `persistLatestPosition` service method, and returns the saved position in API enum shape. |
-| `workmap/apps/web/lib/api/apiClient.ts` | Added `workMapApiPut` so frontend API wrappers can issue typed PUT requests through the same fallback-safe API client path. |
-| `workmap/apps/web/lib/api/apiTypes.ts` | Added request/response types for saving the current user's virtual-office position. |
-| `workmap/apps/web/lib/api/virtualOfficeApi.ts` | Added `saveCurrentVirtualOfficePosition`, targeting the new current-user positions route. |
-| `workmap/apps/web/lib/api/developmentApiAuth.ts` | Extended the development auth cache/result to include `userId`, so the frontend can identify the current user's position from the positions list without creating a production session model. |
-| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | Exposes `officeMapId`, authenticated API options, and the current user's API position. It also filters the current user out of remote players so the local player is not duplicated. Mock fallback remains unchanged. |
-| `workmap/apps/web/components/office/OfficeMap.tsx` | Restores the local player from the current user's saved API position on first load when available, tracks local interaction so later API data does not overwrite user movement, and saves meaningful local position changes through a throttled/debounced PUT call. Review follow-up added a restore/save guard so stale default player state from the same render cannot immediately overwrite the restored backend position. |
+| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | Added basic polling for `GET /virtual-office/map/:officeMapId/positions`, current-user filtering, remote-player updates, visibility-aware polling cadence, last-good failure behavior, and freshness mapping from `updatedAt` into existing presence statuses. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA and Project Context & Docs. |
 
-Pre-existing workspace note:
+Pre-existing workspace notes:
 
-- `docs/references/` is still untracked and was not modified for this task.
+- `docs/references/` remains untracked and was not modified for this task.
 
 ## 3. Implementation Summary
 
-The backend now has a guarded current-user latest-position save endpoint:
+Implemented the basic polling presence layer inside `useVirtualOfficeData`.
+
+The initial load still fetches virtual-office map, navigation, and positions. Once both authenticated API options and `officeMapId` are available, a second effect starts polling the existing positions read endpoint:
 
 ```text
-PUT /virtual-office/map/:officeMapId/positions/me
+GET /virtual-office/map/:officeMapId/positions
 ```
 
-The endpoint does not accept or trust a body `userId`; it saves against the authenticated request context. The existing `VirtualOfficeService.persistLatestPosition` handles company/map/room validation and upserts the latest position.
+Polling updates only the API-derived presence data:
 
-The frontend now:
+- `remotePlayers`
+- `currentUserPosition` for restore support when available
+- `source` when positions become API-backed after fallback
 
-- obtains development auth as before, now including the current `userId`;
-- loads map/navigation/positions through the existing fallback-safe API path;
-- identifies the current user's saved position from the positions response;
-- restores the local player once on `/virtual-office` load if no local movement has already happened;
-- excludes the current user's API position from remote players;
-- saves meaningful local player changes to the backend with throttling/debouncing;
-- logs development-only save failures and continues local/mock behavior if API auth/backend is unavailable.
-
-Review follow-up:
-
-- Fixed a restore/save sequencing risk in `OfficeMap.tsx`.
-- When the API saved position arrives, the restore effect now records a restore guard snapshot.
-- The save effect skips any stale render snapshot that does not yet match the restored snapshot.
-- Once the restored player state is rendered, the guard clears and normal save behavior resumes.
-- This prevents an old/default local coordinate from being PUT after restore and racing against the restored coordinate.
+`OfficeMap.tsx` movement/rendering logic was not changed for this task. The local player remains controlled by local state; polling only changes `officeData.remotePlayers` and therefore updates other users.
 
 ## 4. User-Visible Changes
 
-In local development, a user opening `/virtual-office` with a working backend/dev-token path can now return to their previously saved position instead of always starting from the default local mock coordinate.
+In local development with backend auth available, other seeded/demo users can now appear and update in `/virtual-office` without refreshing the page.
 
-After moving, interacting with chairs, or changing direction/status in the virtual office, the current user's latest position can be persisted to the backend. If the backend is down or auth fails, the page still renders and local movement continues with mock/fallback behavior.
+When another user's saved backend position changes, that remote player updates on the next polling cycle. The current user is filtered out of remote players, so the local player should not appear twice.
 
-No production auth UI, login/onboarding flow, map rendering, movement rules, websocket/realtime behavior, or position-sharing model was added.
+Remote users now reflect simple freshness:
+
+- Updated within 30 seconds: keep backend status.
+- Updated between 30 seconds and 5 minutes: show `idle` unless already `offline`.
+- Older than 5 minutes: show `offline`.
+
+If API positions are available but there are no other users, the remote player list becomes empty. Mock remote users are fallback only when API positions are unavailable or unsafe.
 
 ## 5. Technical Notes
 
-- Save route is guarded by `RequestContextGuard` and scoped to `context.companyId` / `context.userId`.
-- DTO validation is intentionally minimal and local to the virtual-office module; no new dependencies were added.
-- `workMapApiPut` mirrors the existing GET/POST client behavior and returns `ApiResult<T>` so failed saves can degrade without breaking the page.
-- Position saves are skipped until both `officeMapId` and authenticated `apiOptions` are available.
-- Save snapshots round `x` and `y`, compare against the last persisted snapshot, and only save when distance changes by at least `8px` or direction/status/movement/room changes.
-- Save attempts are throttled at `2500ms`; pending saves are rescheduled as the player changes.
-- Restore is one-time per mount and is skipped if the local player has already been touched by keyboard movement, auto-walk, or chair interaction.
-- Current-user restore preserves the local frontend player identity/avatar and applies saved `x`, `y`, `direction`, `status`, and optional `roomId`.
-- Restore/save ordering is protected by `restorePersistGuardRef`: after restore, stale snapshots from the pre-restore render are ignored until the rendered `player` matches the restored snapshot.
+Polling strategy:
+
+- Visible tab interval: `4000ms`.
+- Hidden tab interval: `15000ms`.
+- Polling starts only when `officeMapId`, authenticated `apiOptions`, and `currentUserId` are all available.
+- Polling uses the existing `listVirtualOfficePositions` wrapper and does not add new dependencies.
+
+Visibility strategy:
+
+- When the document becomes hidden, polling slows to the hidden interval.
+- When the document becomes visible again, any pending timer is cleared and positions refresh promptly.
+
+Race/failure controls:
+
+- `inFlight` prevents overlapping polling requests.
+- `requestCounter` and `latestAppliedRequest` prevent older responses from replacing newer applied data.
+- Cleanup sets `cancelled`, clears the active timer, and removes the `visibilitychange` listener.
+- Failed polling responses log a development-only message and keep the last good `remotePlayers`.
+- If initial API positions fail before any good state exists, the existing mock fallback remains.
+
+Current-user behavior:
+
+- Development auth now supplies `currentUserId` from the existing auth bridge.
+- Positions matching `currentUserId` are excluded from `remotePlayers`.
+- The current user's polled position is exposed only as `currentUserPosition`, preserving existing restore-on-load behavior.
+- Polling does not mutate local player movement state and does not overwrite in-progress local movement.
+
+Remote-player behavior:
+
+- Backend positions for users other than `currentUserId` are mapped into existing `RemoteOfficePlayer` shape.
+- The existing status UI is reused; freshness maps stale remote users into `idle`/`offline` rather than adding a new UI surface.
+- API-valid empty remote results are treated as a valid empty remote list, not a reason to show mock people.
 
 ## 6. Verification Results
 
 Commands run from `workmap/`:
 
 ```powershell
-pnpm --filter @workmap/api lint
-pnpm --filter @workmap/api typecheck
-pnpm --filter @workmap/api build
 pnpm --filter @workmap/web lint
 pnpm --filter @workmap/web typecheck
 pnpm --filter @workmap/web build
+pnpm --filter @workmap/api lint
+pnpm --filter @workmap/api typecheck
+pnpm --filter @workmap/api build
 pnpm lint
 pnpm typecheck
 pnpm build
@@ -101,38 +113,13 @@ pnpm build
 Results:
 
 - All commands passed.
-- `pnpm --filter @workmap/web build` and `pnpm build` both emitted the existing warning that the Next.js ESLint plugin was not detected in ESLint config.
+- `pnpm --filter @workmap/web build` and `pnpm build` emitted the existing warning that the Next.js plugin was not detected in ESLint config.
 
-API closed-loop verification:
+Manual/browser verification:
 
-- Started the built API temporarily on `http://127.0.0.1:3001`.
-- Confirmed `GET /health` returned `ok`.
-- Requested `POST /auth/dev-token` for `engineer@workmap.demo` / `workmap-demo-company`.
-- Requested `GET /virtual-office/map`.
-- Requested `PUT /virtual-office/map/:officeMapId/positions/me` with `x=333`, `y=444`, `direction=right`, `isMoving=false`, `status=available`.
-- Requested `GET /virtual-office/map/:officeMapId/positions`.
-- Confirmed the same `userId` read back `x=333`, `y=444`, `direction=right`.
-- `closedLoopOk=true`.
-
-Browser/runtime verification:
-
-- No in-app Browser or Playwright dependency was available in this session.
-- A short-lived web startup probe on port `3000` was attempted but timed out in the local `npx next start` startup chain.
-- Port/process cleanup was checked afterward; no `3000` listener remained, and the temporary `3001` process was cleaned up.
-- Full browser movement/save/restore verification remains a manual QA item.
-
-Review follow-up verification:
-
-```powershell
-pnpm --filter @workmap/web lint
-pnpm --filter @workmap/web typecheck
-pnpm --filter @workmap/web build
-```
-
-Results:
-
-- All three commands passed after the restore/save guard fix.
-- `pnpm --filter @workmap/web build` again emitted the existing Next.js ESLint plugin warning.
+- Not completed in this session.
+- No long-running dev server commands were run as blocking verification.
+- Full browser checks for Network polling cadence, visibility behavior, multi-user update, and failure fallback remain manual QA items.
 
 ## 7. Manual QA Suggestions
 
@@ -152,33 +139,31 @@ http://localhost:3000/virtual-office
 Suggested checks:
 
 - Confirm backend `GET http://localhost:3001/health` returns `ok`.
-- Complete or simulate the existing demo onboarding/login flow.
+- Complete or simulate existing demo login/onboarding.
 - Open `/virtual-office`.
-- Confirm network requests include development auth:
-  - `GET /virtual-office/map`
-  - `GET /virtual-office/navigation`
-  - `GET /virtual-office/map/:officeMapId/positions`
-  - `PUT /virtual-office/map/:officeMapId/positions/me`
-- Move the local player, wait at least `2.5s`, and confirm the PUT save occurs.
-- Refresh `/virtual-office` and confirm the local player restores to the saved backend position.
-- Confirm the current user is not duplicated as a remote player.
-- Stop or break the backend/auth and confirm `/virtual-office` still renders with mock fallback.
-- Re-check movement, collision, double-click auto-walk, chair sit/stand interaction, and contact drawer behavior.
+- Confirm initial map/navigation/positions requests include Bearer auth.
+- Confirm positions polling repeats about every 4 seconds while the tab is visible.
+- Confirm the current user's `userId` does not appear as a remote player.
+- Update another seeded user's position through dev-token/API calls and confirm that remote player updates on the next poll.
+- Confirm API-valid empty remote positions show no remote people instead of mock people.
+- Confirm updated remote users show recent/backend status, 30s-5m old users show `idle`, and older-than-5m users show `offline`.
+- Hide/switch away from the tab and confirm polling slows; return to the tab and confirm a prompt refresh.
+- Stop or break the backend and confirm the page does not crash and keeps last good remote state or initial mock fallback.
+- Re-check WASD/arrow movement, collision, double-click auto-walk, chair sit/stand, contact drawer, room/zone status, desktop layout, and narrow layout.
+- Confirm current-user position save/restore still works and polling does not overwrite local movement.
 
 ## 8. Risks / Notes
 
-- Browser-level save/restore was not fully automated in this session because no Browser/Playwright tool was available and the local web startup probe timed out.
-- The review-identified restore/save race has been addressed with a guard, but should still be manually confirmed in browser Network timing by ensuring no immediate PUT of the old/default coordinate occurs after API restore.
-- Position persistence is latest-position only for the current user; no realtime sharing, polling, websocket, or historical trail was added.
-- Save cadence is conservative but still writes direction/status/room changes even if distance is small.
-- Restore only happens once per mount. If backend data changes after the user starts moving locally, it intentionally does not overwrite the local player.
-- The implementation assumes `POST /auth/dev-token` returns a stable seeded user id in local development.
-- The task's API closed-loop test updated the local dev database position for `engineer@workmap.demo` to `x=333`, `y=444`, `direction=right`.
+- Browser-level polling/manual multi-user behavior has not yet been verified in this session.
+- Freshness mapping intentionally reuses existing statuses; there is no separate "last seen" label in UI.
+- Hidden-tab polling slows rather than fully pausing, so very long hidden sessions can still make occasional requests.
+- API-valid empty positions now produce an empty remote list; this is intentional because mock people should only represent fallback.
+- Last-good behavior is stateful only for the mounted page; a full reload with backend unavailable returns to normal mock fallback.
 - `docs/references/` remains an unrelated untracked workspace change.
 
 ## 9. Docs Update Suggestions
 
-- `docs/skills/api-contract-skill.md`: record the new guarded `PUT /virtual-office/map/:officeMapId/positions/me` contract, request body, response body, and auth requirement.
-- `docs/skills/backend-skill.md`: note that virtual-office latest-position persistence uses `RequestContextGuard` and existing `persistLatestPosition` upsert semantics.
-- `docs/skills/deployment-skill.md`: note manual local verification commands and that frontend should be verified on `localhost:3000` while backend API remains `localhost:3001`.
-- `docs/skills/project-summary.md`: record that `/virtual-office` now supports API-backed current-user restore/save in development while preserving mock fallback.
+- `docs/skills/api-contract-skill.md`: record that `/virtual-office` now relies on repeated `GET /virtual-office/map/:officeMapId/positions` for basic polling presence.
+- `docs/skills/project-summary.md`: note that `/virtual-office` supports simple polling-based multi-user presence for the 5-person pilot.
+- `docs/skills/current-status.md`: record current status as polling presence implemented, browser/manual QA pending.
+- `docs/skills/deployment-skill.md`: record manual local verification expectations: frontend on `localhost:3000`, backend on `localhost:3001`, visible polling about every 4 seconds, hidden polling about every 15 seconds.
