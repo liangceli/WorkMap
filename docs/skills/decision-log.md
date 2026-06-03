@@ -40,6 +40,14 @@ Reason: Local virtual-office verification needed a complete loop where the authe
 
 Trade-off: This is latest-position-only and scoped to the current request context. It intentionally avoids polling, websocket realtime presence, historical position trails, arbitrary user mutation, production auth changes, and TMX/movement behavior changes.
 
+## 2026-06-03 - Basic Polling Presence
+
+Decision: Add basic polling presence through repeated reads of the existing virtual-office positions endpoint.
+
+Reason: The 5-person pilot needs other users to appear/update without requiring websocket/SSE infrastructure.
+
+Trade-off: Polling is simple and adequate for the pilot but adds recurring API requests: about every 4 seconds when visible and 15 seconds when hidden. It reuses existing statuses for freshness instead of adding new UI labels.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

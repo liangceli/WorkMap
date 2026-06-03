@@ -50,9 +50,19 @@ Current-user latest-position persistence added in commit `1a0a19f`:
 - Backend-off/auth-off paths continue to render with mock fallback and local movement.
 - Restore happens once per mount and does not overwrite local movement after the player has been touched.
 
+Basic polling presence added in commit `effb188`:
+
+- Remote positions refresh through repeated `GET /virtual-office/map/:officeMapId/positions`.
+- Visible tabs poll about every 4 seconds.
+- Hidden tabs poll about every 15 seconds.
+- Current user is filtered out and remains locally controlled.
+- Other users update as remote players on polling cycles.
+- Stale remote users map to `idle` or `offline` using `updatedAt` freshness.
+- Failed polling keeps the last good state or initial mock fallback.
+
 ## Current Boundary
 
-The API integration now includes current-user latest-position restore/save. It still does not add polling, websocket, realtime presence, backend map rendering, arbitrary user mutation, historical trails, or production auth/session changes.
+The API integration now includes current-user latest-position restore/save and basic polling presence. It still does not add websocket/SSE realtime infrastructure, backend map rendering, arbitrary user mutation, historical trails, or production auth/session changes.
 
 The canvas source remains `/maps/workmap2.tmx`; do not use backend `OfficeMap.mapData` as the frontend canvas source unless a future task explicitly changes that architecture.
 

@@ -50,11 +50,21 @@ Current-user position persistence:
 - `OfficeMap.tsx` saves meaningful local changes with throttled/debounced PUT calls.
 - Restore/save guard logic prevents stale default position snapshots from overwriting a just-restored backend position.
 
+Basic polling presence:
+
+- `useVirtualOfficeData.ts` polls positions after authenticated API setup.
+- Visible interval is about 4 seconds; hidden interval is about 15 seconds.
+- Polling updates `remotePlayers` and `currentUserPosition`, not local movement state.
+- `document.visibilityState`, an in-flight guard, request counters, timeout cleanup, and a `visibilitychange` listener manage cadence and stale responses.
+- Failed polling responses keep the last good state or fallback.
+- API-valid empty remote results are treated as an empty remote list rather than reverting to mock remote people.
+- Remote freshness maps `updatedAt` to existing statuses: recent keeps backend status, 30 seconds to 5 minutes maps to `idle`, and older than 5 minutes maps to `offline`.
+
 ## State Management
 
 No Redux/Zustand/global state library was confirmed. Current state is mostly React local state plus localStorage helpers for demo workflow and avatar selection.
 
-`useVirtualOfficeData.ts` performs a one-time async load on mount with a cancellation flag. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; no polling or websocket listeners were added.
+`useVirtualOfficeData.ts` performs a one-time initial async load on mount with a cancellation flag, then starts polling positions when authenticated API context is available. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; no websocket listeners were added.
 
 Development API auth token data is cached in localStorage under `workmap.devApiAuth`. The normal login/onboarding workflow remains demo-only and is not production auth.
 

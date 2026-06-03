@@ -137,6 +137,7 @@ QA-confirmed local API reads with Bearer token:
 - `GET http://localhost:3001/virtual-office/map/:officeMapId/positions` returned 200 and 5 positions.
 - Browser DevTools confirmed `/virtual-office/map` and `/virtual-office/navigation` requests included `Authorization: Bearer ...`.
 - API closed-loop verification for `1a0a19f` confirmed `PUT /virtual-office/map/:officeMapId/positions/me` saved `x=333`, `y=444`, `direction=right` and a follow-up positions read returned the same values for the same user.
+- Commit `effb188` reuses repeated `GET /virtual-office/map/:officeMapId/positions` calls for basic polling presence; no new backend route was added.
 
 ## Frontend Virtual Office Data Loader
 
@@ -156,4 +157,4 @@ Important contract assumptions:
 
 ## Important Gaps
 
-- No polling, websocket, realtime position sync, historical position trail, or arbitrary-user position mutation contract has been added.
+- No websocket/SSE realtime position sync, historical position trail, or arbitrary-user position mutation contract has been added.

@@ -33,6 +33,8 @@ Database setup:
 - With backend/API available, Network should show `/virtual-office/map`, `/virtual-office/navigation`, and `/virtual-office/map/:officeMapId/positions` attempts.
 - In local development, Network should show `POST /auth/dev-token` before virtual-office read calls when no valid cached token exists.
 - In local development with backend and seed data available, virtual-office read calls should include `Authorization: Bearer <token>`.
+- Positions polling should repeat about every 4 seconds while the tab is visible.
+- Positions polling should slow to about every 15 seconds while the tab is hidden and refresh promptly when visible again.
 - Console should report `virtual-office API auth available: yes (dev-token)` or `yes (cache)` for authenticated development reads, or `no` when fallback is expected.
 - Console should report `virtual-office data source: api`, `partial-api`, or `mock fallback` according to API availability and validation.
 - Valid API rooms, destinations, and remote players should display safely; invalid or empty API parts should fall back safely.
@@ -76,6 +78,19 @@ Use this repeatable loop after backend/local-startup changes:
 - Refresh `/virtual-office` and confirm the player restores to the newly saved position.
 - Test chair sit/stand and room/status changes; confirm saves remain reasonable and page stays stable.
 - Stop backend or break auth; confirm page still renders with mock fallback and local movement.
+
+## Polling Presence Manual QA
+
+- With backend and frontend running, open `http://localhost:3000/virtual-office`.
+- Confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds in a visible tab.
+- Hide/switch away from the tab and confirm polling slows to about every 15 seconds.
+- Return to the tab and confirm a prompt positions refresh.
+- Confirm the current user's `userId` does not render as a remote player.
+- Update another seeded user's position through dev-token/API calls and confirm that remote player updates on the next poll.
+- Confirm API-valid empty remote positions show no remote people rather than mock people.
+- Confirm freshness windows: under 30 seconds keeps backend status, 30 seconds to 5 minutes maps to `idle`, and older than 5 minutes maps to `offline`.
+- Stop or break the backend and confirm the page does not crash and keeps last good remote state or initial mock fallback.
+- Confirm current-user save/restore still works and polling does not overwrite local movement.
 
 ## Test Gaps
 
@@ -135,3 +150,9 @@ For commit `1a0a19f`, implementation verification reports:
 - API closed-loop test passed: dev token, PUT current-user position, and GET positions readback returned matching `x=333`, `y=444`, `direction=right` for the same user.
 - Follow-up web lint/typecheck/build passed after the restore/save guard fix.
 - Browser movement/save/restore remains a manual QA item because browser automation was unavailable and local web startup probe timed out.
+
+For commit `effb188`, implementation verification reports:
+
+- API/web lint, typecheck, and build commands passed.
+- Root `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- User manual QA passed for visible 4s polling, hidden 15s polling, prompt visible refresh, current-user filtering, remote update after another user's API position changes, existing virtual-office regressions, and current-user save/restore not being overwritten.

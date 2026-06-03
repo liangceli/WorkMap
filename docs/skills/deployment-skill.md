@@ -61,6 +61,7 @@ These override the seeded demo identity used by the frontend development auth br
 5. Open `http://localhost:3000/virtual-office`.
 6. Confirm development auth and virtual-office read requests target backend port 3001.
 7. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
+8. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
 
 ## Deployment Caution
 
