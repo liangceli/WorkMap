@@ -28,6 +28,8 @@ Backend exposes latest positions through `GET /virtual-office/map/:officeMapId/p
 
 Current-user latest position can now be saved through `PUT /virtual-office/map/:officeMapId/positions/me`. This is a latest-position persistence loop for the authenticated current user only.
 
+Dashboard pilot readiness now also reads virtual-office positions as a status snapshot. This should remain a lightweight readiness/read path and should not replace the polling model used by `/virtual-office`.
+
 ## Basic Polling Presence
 
 Commit `effb188` added basic polling presence for the 5-person pilot.

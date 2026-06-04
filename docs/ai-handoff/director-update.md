@@ -2,19 +2,19 @@
 
 ## 1. Completed Task
 
-Pilot Auth + Privacy/Compliance Boundary MVP was implemented.
+Pilot Deployment + Dashboard/Reports/Compliance QA Pass was completed and accepted in commit `79ac906` (`feat: add pilot readiness dashboard and reports QA`).
 
 ## 2. Accepted Changes
 
-- Added `POST /auth/pilot-login` with PBKDF2 password verification and backend-issued JWT response.
-- Added `WORKMAP_PILOT_PASSWORD_HASH` documentation.
-- Added browser pilot session storage under `workmap.pilotSession`.
-- Added unified API auth resolver: pilot session first, development dev-token fallback second.
-- Converted `/login` into a pilot sign-in surface with session display and logout/session clear.
-- AppShell now shows pilot session/role context and logout.
-- `/virtual-office` now prefers pilot Bearer auth while preserving save/restore/polling behavior.
-- Compliance page/panel now use pilot transparency language and existing backend policy/acknowledgement APIs.
-- People panel and compliance copy explain visible presence/location/status/freshness and what WorkMap does not monitor.
+- `.env.example` now documents pilot startup expectations and minimum local/deployment variables.
+- Added `docs/ai-handoff/pilot-release-checklist.md` with setup, startup, health checks, page checks, and 5-user virtual-office regression steps.
+- Added frontend health API typing/wrapper for `GET /health`.
+- Aligned reports frontend types with backend `/reports/usage-summary`.
+- AppShell now handles missing/unclear pilot session state more clearly and links back to `/login`.
+- Dashboard now loads health, auth context, virtual-office positions, compliance policy, and reports usage summary as a pilot readiness view.
+- Reports now loads authenticated current-user app/domain usage summary, explains sparse data, and labels department aggregate rows as pilot examples.
+- Compliance was inspected and preserved on the existing transparency/acknowledgement boundary.
+- Virtual-office core files were intentionally unchanged during this pass.
 
 ## 3. Verification Summary
 
@@ -30,25 +30,29 @@ Reported passing from `workmap/`:
 - `pnpm --filter @workmap/api typecheck`
 - `pnpm --filter @workmap/api build`
 
-Verification passed: web/API lint, typecheck, and build; HTTP smoke for pilot login, `/auth/me`, compliance policy, compliance acknowledgement, and authenticated virtual-office reads; browser/runtime QA for login, session localStorage, compliance acknowledgement marker, virtual-office Bearer requests, People privacy copy, logout clear, and backend-off fallback. User manual acceptance passed.
+HTTP smoke passed for API `/health` and web `/dashboard`, `/reports`, and `/compliance`.
+
+An initial `/virtual-office` smoke returned 500 from an already-running stale Next process. After a clean backend/frontend restart, user QA confirmed `/virtual-office` worked and passed regression checks for map load, local avatar, save/restore, polling, People panel, contact drawer, WASD/collision, auto-walk, chair interaction, room labels, and desktop/narrow layouts.
+
+User manual acceptance also passed for pilot login, AppShell session refresh clarity, Dashboard readiness cards, Reports API/sparse-data states, and Compliance policy/acknowledgement continuity.
 
 ## 4. Remaining Risks
 
-- Pilot auth is not production SSO/OAuth/MFA/password reset or tenant credential lifecycle.
-- Production pilot login requires `WORKMAP_PILOT_PASSWORD_HASH`.
-- Compliance policy endpoint does not return acknowledgement status; frontend stores a browser marker after successful acknowledgement.
-- App route protection remains lightweight; no full route guard/permission overhaul was added.
-- `artresource.tiled-session` and `docs/references/` are unrelated workspace changes.
+- Dashboard can show mixed live API and pilot example/sample states; labels must stay explicit.
+- Reports are current-user summaries only; team/department aggregate reporting still needs a backend contract.
+- Compliance acknowledgement readback still relies on a browser marker because `GET /compliance/policy` does not return acknowledgement status.
+- AppShell improves clarity but is not full production route protection.
+- Stale dev servers can produce false smoke failures; clean restart should remain part of release QA.
+- `docs/references/` remains unrelated untracked reference material.
 
 ## 5. Updated Docs
 
 - `docs/skills/current-status.md`
 - `docs/skills/api-contract-skill.md`
-- `docs/skills/auth-skill.md`
-- `docs/skills/backend-skill.md`
 - `docs/skills/deployment-skill.md`
 - `docs/skills/frontend-skill.md`
 - `docs/skills/ui-ux-skill.md`
+- `docs/skills/realtime-presence-skill.md`
 - `docs/skills/qa-skill.md`
 - `docs/skills/project-summary.md`
 - `docs/skills/decision-log.md`
@@ -56,7 +60,8 @@ Verification passed: web/API lint, typecheck, and build; HTTP smoke for pilot lo
 
 ## 6. Recommended Next Tasks
 
-- Decide production auth roadmap: SSO/OAuth, MFA, password reset, tenant credential lifecycle, route guards.
-- Consider adding acknowledgement status to `GET /compliance/policy`.
-- Add automated tests for pilot login, session expiry/clear, auth resolver priority, compliance acknowledgement fallback, and virtual-office Bearer auth path.
-- Keep final narrow-layout and interaction regression in future release checks.
+- Add backend team/department aggregate reports so Dashboard/Reports can remove pilot-example aggregate rows.
+- Add acknowledgement status to `GET /compliance/policy`.
+- Add production-grade route guards/session enforcement when moving beyond pilot readiness.
+- Automate the pilot release checklist where practical.
+- Keep clean-restart smoke and `/virtual-office` regression checks in future accepted-task QA.

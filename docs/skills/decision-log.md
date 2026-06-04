@@ -64,6 +64,14 @@ Reason: The 5-person pilot needed to move beyond frontend-only demo state while 
 
 Trade-off: This is controlled pilot auth, not production SSO/OAuth/MFA/password-reset/tenant-admin credential lifecycle. Compliance acknowledgement readback uses a browser marker after successful backend acknowledgement because the policy endpoint does not yet return acknowledgement status.
 
+## 2026-06-04 - Pilot Readiness Dashboard And Reports Boundary
+
+Decision: Use existing health, auth, virtual-office positions, compliance policy, and current-user usage-summary APIs to make Dashboard and Reports pilot-readiness surfaces, while labeling sample/aggregate sections as pilot examples.
+
+Reason: The pilot needed a deployable, verifiable readiness view without expanding backend scope during the QA pass.
+
+Trade-off: This avoids adding a new team aggregate reports backend contract. Dashboard and Reports can show mixed API-backed and example states, so labels and sparse-data copy are part of the product boundary.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

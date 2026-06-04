@@ -4,6 +4,14 @@ Last updated: 2026-06-04.
 
 ## Latest Accepted Work
 
+- Commit `79ac906` (`feat: add pilot readiness dashboard and reports QA`) completed the Pilot Deployment + Dashboard/Reports/Compliance QA pass.
+- `.env.example` now documents the minimum pilot startup variables and local port convention: web on `http://localhost:3000`, API on `http://localhost:3001`.
+- `docs/ai-handoff/pilot-release-checklist.md` now captures install, Prisma generate/migrate/seed, startup, health/page checks, and 5-user virtual-office regression checks.
+- AppShell now gives clearer missing-session behavior, derives role from the stored pilot session when available, limits fallback navigation before session setup, and links back to `/login`.
+- `/dashboard` now acts as a pilot readiness surface by loading API health, auth context, virtual-office presence, compliance policy, and reports usage summary with explicit fallback/error states.
+- `/reports` now loads authenticated `/reports/usage-summary`, displays current-user app/domain rows when present, explains sparse pilot data, and keeps department rows labeled as pilot examples until a team aggregate API exists.
+- Compliance was rechecked during this pass and kept on the existing backend policy/acknowledgement path and privacy boundary copy.
+- `/virtual-office` implementation files were intentionally left unchanged; clean-restart QA confirmed no 500 after stale dev processes were cleared.
 - Commit `14fb706` (`feat: add pilot auth and compliance boundary`) implemented the Pilot Auth + Privacy/Compliance Boundary MVP.
 - Backend now exposes `POST /auth/pilot-login`, using email/password/company slug, PBKDF2 password verification, timing-safe comparison, and backend-issued JWT responses aligned with the dev-token response shape.
 - Frontend stores pilot sessions in `localStorage` under `workmap.pilotSession`, clears expired sessions, maps roles into existing workflow state, and exposes logout/session clear behavior.
@@ -50,12 +58,19 @@ Last updated: 2026-06-04.
 - Monorepo scaffold is active with Next.js web, NestJS API, Prisma/Postgres schema, and shared packages.
 - Web app includes routes for login, onboarding, dashboard, employees, reports, compliance, integrations, settings, avatar debug, and `/virtual-office`.
 - `/virtual-office` renders a canvas-based `OfficeMap` using `/maps/workmap2.tmx`, office tilesets, layered avatar assets, local movement, collision detection, click/double-click navigation, chair interaction, and remote office data that can come from validated read APIs or mock fallback.
+- `/dashboard` can now show pilot readiness across API health, auth/session, remote presence, compliance policy, and reports usage.
+- `/reports` can now show authenticated current-user app/domain usage summaries from the API, with sparse-data and pilot-example labels where backend aggregate data is not available.
 - Backend exposes guarded endpoints for auth, users, companies, devices, reports, virtual office, integrations, and compliance.
 - Prisma schema contains company, department, users, devices, activity events, usage summaries, office maps, rooms, virtual office positions, monitoring policies, policy acknowledgements, integrations, and audit logs.
 - Seed data creates a demo company, users, default office map/rooms, policy, device rows, virtual office positions, usage summaries, integrations, and an audit event.
 
 ## Known Issues / Risks
 
+- Dashboard can show a mixed state of live API checks and pilot example/sample sections; labels must remain explicit.
+- Reports are currently current-user usage summaries only. Team/department aggregate reporting remains a future backend contract.
+- Compliance acknowledgement readback is still not returned by `GET /compliance/policy`; frontend readability relies on a browser marker after successful acknowledgement.
+- AppShell improves session clarity but is not full production route protection.
+- A stale running Next dev process produced a false `/virtual-office` 500 during automated smoke; clean restart of API/frontend resolved it and should be part of future release smoke.
 - Backend API room coordinates do not perfectly match the current TMX mock zones. API-backed state can show a different current workspace than fallback at the same player coordinates.
 - Browser-level save/restore closed-loop QA still needs manual confirmation; implementation verified API closed loop through shell, but browser automation was unavailable.
 - Polling presence manual QA passed, but future regression should keep checking cadence, hidden-tab behavior, current-user filtering, empty API remote list behavior, and backend failure last-good fallback.
@@ -80,6 +95,10 @@ Last updated: 2026-06-04.
 
 ## Recommended Next Tasks
 
+- Add a backend team/department aggregate reports endpoint so dashboard/reports can remove pilot-example aggregate rows.
+- Add compliance acknowledgement status to `GET /compliance/policy`.
+- Add production-grade route guards/session enforcement when moving beyond pilot readiness.
+- Use `docs/ai-handoff/pilot-release-checklist.md` as the repeatable pre-release smoke checklist, including a clean restart before `/virtual-office` checks.
 - Decide whether a separate API hot-reload command is needed alongside the reliable build-then-run `dev` command.
 - Align backend office room coordinate data with the current TMX map zones, or document the mismatch as accepted MVP behavior.
 - Manually verify browser save-after-move and refresh-restore behavior, including no immediate stale PUT after restore.

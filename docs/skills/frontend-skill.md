@@ -40,6 +40,11 @@ Important areas:
 
 Known API wrappers include auth, users, reports, integrations, compliance, and virtual office. Some pages/components still rely on mock data instead of API calls.
 
+Pilot readiness API wrappers:
+
+- `lib/api/healthApi.ts` wraps `GET /health`.
+- Reports API types now match backend `/reports/usage-summary` with `apps[]` and `websites[]` rows containing active/idle seconds.
+
 For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring stored pilot Bearer session before development dev-token fallback, then passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
 
 Pilot login/session:
@@ -49,6 +54,15 @@ Pilot login/session:
 - `pilotSession.ts` stores `workmap.pilotSession`, clears expired sessions, exposes Bearer API options, maps backend roles to workflow roles, and clears session on logout.
 - `apiAuth.ts` prefers pilot session, then development dev-token/dev-cache fallback.
 - `AppShell` shows pilot session state, role/session context, backend Bearer messaging, and logout behavior.
+- AppShell now prefers the pilot session role when present, limits fallback navigation before session/workflow setup, and links unclear/missing-session states back to `/login`.
+
+Dashboard and reports readiness:
+
+- `components/dashboard/ManagerOverviewPanel.tsx` is now a pilot readiness surface for API health, auth context, virtual-office presence, compliance policy, and reports usage summary.
+- Dashboard should keep live API status, fallback state, sparse data, and pilot example/sample labels visually distinct.
+- `components/reports/ReportSummaryPanel.tsx` loads authenticated `/reports/usage-summary` data for current-user app/domain rows.
+- Reports should explain sparse pilot data when API rows are empty and keep department/team rows labeled as pilot examples until a backend aggregate endpoint exists.
+- `AppUsageTable.tsx` and `WebsiteUsageTable.tsx` support optional titles so API-backed rows and example rows can be labeled clearly.
 
 Current-user position persistence:
 

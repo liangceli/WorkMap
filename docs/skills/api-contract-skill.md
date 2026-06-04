@@ -79,6 +79,36 @@ Development overrides:
 - `GET /compliance/policy`
 - `POST /compliance/policy/:policyId/acknowledgement`
 
+## Health Contract
+
+`GET /health` returns API availability for pilot readiness checks.
+
+Expected frontend type:
+
+- `status: "ok" | string`
+- `service: string`
+- `timestamp: string`
+
+The Dashboard uses this endpoint to distinguish live API readiness from fallback/error copy.
+
+## Reports Contract
+
+`GET /reports/usage-summary` returns the authenticated current user's usage summary.
+
+`GET /reports/usage-summary?userId=:userId` can request a specific user when allowed by backend context.
+
+Frontend type:
+
+- `userId: string`
+- `apps[]`: `appName`, `category`, `productivityLabel`, `activeSeconds`, `idleSeconds`
+- `websites[]`: `domain`, `category`, `productivityLabel`, `activeSeconds`, `idleSeconds`
+
+Current reporting boundary:
+
+- Dashboard and Reports use this route for API-backed app/domain rows.
+- Department/team aggregate rows are not yet backed by a team aggregate endpoint and must remain labeled as pilot examples.
+- Sparse or empty pilot seed data should be presented as sparse data, not as a broken API.
+
 ## Pilot Auth Contract
 
 `POST /auth/pilot-login` request body:

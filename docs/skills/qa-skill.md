@@ -25,6 +25,12 @@ Database setup:
 ## Manual QA Checklist
 
 - `/login` creates expected demo role workflow.
+- `/login` creates a pilot session with seeded pilot credentials when the backend is running.
+- AppShell session state remains clear after refresh and links missing/unclear session states back to `/login`.
+- `/dashboard` renders API health, auth/session, remote presence, compliance, and reports readiness with clear live/fallback/error labels.
+- `/reports` renders API-backed current-user app/domain rows when available, or clear sparse-data copy when no rows exist.
+- `/reports` and `/dashboard` keep department/team aggregate rows labeled as pilot examples until a backend aggregate endpoint exists.
+- `/compliance` still loads backend policy and acknowledgement flows under pilot Bearer auth.
 - Onboarding routes advance in expected order.
 - `/virtual-office` redirects to avatar onboarding when avatar is missing.
 - `/virtual-office` loads TMX map and tileset images.
@@ -120,6 +126,20 @@ Use this repeatable loop after backend/local-startup changes:
 - Stop backend and refresh `/compliance` and `/virtual-office`; confirm safe fallback copy and no runtime crash.
 - Check desktop and narrow layouts for login panel, AppShell session area, compliance modal, and People privacy copy.
 
+## Pilot Readiness Dashboard / Reports QA
+
+- Clean-restart API on `localhost:3001` and web on `localhost:3000` before final smoke, especially if a stale dev process produced an unexpected 500.
+- Confirm `GET http://localhost:3001/health` returns 200.
+- Sign in through `/login` with seeded pilot credentials.
+- Refresh and confirm AppShell still shows understandable session/role context.
+- Open `/dashboard` and confirm API health, auth context, remote presence, compliance, and reports cards show status clearly.
+- Confirm Dashboard reports rows and pilot example rows are labeled distinctly.
+- Open `/reports` and confirm authenticated `/reports/usage-summary` data appears, or sparse pilot-data copy appears if seeded data is limited.
+- Confirm Reports does not imply screenshots, keystrokes, hidden camera/mic, private messages/email content, full URL capture, export history, or team aggregate monitoring beyond implemented scope.
+- Open `/compliance` and confirm transparency and acknowledgement behavior remain intact.
+- Open `/virtual-office` after the clean restart and run movement, position restore/save, polling, People panel, contact drawer, command palette, WASD/collision, auto-walk, chair interaction, room labels, and desktop/narrow layout regressions.
+- Use `docs/ai-handoff/pilot-release-checklist.md` as the detailed pilot pre-release checklist.
+
 ## Test Gaps
 
 - No automated test files were found during intake.
@@ -198,3 +218,10 @@ For commit `14fb706`, handoff/QA reports:
 - HTTP smoke passed for `/health`, `POST /auth/pilot-login`, `/auth/me`, `/compliance/policy`, compliance acknowledgement, and authenticated virtual-office map/navigation/positions.
 - Browser/runtime QA passed for pilot login, pilot session storage, compliance acknowledgement marker, virtual-office Bearer requests, People privacy copy, logout clear, and backend-off fallback.
 - User manual acceptance passed for login, session refresh readability, virtual-office Bearer requests, compliance acknowledgement, logout/session clear, backend-off fallback, and desktop/narrow layout checks.
+
+For commit `79ac906`, handoff/QA reports:
+
+- Web/API and root lint, typecheck, and build passed.
+- HTTP smoke passed for API `/health` and web `/dashboard`, `/reports`, and `/compliance`.
+- An initial `/virtual-office` smoke returned 500 from an already-running stale Next process; user clean-restarted backend/frontend and confirmed `/virtual-office` worked normally.
+- User manual acceptance passed for pilot login, AppShell session refresh clarity, Dashboard readiness cards, Reports API/sparse-data states, Compliance policy/acknowledgement continuity, and full `/virtual-office` regression checks.

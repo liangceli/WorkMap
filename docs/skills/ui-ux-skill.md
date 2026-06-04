@@ -37,9 +37,17 @@ Pilot auth and compliance UX:
 
 - `/login` should clearly distinguish pilot backend auth from frontend-only demo fallback.
 - App shell should make pilot Bearer session state, role, and logout action understandable.
+- Missing or unclear session states should point users back to `/login` instead of exposing the full role navigation by default.
 - Compliance surfaces should explain what WorkMap shows and what it does not monitor.
 - Privacy copy should explicitly exclude screen recording, keystroke logging, hidden camera/mic, private message/email content, passwords/form inputs, and invisible employee spying.
 - Backend-off compliance fallback should remain transparent and should not pretend acknowledgement was recorded.
+
+Dashboard/reports pilot UX:
+
+- Dashboard readiness cards should clearly separate API health, auth/session, remote presence, compliance, and reports status.
+- Reports surfaces should label API-backed rows separately from pilot example/sample rows.
+- Empty current-user usage summaries should read as sparse pilot data, not as product failure.
+- Do not imply full monitoring, screenshots, keystrokes, camera/mic, private message capture, export history, or full URL tracking unless those features are actually implemented and accepted.
 
 ## UX Boundaries
 
