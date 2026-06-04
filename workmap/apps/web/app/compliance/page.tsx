@@ -46,10 +46,10 @@ export default function CompliancePage() {
           }
         />
 
-        <WorkMapPrivacyNotice title={onboardingMode ? "First-time transparency step" : "Frontend MVP"}>
+        <WorkMapPrivacyNotice title={onboardingMode ? "First-time transparency step" : "Pilot transparency boundary"}>
           {onboardingMode
             ? "Review what WorkMap does and does not collect before entering the workspace."
-            : "This page previews policy copy and acknowledgement behavior. Real acknowledgements require backend identity, company scope, and audit logging."}
+            : "Review what is visible in WorkMap, what is not monitored, and whether the current pilot session can record acknowledgement through the backend policy API."}
         </WorkMapPrivacyNotice>
 
         <CompliancePolicyPanel />

@@ -7,7 +7,7 @@ import {
   listVirtualOfficeNavigation,
   listVirtualOfficePositions,
 } from "../../lib/api/virtualOfficeApi";
-import { getDevelopmentApiAuthOptions } from "../../lib/api/developmentApiAuth";
+import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import type {
   ApiClientOptions,
   WorkMapApiNavigationDestination,
@@ -53,7 +53,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
     let cancelled = false;
 
     async function loadVirtualOfficeData() {
-      const auth = await getDevelopmentApiAuthOptions();
+      const auth = await getWorkMapApiAuthOptions();
 
       if (process.env.NODE_ENV === "development") {
         console.info(`virtual-office API auth available: ${auth.available ? `yes (${auth.source})` : "no"}`);

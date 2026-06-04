@@ -1,5 +1,6 @@
+import { pbkdf2Sync, timingSafeEqual } from "node:crypto";
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
-import type { RequestContext, WorkMapJwtPayload } from "@workmap/auth";
+import type { RequestContext, WorkMapJwtPayload, WorkMapRole } from "@workmap/auth";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { JwtService } from "./jwt.service.js";
 
@@ -8,11 +9,19 @@ type DevTokenInput = {
   companySlug?: unknown;
 };
 
+type PilotLoginInput = DevTokenInput & {
+  password?: unknown;
+};
+
 type DevelopmentHeaderContextInput = {
   companyId: string;
   userId: string;
   role: string;
 };
+
+const TOKEN_TTL_SECONDS = 60 * 60 * 8;
+const DEFAULT_LOCAL_PILOT_PASSWORD_HASH =
+  "pbkdf2-sha256$120000$workmap-local-pilot$ogb3euHMstmx-Dp4fkSgKaZ_iaq4tnKPHWpLO5TpS_k";
 
 @Injectable()
 export class AuthService {
@@ -69,6 +78,53 @@ export class AuthService {
     };
   }
 
+  async createPilotSession(input: PilotLoginInput) {
+    const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+    const companySlug = typeof input.companySlug === "string" ? input.companySlug.trim() : input.companySlug;
+    const password = typeof input.password === "string" ? input.password : "";
+
+    if (!isValidEmail(email)) {
+      throw new BadRequestException("A valid email is required.");
+    }
+
+    if (!password) {
+      throw new BadRequestException("Password is required.");
+    }
+
+    if (companySlug !== undefined && (typeof companySlug !== "string" || !isValidCompanySlug(companySlug))) {
+      throw new BadRequestException("companySlug must be a string when provided.");
+    }
+
+    if (!verifyPilotPassword(password)) {
+      throw new UnauthorizedException("Invalid pilot login credentials.");
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email,
+        company: companySlug ? { slug: companySlug } : undefined,
+      },
+      select: {
+        id: true,
+        companyId: true,
+        email: true,
+        displayName: true,
+        role: true,
+        company: {
+          select: {
+            slug: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("Invalid pilot login credentials.");
+    }
+
+    return this.createAuthTokenResponse(user);
+  }
+
   async createDevelopmentToken(input: DevTokenInput) {
     if (process.env.NODE_ENV === "production") {
       throw new UnauthorizedException("Development token endpoint is disabled in production.");
@@ -108,8 +164,19 @@ export class AuthService {
       throw new UnauthorizedException("Development user not found.");
     }
 
+    return this.createAuthTokenResponse(user);
+  }
+
+  private createAuthTokenResponse(user: {
+    id: string;
+    companyId: string;
+    email: string;
+    displayName: string;
+    role: WorkMapRole;
+    company: { slug: string };
+  }) {
     const now = Math.floor(Date.now() / 1000);
-    const expiresAt = now + 60 * 60 * 8;
+    const expiresAt = now + TOKEN_TTL_SECONDS;
     const accessToken = this.jwt.signPayload({
       sub: user.id,
       companyId: user.companyId,
@@ -132,6 +199,31 @@ export class AuthService {
       },
     };
   }
+}
+
+function verifyPilotPassword(password: string) {
+  const configuredHash = process.env.WORKMAP_PILOT_PASSWORD_HASH?.trim();
+
+  if (!configuredHash && process.env.NODE_ENV === "production") {
+    throw new UnauthorizedException("Pilot login is not configured.");
+  }
+
+  const hash = configuredHash || DEFAULT_LOCAL_PILOT_PASSWORD_HASH;
+  const [algorithm, iterationsText, salt, expectedHash] = hash.split("$");
+
+  if (algorithm !== "pbkdf2-sha256" || !iterationsText || !salt || !expectedHash) {
+    throw new UnauthorizedException("Pilot login is not configured.");
+  }
+
+  const iterations = Number(iterationsText);
+  if (!Number.isInteger(iterations) || iterations < 100_000) {
+    throw new UnauthorizedException("Pilot login is not configured.");
+  }
+
+  const expected = Buffer.from(expectedHash, "base64url");
+  const actual = pbkdf2Sync(password, salt, iterations, expected.length, "sha256");
+
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 function isValidEmail(value: string) {

@@ -8,6 +8,11 @@ import { RequestContextGuard } from "./request-context.guard.js";
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Post("pilot-login")
+  createPilotSession(@Body() body: unknown) {
+    return this.auth.createPilotSession(isRecord(body) ? body : {});
+  }
+
   @Post("dev-token")
   createDevelopmentToken(@Body() body: unknown) {
     return this.auth.createDevelopmentToken(isRecord(body) ? body : {});

@@ -4,11 +4,13 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type PolicyAcknowledgementModalProps = {
   open: boolean;
+  busy?: boolean;
+  policyVersion?: string;
   onClose: () => void;
-  onAcknowledge: () => void;
+  onAcknowledge: () => void | Promise<void>;
 };
 
-export function PolicyAcknowledgementModal({ open, onClose, onAcknowledge }: PolicyAcknowledgementModalProps) {
+export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, onClose, onAcknowledge }: PolicyAcknowledgementModalProps) {
   if (!open) {
     return null;
   }
@@ -18,17 +20,17 @@ export function PolicyAcknowledgementModal({ open, onClose, onAcknowledge }: Pol
       <section aria-modal="true" role="dialog" aria-labelledby="policy-title" style={styles.modal}>
         <div style={styles.header}>
           <div>
-            <p style={styles.eyebrow}>Monitoring policy</p>
+            <p style={styles.eyebrow}>WorkMap visibility policy{policyVersion ? ` / ${policyVersion}` : ""}</p>
             <h2 id="policy-title" style={styles.title}>Acknowledge WorkMap visibility</h2>
           </div>
-          <button type="button" aria-label="Close policy modal" onClick={onClose} style={styles.closeButton}>
+          <button type="button" aria-label="Close policy modal" onClick={onClose} disabled={busy} style={styles.closeButton}>
             x
           </button>
         </div>
 
         <p style={styles.bodyText}>
-          WorkMap records work metadata for presence, collaboration, and role-based reporting. This MVP policy is a mock
-          frontend acknowledgement until backend audit logging and identity APIs are approved.
+          WorkMap shows presence, avatar location, workspace status, freshness, and last-seen context so teammates understand
+          the virtual office. It does not show hidden screen, keyboard, camera, microphone, or private-content monitoring.
         </p>
 
         <div style={styles.grid}>
@@ -36,10 +38,10 @@ export function PolicyAcknowledgementModal({ open, onClose, onAcknowledge }: Pol
             <h3 style={styles.smallTitle}>Collected</h3>
             <ul style={styles.list}>
               <li>Active app name</li>
-              <li>Website domain</li>
-              <li>Active/idle state</li>
-              <li>Device heartbeat</li>
-              <li>Work session timestamps</li>
+              <li>Avatar room or office area</li>
+              <li>Workspace status and freshness</li>
+              <li>Last-seen timestamp</li>
+              <li>Policy acknowledgement time</li>
             </ul>
           </div>
           <div style={styles.panel}>
@@ -55,11 +57,11 @@ export function PolicyAcknowledgementModal({ open, onClose, onAcknowledge }: Pol
         </div>
 
         <div style={styles.actions}>
-          <button type="button" onClick={onClose} style={styles.secondaryButton}>
+          <button type="button" onClick={onClose} disabled={busy} style={styles.secondaryButton}>
             Review later
           </button>
-          <button type="button" onClick={onAcknowledge} style={styles.primaryButton}>
-            Acknowledge policy
+          <button type="button" onClick={onAcknowledge} disabled={busy} style={styles.primaryButton}>
+            {busy ? "Recording..." : "Acknowledge policy"}
           </button>
         </div>
       </section>

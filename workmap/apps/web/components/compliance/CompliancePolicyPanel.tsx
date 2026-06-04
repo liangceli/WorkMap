@@ -1,62 +1,162 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PolicyAcknowledgementModal } from "./PolicyAcknowledgementModal";
+import { acknowledgeCompliancePolicy, getCompliancePolicy } from "../../lib/api/complianceApi";
+import { getWorkMapApiAuthOptions, type WorkMapApiAuthResult } from "../../lib/api/apiAuth";
+import type { WorkMapApiCompliancePolicy } from "../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
-const collectedItems = [
-  "App name",
-  "Website domain",
-  "Active / idle state",
-  "Device heartbeat",
-  "Session time",
+const visibleItems = [
+  "Presence in the virtual office",
+  "Avatar location and room/area",
+  "Workspace status and freshness",
+  "Last-seen timestamp",
+  "Policy acknowledgement timestamp",
 ];
 
-const notCollectedItems = [
-  "Keystrokes",
-  "Screenshots",
-  "Camera",
-  "Microphone",
-  "Teams message content",
-  "Outlook email body",
-  "Full URLs by default",
-  "Form inputs",
-  "Passwords",
+const notVisibleItems = [
+  "Screen recording",
+  "Keystroke logging",
+  "Hidden webcam or microphone monitoring",
+  "Private message or email content",
+  "Passwords or form inputs",
+  "Invisible employee spying",
 ];
 
 export function CompliancePolicyPanel() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [policy, setPolicy] = useState<WorkMapApiCompliancePolicy | null>(null);
+  const [authSource, setAuthSource] = useState<string | null>(null);
   const [acknowledgedAt, setAcknowledgedAt] = useState<string | null>(null);
+  const [statusText, setStatusText] = useState("Loading policy status...");
+  const [loading, setLoading] = useState(true);
+  const [acknowledging, setAcknowledging] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPolicy() {
+      const auth = await getWorkMapApiAuthOptions();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!auth.available) {
+        setLoading(false);
+        setAuthSource(null);
+        setStatusText("Sign in with pilot auth to load and record backend policy acknowledgement. Safe transparency copy is shown below.");
+        return;
+      }
+
+      setAuthSource(auth.source);
+      const policyResult = await getCompliancePolicy(auth.options);
+
+      if (cancelled) {
+        return;
+      }
+
+      setLoading(false);
+
+      if (!policyResult.ok) {
+        setPolicy(null);
+        setStatusText("Backend policy could not be loaded. Safe transparency copy is shown, and no acknowledgement is recorded.");
+        return;
+      }
+
+      setPolicy(policyResult.data);
+      const storedAcknowledgement = readAcknowledgement(auth, policyResult.data.id);
+      setAcknowledgedAt(storedAcknowledgement);
+      setStatusText(
+        storedAcknowledgement
+          ? `Policy ${policyResult.data.policyVersion} was acknowledged from this browser at ${storedAcknowledgement}.`
+          : `Backend policy ${policyResult.data.policyVersion} loaded for this pilot session.`,
+      );
+    }
+
+    void loadPolicy();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const acknowledgePolicy = async () => {
+    if (!policy) {
+      setStatusText("Policy acknowledgement needs a loaded backend policy. The transparency notice remains available for review.");
+      setModalOpen(false);
+      return;
+    }
+
+    setAcknowledging(true);
+    const auth = await getWorkMapApiAuthOptions();
+
+    if (!auth.available) {
+      setAcknowledging(false);
+      setStatusText("No active API session is available. Sign in with pilot auth before recording acknowledgement.");
+      setModalOpen(false);
+      return;
+    }
+
+    const result = await acknowledgeCompliancePolicy(policy.id, auth.options);
+    setAcknowledging(false);
+
+    if (!result.ok) {
+      setStatusText("Backend acknowledgement failed. No local-only policy acknowledgement was recorded.");
+      setModalOpen(false);
+      return;
+    }
+
+    const acknowledged = new Date(result.data.acknowledgedAt).toLocaleString();
+    setAcknowledgedAt(acknowledged);
+    writeAcknowledgement(auth, policy.id, acknowledged);
+    setStatusText(`Policy ${policy.policyVersion} acknowledged at ${acknowledged}.`);
+    setModalOpen(false);
+  };
 
   return (
     <div style={styles.stack}>
       <section style={styles.policyGrid}>
-        <PolicyList title="Collected" tone="blue" items={collectedItems} />
-        <PolicyList title="Not collected" tone="green" items={notCollectedItems} />
+        <PolicyList title="Visible in WorkMap" tone="blue" items={visibleItems} />
+        <PolicyList title="Not monitored" tone="green" items={notVisibleItems} />
+      </section>
+
+      <section style={styles.boundaryPanel}>
+        <p style={styles.panelLabel}>Role visibility boundary</p>
+        <p style={styles.panelText}>
+          Employees can understand their own presence context. Manager and owner views may show team-level office presence where API
+          guards support it, but this pilot does not claim enterprise permissions, hidden monitoring, or historical tracking trails.
+        </p>
       </section>
 
       <section style={styles.ackPanel}>
         <div>
           <p style={styles.panelLabel}>Policy acknowledgement</p>
-          <h2 style={styles.panelTitle}>{acknowledgedAt ? "Acknowledged in this browser" : "Employee notice preview"}</h2>
+          <h2 style={styles.panelTitle}>{acknowledgedAt ? "Acknowledged" : policy ? "Backend policy ready" : "Transparency notice"}</h2>
           <p style={styles.panelText}>
-            {acknowledgedAt
-              ? `Mock acknowledgement recorded locally at ${acknowledgedAt}.`
-              : "Preview the first-time notice employees will see before monitoring metadata is enabled."}
+            {loading
+              ? "Checking the current API session..."
+              : statusText}
           </p>
+          {authSource ? <p style={styles.sessionText}>API context: {authSource}</p> : null}
+          {policy ? (
+            <p style={styles.sessionText}>
+              {policy.name} / version {policy.policyVersion} / retention {policy.retentionDays} days
+            </p>
+          ) : null}
         </div>
         <button type="button" onClick={() => setModalOpen(true)} style={styles.primaryButton}>
-          Preview acknowledgement
+          {policy ? "Review and acknowledge" : "Review notice"}
         </button>
       </section>
 
       <PolicyAcknowledgementModal
         open={modalOpen}
+        busy={acknowledging}
+        policyVersion={policy?.policyVersion}
         onClose={() => setModalOpen(false)}
-        onAcknowledge={() => {
-          setAcknowledgedAt(new Date().toLocaleString());
-          setModalOpen(false);
-        }}
+        onAcknowledge={acknowledgePolicy}
       />
     </div>
   );
@@ -74,6 +174,26 @@ function PolicyList({ title, tone, items }: { title: string; tone: "blue" | "gre
       </ul>
     </section>
   );
+}
+
+function acknowledgementKey(auth: Extract<WorkMapApiAuthResult, { available: true }>, policyId: string) {
+  return `workmap.policyAcknowledgement.${auth.userId}.${policyId}`;
+}
+
+function readAcknowledgement(auth: Extract<WorkMapApiAuthResult, { available: true }>, policyId: string) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(acknowledgementKey(auth, policyId));
+}
+
+function writeAcknowledgement(auth: Extract<WorkMapApiAuthResult, { available: true }>, policyId: string, acknowledgedAt: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(acknowledgementKey(auth, policyId), acknowledgedAt);
 }
 
 const styles = {
@@ -112,6 +232,12 @@ const styles = {
     fontSize: "14px",
     lineHeight: 1.8,
   },
+  boundaryPanel: {
+    ...wmStyles.infoNotice,
+    display: "grid",
+    gap: "6px",
+    padding: "16px",
+  },
   ackPanel: {
     ...wmStyles.infoNotice,
     display: "flex",
@@ -123,6 +249,7 @@ const styles = {
   panelLabel: {
     ...wmStyles.eyebrow,
     color: wm.colors.infoText,
+    margin: 0,
   },
   panelTitle: {
     margin: "0 0 6px",
@@ -135,6 +262,12 @@ const styles = {
     color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
+  },
+  sessionText: {
+    margin: "6px 0 0",
+    color: wm.colors.textMuted,
+    fontSize: "12px",
+    fontWeight: 700,
   },
   primaryButton: {
     ...wmStyles.primaryButton,

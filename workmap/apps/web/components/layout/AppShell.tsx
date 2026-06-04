@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
-import { getUserSetupState, type UserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
+import { clearPilotSession, getPilotSession, type StoredPilotSession } from "../../lib/auth/pilotSession";
+import { getUserSetupState, resetUserSetupState, type UserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 
 type AppShellProps = {
   children: ReactNode;
@@ -20,9 +21,11 @@ const navItems: Array<{ label: string; href: string; roles: WorkMapRole[] }> = [
 
 export function AppShell({ children }: AppShellProps) {
   const [setupState, setSetupState] = useState<UserSetupState | null>(null);
+  const [pilotSession, setPilotSession] = useState<StoredPilotSession | null>(null);
 
   useEffect(() => {
     setSetupState(getUserSetupState());
+    setPilotSession(getPilotSession());
   }, []);
 
   const visibleItems = useMemo(() => {
@@ -52,16 +55,34 @@ export function AppShell({ children }: AppShellProps) {
           ))}
         </nav>
 
-        <div style={styles.rolePill}>
+        <div style={styles.sessionWrap}>
+          <div style={styles.rolePill}>
           <span style={styles.roleDot} />
-          {setupState ? setupState.role.replace("_", " ") : "Dev access"}
+            {pilotSession ? pilotSession.user.role.replace("_", " ") : setupState ? setupState.role.replace("_", " ") : "Dev access"}
+          </div>
+          {pilotSession ? (
+            <button
+              type="button"
+              style={styles.logoutButton}
+              onClick={() => {
+                clearPilotSession();
+                resetUserSetupState();
+                setPilotSession(null);
+                setSetupState(null);
+              }}
+            >
+              Log out
+            </button>
+          ) : null}
         </div>
       </header>
 
       <section style={styles.notice}>
-        <strong>Frontend-only demo</strong>
+        <strong>{pilotSession ? "Pilot session" : "Frontend demo fallback"}</strong>
         <span>
-          Navigation visibility is for workflow testing only. Real authentication, RBAC, and tenant permissions must be enforced by the backend.
+          {pilotSession
+            ? `${pilotSession.user.displayName} is using a backend bearer token. Role boundaries are enforced by API guards where implemented.`
+            : "Navigation visibility is for workflow testing only. Sign in on /login for a backend-issued pilot token."}
         </span>
       </section>
 
@@ -149,6 +170,21 @@ const styles = {
     fontWeight: 700,
     minWidth: "120px",
     justifyContent: "center",
+  },
+  sessionWrap: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  logoutButton: {
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: "999px",
+    background: wm.colors.surface,
+    color: wm.colors.textSecondary,
+    padding: "8px 10px",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: 800,
   },
   roleDot: {
     width: "8px",

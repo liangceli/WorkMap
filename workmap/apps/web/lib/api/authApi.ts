@@ -1,5 +1,5 @@
 import { workMapApiGet, workMapApiPost } from "./apiClient";
-import type { ApiClientOptions, WorkMapApiDevelopmentToken, WorkMapApiUser } from "./apiTypes";
+import type { ApiClientOptions, WorkMapApiDevelopmentToken, WorkMapApiPilotSession, WorkMapApiUser } from "./apiTypes";
 
 export function getCurrentUser(options?: ApiClientOptions) {
   return workMapApiGet<WorkMapApiUser>("/users/me", options);
@@ -7,4 +7,8 @@ export function getCurrentUser(options?: ApiClientOptions) {
 
 export function createDevelopmentToken(body: { email: string; companySlug?: string }, options?: ApiClientOptions) {
   return workMapApiPost<WorkMapApiDevelopmentToken>("/auth/dev-token", body, options);
+}
+
+export function createPilotSession(body: { email: string; password: string; companySlug?: string }, options?: ApiClientOptions) {
+  return workMapApiPost<WorkMapApiPilotSession>("/auth/pilot-login", body, options);
 }

@@ -1,19 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createPilotSession } from "../../lib/api/authApi";
+import { clearPilotSession, getPilotSession, savePilotSession, toWorkflowRole, type StoredPilotSession } from "../../lib/auth/pilotSession";
 import {
   getDefaultSetupState,
   getNextRouteForUser,
+  resetUserSetupState,
   saveUserSetupState,
   type WorkMapRole,
 } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
+const pilotUsers: Array<{ label: string; email: string; role: WorkMapRole }> = [
+  { label: "Employee / Ethan Engineer", email: "engineer@workmap.demo", role: "EMPLOYEE" },
+  { label: "Manager / Mia Manager", email: "manager@workmap.demo", role: "MANAGER" },
+  { label: "Owner / Olivia Owner", email: "owner@workmap.demo", role: "OWNER" },
+  { label: "IT Admin / Isaac IT Admin", email: "it.admin@workmap.demo", role: "IT_ADMIN" },
+];
+
 export function MockLoginPanel() {
   const router = useRouter();
-  const [email, setEmail] = useState("manager@workmap.local");
+  const [email, setEmail] = useState("engineer@workmap.demo");
+  const [password, setPassword] = useState("workmap-pilot");
+  const [companySlug, setCompanySlug] = useState("workmap-demo-company");
   const [role, setRole] = useState<WorkMapRole>("MANAGER");
+  const [session, setSession] = useState<StoredPilotSession | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setSession(getPilotSession());
+  }, []);
+
+  const loginPilot = async () => {
+    setSubmitting(true);
+    setStatus(null);
+
+    const result = await createPilotSession({ email, password, companySlug });
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setStatus("Pilot login failed. Check the API is running and the password hash is configured.");
+      return;
+    }
+
+    savePilotSession(result.data);
+    setSession(result.data);
+    const nextState = getDefaultSetupState(toWorkflowRole(result.data.user.role));
+    router.push(getNextRouteForUser(nextState));
+  };
 
   const continueDemo = () => {
     const state = getDefaultSetupState(role);
@@ -21,13 +58,53 @@ export function MockLoginPanel() {
     router.push(getNextRouteForUser(state));
   };
 
+  const logout = () => {
+    clearPilotSession();
+    resetUserSetupState();
+    setSession(null);
+    setStatus("Pilot session cleared on this browser.");
+  };
+
   return (
     <section style={styles.card}>
-      <p style={styles.eyebrow}>Frontend mock</p>
+      <p style={styles.eyebrow}>Pilot sign-in</p>
       <h1 style={styles.title}>Sign in to WorkMap</h1>
       <p style={styles.subtitle}>
-        This is a frontend-only demo sign-in. Real authentication and RBAC are not implemented yet.
+        Use a backend-issued JWT for the 5-person pilot. This is not enterprise SSO or production auth hardening.
       </p>
+
+      {session ? (
+        <section style={styles.sessionCard}>
+          <strong>{session.user.displayName}</strong>
+          <span>{session.user.email}</span>
+          <span>{session.user.role.replace("_", " ")} / expires {new Date(session.expiresAt).toLocaleString()}</span>
+          <div style={styles.sessionActions}>
+            <button type="button" onClick={() => router.push("/virtual-office")} style={styles.secondaryButton}>
+              Open office
+            </button>
+            <button type="button" onClick={logout} style={styles.secondaryButton}>
+              Clear session
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      <label style={styles.label}>
+        <span>Pilot user</span>
+        <select
+          value={email}
+          onChange={(event) => {
+            const nextEmail = event.target.value;
+            setEmail(nextEmail);
+            setRole(pilotUsers.find((user) => user.email === nextEmail)?.role ?? "EMPLOYEE");
+          }}
+          style={styles.input}
+        >
+          {pilotUsers.map((user) => (
+            <option key={user.email} value={user.email}>{user.label}</option>
+          ))}
+        </select>
+      </label>
 
       <label style={styles.label}>
         <span>Email</span>
@@ -35,7 +112,25 @@ export function MockLoginPanel() {
       </label>
 
       <label style={styles.label}>
-        <span>Demo role</span>
+        <span>Password</span>
+        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" style={styles.input} />
+      </label>
+
+      <label style={styles.label}>
+        <span>Company slug</span>
+        <input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} style={styles.input} />
+      </label>
+
+      <button type="button" onClick={loginPilot} disabled={submitting} style={styles.primaryAction}>
+        {submitting ? "Signing in..." : "Sign in with pilot auth"}
+      </button>
+
+      {status ? <p style={styles.status}>{status}</p> : null}
+
+      <section style={styles.demoBox}>
+        <p style={styles.demoTitle}>Frontend fallback</p>
+        <label style={styles.label}>
+          <span>Demo role</span>
         <select value={role} onChange={(event) => setRole(event.target.value as WorkMapRole)} style={styles.input}>
           <option value="EMPLOYEE">Employee</option>
           <option value="MANAGER">Manager</option>
@@ -43,13 +138,12 @@ export function MockLoginPanel() {
           <option value="IT_ADMIN">IT Admin</option>
         </select>
       </label>
-
-      <button type="button" onClick={continueDemo} style={styles.primaryAction}>Continue</button>
-      <a href="/onboarding/avatar" style={styles.secondaryAction}>Create avatar first</a>
+        <button type="button" onClick={continueDemo} style={styles.secondaryAction}>Continue without API session</button>
+      </section>
 
       <p style={styles.note}>
-        This form does not authenticate, set cookies, create sessions, or grant permissions. Backend auth must enforce the
-        real role.
+        Pilot auth signs a bearer token for seeded users. Dev-token fallback remains development-only; production SSO,
+        MFA, password reset, and tenant admin are still outside this MVP.
       </p>
     </section>
   );
@@ -103,6 +197,50 @@ const styles = {
     display: "flex",
     justifyContent: "center",
     padding: "10px",
+  },
+  secondaryButton: {
+    ...wmStyles.secondaryButton,
+    display: "flex",
+    justifyContent: "center",
+    padding: "9px 10px",
+  },
+  sessionCard: {
+    display: "grid",
+    gap: "5px",
+    border: `1px solid ${wm.colors.successBorder}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.successBg,
+    color: "#14532d",
+    padding: "12px",
+    fontSize: "13px",
+  },
+  sessionActions: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "8px",
+    marginTop: "6px",
+  },
+  demoBox: {
+    display: "grid",
+    gap: "10px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.surfaceLow,
+    padding: "12px",
+  },
+  demoTitle: {
+    margin: 0,
+    color: wm.colors.textMuted,
+    fontSize: "12px",
+    fontWeight: 900,
+    textTransform: "uppercase" as const,
+  },
+  status: {
+    margin: 0,
+    color: wm.colors.errorText,
+    fontSize: "12px",
+    lineHeight: 1.4,
+    fontWeight: 800,
   },
   note: {
     margin: 0,

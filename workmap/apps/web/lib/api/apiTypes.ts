@@ -22,14 +22,23 @@ export type WorkMapApiDevelopmentToken = {
   accessToken: string;
   tokenType: "Bearer";
   expiresAt: string;
-  user: {
-    id: string;
-    companyId: string;
-    companySlug: string;
-    email: string;
-    displayName: string;
-    role: string;
-  };
+  user: WorkMapApiAuthUser;
+};
+
+export type WorkMapApiAuthUser = {
+  id: string;
+  companyId: string;
+  companySlug: string;
+  email: string;
+  displayName: string;
+  role: string;
+};
+
+export type WorkMapApiPilotSession = {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresAt: string;
+  user: WorkMapApiAuthUser;
 };
 
 export type WorkMapApiOfficeRoom = {
@@ -117,6 +126,12 @@ export type WorkMapApiCompliancePolicy = {
   employeeCanViewOwnData: boolean;
   policyVersion: string;
   activeFrom: string;
+};
+
+export type WorkMapApiPolicyAcknowledgement = {
+  id: string;
+  monitoringPolicyId: string;
+  acknowledgedAt: string;
 };
 
 export type WorkMapApiUsageSummary = {

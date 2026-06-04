@@ -120,6 +120,11 @@ export function OfficeSidePanel({
             </div>
 
             <p style={styles.presenceNote}>{presenceNote(presenceSource, people.length)}</p>
+            <section style={styles.privacyBoundary}>
+              <strong>Presence is visible in the office</strong>
+              <span>Teammates can see avatar location, workspace status, and last-seen freshness.</span>
+              <span>No screen recording, keystroke logging, hidden webcam, microphone, or message content is shown here.</span>
+            </section>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search team..." style={styles.input} />
             <div style={styles.filterRow}>
               {(["all", "available", "focus", "busy", "idle", "offline"] as StatusFilter[]).map((filter) => (
@@ -454,6 +459,18 @@ const styles = {
     fontSize: "12px",
     lineHeight: 1.35,
     fontWeight: 800,
+  },
+  privacyBoundary: {
+    display: "grid",
+    gap: "5px",
+    border: `1px solid ${wm.colors.complianceBorder}`,
+    borderRadius: "14px",
+    background: wm.colors.complianceBg,
+    color: wm.colors.textSecondary,
+    padding: "12px",
+    fontSize: "12px",
+    lineHeight: 1.35,
+    fontWeight: 750,
   },
   input: {
     ...wmStyles.input,
