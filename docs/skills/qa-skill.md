@@ -106,6 +106,20 @@ Use this repeatable loop after backend/local-startup changes:
 - Watch the map for at least 15 seconds with polling active and confirm remote presence updates do not cause visible full-map/canvas refresh or flashing.
 - Confirm current-user position save omits non-UUID frontend/mock `roomId`; backend should return controlled 400 for invalid UUID-shaped errors instead of Prisma crashes.
 
+## Pilot Auth / Compliance Manual QA
+
+- Open `http://localhost:3000/login`.
+- Sign in as `engineer@workmap.demo` with password `workmap-pilot` and company slug `workmap-demo-company`.
+- Confirm pilot session card shows user, role, and expiry.
+- Refresh and confirm session remains understandable.
+- Confirm `/virtual-office` requests include `Authorization: Bearer ...`.
+- Confirm current user is not duplicated in remote teammate list/map.
+- Open `/compliance` and confirm backend policy loads under pilot session.
+- Acknowledge policy and refresh; confirm acknowledgement state remains understandable through the browser marker.
+- Click AppShell logout or login clear-session action and confirm `workmap.pilotSession` and workflow state are cleared.
+- Stop backend and refresh `/compliance` and `/virtual-office`; confirm safe fallback copy and no runtime crash.
+- Check desktop and narrow layouts for login panel, AppShell session area, compliance modal, and People privacy copy.
+
 ## Test Gaps
 
 - No automated test files were found during intake.
@@ -177,3 +191,10 @@ For commit `b68dd49`, handoff/QA reports:
 - Direct HTTP verification passed: invalid `roomId=open-office-north` returned controlled 400; omitted `roomId` save succeeded.
 - User manual QA passed for current-user card, no duplicate current user, UUID-free room labels, People summary/filters/empty states, command palette People context, contact drawer, backend-off fallback, remote update after API change, and no visible canvas refresh during polling.
 - Full final regression remains recommended for movement, collision, auto-walk, chair interaction, room/zone status, and narrow layout overflow.
+
+For commit `14fb706`, handoff/QA reports:
+
+- Web/API lint, typecheck, and build passed.
+- HTTP smoke passed for `/health`, `POST /auth/pilot-login`, `/auth/me`, `/compliance/policy`, compliance acknowledgement, and authenticated virtual-office map/navigation/positions.
+- Browser/runtime QA passed for pilot login, pilot session storage, compliance acknowledgement marker, virtual-office Bearer requests, People privacy copy, logout clear, and backend-off fallback.
+- User manual acceptance passed for login, session refresh readability, virtual-office Bearer requests, compliance acknowledgement, logout/session clear, backend-off fallback, and desktop/narrow layout checks.

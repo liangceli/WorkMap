@@ -40,6 +40,7 @@ From `.env.example`:
 - `NEXT_PUBLIC_APP_URL`
 - `API_PORT`
 - `WORKMAP_JWT_SECRET`
+- `WORKMAP_PILOT_PASSWORD_HASH`
 
 Frontend API client also uses:
 
@@ -52,6 +53,13 @@ Development-only virtual-office API verification can also use:
 
 These override the seeded demo identity used by the frontend development auth bridge for `POST /auth/dev-token`.
 
+Pilot auth local defaults:
+
+- Seeded/demo password: `workmap-pilot`.
+- Example user: `engineer@workmap.demo`.
+- Company slug: `workmap-demo-company`.
+- Production requires an explicit `WORKMAP_PILOT_PASSWORD_HASH`; without it, pilot login is disabled.
+
 ## Local API Verification Loop
 
 1. Ensure local `.env` contains `DATABASE_URL`, `API_PORT="3001"`, `NEXT_PUBLIC_APP_URL="http://localhost:3000"`, and `WORKMAP_JWT_SECRET`.
@@ -63,6 +71,7 @@ These override the seeded demo identity used by the frontend development auth br
 7. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
 8. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
 9. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
+10. For pilot auth/compliance QA, sign in at `http://localhost:3000/login`, confirm API calls use Bearer auth against `http://localhost:3001`, acknowledge compliance policy, and verify backend-off fallback copy.
 
 ## Deployment Caution
 

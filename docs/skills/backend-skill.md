@@ -54,11 +54,26 @@ Context can come from:
 
 In production, Bearer token is required.
 
+## Pilot Auth
+
+Commit `14fb706` added `POST /auth/pilot-login`.
+
+- Input: email, password, optional company slug.
+- User lookup is email/company scoped; client user id is not trusted.
+- Password verification uses Node `pbkdf2Sync` with SHA-256 and `timingSafeEqual`.
+- Password hash format is `pbkdf2-sha256$iterations$salt$hash`.
+- Minimum accepted iterations: `100000`.
+- Env: `WORKMAP_PILOT_PASSWORD_HASH`.
+- Non-production can use the default local pilot hash for seeded password `workmap-pilot`.
+- Production pilot login is disabled unless `WORKMAP_PILOT_PASSWORD_HASH` is configured.
+- Successful response uses the same 8-hour Bearer JWT response shape as dev-token.
+
 ## Error Handling / Validation
 
 - UUID route params use `ParseUUIDPipe`.
 - Optional UUID query params use `OptionalUuidPipe`.
 - Auth service validates dev token email and company slug inputs.
+- Auth service validates pilot login email, password presence, company slug, and pilot hash configuration.
 - Virtual office service checks office map and room ownership before persisting positions.
 
 ## Not Confirmed

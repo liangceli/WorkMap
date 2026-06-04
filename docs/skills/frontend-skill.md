@@ -13,13 +13,14 @@ Important areas:
 - `components/office`: virtual office UI and canvas implementation.
 - `components/avatar`, `lib/avatar`: avatar preview, storage, layer assets, frame maps.
 - `lib/api`: frontend API client and endpoint wrappers.
+- `lib/auth/pilotSession.ts`: browser pilot session storage and API auth options.
 - `lib/workflow/workflowState.ts`: frontend-only demo onboarding/login state.
 - `lib/theme/workmapTheme.ts`: central theme tokens.
 
 ## Routes Confirmed
 
 - `/`: home/onboarding router surface.
-- `/login`: mock login panel.
+- `/login`: pilot sign-in surface with frontend fallback.
 - `/onboarding/company`
 - `/onboarding/avatar`
 - `/onboarding/device-setup`
@@ -39,7 +40,15 @@ Important areas:
 
 Known API wrappers include auth, users, reports, integrations, compliance, and virtual office. Some pages/components still rely on mock data instead of API calls.
 
-For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It first asks `lib/api/developmentApiAuth.ts` for browser-only development auth options, then passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
+For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring stored pilot Bearer session before development dev-token fallback, then passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
+
+Pilot login/session:
+
+- `/login` is a pilot sign-in surface with seeded pilot users, password/company slug fields, session display, open-office action, logout/session clear, and clearly labeled frontend fallback.
+- `authApi.ts` exposes `createPilotSession()`.
+- `pilotSession.ts` stores `workmap.pilotSession`, clears expired sessions, exposes Bearer API options, maps backend roles to workflow roles, and clears session on logout.
+- `apiAuth.ts` prefers pilot session, then development dev-token/dev-cache fallback.
+- `AppShell` shows pilot session state, role/session context, backend Bearer messaging, and logout behavior.
 
 Current-user position persistence:
 
@@ -74,7 +83,7 @@ No Redux/Zustand/global state library was confirmed. Current state is mostly Rea
 
 `useVirtualOfficeData.ts` performs a one-time initial async load on mount with a cancellation flag, then starts polling positions when authenticated API context is available. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; no websocket listeners were added.
 
-Development API auth token data is cached in localStorage under `workmap.devApiAuth`. The normal login/onboarding workflow remains demo-only and is not production auth.
+Pilot API auth token data is cached in localStorage under `workmap.pilotSession`. Development API auth token data is cached under `workmap.devApiAuth`. The normal login/onboarding workflow remains for continuity and fallback, not production authorization.
 
 Position save writes are movement-driven and latest-position-only. They are not realtime sharing and do not create position history.
 

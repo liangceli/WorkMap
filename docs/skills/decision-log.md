@@ -56,6 +56,14 @@ Reason: The 5-person pilot needs readable team status, current-user clarity, las
 
 Trade-off: The UI reuses polling and existing statuses rather than adding websocket/SSE or a separate live monitoring model. Freshness labels update when polling/renders occur, not from a separate minute ticker.
 
+## 2026-06-04 - Pilot Auth And Compliance Boundary
+
+Decision: Add pilot-ready email/password auth backed by JWTs, browser-scoped pilot session storage, unified API auth resolution, and compliance transparency/acknowledgement flows.
+
+Reason: The 5-person pilot needed to move beyond frontend-only demo state while still avoiding full enterprise auth scope.
+
+Trade-off: This is controlled pilot auth, not production SSO/OAuth/MFA/password-reset/tenant-admin credential lifecycle. Compliance acknowledgement readback uses a browser marker after successful backend acknowledgement because the policy endpoint does not yet return acknowledgement status.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

@@ -1,9 +1,17 @@
 # Current Status
 
-Last updated: 2026-06-03.
+Last updated: 2026-06-04.
 
 ## Latest Accepted Work
 
+- Commit `14fb706` (`feat: add pilot auth and compliance boundary`) implemented the Pilot Auth + Privacy/Compliance Boundary MVP.
+- Backend now exposes `POST /auth/pilot-login`, using email/password/company slug, PBKDF2 password verification, timing-safe comparison, and backend-issued JWT responses aligned with the dev-token response shape.
+- Frontend stores pilot sessions in `localStorage` under `workmap.pilotSession`, clears expired sessions, maps roles into existing workflow state, and exposes logout/session clear behavior.
+- API auth now uses a unified resolver: stored pilot session first, development dev-token/dev-cache fallback second.
+- `/virtual-office` now prefers the pilot Bearer session for API calls while preserving current-user filtering, save/restore, polling presence, and backend-off fallback behavior.
+- `/login` is now a pilot sign-in surface with seeded pilot users, password/company slug fields, pilot session display, open-office action, logout/session clear, and clearly labeled frontend fallback.
+- `/compliance` now loads backend policy with current API auth, posts acknowledgement through existing backend endpoints, and shows pilot transparency copy for what WorkMap shows and does not monitor.
+- People panel and compliance copy now explain privacy boundaries: presence/avatar location/status/freshness are visible; screen recording, keystrokes, hidden camera/mic, private message/email content, passwords, and invisible spying are not shown.
 - Commit `b68dd49` (`feat(virtual-office): improve team presence experience`) completed the 5-person presence/team UX MVP around the existing polling sync.
 - People panel now separates the current user (`You`) from remote teammates, shows active/idle/offline summary counts, readable freshness/last-seen text, status filters, search/empty states, and backend/fallback/empty source notes.
 - Command palette People results now show freshness/last-seen context and friendly empty search rows.
@@ -57,7 +65,11 @@ Last updated: 2026-06-03.
 - The implementation test updated local dev DB position for `engineer@workmap.demo` to `x=333`, `y=444`, `direction=right`.
 - API `dev` script is now build-then-run, not watch/hot reload.
 - `load-local-env.ts` is imported unconditionally by the API entry. It preserves existing env vars, but deployment expectations should stay explicit.
-- Production auth/session remains unimplemented; the dev auth bridge is explicitly local-development verification only.
+- Enterprise production auth/session remains unimplemented; pilot auth is a controlled pilot path, and the dev auth bridge remains local-development verification only.
+- Pilot auth is pilot-ready but not enterprise production auth: no SSO/OAuth, MFA, password reset, tenant credential lifecycle, or full route permission overhaul.
+- Production pilot login requires explicit `WORKMAP_PILOT_PASSWORD_HASH`; without it, pilot login is disabled in production.
+- Compliance acknowledgement readback is not exposed by the backend policy endpoint; frontend stores a browser marker only after successful backend acknowledgement.
+- `artresource.tiled-session` is a tracked dirty file that appears unrelated to this docs/task flow and should not be staged accidentally.
 - The dev auth bridge assumes seeded demo users from `prisma/seed.ts` exist locally, unless public dev env overrides are supplied.
 - Backend `zoneData`, navigation `anchor`, and navigation `bounds` must match the current TMX pixel coordinate system to be accepted safely.
 - API-derived remote players use fallback role text (`Team member`) and may route profiles by raw user id.
@@ -74,6 +86,8 @@ Last updated: 2026-06-03.
 - Decide whether `break` needs a dedicated People filter or should remain visible only in all/search.
 - Consider explicit last-seen UI refresh cadence if labels need to update independently of polling.
 - Decide the production auth/session model separately from the development auth bridge.
+- Decide the production auth roadmap: SSO/OAuth, MFA, password reset, tenant admin credential lifecycle, and route guards.
+- Decide whether backend compliance policy responses should include acknowledgement status instead of relying on browser marker readability.
 - Decide whether polling is sufficient for MVP or whether websocket/SSE realtime presence is needed later.
 - Replace frontend-only demo workflow state with real auth/session wiring when ready.
 - Add tests for pathfinding, API contracts, auth guard behavior, and key UI routing workflows.

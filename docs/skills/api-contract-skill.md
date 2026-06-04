@@ -60,6 +60,7 @@ Development overrides:
 ## Confirmed Endpoints
 
 - `GET /health`
+- `POST /auth/pilot-login`
 - `POST /auth/dev-token`
 - `GET /auth/me`
 - `GET /companies/current`
@@ -77,6 +78,46 @@ Development overrides:
 - `GET /integrations/contact-links/:targetUserId`
 - `GET /compliance/policy`
 - `POST /compliance/policy/:policyId/acknowledgement`
+
+## Pilot Auth Contract
+
+`POST /auth/pilot-login` request body:
+
+- `email: string`
+- `password: string`
+- optional `companySlug: string`
+
+Response body:
+
+- `accessToken`
+- `tokenType: "Bearer"`
+- `expiresAt`
+- `user`: `id`, `companyId`, `companySlug`, `email`, `displayName`, `role`
+
+Behavior:
+
+- Backend resolves user by email and optional company slug.
+- Client does not choose `userId`.
+- Invalid credentials return unauthorized without disclosing whether the user exists.
+- Production requires `WORKMAP_PILOT_PASSWORD_HASH`; otherwise pilot login is disabled.
+
+Local pilot defaults:
+
+- Example user: `engineer@workmap.demo`.
+- Password: `workmap-pilot`.
+- Company slug: `workmap-demo-company`.
+
+## Compliance Contract
+
+`GET /compliance/policy` returns active policy fields such as id, name, collection flags, work hours, retention, policy version, and active date.
+
+`POST /compliance/policy/:policyId/acknowledgement` records acknowledgement for the authenticated current user and returns:
+
+- `id`
+- `monitoringPolicyId`
+- `acknowledgedAt`
+
+Current limitation: `GET /compliance/policy` does not return acknowledgement status, so the frontend stores a browser marker after successful backend acknowledgement for pilot refresh readability.
 
 ## Virtual Office Response Shapes
 

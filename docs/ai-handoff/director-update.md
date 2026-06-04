@@ -2,17 +2,19 @@
 
 ## 1. Completed Task
 
-5-person People/Presence team experience MVP was completed for `/virtual-office`.
+Pilot Auth + Privacy/Compliance Boundary MVP was implemented.
 
 ## 2. Accepted Changes
 
-- Added reusable presence freshness helpers.
-- Improved People panel with current-user `You` card, team summary, source/fallback/empty notes, filters, readable last-seen labels, and empty/search states.
-- Improved command palette People results with freshness and room/area context.
-- Resolved room IDs through known destinations and fell back to `Office area` to avoid showing raw UUIDs.
-- Prevented non-UUID local/mock `roomId` values from reaching current-user position save; backend now returns controlled 400 for invalid optional `roomId`.
-- Fixed People filter style conflict by using longhand border styles.
-- Stabilized canvas during polling by reading remote people/selected remote from refs instead of restarting the TMX animation loop.
+- Added `POST /auth/pilot-login` with PBKDF2 password verification and backend-issued JWT response.
+- Added `WORKMAP_PILOT_PASSWORD_HASH` documentation.
+- Added browser pilot session storage under `workmap.pilotSession`.
+- Added unified API auth resolver: pilot session first, development dev-token fallback second.
+- Converted `/login` into a pilot sign-in surface with session display and logout/session clear.
+- AppShell now shows pilot session/role context and logout.
+- `/virtual-office` now prefers pilot Bearer auth while preserving save/restore/polling behavior.
+- Compliance page/panel now use pilot transparency language and existing backend policy/acknowledgement APIs.
+- People panel and compliance copy explain visible presence/location/status/freshness and what WorkMap does not monitor.
 
 ## 3. Verification Summary
 
@@ -28,25 +30,24 @@ Reported passing from `workmap/`:
 - `pnpm --filter @workmap/api typecheck`
 - `pnpm --filter @workmap/api build`
 
-Verification passed: web/API lint, typecheck, and build; direct HTTP invalid-roomId save returned controlled 400 and omitted-roomId save succeeded. Manual QA passed for current-user separation, UUID-free labels, People summary/filter/empty states, command palette People rows, contact drawer, backend-off fallback, remote update after API change, and no visible canvas refresh during polling.
+Verification passed: web/API lint, typecheck, and build; HTTP smoke for pilot login, `/auth/me`, compliance policy, compliance acknowledgement, and authenticated virtual-office reads; browser/runtime QA for login, session localStorage, compliance acknowledgement marker, virtual-office Bearer requests, People privacy copy, logout clear, and backend-off fallback. User manual acceptance passed.
 
 ## 4. Remaining Risks
 
-- Full movement/collision/auto-walk/chair and full desktop/narrow layout regression remains recommended.
-- `break` users do not have a dedicated People filter in this version.
-- Freshness labels update on polling/rerender, not through a separate minute ticker.
-- People panel/card layouts may need future polish for narrow screens and long names.
-- No websocket/SSE, production auth, schema migration, map/asset, movement, collision, pathfinding, chair, or contact drawer behavior changes were added.
+- Pilot auth is not production SSO/OAuth/MFA/password reset or tenant credential lifecycle.
+- Production pilot login requires `WORKMAP_PILOT_PASSWORD_HASH`.
+- Compliance policy endpoint does not return acknowledgement status; frontend stores a browser marker after successful acknowledgement.
+- App route protection remains lightweight; no full route guard/permission overhaul was added.
+- `artresource.tiled-session` and `docs/references/` are unrelated workspace changes.
 
 ## 5. Updated Docs
 
 - `docs/skills/current-status.md`
 - `docs/skills/api-contract-skill.md`
+- `docs/skills/auth-skill.md`
 - `docs/skills/backend-skill.md`
 - `docs/skills/deployment-skill.md`
-- `docs/skills/virtual-office-skill.md`
 - `docs/skills/frontend-skill.md`
-- `docs/skills/realtime-presence-skill.md`
 - `docs/skills/ui-ux-skill.md`
 - `docs/skills/qa-skill.md`
 - `docs/skills/project-summary.md`
@@ -55,8 +56,7 @@ Verification passed: web/API lint, typecheck, and build; direct HTTP invalid-roo
 
 ## 6. Recommended Next Tasks
 
-- Run final movement/collision/auto-walk/chair and narrow-layout regression.
-- Decide whether `break` needs a dedicated People filter.
-- Consider explicit last-seen refresh cadence if labels need to update without polling/rerender.
-- Decide the real production auth/session path separately.
-- Add automated tests for presence freshness helpers, UUID roomId validation, room-label fallback, and People panel filtering/empty states.
+- Decide production auth roadmap: SSO/OAuth, MFA, password reset, tenant credential lifecycle, route guards.
+- Consider adding acknowledgement status to `GET /compliance/policy`.
+- Add automated tests for pilot login, session expiry/clear, auth resolver priority, compliance acknowledgement fallback, and virtual-office Bearer auth path.
+- Keep final narrow-layout and interaction regression in future release checks.

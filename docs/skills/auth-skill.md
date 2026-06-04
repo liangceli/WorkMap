@@ -11,7 +11,33 @@ Supported context sources:
 
 `POST /auth/dev-token` creates an 8-hour development Bearer token for seeded users when not in production.
 
+`POST /auth/pilot-login` creates an 8-hour pilot Bearer token for seeded/pilot users when credentials are valid.
+
 `GET /auth/me` returns the resolved request context.
+
+## Pilot Auth
+
+Commit `14fb706` added pilot-ready auth for the 5-person pilot.
+
+Backend behavior:
+
+- Endpoint: `POST /auth/pilot-login`.
+- Request body: `email`, `password`, optional `companySlug`.
+- Backend finds the user by email/company scope and does not trust a client user id.
+- Password verification uses Node built-in PBKDF2 SHA-256 and `timingSafeEqual`; no new dependency was added.
+- Password hash env: `WORKMAP_PILOT_PASSWORD_HASH`.
+- In non-production, a local pilot hash supports seeded/demo password `workmap-pilot`.
+- In production, pilot login is disabled unless `WORKMAP_PILOT_PASSWORD_HASH` is explicitly configured.
+- Successful response matches the Bearer token shape used by dev-token.
+
+Frontend behavior:
+
+- Pilot session storage key: `workmap.pilotSession`.
+- Stored data includes Bearer token, expiry, and auth user context.
+- Sessions expire one minute before token expiry and are cleared automatically.
+- `getWorkMapApiAuthOptions()` prefers pilot session, then falls back to development dev-token/dev-cache when available.
+- Logout/session clear removes pilot session and demo workflow state.
+- Existing demo workflow state remains for onboarding/navigation continuity, not production authorization.
 
 ## Frontend Auth Boundary
 
@@ -58,6 +84,7 @@ Frontend demo workflow role union currently includes only `EMPLOYEE`, `MANAGER`,
 
 ## Risks
 
-- Production session handling and frontend token storage are not confirmed.
+- Enterprise production auth/session handling is not confirmed beyond the pilot session path.
 - Frontend route access is demo-state-based, not backend-auth-based.
 - Authenticated virtual-office API success depends on the local backend listening on `localhost:3001`, `WORKMAP_JWT_SECRET` being configured, and demo seed data existing.
+- Pilot auth is not SSO/OAuth/MFA/password-reset-ready production auth.

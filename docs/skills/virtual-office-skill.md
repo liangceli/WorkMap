@@ -71,6 +71,14 @@ Basic polling presence added in commit `effb188`:
 - Room labels are resolved from destinations or shown as `Office area`; raw UUIDs are not displayed.
 - Polling remote presence no longer visibly reloads/flashes the TMX canvas loop.
 
+Pilot auth/privacy boundary added in commit `14fb706`:
+
+- `/virtual-office` uses unified API auth and prefers stored pilot Bearer session over development dev-token fallback.
+- Current-user filtering continues to use the authenticated user id.
+- Position save/restore and polling presence continue under pilot Bearer auth when signed in.
+- People panel explains that teammates can see avatar location, workspace status, and last-seen freshness.
+- People panel also states that screen recording, keystrokes, hidden camera/mic, and message content are not shown there.
+
 ## Current Boundary
 
 The API integration now includes current-user latest-position restore/save and basic polling presence. It still does not add websocket/SSE realtime infrastructure, backend map rendering, arbitrary user mutation, historical trails, or production auth/session changes.
