@@ -23,9 +23,10 @@ export default function ReportsPage() {
           }
         />
 
-        <WorkMapPrivacyNotice title="Mock report data">
-          Reports show aggregated app names and domains only. No full URLs, messages, emails, screenshots, keystrokes,
-          camera, or microphone data.
+        <WorkMapPrivacyNotice title="Pilot report boundary">
+          Reports use the existing backend usage-summary API when an authenticated pilot session is available. Sparse pilot
+          data is expected; reports still show app names and domains only, never full URLs, messages, screenshots,
+          keystrokes, camera, or microphone data.
         </WorkMapPrivacyNotice>
 
         <ReportSummaryPanel metrics={reportMetrics} rows={reportRows} />

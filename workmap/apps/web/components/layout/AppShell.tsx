@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
-import { clearPilotSession, getPilotSession, type StoredPilotSession } from "../../lib/auth/pilotSession";
+import { clearPilotSession, getPilotSession, toWorkflowRole, type StoredPilotSession } from "../../lib/auth/pilotSession";
 import { getUserSetupState, resetUserSetupState, type UserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 
 type AppShellProps = {
@@ -22,6 +22,7 @@ const navItems: Array<{ label: string; href: string; roles: WorkMapRole[] }> = [
 export function AppShell({ children }: AppShellProps) {
   const [setupState, setSetupState] = useState<UserSetupState | null>(null);
   const [pilotSession, setPilotSession] = useState<StoredPilotSession | null>(null);
+  const activeRole = pilotSession ? toWorkflowRole(pilotSession.user.role) : setupState?.role ?? null;
 
   useEffect(() => {
     setSetupState(getUserSetupState());
@@ -29,12 +30,14 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   const visibleItems = useMemo(() => {
-    if (!setupState) {
-      return navItems;
+    if (!activeRole) {
+      return navItems.filter((item) => ["/virtual-office", "/compliance", "/settings"].includes(item.href));
     }
 
-    return navItems.filter((item) => item.roles.includes(setupState.role));
-  }, [setupState]);
+    return navItems.filter((item) => item.roles.includes(activeRole));
+  }, [activeRole]);
+
+  const roleLabel = pilotSession ? formatRole(pilotSession.user.role) : activeRole ? formatRole(activeRole) : "Sign in needed";
 
   return (
     <main style={styles.page}>
@@ -57,8 +60,8 @@ export function AppShell({ children }: AppShellProps) {
 
         <div style={styles.sessionWrap}>
           <div style={styles.rolePill}>
-          <span style={styles.roleDot} />
-            {pilotSession ? pilotSession.user.role.replace("_", " ") : setupState ? setupState.role.replace("_", " ") : "Dev access"}
+            <span style={styles.roleDot} />
+            {roleLabel}
           </div>
           {pilotSession ? (
             <button
@@ -78,17 +81,28 @@ export function AppShell({ children }: AppShellProps) {
       </header>
 
       <section style={styles.notice}>
-        <strong>{pilotSession ? "Pilot session" : "Frontend demo fallback"}</strong>
+        <strong>{pilotSession ? "Pilot session" : activeRole ? "Frontend demo fallback" : "No pilot session"}</strong>
         <span>
           {pilotSession
             ? `${pilotSession.user.displayName} is using a backend bearer token. Role boundaries are enforced by API guards where implemented.`
-            : "Navigation visibility is for workflow testing only. Sign in on /login for a backend-issued pilot token."}
+            : activeRole
+              ? "Navigation visibility is for workflow testing only. Sign in on /login for a backend-issued pilot token."
+              : "Sign in before pilot QA so API requests use the intended backend-issued user context."}
         </span>
+        {!pilotSession ? (
+          <a href="/login" style={styles.noticeLink}>
+            Sign in
+          </a>
+        ) : null}
       </section>
 
       <section style={styles.content}>{children}</section>
     </main>
   );
+}
+
+function formatRole(role: string) {
+  return role.replace(/_/g, " ");
 }
 
 const styles = {
@@ -202,6 +216,14 @@ const styles = {
     padding: "12px 16px",
     fontSize: "13px",
     lineHeight: 1.45,
+  },
+  noticeLink: {
+    marginLeft: "auto",
+    color: wm.colors.infoText,
+    fontSize: "13px",
+    fontWeight: 900,
+    textDecoration: "underline",
+    whiteSpace: "nowrap" as const,
   },
   content: {
     maxWidth: "1440px",

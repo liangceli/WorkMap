@@ -2,128 +2,110 @@
 
 ## 1. Original Task Brief
 
-Build Pilot Auth + Privacy/Compliance Boundary MVP.
+Pilot Deployment + Dashboard/Reports/Compliance QA Pass.
 
-Goal: complete the second large pilot cycle so WorkMap feels less like a local demo and more like a controlled 5-person pilot product.
+Goal: complete the third large pilot cycle so the current 5-person small-company pilot feels deployable, testable, and coherent as a product, not just a virtual-office feature demo.
 
 Key requirements:
 
-- Add a clearer pilot-ready authenticated app entry path.
-- Use backend-issued JWTs where practical.
-- Persist/reuse authenticated API context after login/refresh.
-- Add logout/session clear behavior.
-- Keep dev-token behavior development-only.
-- Ensure `/virtual-office` uses authenticated current-user context when available.
-- Keep current user out of remote teammates.
-- Preserve position save/restore/polling behavior.
-- Surface clear privacy/compliance language explaining what WorkMap shows and does not show.
-- Use existing compliance policy/acknowledgement API where practical.
-- Do not add websocket/SSE, production SSO/OAuth, billing, full admin, schema/migration, movement/map/chair/contact drawer changes, or new dependencies.
+- Clarify pilot deployment/startup readiness and minimum env/config.
+- Improve local production-like startup checks without performing a real deployment.
+- Make session failure states clearer.
+- Make Dashboard, Reports, and Compliance minimally useful and honest for a 5-person pilot.
+- Preserve virtual-office auth, fallback, save/restore, polling, People panel, movement, collision, auto-walk, chair interaction, and contact drawer behavior.
+- Add a 5-user pilot QA checklist.
+- Do not add production auth providers, websocket/SSE, billing, desktop/browser agent work, Prisma schema/migrations, map/assets/movement changes, or broad redesign.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/apps/api/src/modules/auth/auth.controller.ts` | Added `POST /auth/pilot-login` for explicit pilot sign-in. Existing `POST /auth/dev-token` and `GET /auth/me` remain. |
-| `workmap/apps/api/src/modules/auth/auth.service.ts` | Added pilot email/password verification using Node built-in PBKDF2, backend-issued JWT response reuse, production guard when pilot hash is not configured, and typed JWT role payload. |
-| `workmap/.env.example` | Documented `WORKMAP_PILOT_PASSWORD_HASH` for pilot/local credential configuration. |
-| `workmap/apps/web/lib/api/apiTypes.ts` | Added shared auth-user/session and compliance acknowledgement response types. |
-| `workmap/apps/web/lib/api/authApi.ts` | Added frontend client wrapper for `POST /auth/pilot-login`. |
-| `workmap/apps/web/lib/api/apiAuth.ts` | Added unified API auth resolver: prefer stored pilot session, then development dev-token fallback where available. |
-| `workmap/apps/web/lib/auth/pilotSession.ts` | Added browser-scoped pilot session storage, expiration handling, Bearer API options, session clear, and role mapping into the existing demo workflow state. |
-| `workmap/apps/web/components/login/MockLoginPanel.tsx` | Converted `/login` into a pilot sign-in surface with seeded pilot users, password/company slug fields, session display, open-office action, logout/session clear, and clearly labeled frontend fallback. |
-| `workmap/apps/web/components/layout/AppShell.tsx` | Shows pilot session state, backend Bearer context messaging, role pill, and logout behavior in the app shell. |
-| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | Uses the unified auth resolver so `/virtual-office` API calls prefer the authenticated pilot session before dev-token fallback. |
-| `workmap/apps/web/components/office/OfficeSidePanel.tsx` | Added a People-panel privacy boundary explaining visible presence/location/status/freshness and what is not shown. |
-| `workmap/apps/web/app/compliance/page.tsx` | Updated top-level compliance copy from mock preview to pilot transparency boundary. |
-| `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx` | Loads existing backend policy with the current API auth context, surfaces role/visibility boundary text, posts acknowledgement to the backend, stores a browser marker for refresh readability, and falls back safely when auth/API is unavailable. |
-| `workmap/apps/web/components/compliance/PolicyAcknowledgementModal.tsx` | Replaced mock acknowledgement language with pilot visibility language and added busy/disabled acknowledgement handling. |
-| `workmap/apps/web/lib/api/complianceApi.ts` | Uses the shared acknowledgement response type. |
+| `workmap/.env.example` | Added pilot startup comments and documented minimum local/deployment variables: DB URL, public web/API URLs, API port, JWT secret, and pilot password hash. |
+| `workmap/apps/web/lib/api/apiTypes.ts` | Added `WorkMapApiHealth` and aligned `WorkMapApiUsageSummary` with the existing backend `/reports/usage-summary` response shape. |
+| `workmap/apps/web/lib/api/healthApi.ts` | Added a small frontend wrapper for `GET /health`. |
+| `workmap/apps/web/components/layout/AppShell.tsx` | Made missing-session behavior clearer, derived role from pilot session when present, limited fallback nav when no session/setup exists, and added a `/login` link in the session notice. |
+| `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx` | Reworked Dashboard into a pilot readiness surface that reads API health, API auth context, virtual-office positions, compliance policy status, and reports usage summary when available, with explicit fallback states. |
+| `workmap/apps/web/components/dashboard/AppUsageTable.tsx` | Added optional title so Dashboard can label API-backed vs pilot-example app rows. |
+| `workmap/apps/web/components/dashboard/WebsiteUsageTable.tsx` | Added optional title so Dashboard can label API-backed vs pilot-example domain rows. |
+| `workmap/apps/web/app/reports/page.tsx` | Updated report boundary wording from mock-only language to authenticated pilot/API summary language. |
+| `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` | Added Reports API loading, empty/error states, current-user usage summary display, privacy boundary copy, and clearly labeled pilot example department rows. |
+| `docs/ai-handoff/pilot-release-checklist.md` | Added practical startup steps, 5-user QA checklist, and virtual-office regression checklist. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA and Project Context & Docs. |
 
 Workspace notes:
 
-- `artresource.tiled-session` is a tracked dirty file that appears unrelated to this task.
-- `docs/references/` is an untracked directory and was not reviewed as part of this implementation.
+- `docs/references/` is a pre-existing untracked directory and was not modified for this task.
+- No backend code was modified.
+- No virtual-office map/movement/chair/contact drawer implementation files were modified.
 
 ## 3. Implementation Summary
 
-Pilot auth/session:
+Deployment/startup readiness:
 
-- Added `POST /auth/pilot-login`.
-- Login input is email + password + optional company slug.
-- The backend finds the user by email/company scope and never trusts user id from the client.
-- Password verification uses Node built-in `pbkdf2Sync` and `timingSafeEqual`; no new dependencies were added.
-- Password is compared against `WORKMAP_PILOT_PASSWORD_HASH`.
-- In non-production, a local pilot hash is available for the seeded/demo password `workmap-pilot`.
-- In production, pilot login is disabled unless `WORKMAP_PILOT_PASSWORD_HASH` is explicitly configured.
-- JWT responses reuse the same bearer-token shape as the existing development token bridge.
-- JWT role payload is typed as `WorkMapRole`.
+- `.env.example` now documents the local pilot port convention: web `3000`, API `3001`.
+- `.env.example` now names the minimum variables needed for pilot operation.
+- Added `docs/ai-handoff/pilot-release-checklist.md` with install, Prisma generate/migrate/seed, manual API/web startup, health check, page checks, and 5-user QA steps.
+- The checklist explicitly notes that `pnpm --filter @workmap/api dev` is a long-running build-then-run server command, not a blocking verification command.
 
-Frontend login/session:
+Session failure states:
 
-- `/login` now has a pilot sign-in path for seeded pilot users.
-- Successful login stores a browser-scoped `workmap.pilotSession` entry with token, expiry, and auth user context.
-- Stored sessions expire one minute before token expiry and are cleared automatically.
-- Existing demo workflow state is still used for onboarding/navigation continuity, but the backend token is the preferred API auth context.
-- Logout clears the pilot session and demo workflow state.
-- Frontend fallback remains clearly labeled as non-API demo flow.
+- `AppShell` now prefers the pilot session role when present.
+- If no pilot session or workflow setup exists, the shell does not expose the full role-based nav as if a role were known.
+- The session notice now clearly says when no pilot session exists and links to `/login`.
+- Logout/session clear behavior was preserved.
 
-Virtual office auth:
+Dashboard:
 
-- `/virtual-office` now calls `getWorkMapApiAuthOptions()`.
-- The resolver prefers the stored pilot Bearer token.
-- If no pilot session exists, the existing development dev-token/dev-cache flow remains available in development.
-- Current-user filtering continues to use the authenticated user id, so the current user does not duplicate as a remote teammate.
-- No polling cadence, websocket/SSE, movement, collision, pathfinding, chair, contact drawer, map rendering source, or assets were changed.
+- Dashboard now attempts to load:
+  - `GET /health`
+  - current API auth context
+  - virtual-office map/positions
+  - compliance policy
+  - reports usage summary
+- API-backed state is used when available.
+- Empty/error states are shown plainly instead of silently pretending data exists.
+- Remote teammate cards from office positions exclude the current signed-in user.
+- If position rows are unavailable, Dashboard labels the visible people cards as pilot examples.
+- Usage tables are labeled as Reports API rows or pilot examples.
 
-Privacy/compliance:
+Reports:
 
-- People panel now explains that teammates can see avatar location, workspace status, and last-seen freshness.
-- People panel also states that screen recording, keystroke logging, hidden webcam/microphone, and message content are not shown there.
-- Compliance page now uses pilot transparency wording instead of mock-only wording.
-- Compliance panel shows:
-  - visible in WorkMap: presence, avatar location/room, workspace status/freshness, last seen, acknowledgement timestamp
-  - not monitored: screen recording, keystroke logging, hidden webcam/microphone, private message/email content, passwords/form inputs, invisible employee spying
-- Compliance acknowledgement uses existing backend endpoints:
-  - `GET /compliance/policy`
-  - `POST /compliance/policy/:policyId/acknowledgement`
-- If auth or policy loading fails, the page shows safe read-only transparency copy and does not pretend a backend acknowledgement was recorded.
+- Reports now loads the existing `/reports/usage-summary` API through the current API auth resolver.
+- It displays current-user app/domain rows when available.
+- Sparse pilot data is treated as expected and explained.
+- The department table remains as a labeled pilot example layout until a team-level aggregate reports API exists.
+- Copy avoids implying full monitoring, exports, historical surveillance, screenshots, keystrokes, camera, microphone, messages, or full URL tracking.
 
-Role/visibility boundary:
+Compliance:
 
-- Existing roles are preserved.
-- AppShell shows role/session context.
-- Compliance copy says employee/manager/owner visibility is limited to where API guards actually support it.
-- No fake enterprise permission model was invented.
+- Compliance implementation was inspected but not changed in code because the previous pilot auth/compliance task already added policy loading, acknowledgement action, browser acknowledgement marker, and transparency wording.
+- The backend still does not return acknowledgement status from `GET /compliance/policy`; the frontend marker remains the pilot readback helper after a successful backend acknowledgement.
+
+Virtual office:
+
+- No virtual-office core files were changed.
+- No websocket/SSE/realtime infrastructure was added.
+- No polling cadence, TMX rendering, movement, collision, pathfinding, chair interaction, contact drawer, assets, or position persistence logic was changed.
 
 ## 4. User-Visible Changes
 
-- `/login` has a clear pilot sign-in path using backend JWTs.
-- Users can see the signed-in pilot user, role, expiry, and clear the session.
-- App shell distinguishes a real pilot Bearer session from frontend demo fallback.
-- `/virtual-office` uses the pilot session for API calls when available.
-- People panel includes a calm privacy boundary for visible presence/freshness.
-- `/compliance` can load backend policy and record acknowledgement when signed in.
-- Compliance copy explains what WorkMap shows and what it does not monitor.
+- App shell is clearer when the user is signed in with pilot auth, in frontend demo fallback, or missing a session entirely.
+- Dashboard now behaves like a pilot readiness page instead of static demo analytics.
+- Dashboard can show backend health, auth context, remote presence counts, compliance policy readiness, and Reports API usage rows.
+- Reports now attempts to show real usage-summary API rows and explains when pilot data is sparse.
+- Reports and Dashboard distinguish API data from pilot example data.
+- `.env.example` and the new checklist make local startup and QA expectations easier to follow.
 
 ## 5. Technical Notes
 
-- No Prisma schema, migration, or seed changes were made.
-- No plaintext passwords are stored.
-- The default local pilot credential is development/pilot only:
-  - email examples are seeded/demo users such as `engineer@workmap.demo`
-  - password is `workmap-pilot`
-  - company slug is `workmap-demo-company`
-- Production auth is not claimed complete:
-  - no SSO/OAuth
-  - no MFA
-  - no password reset
-  - no tenant admin credential lifecycle
-  - no enterprise authorization overhaul
-- The development token endpoint remains disabled in production.
-- Compliance acknowledgement is backend-backed, but the current policy GET endpoint does not return acknowledgement status; the frontend stores a browser marker after successful backend acknowledgement so refresh behavior is understandable in the pilot.
-- Manual browser QA is still recommended for layout, login flow, and virtual office regressions.
+- `GET /health` remains unauthenticated and is only wrapped on the frontend.
+- Reports API data is current-user scoped through existing backend guards; this task did not invent a team aggregate endpoint.
+- Dashboard positions are loaded from the virtual-office read APIs and filtered to remove the authenticated current user from the manager snapshot.
+- Room labels on Dashboard use backend room names where available and fall back to `Office area`, not raw IDs.
+- Development token fallback remains development-only via the existing auth resolver.
+- Production auth architecture was not changed.
+- No new dependencies were added.
+- No Prisma schema, migrations, or seed changes were made.
 
 ## 6. Verification Results
 
@@ -144,112 +126,59 @@ pnpm build
 Results:
 
 - All commands passed.
-- Web builds printed the existing warning that the Next.js plugin was not detected in ESLint config.
+- Web build and root build printed the existing warning that the Next.js plugin was not detected in ESLint config.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was restored after verification so it is not part of the implementation diff.
 
-Local HTTP smoke verification:
+HTTP smoke against currently running local services:
 
-- Started the freshly built API temporarily on `http://127.0.0.1:3012`, then killed it.
-- `GET /health` returned `ok`.
-- `POST /auth/pilot-login` succeeded for `engineer@workmap.demo` / `workmap-pilot` / `workmap-demo-company`.
-- `GET /auth/me` succeeded with the returned Bearer token.
-- `GET /compliance/policy` succeeded and returned policy version `v1`.
-- `POST /compliance/policy/:policyId/acknowledgement` succeeded and returned `acknowledgedAt`.
-- Started the freshly built API temporarily on `http://127.0.0.1:3013`, then killed it.
-- With the pilot Bearer token:
-  - `GET /virtual-office/map` succeeded.
-  - `GET /virtual-office/navigation` succeeded and returned 6 destinations.
-  - `GET /virtual-office/map/:officeMapId/positions` succeeded and returned 5 positions.
+- Existing API on `http://127.0.0.1:3001` responded to `GET /health` with `status: ok`.
+- Existing web on `http://127.0.0.1:3000` returned:
+  - `/dashboard`: `200`
+  - `/reports`: `200`
+  - `/compliance`: `200`
+  - `/virtual-office`: `500` from the already-running Next process
 
-Manual/browser verification:
+Important smoke note:
 
-- After the user released the ports, the implementation chat cleared `apps/web/.next`, started API on `3001`, started web on `3000`, verified the running app, then stopped the started API/web/browser processes.
-- `GET http://127.0.0.1:3000/virtual-office` returned `200` after the frontend restart.
-- In-app Browser connector was unavailable (`Browser is not available: iab`), and Playwright CLI was not installed, so verification used a temporary headless Edge instance through Chrome DevTools Protocol.
-- Login UI:
-  - Opened `/login`.
-  - Clicked `Sign in with pilot auth` for `engineer@workmap.demo`.
-  - `POST /auth/pilot-login` returned `201`.
-  - Browser `localStorage` contained `workmap.pilotSession` with user `engineer@workmap.demo`, role `EMPLOYEE`, and a bearer token.
-  - App navigated to `/compliance`.
-- Compliance UI:
-  - `/compliance` loaded under the pilot session.
-  - `GET /compliance/policy` included `Authorization: Bearer ...` and returned `200`.
-  - Clicked `Review and acknowledge`, then `Acknowledge policy`.
-  - Browser acknowledgement marker was written after backend acknowledgement.
-  - Refreshing `/compliance` showed `Acknowledged`, policy version `v1`, `Visible in WorkMap`, and `Not monitored`.
-  - No browser console errors/warnings were captured for the compliance flow.
-- Virtual office UI:
-  - Set the existing onboarding/avatar localStorage flags required to enter `/virtual-office` for browser QA.
-  - `/virtual-office` loaded with a canvas and `WorkMap Office`.
-  - Requests included `Authorization: Bearer ...` for:
-    - `GET /virtual-office/map`
-    - `GET /virtual-office/navigation`
-    - `GET /virtual-office/map/:officeMapId/positions`
-    - `PUT /virtual-office/map/:officeMapId/positions/me`
-    - subsequent polling `GET /virtual-office/map/:officeMapId/positions`
-  - People panel showed `You`, readable room labels such as `Open Office` / `Office area`, and no raw UUID text.
-  - People panel showed the privacy copy: `Presence is visible in the office`.
-  - Clicked `available`, `focus`, `busy`, `idle`, and `offline` filters; no browser console errors/warnings were captured.
-  - The canvas element stayed stable across polling observation and filter interactions.
-- Logout/session clear:
-  - Clicked `Log out`.
-  - Browser `localStorage` no longer contained `workmap.pilotSession` or `workmap.userSetupState`.
-- Backend-off fallback:
-  - Stopped API on `3001` and started only frontend on `3000`.
-  - `/compliance` still rendered safe transparency copy with `Visible in WorkMap` and `Not monitored`.
-  - `/virtual-office` still rendered `WorkMap Office` and canvas with backend unavailable.
-  - Browser logs showed expected network `ERR_CONNECTION_REFUSED` entries for API calls, with no runtime exception crash captured.
-- No long-running dev server or browser process was left running by this verification.
-- The local compliance smoke test wrote/upserted one acknowledgement for the local seeded engineer user in the development database.
+- Ports `3000` and `3001` were already occupied, so this implementation did not kill or restart them.
+- Because the user prefers not to silently move the frontend to another port or steal `3000`, the running `/virtual-office` `500` was not debugged by restarting the server.
+- The code changes did not modify virtual-office core files, and `pnpm --filter @workmap/web build` successfully built `/virtual-office`.
+- Manual QA should restart frontend/backend on `3000`/`3001` with the latest build before treating the running `/virtual-office` result as an implementation regression.
 
 ## 7. Manual QA Suggestions
 
-Use frontend on:
+Use `docs/ai-handoff/pilot-release-checklist.md` as the dedicated checklist.
 
-```text
-http://localhost:3000
-```
+Minimum manual checks:
 
-Use backend on:
-
-```text
-http://localhost:3001
-```
-
-Suggested checks:
-
-- Open `/login`.
-- Sign in as `engineer@workmap.demo` with password `workmap-pilot` and company slug `workmap-demo-company`.
-- Confirm a pilot session card appears with user, role, and expiry.
-- Refresh and confirm the session remains understandable.
-- Click clear session/logout and confirm session state is removed.
-- Sign in again and open `/virtual-office`.
-- Confirm network requests include `Authorization: Bearer ...`.
-- Confirm current user is not duplicated in People panel/map.
-- Confirm map renders, position restore/save works, remote users update through polling, People panel works, and contact drawer opens.
-- Confirm backend-off or cleared-token fallback remains safe in development.
-- Open `/compliance`.
-- Confirm backend policy loads under a pilot session.
-- Acknowledge the policy and refresh; confirm the browser marker makes acknowledgement state understandable.
-- Stop backend and reload `/compliance`; confirm safe fallback text appears and no crash occurs.
-- Regression test WASD/arrow movement, collision, double-click auto-walk, chair `E` interaction, room/zone status, command palette People search, desktop viewport, and narrow viewport.
+- Restart backend on `localhost:3001` and frontend on `localhost:3000` with the latest code.
+- Confirm `GET /health`.
+- Log in through `/login` using pilot auth.
+- Refresh and confirm AppShell session state remains understandable.
+- Confirm logout clears the pilot session and workflow state.
+- Open `/dashboard` and confirm API health/auth/presence/compliance/report readiness states are clear.
+- Open `/reports` and confirm Reports API rows or sparse-data explanation is clear.
+- Open `/compliance`, acknowledge policy, refresh, and confirm browser marker behavior.
+- Open `/virtual-office` and regression test map render, current-user restore/save, polling, People panel, readable room labels, backend-off fallback, WASD/arrow movement, collision, double-click auto-walk, chair `E`, and contact drawer.
+- Simulate five pilot users where available through seeded users/API state.
+- Stop backend and confirm Dashboard, Reports, Compliance, and Virtual Office do not crash.
+- Check desktop and narrow viewport layouts.
 
 ## 8. Risks / Notes
 
-- Browser/runtime QA passed for the main pilot auth, compliance acknowledgement, and virtual-office API-auth path using temporary local services on `3000`/`3001`.
-- Full human visual QA is still recommended for narrow viewport layout, double-click auto-walk, chair interaction, and contact drawer ergonomics.
-- This is pilot-ready auth, not production-enterprise auth.
-- The shared pilot password is intentionally for seeded/demo pilot users and must not be treated as production credential management.
-- In production, `WORKMAP_PILOT_PASSWORD_HASH` must be explicitly configured for pilot login to work; otherwise pilot login is disabled.
-- Current compliance acknowledgement readback is not exposed by the backend policy endpoint; frontend stores a browser marker only after a successful backend acknowledgement.
-- App route protection remains lightweight; AppShell exposes session/fallback state and role-based navigation visibility, but there is no full route guard/permission overhaul.
-- Existing dev-token fallback remains development-only.
-- `artresource.tiled-session` and `docs/references/` are pre-existing workspace changes and should not be staged unless intentionally included.
+- Manual browser interaction QA was limited because `3000` and `3001` were already occupied and were not restarted or killed.
+- Current running `/virtual-office` returned `500`; this may be a stale/running-server issue after builds, but it requires a clean restart on `3000`/`3001` for final human confirmation.
+- Reports are current-user summary rows only; team-level aggregate reports remain a future API task.
+- Dashboard still uses pilot example rows/cards when backend data is missing or sparse, but labels them explicitly.
+- Compliance acknowledgement readback still depends on a browser marker because backend policy GET does not include acknowledgement status.
+- Pilot auth remains pilot/MVP auth, not production SSO/OAuth/MFA/password reset.
+- App route protection remains lightweight; this task improved session context but did not add a full permission system.
+- `docs/references/` remains an unrelated untracked workspace directory.
 
 ## 9. Docs Update Suggestions
 
-- `docs/skills/project-summary.md`: record pilot auth path, backend JWT session, `/login` behavior, and compliance transparency boundary.
-- `docs/skills/api-contract-skill.md`: document `POST /auth/pilot-login`, response shape, and compliance acknowledgement endpoints.
-- `docs/skills/current-status.md`: record that Pilot Auth + Privacy/Compliance Boundary MVP is implemented and static/API/browser-runtime verified, with final human visual QA recommended.
-- `docs/skills/backend-skill.md`: note PBKDF2 pilot password hash configuration and production-disabled behavior when no hash is configured.
-- `docs/skills/deployment-skill.md`: document `WORKMAP_PILOT_PASSWORD_HASH`, frontend `localhost:3000`, backend `localhost:3001`, and avoid using long-running dev server commands as blocking verification.
+- `docs/skills/project-summary.md`: record that pilot readiness Dashboard/Reports/Compliance pass is implemented.
+- `docs/skills/current-status.md`: record the new Dashboard health/auth/presence/report readiness behavior and the Reports API sparse-data boundary.
+- `docs/skills/deployment-skill.md`: record required env vars, recommended ports `3000`/`3001`, Prisma setup steps, and that API dev is a long-running build-then-run command.
+- `docs/skills/api-contract-skill.md`: update frontend-consumed response shape for `/reports/usage-summary` and note `GET /health`.
+- `docs/skills/realtime-presence-skill.md`: record that this task did not add websocket/SSE and preserved polling-only presence.

@@ -4,7 +4,9 @@
 
 人工验收通过
 
-QA review result: 本轮 “Build Pilot Auth + Privacy/Compliance Boundary MVP” 已按 workflow 读取 `docs/ai-handoff/latest-implementation.md`，并检查 `git status`、`git diff --stat`、`git diff --name-only`、`git diff`。Diff 与 handoff 基本一致，未发现阻塞级实现问题。用户已完成手动验收，未反馈需要返工的问题。
+QA review result: 本轮 “Pilot Deployment + Dashboard/Reports/Compliance QA Pass” 已按 workflow 读取 `docs/ai-handoff/latest-implementation.md`，并检查 `git status`、`git diff --stat`、`git diff --name-only`、`git diff`。当前 diff 与 handoff 基本一致，未发现明确代码级阻塞问题。用户已完成手动验收，未反馈需要返工的问题。
+
+Important QA gate resolved: implementation handoff 记录旧的已运行 Next 进程里 `/virtual-office` 返回过 `500`。本轮人工验收已在干净重启的 `3000`/`3001` 上确认 `/virtual-office` 正常，不再复现该问题。
 
 No fix request required.
 
@@ -12,96 +14,92 @@ No fix request required.
 
 实现整体符合原 Task Brief：
 
-- 新增 pilot-ready `/login` 登录入口，并通过后端 `POST /auth/pilot-login` 获取 JWT。
-- 前端持久化并复用 `workmap.pilotSession`，`/virtual-office` 优先使用 pilot Bearer token。
-- 保留 development-only dev-token fallback。
-- 新增 logout/session clear 行为。
-- `/virtual-office` 未引入 websocket/SSE、生产 SSO/OAuth、billing、admin、schema/migration、movement/map/chair/contact drawer 改动。
-- People panel 与 compliance 页面补充隐私/合规边界说明。
-- Compliance acknowledgement 复用现有 backend policy/acknowledgement API。
+- Clarify pilot deployment/startup readiness and minimum env/config.
+- Improve local production-like startup checks without doing real deployment.
+- Make session failure states clearer.
+- Make Dashboard, Reports, and Compliance more honest/useful for a 5-person pilot.
+- Preserve virtual-office auth/fallback/save/restore/polling/People panel/movement/collision/auto-walk/chair/contact drawer behavior by not editing those core files.
+- Add a 5-user pilot QA checklist.
+- No backend code, Prisma schema/migration, websocket/SSE, production auth provider, billing, desktop/browser agent, map/assets/movement broad redesign was added.
 
 Scope notes:
 
-- `artresource.tiled-session` 是 tracked dirty file，看起来与本任务无关，不建议随本轮提交。
-- `docs/references/` 是 untracked directory，本轮 QA 未审查，不建议误提交。
-- `workmap/apps/web/lib/api/apiAuth.ts` 和 `workmap/apps/web/lib/auth/` 是本轮核心新增文件，提交时需要包含。
+- `docs/references/` remains an unrelated untracked directory and was not reviewed as part of this task.
+- `workmap/apps/web/lib/api/healthApi.ts` and `docs/ai-handoff/pilot-release-checklist.md` are new task files and should be included if committing this task.
 
 ## 3. File-Level Diff Review
 
 | File | Review | Risk |
 |---|---|---|
-| `workmap/apps/api/src/modules/auth/auth.controller.ts` | 新增 `POST /auth/pilot-login`，未破坏现有 `dev-token` / `me` endpoint。 | Low |
-| `workmap/apps/api/src/modules/auth/auth.service.ts` | 新增 PBKDF2 pilot password verification、JWT response 复用、production hash guard。未引入新依赖。 | Low-medium；pilot auth 不是完整生产认证。 |
-| `workmap/.env.example` | 记录 `WORKMAP_PILOT_PASSWORD_HASH`。 | Low |
-| `workmap/apps/web/lib/api/apiTypes.ts` | 新增 auth session/user 和 policy acknowledgement 类型。 | Low |
-| `workmap/apps/web/lib/api/authApi.ts` | 新增 `createPilotSession()` wrapper，复用现有 API client。 | Low |
-| `workmap/apps/web/lib/api/apiAuth.ts` | 新增统一 API auth resolver：pilot session 优先，dev-token fallback 其次。 | Low |
-| `workmap/apps/web/lib/auth/pilotSession.ts` | 新增 session storage、过期清理、Bearer options、role mapping，并保存 workflow state。 | Low-medium；依赖 localStorage，符合 pilot MVP。 |
-| `workmap/apps/web/components/login/MockLoginPanel.tsx` | `/login` 转为 pilot sign-in，同时保留 frontend fallback。 | Medium；需人工确认失败登录、刷新、清 session UX。 |
-| `workmap/apps/web/components/layout/AppShell.tsx` | 显示 pilot session/role/logout，并区分 demo fallback。 | Low-medium；logout 清 session 但不强制跳转，需人工确认体验。 |
-| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | `/virtual-office` 改用 unified auth resolver。 | Low |
-| `workmap/apps/web/components/office/OfficeSidePanel.tsx` | 新增 People panel privacy boundary。 | Low |
-| `workmap/apps/web/app/compliance/page.tsx` | compliance copy 从 mock preview 改为 pilot transparency boundary。 | Low |
-| `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx` | 使用当前 API auth 加载 policy、提交 acknowledgement，失败时显示安全 fallback copy。 | Low-medium；ack 状态读回依赖浏览器 marker。 |
-| `workmap/apps/web/components/compliance/PolicyAcknowledgementModal.tsx` | 更新 policy wording，并增加 busy/disabled acknowledgement 状态。 | Low |
-| `workmap/apps/web/lib/api/complianceApi.ts` | 使用共享 acknowledgement response type。 | Low |
-| `docs/ai-handoff/latest-implementation.md` | 本轮 implementation handoff。 | Low |
-| `artresource.tiled-session` | Tiled session/view state 变化，与任务无关。 | 不建议提交。 |
-| `docs/references/` | Untracked directory，未纳入本轮 review。 | 不建议提交，除非确认属于单独 docs 任务。 |
+| `workmap/.env.example` | Adds local/deployment minimum config comments, `NEXT_PUBLIC_WORKMAP_API_URL`, ports, JWT secret, and pilot hash guidance. | Low |
+| `workmap/apps/web/lib/api/apiTypes.ts` | Adds `WorkMapApiHealth` and aligns `WorkMapApiUsageSummary` to backend `/reports/usage-summary` shape. Verified against `reports.service.ts`. | Low |
+| `workmap/apps/web/lib/api/healthApi.ts` | Small wrapper for `GET /health`, reuses existing API client. | Low |
+| `workmap/apps/web/components/layout/AppShell.tsx` | Improves missing-session state, derives role from pilot session, limits nav when no active role, adds sign-in link. | Low-medium; manual UX check needed. |
+| `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx` | Reworks dashboard into pilot readiness surface loading health, auth, office positions, compliance policy, and reports summary with fallback/errors. | Medium; needs browser QA for loading/error/layout states. |
+| `workmap/apps/web/components/dashboard/AppUsageTable.tsx` | Adds optional title prop. | Low |
+| `workmap/apps/web/components/dashboard/WebsiteUsageTable.tsx` | Adds optional title prop. | Low |
+| `workmap/apps/web/app/reports/page.tsx` | Updates report boundary wording to API-backed pilot summary language. | Low |
+| `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` | Loads reports API via current auth, displays API rows or sparse/fallback explanation, clarifies privacy boundary. | Medium; needs browser QA for sparse/error/overflow states. |
+| `docs/ai-handoff/pilot-release-checklist.md` | Adds startup, 5-user pilot QA, and virtual-office regression checklist. | Low |
+| `docs/ai-handoff/latest-implementation.md` | Updated implementation handoff for this task. | Low |
+| `docs/references/` | Untracked directory, not reviewed. | Do not stage unless intentionally part of another docs task. |
 
 ## 4. Issues Found
 
 Blocking issues:
 
-- None found.
+- None found in code review.
+
+Resolved acceptance gate:
+
+- `/virtual-office` returned `500` in implementation smoke against an already-running Next process. User confirmed clean-restart manual QA on frontend `3000` and backend `3001` passes, so this is treated as stale-process/port-state smoke noise rather than a current implementation blocker.
 
 Non-blocking issues / notes:
 
-- Pilot login 是 MVP/pilot auth，不是生产级 SSO/OAuth/MFA/password reset。
-- Production 环境如果没有配置 `WORKMAP_PILOT_PASSWORD_HASH`，pilot login 会按预期禁用。
-- `AppShell` logout 会清除 pilot session 和 workflow state，但不会强制跳转到 `/login`；人工验收时确认当前页面状态是否符合预期。
-- Compliance backend policy endpoint 目前不返回 acknowledgement status；前端只在 backend acknowledgement 成功后写 browser marker，刷新可读性依赖 localStorage。
-- Login failure path显示通用错误文案，不泄露用户是否存在；这是合理的。
-- `artresource.tiled-session` 和 `docs/references/` 不应随本任务误提交。
+- Dashboard and Reports now make multiple client-side API calls on mount; failures are displayed rather than crashing.
+- Dashboard uses sample people/apps/domains when backend data is missing or sparse, but labels them as pilot examples.
+- Reports are current-user scoped only; team aggregate report rows remain labeled frontend examples.
+- Compliance acknowledgement readback still depends on browser marker because backend policy GET does not include acknowledgement state.
+- AppShell still does not implement full route protection; it improves session clarity and nav visibility only.
 
 ## 5. Regression Risks
 
-- `/login` 从 mock login 改为 pilot auth surface，可能影响旧的 frontend-only demo onboarding 习惯。
-- Pilot session localStorage 过期/清除后，AppShell 和子页面状态需要人工确认无残留混乱。
-- `/virtual-office` auth source 切换后，要确认 current user 不会在 remote teammates 中重复出现。
-- Compliance acknowledgement 失败时应保持 read-only transparency copy，不应假装已记录。
-- Backend off / unauthorized / expired token 情况下，virtual-office 和 compliance 应继续安全 fallback，不应 crash。
-- Narrow viewport 下 login/compliance modal/AppShell session pill 可能有布局拥挤风险。
+- Dashboard could show mixed API/sample states; manual QA should confirm labels are clear and not misleading.
+- Reports table rows may overflow on narrow viewports because API rows include app/domain names and duration columns.
+- AppShell no-session nav is intentionally limited; verify it does not hide a route needed for QA.
+- Backend-off state should not crash Dashboard/Reports/Compliance/Virtual Office.
+- `/virtual-office` must be rechecked after clean restart because of the recorded stale-process `500`.
+- Usage summary shape is now stricter in frontend types; if backend response changes, Reports/Dashboard could silently fall back or render empty states.
 
 ## 6. Virtual Office Specific Check
 
-- Map rendering: 未修改 TMX/canvas source，仍使用既有 map rendering path。
-- Avatar movement: 未修改 movement/collision/pathfinding 逻辑。
-- Room/zone behavior: 本轮不改变 room/zone mapping，只改变 API auth 来源。
-- Object interaction: chair `E`、contact drawer、double-click auto-walk 未在本轮改动。
-- Presence/activity state: 继续使用现有 positions polling；pilot Bearer token 优先用于 API calls。
-- Current-user boundary: unified auth result 提供 `userId`，应继续过滤 current user，避免自我重复显示为 remote teammate。
-- Timers/listeners cleanup: 本轮未新增 websocket/SSE/timer；保持原 polling 行为。
-- Desktop/mobile behavior: 需要人工确认 AppShell session UI、People privacy copy 在桌面和窄屏下不遮挡主要地图。
+- Map rendering: no TMX/canvas source changes in this diff.
+- Avatar movement: no movement/collision/pathfinding code changed.
+- Room/zone behavior: no virtual-office room/zone code changed.
+- Object interaction: chair `E`, contact drawer, and double-click auto-walk were not changed.
+- Presence/activity state: Dashboard reads virtual-office map/positions for readiness display; core polling cadence was not changed.
+- Current-user boundary: Dashboard filters positions by authenticated `auth.userId` so manager snapshot excludes the current user.
+- Timers/listeners cleanup: no new virtual-office timers/listeners; Dashboard/Reports effects use cancellation guards.
+- Desktop/mobile behavior: Dashboard/Reports/AppShell layouts need manual desktop and narrow viewport checks.
 
 ## 7. Backend/API/Auth Check
 
-- Request shape: `POST /auth/pilot-login` 接收 email/password/companySlug；不信任 client user id。
-- Response shape: 返回 `accessToken`、`tokenType: Bearer`、`expiresAt`、`user`，与 dev-token response shape 对齐。
-- Error handling: API client 会把 backend unavailable / non-2xx 包装为 `ok:false`，前端走 fallback/status 文案。
-- Validation: email、companySlug、password 都有基础校验；pilot password hash 格式和最低 iteration 有 guard。
-- Auth/session behavior: pilot session 存在时优先使用 Bearer；无 session 时才进入 development dev-token fallback。
-- Data persistence: 无 Prisma schema/migration；compliance acknowledgement 使用现有 backend API。
-- Security/privacy: 不新增 hidden monitoring；合规文案明确说明不采集 screen/keystroke/camera/mic/private content。
+- Request shape: `GET /health` is unauthenticated; Reports and virtual-office readiness calls use `getWorkMapApiAuthOptions()`.
+- Response shape: `WorkMapApiUsageSummary` matches backend `reports.service.ts`: `userId`, `apps`, `websites`, `activeSeconds`, `idleSeconds`.
+- Error handling: API client returns `ok:false`; Dashboard/Reports collect/display fallback states.
+- Validation: Reports optional `userId` remains guarded by existing backend `OptionalUuidPipe`; no backend changes in this task.
+- Auth/session behavior: AppShell derives role from pilot session if present, otherwise workflow state, otherwise no-session state.
+- Data persistence: no new persistence, no Prisma schema/migration/seed changes.
+- Security/privacy: copy avoids claiming screenshots, keystrokes, camera, microphone, messages, full URL history, or full enterprise monitoring.
 
 ## 8. Performance and Stability Check
 
-- 没有新增依赖、websocket、SSE 或额外后台轮询。
-- PBKDF2 verification 在 login 请求上执行，符合 pilot auth 成本范围。
-- `getWorkMapApiAuthOptions()` 只在需要 API context 时解析 session/dev-token。
-- Compliance load effect 有 `cancelled` guard，避免 unmounted 后继续 setState。
-- Virtual-office polling cadence 未改变。
-- Browser localStorage session parse 有 try/catch 和 expiry guard。
+- No new dependencies, websocket, SSE, or background realtime infrastructure.
+- Dashboard mount performs health + auth + map/policy/reports calls; acceptable for pilot readiness page but should be checked for noisy error output.
+- Reports mount performs auth + usage-summary call.
+- Effects use local `cancelled` guards before state updates after async calls.
+- Virtual-office core polling/rendering was not changed.
+- No server-side rendering data fetch was introduced; new API work runs client-side.
 
 ## 9. Verification Suggestions
 
@@ -116,34 +114,36 @@ Implementation handoff reported already passed:
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
-- HTTP smoke for `/health`, `POST /auth/pilot-login`, `/auth/me`, `/compliance/policy`, compliance acknowledgement, `/virtual-office/map`, `/virtual-office/navigation`, `/virtual-office/map/:officeMapId/positions`
-- Browser/headless verification for login, session localStorage, compliance acknowledgement marker, virtual-office Bearer requests, People privacy copy, logout clear, backend-off fallback
+
+Implementation smoke reported:
+
+- `GET /health` on `127.0.0.1:3001` returned `status: ok`.
+- `/dashboard`, `/reports`, `/compliance` on `127.0.0.1:3000` returned `200`.
+- `/virtual-office` on the already-running Next process returned `500`; clean restart verification later passed in manual QA.
 
 Manual acceptance completed by user:
 
-- 已确认 backend 在 `http://localhost:3001`，frontend 在 `http://localhost:3000`，端口和浏览器地址一致。
-- 已打开 `/login` 并使用 `engineer@workmap.demo` / `workmap-pilot` / `workmap-demo-company` 完成 pilot 登录。
-- 已确认 pilot session card 显示用户、role、expiry。
-- 已刷新页面并确认 session 仍可读。
-- 已在 DevTools Network 检查 `/virtual-office` 请求包含 `Authorization: Bearer ...`。
-- 已打开 `/virtual-office` 并确认 canvas、local avatar、remote teammates、People panel 正常。
-- 已确认 current user 不重复出现在 remote teammate 列表里。
-- 已回归 WASD/方向键、collision、double-click auto-walk、chair `E`、contact drawer、room/zone status。
-- 已打开 `/compliance`，确认 policy 能加载，并能完成 acknowledgement。
-- 已在 acknowledgement 后刷新 `/compliance`，确认页面显示已确认状态。
-- 已点击 AppShell logout / login clear session，确认 `workmap.pilotSession` 和 workflow state 被清掉。
-- 已在后端关闭时刷新 `/compliance` 和 `/virtual-office`，确认页面 fallback 安全且无 runtime crash。
-- 已检查桌面和窄屏布局，尤其是 login panel、AppShell session area、compliance modal、People privacy copy。
+- 已干净重启 backend 在 `http://localhost:3001`，frontend 在 `http://localhost:3000`，未混用旧端口或旧进程。
+- 已打开 `http://localhost:3001/health`，确认返回 `status: ok`。
+- 已打开 `/login`，使用 pilot auth 登录。
+- 已刷新页面，确认 AppShell 显示 pilot session；logout/no-session notice 和 `/login` 链接清楚。
+- 已打开 `/dashboard`，确认 API health、API auth、Remote presence、Compliance 四个 readiness card 文案清楚。
+- 已在 `/dashboard` 确认 Reports API rows 和 pilot example rows 标注不会混淆。
+- 已打开 `/reports`，确认 Reports API rows 或 sparse-data explanation 清楚。
+- 已打开 `/compliance`，确认 policy/transparency copy 和 acknowledgement 行为仍正常。
+- 已重点打开 `/virtual-office`，确认干净重启后不再出现 `500`。
+- 已回归 `/virtual-office`：map render、local avatar、position restore/save、polling、People panel、contact drawer、WASD/方向键、collision、double-click auto-walk、chair `E`、room/zone label。
+- 已检查桌面和窄屏布局，尤其是 AppShell notice、Dashboard status panel、Reports table/API rows。
 
 ## 10. Docs/Skills Update Needs
 
 Codex Chat 1 should later update:
 
-- `docs/skills/project-summary.md`: 记录 Pilot Auth + Privacy/Compliance Boundary MVP 已实现。
-- `docs/skills/api-contract-skill.md`: 记录 `POST /auth/pilot-login` request/response、JWT session shape、compliance acknowledgement endpoints。
-- `docs/skills/current-status.md`: 记录 pilot auth、backend Bearer session、virtual-office auth resolver、compliance acknowledgement 状态。
-- `docs/skills/backend-skill.md`: 记录 PBKDF2 pilot password hash、production 缺少 `WORKMAP_PILOT_PASSWORD_HASH` 时禁用 pilot login。
-- `docs/skills/deployment-skill.md`: 记录本地验收端口必须统一为 frontend `3000`、backend `3001`，以及 production env 需要配置 `WORKMAP_PILOT_PASSWORD_HASH`。
+- `docs/skills/project-summary.md`: record pilot readiness Dashboard/Reports/Compliance pass.
+- `docs/skills/current-status.md`: record Dashboard health/auth/presence/report readiness behavior and Reports sparse-data boundary.
+- `docs/skills/deployment-skill.md`: record required env vars, recommended ports `3000`/`3001`, Prisma setup steps, and that API dev is long-running.
+- `docs/skills/api-contract-skill.md`: record `GET /health` and `/reports/usage-summary` response shape.
+- `docs/skills/realtime-presence-skill.md`: record that this task preserved polling-only presence and did not add websocket/SSE.
 
 ## 11. Fix Request for Implementation Chat
 

@@ -9,6 +9,12 @@ export type ApiClientOptions = {
   baseUrl?: string;
 };
 
+export type WorkMapApiHealth = {
+  status: "ok" | string;
+  service: string;
+  timestamp: string;
+};
+
 export type WorkMapApiUser = {
   id: string;
   email?: string;
@@ -135,10 +141,19 @@ export type WorkMapApiPolicyAcknowledgement = {
 };
 
 export type WorkMapApiUsageSummary = {
-  userId?: string;
-  range?: string;
-  activeTime?: string;
-  idleTime?: string;
-  apps?: Array<{ name: string; duration: string; share?: string }>;
-  domains?: Array<{ domain: string; duration: string; share?: string }>;
+  userId: string;
+  apps: Array<{
+    appName: string;
+    category: string | null;
+    productivityLabel: string | null;
+    activeSeconds: number;
+    idleSeconds: number;
+  }>;
+  websites: Array<{
+    domain: string;
+    category: string | null;
+    productivityLabel: string | null;
+    activeSeconds: number;
+    idleSeconds: number;
+  }>;
 };

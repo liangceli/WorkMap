@@ -3,8 +3,9 @@ import type { UsageRow } from "./mockDashboardData";
 
 type AppUsageTableProps = {
   rows: UsageRow[];
+  title?: string;
 };
 
-export function AppUsageTable({ rows }: AppUsageTableProps) {
-  return <UsageTable title="Top apps today" rows={rows} />;
+export function AppUsageTable({ rows, title = "Top apps today" }: AppUsageTableProps) {
+  return <UsageTable title={title} rows={rows} />;
 }
