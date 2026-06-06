@@ -14,6 +14,7 @@ Important areas:
 - `components/avatar`, `lib/avatar`: avatar preview, storage, layer assets, frame maps.
 - `lib/api`: frontend API client and endpoint wrappers.
 - `lib/auth/pilotSession.ts`: browser pilot session storage and API auth options.
+- `lib/auth/cognitoSession.ts`: Cognito Hosted UI config, PKCE transaction, token exchange, session storage, and logout URL handling.
 - `lib/workflow/workflowState.ts`: frontend-only demo onboarding/login state.
 - `lib/theme/workmapTheme.ts`: central theme tokens.
 
@@ -21,6 +22,7 @@ Important areas:
 
 - `/`: home/onboarding router surface.
 - `/login`: pilot sign-in surface with frontend fallback.
+- `/login/callback`: Cognito Hosted UI callback and WorkMap mapping surface.
 - `/onboarding/company`
 - `/onboarding/avatar`
 - `/onboarding/device-setup`
@@ -40,6 +42,12 @@ Important areas:
 
 Known API wrappers include auth, users, reports, integrations, compliance, and virtual office. Some pages/components still rely on mock data instead of API calls.
 
+Local env behavior:
+
+- `apps/web/next.config.ts` loads root `workmap/.env` for local dev/build before exporting Next config.
+- Existing platform/shell env wins; root `.env` only fills missing keys.
+- Restart the web dev server after changing root `.env`.
+
 Pilot readiness API wrappers:
 
 - `lib/api/healthApi.ts` wraps `GET /health`.
@@ -49,10 +57,12 @@ For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts 
 
 Pilot login/session:
 
-- `/login` is a pilot sign-in surface with seeded pilot users, password/company slug fields, session display, open-office action, logout/session clear, and clearly labeled frontend fallback.
+- `/login` supports Cognito Hosted UI sign-in when `NEXT_PUBLIC_COGNITO_*` config is present, and remains a pilot sign-in surface with seeded pilot users, password/company slug fields, session display, open-office action, logout/session clear, and clearly labeled frontend fallback.
 - `authApi.ts` exposes `createPilotSession()`.
 - `pilotSession.ts` stores `workmap.pilotSession`, clears expired sessions, exposes Bearer API options, maps backend roles to workflow roles, and clears session on logout.
-- `apiAuth.ts` prefers pilot session, then development dev-token/dev-cache fallback.
+- `cognitoSession.ts` stores Cognito sessions under `workmap.cognitoSession` and PKCE transactions under `workmap.cognitoTransaction`.
+- `/login/callback` exchanges the Cognito code, stores Cognito session, calls `/auth/me` with the Cognito id token, and maps the returned WorkMap role into workflow state before opening `/virtual-office`.
+- `apiAuth.ts` prefers mapped Cognito session, then pilot session, then development dev-token/dev-cache fallback.
 - `AppShell` shows pilot session state, role/session context, backend Bearer messaging, and logout behavior.
 - AppShell now prefers the pilot session role when present, limits fallback navigation before session/workflow setup, and links unclear/missing-session states back to `/login`.
 

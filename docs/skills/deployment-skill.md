@@ -32,6 +32,13 @@ API local development note:
 - The compiled API entry imports `load-local-env.js` before `AppModule` so local `.env` values and compiled workspace package aliases are available.
 - The pilot release checklist treats this API dev command as a long-running server command, not a command that should complete during verification.
 
+Web local development note:
+
+- As of commit `c2c7d76`, `apps/web/next.config.ts` loads the workspace root `workmap/.env` before exporting Next config.
+- The loader walks upward until it finds `pnpm-workspace.yaml`, reads `.env` from that workspace root, skips comments/blank lines, supports simple quoted values, and does not override existing `process.env` keys.
+- This lets `pnpm --filter @workmap/web dev` and `pnpm --filter @workmap/web build` see root `NEXT_PUBLIC_*` values.
+- Restart the web dev server after changing `workmap/.env`; already-running Next processes will not pick up changed env values.
+
 ## Environment Variables
 
 From `.env.example`:
@@ -40,15 +47,31 @@ From `.env.example`:
 - `REDIS_URL`
 - `NEXT_PUBLIC_APP_URL`
 - `NEXT_PUBLIC_WORKMAP_API_URL`
+- `NEXT_PUBLIC_COGNITO_REGION`
+- `NEXT_PUBLIC_COGNITO_USER_POOL_ID`
+- `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID`
+- `NEXT_PUBLIC_COGNITO_DOMAIN`
+- `NEXT_PUBLIC_COGNITO_REDIRECT_URI`
+- `NEXT_PUBLIC_COGNITO_LOGOUT_URI`
+- `NEXT_PUBLIC_COGNITO_SCOPE`
 - `API_PORT`
+- `WORKMAP_ALLOWED_ORIGIN`
 - `WORKMAP_JWT_SECRET`
 - `WORKMAP_PILOT_PASSWORD_HASH`
+- `WORKMAP_COGNITO_ISSUER`
+- `WORKMAP_COGNITO_REGION`
+- `WORKMAP_COGNITO_USER_POOL_ID`
+- `WORKMAP_COGNITO_APP_CLIENT_ID`
+- `WORKMAP_COGNITO_COMPANY_SLUG`
 
 Pilot local startup convention:
 
 - `NEXT_PUBLIC_APP_URL="http://localhost:3000"`
 - `NEXT_PUBLIC_WORKMAP_API_URL="http://localhost:3001"`
 - `API_PORT="3001"`
+- `WORKMAP_ALLOWED_ORIGIN="http://localhost:3000"`
+- `NEXT_PUBLIC_COGNITO_REDIRECT_URI="http://localhost:3000/login/callback"`
+- `NEXT_PUBLIC_COGNITO_LOGOUT_URI="http://localhost:3000/login"`
 
 Development-only virtual-office API verification can also use:
 
@@ -83,12 +106,55 @@ Pilot auth local defaults:
 
 Detailed release smoke steps live in `docs/ai-handoff/pilot-release-checklist.md`.
 
+## STAGE 2 Deployment Readiness
+
+Read `docs/ai-handoff/stage2-deployment-readiness.md` before external deployment work.
+
+Target platform direction:
+
+- Frontend: Vercel.
+- Backend: Render.
+- Database: Supabase Postgres.
+- Auth: AWS Cognito Hosted UI with browser PKCE.
+
+Vercel frontend:
+
+- Root directory: `workmap`.
+- Install command: `pnpm install`.
+- Build command: `pnpm --filter @workmap/web build`.
+- Required public env includes `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_WORKMAP_API_URL`, and `NEXT_PUBLIC_COGNITO_*`.
+- Cognito callback should point to `https://<vercel-domain>/login/callback`.
+- Cognito logout should point to `https://<vercel-domain>/login`.
+
+Render backend:
+
+- Root directory: `workmap`.
+- Build command: `pnpm install && pnpm --filter @workmap/api build`.
+- Start command: `pnpm --filter @workmap/api start`.
+- Health check path: `/health`.
+- Required server env includes `DATABASE_URL`, `WORKMAP_ALLOWED_ORIGIN`, `WORKMAP_JWT_SECRET`, `WORKMAP_PILOT_PASSWORD_HASH`, and `WORKMAP_COGNITO_*`.
+- `WORKMAP_ALLOWED_ORIGIN` must match the Vercel frontend origin.
+
+Supabase:
+
+- Use the Supabase Postgres connection string as `DATABASE_URL`.
+- Run Prisma generate/migrate/seed against the intended database.
+- No Supabase RLS or multi-tenant schema work is included in STAGE 2.
+
+Cognito:
+
+- Configure Hosted UI domain, browser PKCE app client, callback/logout URLs, and `openid email profile` scopes.
+- Backend maps verified Cognito email to an existing WorkMap user for STAGE 2.
+- Stable Cognito `sub` mapping and tenant provisioning remain future work.
+
 ## Deployment Caution
 
 `load-local-env.ts` is imported by the API main entry and registers compiled workspace aliases when the compiled local paths exist. It does not overwrite existing environment variables. Production/deployed startup should provide required env vars explicitly and should be reviewed if deployment uses the same compiled entry path.
 
+The web root `.env` loader is for local monorepo ergonomics. Vercel/Render production values should be set in platform environment settings; do not rely on a committed `.env` for real deployment secrets.
+
 ## Deployment Unknowns
 
-- No concrete hosting target was confirmed.
 - Redis is listed in env example but no confirmed runtime usage was found during intake.
 - Desktop agent, browser extension, and worker are currently placeholder scaffolds.
+- External Vercel/Render/Cognito deployed smoke remains pending for the accepted STAGE 2 baseline.

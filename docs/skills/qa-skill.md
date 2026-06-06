@@ -13,6 +13,7 @@ Targeted commands:
 - `pnpm --filter @workmap/web lint`
 - `pnpm --filter @workmap/web typecheck`
 - `pnpm --filter @workmap/web build`
+- `pnpm --filter @workmap/api lint`
 - `pnpm --filter @workmap/api typecheck`
 - `pnpm --filter @workmap/api build`
 
@@ -25,6 +26,11 @@ Database setup:
 ## Manual QA Checklist
 
 - `/login` creates expected demo role workflow.
+- `/login` shows `Sign in with Cognito` when root `workmap/.env` provides complete `NEXT_PUBLIC_COGNITO_*` config and the web dev server has been restarted.
+- `/login` shows Cognito missing-config guidance when public Cognito env is incomplete, while keeping pilot fallback available.
+- `/login/callback` completes Cognito token exchange and backend `/auth/me` mapping for a verified, mapped Cognito user.
+- Unmapped Cognito users, unverified email claims, and ambiguous email mappings should fail in a controlled way.
+- Clear/sign out Cognito session before verifying pilot fallback after Cognito mapping failure.
 - `/login` creates a pilot session with seeded pilot credentials when the backend is running.
 - AppShell session state remains clear after refresh and links missing/unclear session states back to `/login`.
 - `/dashboard` renders API health, auth/session, remote presence, compliance, and reports readiness with clear live/fallback/error labels.
@@ -53,6 +59,26 @@ Database setup:
 - Dashboard/employees/reports/compliance/integrations/settings routes render.
 - API `GET /health` responds when backend is running.
 - Dev token endpoint works against seeded demo users outside production.
+- Local browser smoke should use `http://localhost:3000`, not `http://127.0.0.1:3000`, when `WORKMAP_ALLOWED_ORIGIN` is configured for localhost.
+
+## STAGE 2 Cognito / Deployment QA
+
+- Keep real secrets out of chat, logs, docs, and commits.
+- Confirm `workmap/.env` contains local public Cognito config when testing Cognito locally; do not create `apps/web/.env.local` for the standard STAGE 2 flow.
+- Stop old web dev servers after editing root `.env`.
+- Start API: `pnpm --filter @workmap/api dev`.
+- Start Web: `pnpm --filter @workmap/web dev`.
+- Open `http://localhost:3000/login` and confirm Cognito config status.
+- Confirm pilot login still succeeds with seeded user/password/company slug.
+- Confirm AppShell/session source is understandable after pilot login and after refresh.
+- With real Cognito configured, click `Sign in with Cognito`, complete Hosted UI sign-in, and confirm `/login/callback` maps through backend `/auth/me`.
+- Confirm a mapped verified Cognito user can open `/virtual-office`.
+- Confirm an unmapped Cognito user receives controlled mapping-needed guidance.
+- Confirm an unverified Cognito email is rejected by the backend.
+- Confirm clearing Cognito session allows pilot fallback testing again.
+- Confirm `/dashboard`, `/reports`, and `/compliance` still render with fallback/sign-in guidance when unauthenticated and API-backed state when authenticated.
+- Confirm backend stopped does not crash frontend pages that already have fallback behavior.
+- For deployed smoke, set real Vercel, Render, Supabase, and Cognito env values directly in platform consoles and verify real callback/logout URLs.
 
 ## Local API-Backed Virtual Office Verification Loop
 
@@ -225,3 +251,14 @@ For commit `79ac906`, handoff/QA reports:
 - HTTP smoke passed for API `/health` and web `/dashboard`, `/reports`, and `/compliance`.
 - An initial `/virtual-office` smoke returned 500 from an already-running stale Next process; user clean-restarted backend/frontend and confirmed `/virtual-office` worked normally.
 - User manual acceptance passed for pilot login, AppShell session refresh clarity, Dashboard readiness cards, Reports API/sparse-data states, Compliance policy/acknowledgement continuity, and full `/virtual-office` regression checks.
+
+For commit `c2c7d76`, handoff/QA reports:
+
+- Web lint, typecheck, and build passed after root `.env` loading was added to `apps/web/next.config.ts`.
+- Full STAGE 2 baseline verification passed for web/API lint, typecheck, and build.
+- Secret/key review found no real committed secrets; `.env.example` values are local examples/placeholders.
+- API smoke passed for `GET /health` and `POST /auth/pilot-login`.
+- Clean local web smoke passed for `/login`, `/dashboard`, `/reports`, `/compliance`, and `/virtual-office`.
+- `/login` showed `Sign in with Cognito` in the local environment, confirming root `.env` public Cognito config was visible to the web dev server without printing env values.
+- User manual progress confirmed local `/login`, pilot login, basic `/virtual-office` entry, `/dashboard`, `/reports`, `/compliance`, Supabase manual migration SQL, and minimal seed insertion.
+- Render/Vercel deployed smoke is deferred until after deployed env/callback/logout URLs are configured; an earlier Render failure was from an older `main` commit and should not be treated as this implementation failing.

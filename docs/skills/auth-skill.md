@@ -6,7 +6,8 @@ Backend auth is centered on `RequestContextGuard`.
 
 Supported context sources:
 
-- Bearer JWT, verified by backend `JwtService`.
+- Cognito Bearer JWT, verified by backend `CognitoJwtService`.
+- WorkMap Bearer JWT, verified by backend `JwtService`.
 - Development-only headers: `x-workmap-company-id`, `x-workmap-user-id`, `x-workmap-role`.
 
 `POST /auth/dev-token` creates an 8-hour development Bearer token for seeded users when not in production.
@@ -14,6 +15,36 @@ Supported context sources:
 `POST /auth/pilot-login` creates an 8-hour pilot Bearer token for seeded/pilot users when credentials are valid.
 
 `GET /auth/me` returns the resolved request context.
+
+Auth priority as of commit `c2c7d76`:
+
+1. Cognito Bearer JWT.
+2. WorkMap/pilot/dev Bearer JWT.
+3. Development headers, only when `NODE_ENV !== "production"`.
+
+## Cognito Auth
+
+Commit `c2c7d76` added the STAGE 2 Cognito deployment baseline.
+
+Backend behavior:
+
+- `CognitoJwtService` verifies Cognito JWTs against issuer JWKS using RS256.
+- Required backend config: `WORKMAP_COGNITO_APP_CLIENT_ID` plus either `WORKMAP_COGNITO_ISSUER` or `WORKMAP_COGNITO_REGION` and `WORKMAP_COGNITO_USER_POOL_ID`.
+- Verification checks issuer, audience/client id, expiry, `nbf`, and signature.
+- `AuthService.resolveCognitoContext()` requires a Cognito subject and verified email.
+- `email_verified` must be boolean `true` or string `"true"`.
+- STAGE 2 maps Cognito email to an existing WorkMap user; if `WORKMAP_COGNITO_COMPANY_SLUG` is configured, lookup is company-scoped.
+- If the same email maps to multiple companies and no company slug is configured, the request is rejected as ambiguous.
+- WorkMap `companyId`, `userId`, and `role` come from Prisma, not frontend claims.
+
+Frontend behavior:
+
+- `lib/auth/cognitoSession.ts` manages Hosted UI config, PKCE transaction state, token exchange, session storage, and logout URL generation.
+- Cognito session storage key: `workmap.cognitoSession`.
+- Cognito transaction storage key: `workmap.cognitoTransaction`.
+- `/login/callback` completes the code exchange, calls backend `/auth/me`, saves workflow role state, and routes mapped users to `/virtual-office`.
+- `getWorkMapApiAuthOptions()` uses a mapped Cognito session before pilot or dev-token auth.
+- If a Cognito session exists but backend mapping fails, API auth returns unavailable rather than silently using pilot fallback. Clear/sign out Cognito session before testing pilot fallback again.
 
 ## Pilot Auth
 
@@ -36,6 +67,7 @@ Frontend behavior:
 - Stored data includes Bearer token, expiry, and auth user context.
 - Sessions expire one minute before token expiry and are cleared automatically.
 - `getWorkMapApiAuthOptions()` prefers pilot session, then falls back to development dev-token/dev-cache when available.
+- After `c2c7d76`, pilot session is second priority behind a mapped Cognito session.
 - Logout/session clear removes pilot session and demo workflow state.
 - Existing demo workflow state remains for onboarding/navigation continuity, not production authorization.
 
@@ -84,7 +116,8 @@ Frontend demo workflow role union currently includes only `EMPLOYEE`, `MANAGER`,
 
 ## Risks
 
-- Enterprise production auth/session handling is not confirmed beyond the pilot session path.
+- STAGE 2 Cognito is a deployment/auth baseline, not a complete enterprise identity lifecycle.
+- Stable Cognito `sub` mapping, tenant provisioning, invite flows, MFA policy, password reset UX, and route guard overhaul remain future work.
 - Frontend route access is demo-state-based, not backend-auth-based.
 - Authenticated virtual-office API success depends on the local backend listening on `localhost:3001`, `WORKMAP_JWT_SECRET` being configured, and demo seed data existing.
 - Pilot auth is not SSO/OAuth/MFA/password-reset-ready production auth.

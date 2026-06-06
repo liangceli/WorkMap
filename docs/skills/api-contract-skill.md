@@ -7,8 +7,9 @@ Base URL:
 
 Authentication/context:
 
-- Production: Bearer JWT.
-- Development: Bearer JWT or `x-workmap-company-id`, `x-workmap-user-id`, `x-workmap-role` headers.
+- Production: Cognito Bearer JWT or WorkMap Bearer JWT.
+- Development: Cognito Bearer JWT, WorkMap Bearer JWT, or `x-workmap-company-id`, `x-workmap-user-id`, `x-workmap-role` headers.
+- Resolution priority: Cognito Bearer, WorkMap Bearer, then development headers outside production.
 
 ## Development Auth Bridge
 
@@ -136,6 +137,37 @@ Local pilot defaults:
 - Example user: `engineer@workmap.demo`.
 - Password: `workmap-pilot`.
 - Company slug: `workmap-demo-company`.
+
+## Cognito Auth Contract
+
+STAGE 2 Cognito support uses Cognito Hosted UI on the frontend and Cognito JWT verification on the backend.
+
+Frontend public config:
+
+- `NEXT_PUBLIC_COGNITO_REGION`
+- `NEXT_PUBLIC_COGNITO_USER_POOL_ID`
+- `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID`
+- `NEXT_PUBLIC_COGNITO_DOMAIN`
+- `NEXT_PUBLIC_COGNITO_REDIRECT_URI`
+- `NEXT_PUBLIC_COGNITO_LOGOUT_URI`
+- `NEXT_PUBLIC_COGNITO_SCOPE`
+
+Backend config:
+
+- `WORKMAP_COGNITO_APP_CLIENT_ID`
+- `WORKMAP_COGNITO_ISSUER` or `WORKMAP_COGNITO_REGION` plus `WORKMAP_COGNITO_USER_POOL_ID`
+- optional `WORKMAP_COGNITO_COMPANY_SLUG`
+
+Backend verification:
+
+- JWT issuer must match configured issuer.
+- Audience/client id must match configured app client id.
+- Signature must verify through Cognito JWKS with RS256.
+- Expired or not-yet-active tokens are rejected.
+- `email_verified` must be true.
+- Cognito email must map to exactly one existing WorkMap user, unless company slug scopes the lookup.
+
+`GET /auth/me` under Cognito Bearer returns the resolved WorkMap request context from Prisma. It does not trust frontend-provided company/user/role.
 
 ## Compliance Contract
 

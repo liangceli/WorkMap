@@ -1,9 +1,18 @@
 # Current Status
 
-Last updated: 2026-06-04.
+Last updated: 2026-06-06.
 
 ## Latest Accepted Work
 
+- Commit `c2c7d76` (`feat: add stage 2 cognito deployment baseline`) completed the STAGE 2 Cognito/deployment baseline and root `.env` local loading follow-up.
+- Web local dev/build now loads the workspace root `workmap/.env` from `apps/web/next.config.ts` without overwriting existing platform/shell env values, so `apps/web/.env.local` is no longer required for local STAGE 2 Cognito public config.
+- `.env.example` now separates frontend public env, backend/server env, Cognito backend verification env, pilot fallback env, and local port defaults.
+- `docs/ai-handoff/stage2-deployment-readiness.md` now documents Vercel frontend, Render backend, Supabase Postgres, Cognito Hosted UI, Cognito email-to-WorkMap-user mapping, and smoke checks.
+- Backend now includes Cognito JWT verification through JWKS/RS256, issuer and audience/client-id checks, expiry/nbf validation, verified-email enforcement, and temporary email-to-existing-user mapping.
+- `RequestContextGuard` auth priority is Cognito Bearer first, WorkMap JWT second, and development headers only outside production.
+- Frontend now supports Cognito Hosted UI PKCE sign-in, `/login/callback` token exchange, `workmap.cognitoSession` storage, Cognito logout URL generation, and backend `/auth/me` mapping before entering WorkMap.
+- Frontend API auth now prefers a mapped Cognito session, then pilot session, then development dev-token/dev-cache.
+- Pilot auth fallback, backend `email_verified` enforcement, and development-only dev-token behavior were preserved.
 - Commit `79ac906` (`feat: add pilot readiness dashboard and reports QA`) completed the Pilot Deployment + Dashboard/Reports/Compliance QA pass.
 - `.env.example` now documents the minimum pilot startup variables and local port convention: web on `http://localhost:3000`, API on `http://localhost:3001`.
 - `docs/ai-handoff/pilot-release-checklist.md` now captures install, Prisma generate/migrate/seed, startup, health/page checks, and 5-user virtual-office regression checks.
@@ -57,15 +66,24 @@ Last updated: 2026-06-04.
 
 - Monorepo scaffold is active with Next.js web, NestJS API, Prisma/Postgres schema, and shared packages.
 - Web app includes routes for login, onboarding, dashboard, employees, reports, compliance, integrations, settings, avatar debug, and `/virtual-office`.
+- `/login` now supports Cognito Hosted UI sign-in when `NEXT_PUBLIC_COGNITO_*` config is available, while preserving pilot fallback.
+- `/login/callback` completes Cognito code exchange, validates backend WorkMap mapping through `/auth/me`, and routes mapped users into `/virtual-office`.
 - `/virtual-office` renders a canvas-based `OfficeMap` using `/maps/workmap2.tmx`, office tilesets, layered avatar assets, local movement, collision detection, click/double-click navigation, chair interaction, and remote office data that can come from validated read APIs or mock fallback.
 - `/dashboard` can now show pilot readiness across API health, auth/session, remote presence, compliance policy, and reports usage.
 - `/reports` can now show authenticated current-user app/domain usage summaries from the API, with sparse-data and pilot-example labels where backend aggregate data is not available.
 - Backend exposes guarded endpoints for auth, users, companies, devices, reports, virtual office, integrations, and compliance.
+- Backend request context can now resolve Cognito users from verified Cognito JWTs before falling back to WorkMap pilot/dev JWTs.
 - Prisma schema contains company, department, users, devices, activity events, usage summaries, office maps, rooms, virtual office positions, monitoring policies, policy acknowledgements, integrations, and audit logs.
 - Seed data creates a demo company, users, default office map/rooms, policy, device rows, virtual office positions, usage summaries, integrations, and an audit event.
 
 ## Known Issues / Risks
 
+- Real external deployment smoke for Vercel/Render/Cognito is still pending after commit/push; the readiness doc is a checklist, not proof of deployed production success.
+- Root `.env` changes require restarting the Next dev server before `/login` reflects updated `NEXT_PUBLIC_COGNITO_*` values.
+- Local browser smoke should use `http://localhost:3000`; using `http://127.0.0.1:3000` can fail CORS when `WORKMAP_ALLOWED_ORIGIN` is `http://localhost:3000`.
+- Cognito mapping is temporary STAGE 2 email mapping. Future schema-backed Cognito `sub`/identity mapping and tenant provisioning remain undecided.
+- If a Cognito session exists but backend mapping fails, frontend API auth returns unavailable and does not silently fall back to pilot auth until Cognito session is cleared.
+- Cognito Hosted UI sign-in requires verified email and an existing WorkMap user record with matching email; unmapped, unverified, or ambiguous users are rejected.
 - Dashboard can show a mixed state of live API checks and pilot example/sample sections; labels must remain explicit.
 - Reports are currently current-user usage summaries only. Team/department aggregate reporting remains a future backend contract.
 - Compliance acknowledgement readback is still not returned by `GET /compliance/policy`; frontend readability relies on a browser marker after successful acknowledgement.
@@ -80,11 +98,10 @@ Last updated: 2026-06-04.
 - The implementation test updated local dev DB position for `engineer@workmap.demo` to `x=333`, `y=444`, `direction=right`.
 - API `dev` script is now build-then-run, not watch/hot reload.
 - `load-local-env.ts` is imported unconditionally by the API entry. It preserves existing env vars, but deployment expectations should stay explicit.
-- Enterprise production auth/session remains unimplemented; pilot auth is a controlled pilot path, and the dev auth bridge remains local-development verification only.
+- Enterprise production auth/session is partially started through STAGE 2 Cognito baseline, but account lifecycle, MFA policy, password reset flows, tenant admin management, stable Cognito identity mapping, and full route guards remain unimplemented.
 - Pilot auth is pilot-ready but not enterprise production auth: no SSO/OAuth, MFA, password reset, tenant credential lifecycle, or full route permission overhaul.
 - Production pilot login requires explicit `WORKMAP_PILOT_PASSWORD_HASH`; without it, pilot login is disabled in production.
 - Compliance acknowledgement readback is not exposed by the backend policy endpoint; frontend stores a browser marker only after successful backend acknowledgement.
-- `artresource.tiled-session` is a tracked dirty file that appears unrelated to this docs/task flow and should not be staged accidentally.
 - The dev auth bridge assumes seeded demo users from `prisma/seed.ts` exist locally, unless public dev env overrides are supplied.
 - Backend `zoneData`, navigation `anchor`, and navigation `bounds` must match the current TMX pixel coordinate system to be accepted safely.
 - API-derived remote players use fallback role text (`Team member`) and may route profiles by raw user id.
@@ -95,6 +112,10 @@ Last updated: 2026-06-04.
 
 ## Recommended Next Tasks
 
+- Execute deployed smoke on real Vercel/Render/Cognito URLs after confirming environment variables and callback/logout URLs.
+- Decide the stable Cognito identity model: `cognitoSub` field vs identity table, tenant membership, invite/onboarding, and migration from pilot users.
+- Consider clearer manual recovery for Cognito mapping failure, including sign-out/clear-session guidance before using pilot fallback.
+- Add automated tests for Cognito token verification, email_verified enforcement, mapping ambiguity, auth priority, `/login/callback`, and root `.env` loading behavior.
 - Add a backend team/department aggregate reports endpoint so dashboard/reports can remove pilot-example aggregate rows.
 - Add compliance acknowledgement status to `GET /compliance/policy`.
 - Add production-grade route guards/session enforcement when moving beyond pilot readiness.

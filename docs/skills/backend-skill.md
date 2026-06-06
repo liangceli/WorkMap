@@ -49,10 +49,29 @@ Most business endpoints use `RequestContextGuard`.
 
 Context can come from:
 
-- Bearer JWT verified by `JwtService`.
+- Cognito Bearer JWT verified by `CognitoJwtService`.
+- WorkMap Bearer JWT verified by `JwtService`.
 - Development-only headers: `x-workmap-company-id`, `x-workmap-user-id`, `x-workmap-role`.
 
 In production, Bearer token is required.
+
+Auth priority:
+
+1. Cognito Bearer JWT.
+2. WorkMap/pilot/dev Bearer JWT.
+3. Development headers outside production only.
+
+## Cognito Backend Baseline
+
+Commit `c2c7d76` added STAGE 2 Cognito request-context support.
+
+- `CognitoJwtService` verifies Cognito JWTs with JWKS, RS256, issuer, audience/client id, expiry, and `nbf`.
+- JWKS are cached for about one hour per issuer.
+- Cognito config is read from `WORKMAP_COGNITO_ISSUER` or derived from `WORKMAP_COGNITO_REGION` and `WORKMAP_COGNITO_USER_POOL_ID`, plus `WORKMAP_COGNITO_APP_CLIENT_ID`.
+- `AuthService.resolveCognitoContext()` requires verified email and maps Cognito email to an existing WorkMap `User`.
+- `WORKMAP_COGNITO_COMPANY_SLUG` can scope the temporary email mapping to one company.
+- Ambiguous same-email cross-company matches are rejected until mapping is scoped or a stable identity model is added.
+- No Prisma schema/migration was added for Cognito `sub` mapping in this round.
 
 ## Pilot Auth
 
@@ -79,5 +98,5 @@ Commit `14fb706` added `POST /auth/pilot-login`.
 ## Not Confirmed
 
 - No websocket gateway was found.
-- No production OAuth/password login implementation was confirmed.
+- No complete production account lifecycle, tenant provisioning, MFA, or password reset implementation was confirmed.
 - No background activity ingestion controller route was confirmed during intake, despite activity-related schema/module presence.

@@ -72,6 +72,22 @@ Reason: The pilot needed a deployable, verifiable readiness view without expandi
 
 Trade-off: This avoids adding a new team aggregate reports backend contract. Dashboard and Reports can show mixed API-backed and example states, so labels and sparse-data copy are part of the product boundary.
 
+## 2026-06-06 - STAGE 2 Cognito Deployment Baseline
+
+Decision: Add Cognito Hosted UI / JWT verification as the first deployment auth baseline while preserving pilot auth and development-only dev-token fallback.
+
+Reason: STAGE 2 needs a deployable path for Vercel, Render, Supabase, and Cognito without jumping straight to full enterprise account lifecycle or tenant provisioning.
+
+Trade-off: Cognito users are temporarily mapped by verified email to existing WorkMap users, optionally scoped by `WORKMAP_COGNITO_COMPANY_SLUG`. Stable Cognito `sub` mapping, tenant membership, invite flows, MFA/password reset UX, and full route guards remain future work.
+
+## 2026-06-06 - Shared Root Local Env Loading
+
+Decision: Load root `workmap/.env` from `apps/web/next.config.ts` for local web dev/build without overriding existing environment variables.
+
+Reason: Local STAGE 2 testing should use one root `.env` for API and Web, so `/login` can see `NEXT_PUBLIC_COGNITO_*` without requiring `apps/web/.env.local`.
+
+Trade-off: The small loader intentionally handles simple `.env` lines only and requires a Next dev-server restart after env changes. Platform env values remain authoritative for deployment.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

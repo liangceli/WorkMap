@@ -35,6 +35,8 @@ People/Presence UX added for the 5-person pilot:
 
 Pilot auth and compliance UX:
 
+- `/login` should show Cognito Hosted UI sign-in when configured, clear missing-config guidance when not configured, and preserve pilot fallback.
+- `/login/callback` should make Cognito token exchange and WorkMap mapping status understandable, including mapping-needed failures.
 - `/login` should clearly distinguish pilot backend auth from frontend-only demo fallback.
 - App shell should make pilot Bearer session state, role, and logout action understandable.
 - Missing or unclear session states should point users back to `/login` instead of exposing the full role navigation by default.
