@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import type { WorkMapRole } from "@workmap/auth";
 import { AuthService } from "./auth.service.js";
+import { CognitoJwtService } from "./cognito-jwt.service.js";
 import { REQUEST_CONTEXT_KEY, type RequestWithContext } from "./current-context.decorator.js";
 import { JwtService } from "./jwt.service.js";
 
@@ -14,12 +15,20 @@ type HeaderRequest = RequestWithContext & {
 export class RequestContextGuard implements CanActivate {
   constructor(
     private readonly auth: AuthService,
+    private readonly cognitoJwt: CognitoJwtService,
     private readonly jwt: JwtService,
   ) {}
 
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<HeaderRequest>();
     const authorization = singleHeader(request.headers.authorization);
+    const cognitoPayload = await this.cognitoJwt.verifyBearerToken(authorization);
+
+    if (cognitoPayload) {
+      request[REQUEST_CONTEXT_KEY] = await this.auth.resolveCognitoContext(cognitoPayload);
+      return true;
+    }
+
     const jwtPayload = this.jwt.verifyBearerToken(authorization);
 
     if (jwtPayload) {

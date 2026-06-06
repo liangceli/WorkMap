@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { clearPilotSession, getPilotSession, toWorkflowRole, type StoredPilotSession } from "../../lib/auth/pilotSession";
 import { getUserSetupState, resetUserSetupState, type UserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 
@@ -21,11 +22,13 @@ const navItems: Array<{ label: string; href: string; roles: WorkMapRole[] }> = [
 
 export function AppShell({ children }: AppShellProps) {
   const [setupState, setSetupState] = useState<UserSetupState | null>(null);
+  const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
   const [pilotSession, setPilotSession] = useState<StoredPilotSession | null>(null);
-  const activeRole = pilotSession ? toWorkflowRole(pilotSession.user.role) : setupState?.role ?? null;
+  const activeRole = cognitoSession ? setupState?.role ?? null : pilotSession ? toWorkflowRole(pilotSession.user.role) : setupState?.role ?? null;
 
   useEffect(() => {
     setSetupState(getUserSetupState());
+    setCognitoSession(getCognitoSession());
     setPilotSession(getPilotSession());
   }, []);
 
@@ -37,7 +40,16 @@ export function AppShell({ children }: AppShellProps) {
     return navItems.filter((item) => item.roles.includes(activeRole));
   }, [activeRole]);
 
-  const roleLabel = pilotSession ? formatRole(pilotSession.user.role) : activeRole ? formatRole(activeRole) : "Sign in needed";
+  const roleLabel = cognitoSession
+    ? activeRole
+      ? `Cognito / ${formatRole(activeRole)}`
+      : "Cognito / mapping"
+    : pilotSession
+      ? formatRole(pilotSession.user.role)
+      : activeRole
+        ? formatRole(activeRole)
+        : "Sign in needed";
+  const sessionSource = cognitoSession ? "Cognito session" : pilotSession ? "Pilot session" : activeRole ? "Frontend demo fallback" : "No session";
 
   return (
     <main style={styles.page}>
@@ -63,13 +75,15 @@ export function AppShell({ children }: AppShellProps) {
             <span style={styles.roleDot} />
             {roleLabel}
           </div>
-          {pilotSession ? (
+          {cognitoSession || pilotSession ? (
             <button
               type="button"
               style={styles.logoutButton}
               onClick={() => {
+                clearCognitoSession();
                 clearPilotSession();
                 resetUserSetupState();
+                setCognitoSession(null);
                 setPilotSession(null);
                 setSetupState(null);
               }}
@@ -81,15 +95,17 @@ export function AppShell({ children }: AppShellProps) {
       </header>
 
       <section style={styles.notice}>
-        <strong>{pilotSession ? "Pilot session" : activeRole ? "Frontend demo fallback" : "No pilot session"}</strong>
+        <strong>{sessionSource}</strong>
         <span>
-          {pilotSession
+          {cognitoSession
+            ? `${cognitoSession.claims.email ?? cognitoSession.claims.sub} is using a Cognito bearer token. WorkMap user/company/role mapping is resolved by the backend.`
+            : pilotSession
             ? `${pilotSession.user.displayName} is using a backend bearer token. Role boundaries are enforced by API guards where implemented.`
             : activeRole
               ? "Navigation visibility is for workflow testing only. Sign in on /login for a backend-issued pilot token."
-              : "Sign in before pilot QA so API requests use the intended backend-issued user context."}
+              : "Sign in before QA so API requests use the intended backend-issued user context."}
         </span>
-        {!pilotSession ? (
+        {!cognitoSession && !pilotSession ? (
           <a href="/login" style={styles.noticeLink}>
             Sign in
           </a>

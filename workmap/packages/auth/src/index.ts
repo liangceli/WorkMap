@@ -14,6 +14,21 @@ export type WorkMapJwtPayload = {
   exp?: number;
 };
 
+export type CognitoJwtPayload = {
+  sub: string;
+  iss: string;
+  token_use?: "id" | "access" | string;
+  aud?: string;
+  client_id?: string;
+  email?: string;
+  email_verified?: boolean | "true" | "false" | string;
+  username?: string;
+  "cognito:username"?: string;
+  iat?: number;
+  exp?: number;
+  nbf?: number;
+};
+
 const MANAGER_ROLES = new Set<WorkMapRole>(["TEAM_LEAD", "MANAGER", "HR_ADMIN", "OWNER"]);
 const ADMIN_ROLES = new Set<WorkMapRole>(["HR_ADMIN", "IT_ADMIN", "OWNER"]);
 

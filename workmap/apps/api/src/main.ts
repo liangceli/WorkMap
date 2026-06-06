@@ -7,7 +7,7 @@ async function bootstrap() {
   const port = Number(process.env.API_PORT ?? 3001);
 
   app.enableCors({
-    origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    origin: process.env.WORKMAP_ALLOWED_ORIGIN ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
     credentials: true,
   });
 

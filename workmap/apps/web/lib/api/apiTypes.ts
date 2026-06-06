@@ -40,6 +40,12 @@ export type WorkMapApiAuthUser = {
   role: string;
 };
 
+export type WorkMapApiRequestContext = {
+  companyId: string;
+  userId: string;
+  role: string;
+};
+
 export type WorkMapApiPilotSession = {
   accessToken: string;
   tokenType: "Bearer";

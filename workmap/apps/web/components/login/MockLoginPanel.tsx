@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPilotSession } from "../../lib/api/authApi";
+import {
+  clearCognitoSession,
+  getCognitoConfigStatus,
+  getCognitoLogoutUrl,
+  getCognitoSession,
+  startCognitoSignIn,
+  type StoredCognitoSession,
+} from "../../lib/auth/cognitoSession";
 import { clearPilotSession, getPilotSession, savePilotSession, toWorkflowRole, type StoredPilotSession } from "../../lib/auth/pilotSession";
 import {
   getDefaultSetupState,
@@ -27,12 +35,29 @@ export function MockLoginPanel() {
   const [companySlug, setCompanySlug] = useState("workmap-demo-company");
   const [role, setRole] = useState<WorkMapRole>("MANAGER");
   const [session, setSession] = useState<StoredPilotSession | null>(null);
+  const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
+  const [cognitoConfig, setCognitoConfig] = useState<ReturnType<typeof getCognitoConfigStatus> | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [cognitoSubmitting, setCognitoSubmitting] = useState(false);
 
   useEffect(() => {
     setSession(getPilotSession());
+    setCognitoSession(getCognitoSession());
+    setCognitoConfig(getCognitoConfigStatus());
   }, []);
+
+  const loginCognito = async () => {
+    setCognitoSubmitting(true);
+    setStatus(null);
+
+    try {
+      await startCognitoSignIn();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Cognito sign-in could not be started.");
+      setCognitoSubmitting(false);
+    }
+  };
 
   const loginPilot = async () => {
     setSubmitting(true);
@@ -59,19 +84,61 @@ export function MockLoginPanel() {
   };
 
   const logout = () => {
+    clearCognitoSession();
     clearPilotSession();
     resetUserSetupState();
+    setCognitoSession(null);
     setSession(null);
-    setStatus("Pilot session cleared on this browser.");
+    setStatus("Auth sessions cleared on this browser.");
   };
+
+  const cognitoLogoutUrl = getCognitoLogoutUrl();
+  const cognitoMissing = cognitoConfig && !cognitoConfig.configured ? cognitoConfig.missing.join(", ") : "";
 
   return (
     <section style={styles.card}>
-      <p style={styles.eyebrow}>Pilot sign-in</p>
+      <p style={styles.eyebrow}>WorkMap sign-in</p>
       <h1 style={styles.title}>Sign in to WorkMap</h1>
       <p style={styles.subtitle}>
-        Use a backend-issued JWT for the 5-person pilot. This is not enterprise SSO or production auth hardening.
+        Use Cognito when configured for STAGE 2, or keep using pilot auth while production setup is being completed.
       </p>
+
+      <section style={styles.cognitoBox}>
+        <p style={styles.demoTitle}>Cognito baseline</p>
+        {cognitoSession ? (
+          <section style={styles.sessionCard}>
+            <strong>{cognitoSession.claims.displayName ?? cognitoSession.claims.email ?? "Cognito user"}</strong>
+            <span>{cognitoSession.claims.email ?? cognitoSession.claims.sub}</span>
+            <span>expires {new Date(cognitoSession.expiresAt).toLocaleString()}</span>
+            <div style={styles.sessionActions}>
+              <button type="button" onClick={() => router.push("/virtual-office")} style={styles.secondaryButton}>
+                Open office
+              </button>
+              {cognitoLogoutUrl ? (
+                <a href={cognitoLogoutUrl} onClick={logout} style={styles.secondaryButton}>
+                  Sign out
+                </a>
+              ) : (
+                <button type="button" onClick={logout} style={styles.secondaryButton}>
+                  Clear session
+                </button>
+              )}
+            </div>
+          </section>
+        ) : null}
+        {cognitoConfig?.configured ? (
+          <button type="button" onClick={loginCognito} disabled={cognitoSubmitting} style={styles.primaryAction}>
+            {cognitoSubmitting ? "Opening Cognito..." : "Sign in with Cognito"}
+          </button>
+        ) : (
+          <p style={styles.note}>
+            Cognito is not configured in this environment. Missing public config: {cognitoMissing || "checking"}.
+          </p>
+        )}
+        <p style={styles.note}>
+          This path uses Cognito Hosted UI with PKCE and requires backend Cognito JWT verification plus WorkMap user mapping.
+        </p>
+      </section>
 
       {session ? (
         <section style={styles.sessionCard}>
@@ -142,8 +209,8 @@ export function MockLoginPanel() {
       </section>
 
       <p style={styles.note}>
-        Pilot auth signs a bearer token for seeded users. Dev-token fallback remains development-only; production SSO,
-        MFA, password reset, and tenant admin are still outside this MVP.
+        Pilot auth remains available during the transition. Dev-token fallback remains development-only; tenant mapping and full
+        production account lifecycle are still staged work.
       </p>
     </section>
   );
@@ -226,6 +293,14 @@ const styles = {
     border: `1px solid ${wm.colors.border}`,
     borderRadius: wm.radius.lg,
     background: wm.colors.surfaceLow,
+    padding: "12px",
+  },
+  cognitoBox: {
+    display: "grid",
+    gap: "10px",
+    border: `1px solid ${wm.colors.infoBorder}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.infoBg,
     padding: "12px",
   },
   demoTitle: {

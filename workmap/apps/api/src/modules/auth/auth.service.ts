@@ -1,6 +1,6 @@
 import { pbkdf2Sync, timingSafeEqual } from "node:crypto";
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
-import type { RequestContext, WorkMapJwtPayload, WorkMapRole } from "@workmap/auth";
+import type { CognitoJwtPayload, RequestContext, WorkMapJwtPayload, WorkMapRole } from "@workmap/auth";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { JwtService } from "./jwt.service.js";
 
@@ -46,6 +46,52 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException("Bearer token user is not active in this company.");
     }
+
+    return {
+      companyId: user.companyId,
+      userId: user.id,
+      role: user.role,
+    };
+  }
+
+  async resolveCognitoContext(payload: CognitoJwtPayload): Promise<RequestContext> {
+    const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+
+    if (!payload.sub) {
+      throw new UnauthorizedException("Cognito token is missing subject.");
+    }
+
+    if (!isVerifiedEmailClaim(payload.email_verified)) {
+      throw new UnauthorizedException("Cognito email must be verified before WorkMap user mapping.");
+    }
+
+    if (!isValidEmail(email)) {
+      throw new UnauthorizedException("Cognito token is not mapped to a WorkMap user email.");
+    }
+
+    const companySlug = process.env.WORKMAP_COGNITO_COMPANY_SLUG?.trim();
+    const users = await this.prisma.user.findMany({
+      where: {
+        email,
+        company: companySlug ? { slug: companySlug } : undefined,
+      },
+      select: {
+        id: true,
+        companyId: true,
+        role: true,
+      },
+      take: 2,
+    });
+
+    if (users.length === 0) {
+      throw new UnauthorizedException("Cognito user is not mapped to an active WorkMap user.");
+    }
+
+    if (users.length > 1) {
+      throw new UnauthorizedException("Cognito user email is ambiguous. Configure WORKMAP_COGNITO_COMPANY_SLUG.");
+    }
+
+    const [user] = users;
 
     return {
       companyId: user.companyId,
@@ -228,6 +274,10 @@ function verifyPilotPassword(password: string) {
 
 function isValidEmail(value: string) {
   return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isVerifiedEmailClaim(value: CognitoJwtPayload["email_verified"]) {
+  return value === true || value === "true";
 }
 
 function isValidCompanySlug(value: string) {

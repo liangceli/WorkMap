@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "nest build && node dist/apps/api/src/main.js",
     "build": "nest build",
+    "start": "node dist/apps/api/src/main.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
