@@ -15,6 +15,16 @@ type PersistPositionInput = {
   status: UserPresenceStatus;
 };
 
+export type VirtualOfficeRealtimeJoinContext = {
+  user: {
+    displayName: string;
+    avatarId: string;
+    role: string;
+    status: UserPresenceStatus;
+  };
+  roomIds: Set<string>;
+};
+
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
@@ -140,6 +150,52 @@ export class VirtualOfficeService {
         status: toPrismaStatus(input.status),
       },
     });
+  }
+
+  async getRealtimeJoinContext(
+    companyId: string,
+    userId: string,
+    officeMapId: string,
+  ): Promise<VirtualOfficeRealtimeJoinContext> {
+    await this.assertMapAndRoomBelongToCompany(companyId, officeMapId);
+
+    const [user, rooms] = await Promise.all([
+      this.prisma.user.findFirst({
+        where: {
+          id: userId,
+          companyId,
+        },
+        select: {
+          displayName: true,
+          avatarId: true,
+          role: true,
+          status: true,
+        },
+      }),
+      this.prisma.officeRoom.findMany({
+        where: {
+          companyId,
+          officeMapId,
+        },
+        select: {
+          id: true,
+        },
+      }),
+    ]);
+
+    if (!user) {
+      throw new NotFoundException("Virtual office user not found.");
+    }
+
+    return {
+      user: {
+        displayName: user.displayName,
+        avatarId: user.avatarId ?? "default",
+        role: user.role,
+        status: toApiStatus(user.status),
+      },
+      roomIds: new Set(rooms.map((room) => room.id)),
+    };
   }
 
   private async assertMapAndRoomBelongToCompany(companyId: string, officeMapId: string, officeRoomId?: string) {

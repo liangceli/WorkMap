@@ -2,7 +2,7 @@
 
 ## 1. Overall Conclusion
 
-QA review result: STAGE 2 Round 3 final QA passes.
+QA review result: STAGE 2 Round 4 final QA passes.
 
 This pass reviewed:
 
@@ -11,57 +11,42 @@ This pass reviewed:
 - current `git diff --stat`
 - current tracked implementation diff
 - untracked implementation files:
-  - `workmap/apps/web/lib/auth/displayName.ts`
-  - `workmap/apps/web/lib/avatar/avatarProfile.ts`
+  - `workmap/apps/api/src/modules/auth/request-context-resolver.service.ts`
+  - `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts`
+  - `workmap/apps/web/components/office/useVirtualOfficeRealtime.ts`
+  - `workmap/apps/web/lib/api/realtimeApi.ts`
 
-The final OWNER avatar asymmetry appears addressed in code:
+No blocking code issue was found in this QA pass.
 
-1. OWNER default workflow no longer treats avatar as complete without backend avatar/profile confirmation.
-2. Fresh OWNER workspace creation routes to `/onboarding/avatar` when backend `User.avatarId` has no valid `layered:v2:` avatar reference.
-3. OWNER re-login / Cognito Continue reads `/users/me`; if backend avatar exists, it is cached and avatar onboarding is skipped.
-4. `OfficeMap` decodes backend avatar references for current user and remote players, so EMPLOYEE can see OWNER's real layered avatar once OWNER has completed backend avatar/profile setup and saved/appeared in office position data.
-5. OWNER still sees EMPLOYEE's real layered avatar through the same backend-backed `avatarId` path.
+The implementation matches the Round 4 scope: native WebSocket realtime movement for `/virtual-office`, backend-authenticated tenant/map rooms, no per-frame database writes, preserved polling fallback, and smooth remote avatar interpolation.
 
-No new blocking code issue was found in this QA pass.
-
-Final manual browser retest was completed by the user and passed for the final OWNER avatar/profile scenario.
+Final local browser/manual realtime QA was completed by the user and passed.
 
 ## 2. Current Workspace Snapshot
 
 Tracked implementation files reviewed:
 
 - `docs/ai-handoff/latest-implementation.md`
-- `workmap/packages/auth/src/index.ts`
-- `workmap/apps/api/src/modules/integrations/integrations.service.ts`
-- `workmap/apps/api/src/modules/invitations/invitations.service.ts`
-- `workmap/apps/api/src/modules/reports/reports.service.ts`
-- `workmap/apps/api/src/modules/tenant-onboarding/tenant-onboarding.service.ts`
-- `workmap/apps/api/src/modules/users/users.controller.ts`
-- `workmap/apps/api/src/modules/users/users.service.ts`
+- `workmap/apps/api/src/modules/auth/auth.module.ts`
+- `workmap/apps/api/src/modules/auth/request-context.guard.ts`
+- `workmap/apps/api/src/modules/virtual-office/virtual-office.module.ts`
 - `workmap/apps/api/src/modules/virtual-office/virtual-office.service.ts`
-- `workmap/apps/web/app/employees/page.tsx`
-- `workmap/apps/web/app/invite/[token]/page.tsx`
-- `workmap/apps/web/app/login/callback/page.tsx`
-- `workmap/apps/web/app/onboarding/avatar/page.tsx`
-- `workmap/apps/web/app/onboarding/company/page.tsx`
-- `workmap/apps/web/components/employees/EmployeeDirectory.tsx`
-- `workmap/apps/web/components/layout/AppShell.tsx`
-- `workmap/apps/web/components/login/MockLoginPanel.tsx`
-- `workmap/apps/web/components/office/OfficeCommandPalette.tsx`
 - `workmap/apps/web/components/office/OfficeMap.tsx`
-- `workmap/apps/web/components/office/useVirtualOfficeData.ts`
-- `workmap/apps/web/lib/api/apiClient.ts`
-- `workmap/apps/web/lib/api/apiTypes.ts`
-- `workmap/apps/web/lib/api/invitationsApi.ts`
-- `workmap/apps/web/lib/api/tenantOnboardingApi.ts`
-- `workmap/apps/web/lib/api/usersApi.ts`
-- `workmap/apps/web/lib/workflow/workflowState.ts`
+- `workmap/packages/shared-types/src/index.ts`
+
+Untracked implementation files reviewed:
+
+- `workmap/apps/api/src/modules/auth/request-context-resolver.service.ts`
+- `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts`
+- `workmap/apps/web/components/office/useVirtualOfficeRealtime.ts`
+- `workmap/apps/web/lib/api/realtimeApi.ts`
 
 Workspace notes:
 
 - `docs/references/` remains unrelated untracked workspace content. Do not stage it unless explicitly intended.
 - `.env` was not read during this QA pass.
-- No Prisma schema or migration file changed for this follow-up.
+- No Prisma schema or migration file changed for Round 4.
+- No package or lockfile dependency change was introduced.
 - `workmap/apps/web/tsconfig.tsbuildinfo` was restored after web build verification and should not be included in commit.
 
 ## 3. Secret / Sensitive Data Review
@@ -89,102 +74,77 @@ Result:
 
 - No matches.
 
-## 4. OWNER Backend Avatar Completion Review
+## 4. Realtime Backend Review
 
-Status: code-review passed; manual retest required.
-
-Reviewed behavior:
-
-- `getDefaultSetupState("OWNER").hasAvatar` is now `false`.
-- `/onboarding/company` creates the owner workspace, inspects returned `user.avatarId`, and routes to `/onboarding/avatar` when no valid backend avatar exists.
-- If backend avatar exists, `/onboarding/company` caches it locally and preserves the backend next route.
-- `/login/callback` reads `/users/me` after `GET /auth/me`.
-- Login page Cognito Continue reads `/users/me` after `GET /auth/me`.
-- For OWNER without backend avatar, both mapped login paths route to `/onboarding/avatar`.
-- For OWNER with backend avatar, both mapped login paths cache the layered avatar locally and skip avatar recreation.
-- `/onboarding/avatar` lets non-EMPLOYEE users, including OWNER, confirm existing backend display name while choosing/saving avatar.
-- Avatar save uses `PATCH /users/me` with `displayName` and encoded `avatarId`.
-
-Conclusion:
-
-- Fresh OWNER workspace creation should no longer enter the product with only local/fallback avatar state.
-- OWNER re-login should no longer recreate avatar after backend `User.avatarId` contains a valid `layered:v2:` reference.
-
-## 5. Virtual-Office Avatar Consistency Review
-
-Status: code-review passed; manual retest required.
+Status: code-review passed.
 
 Reviewed behavior:
 
-- `VirtualOfficeController.listPositions()` returns `position.user.avatarId ?? "default"`.
-- `useVirtualOfficeData()` maps position `avatarId` into current and remote player state.
-- `OfficeMap` decodes backend avatar references for the current user and remote users.
-- Remote avatar assets are keyed by a stable `userId:avatarId` signature so ordinary 4-second polling does not constantly reload avatar assets.
-- If a remote user has valid backend `layered:v2:` avatar data in position response, canvas drawing uses that layered avatar instead of fallback `WM`.
+- `RequestContextResolverService` centralizes HTTP and WebSocket auth resolution.
+- Auth resolution order remains Cognito Bearer, WorkMap/pilot Bearer, then development headers for HTTP outside production.
+- WebSocket handshake uses Bearer auth from `Authorization` or the query `token` parameter.
+- WebSocket handshake rejects unauthenticated clients with `401`.
+- `VirtualOfficeRealtimeGateway` attaches to `/virtual-office/realtime`.
+- `office:join` verifies role capability with `canAccessVirtualOffice()`.
+- `office:join` validates `officeMapId` format and verifies the office map belongs to `context.companyId`.
+- Room key is backend-computed as `companyId:officeMapId`.
+- `player:move` is accepted only after a validated join.
+- Optional `roomId` is validated and must belong to the joined office map.
+- Movement events are broadcast only to other sockets in the same room.
+- WebSocket movement frames do not write to Prisma/database.
+- Existing HTTP durable position save path remains separate.
 
-Expected manual result:
+Residual risk / deployment note:
 
-- EMPLOYEE should see OWNER's real layered avatar after OWNER has completed backend avatar/profile setup and is present in the office.
-- OWNER should continue seeing EMPLOYEE's real layered avatar.
+- The realtime gateway is in-memory. Multi-instance API deployment would need shared pub/sub before horizontal scaling.
+- In production, `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL` must include the deployed frontend origin, otherwise browser WebSocket origin checks can fail.
+- Browser tokens are passed in the WebSocket URL query because native `WebSocket` cannot set custom `Authorization` headers. Production must use `wss://`.
+
+## 5. Realtime Frontend Review
+
+Status: code-review passed.
+
+Reviewed behavior:
+
+- `getVirtualOfficeRealtimeUrl()` derives `ws://` or `wss://` from the existing API base URL; no new frontend env variable is required.
+- `useVirtualOfficeRealtime()` connects only when `officeMapId` and token-backed API auth options are available.
+- Reconnect fallback exists and existing polling remains active.
+- Movement sending is throttled:
+  - about 110ms while visible
+  - about 1000ms while hidden
+  - stationary refresh about 2000ms
+- Important stop/status/room changes send promptly.
+- `OfficeMap` keeps realtime remote state in refs to avoid React render storms.
+- Remote players interpolate toward realtime targets on the canvas.
+- Large or stale jumps snap safely.
+- Polling data still reconciles display name, avatar, role, and stale remote state.
+- Canvas click/contact navigation uses rendered realtime positions where available.
+- Map asset loading now has a cancellation guard to avoid stale async loops.
 
 Residual watch item:
 
-- If an authenticated API user has local avatar cache but no backend avatar and also has no current virtual-office position yet, direct `/virtual-office` access may still have edge behavior that depends on login routing and API load timing. The intended supported flow is now protected by workspace creation and login callback/Continue routing through `/users/me`.
+- If WebSocket join fails, frontend remains usable through polling fallback, but manual QA should confirm the visible experience is not confusing in the console/UI.
 
-## 6. Display Name / Employee Avatar Review
+## 6. Regression Risk Review
 
-Status: code-review passed; previously tested by user before final OWNER-avatar fix.
+Passed or unchanged by code review:
 
-Reviewed behavior remains intact:
-
-- New EMPLOYEE invite acceptance display-name field starts blank and is required.
-- New EMPLOYEE avatar/profile setup display-name field starts blank and is required when no backend avatar exists.
-- Employee avatar/profile save persists `displayName` plus encoded `avatarId`.
-- Returning employee with backend avatar should skip avatar recreation.
-- `/employees` decodes backend `avatarId` and renders real layered avatar when available.
-
-## 7. RBAC / Tenant Isolation Review
-
-Status: passed by code review.
-
-Reviewed safeguards remain intact:
-
-- Central `WorkMapCapability` / `WORKMAP_ROLE_CAPABILITIES` model remains in `workmap/packages/auth/src/index.ts`.
-- Invite list/create has service-level `canInviteEmployees()` enforcement.
-- Reports verify target user tenancy before cross-user report access.
-- Users directory checks `canViewEmployeeDirectory()` and scopes by backend `context.companyId`.
-- Virtual-office position reads verify the office map belongs to the requester's company.
-- Integration settings require integration-management capability.
-- Contact links remain same-tenant target scoped.
-- No reviewed endpoint newly trusts frontend-provided `companyId`, `tenantId`, `userId`, or `role`.
-
-Non-blocking limitations:
-
-- Frontend role visibility remains advisory UX; backend service checks are the security boundary.
-- Frontend workflow roles are still coarser than backend roles; `TEAM_LEAD` / `HR_ADMIN` are manager-style in the current frontend bridge.
-- Department/team-level RBAC remains future work because the data model does not yet encode team membership boundaries.
-
-## 8. Regression Risk Review
-
-Passed or unchanged:
-
+- Existing polling and durable position save/restore are preserved.
+- Current local movement, collision, double-click auto-walk, chair interaction, room/zone status, contact drawer, People panel, and avatar drawing paths remain in place.
 - Cognito, pilot auth, and dev-token fallback remain distinct backend-resolved paths.
 - No real secret or external platform credential was added.
-- No schema/migration change was introduced.
-- No desktop agent, browser extension, websocket/SSE, map expansion, deployment troubleshooting, billing, or full membership migration was introduced.
-- `/virtual-office` remains polling-based; realtime walking animation remains future work.
-- Dashboard, Reports, Compliance, invite flow, owner onboarding, and employee onboarding remain in scope only where needed for profile/RBAC integration.
+- No Prisma schema/migration change was introduced.
+- No desktop agent, browser extension, app/domain tracking, map expansion, billing, full membership migration, or deployment troubleshooting was introduced.
+- Dashboard, Reports, Compliance, Employees, Settings, Integrations, invite flow, owner onboarding, and employee onboarding were not intentionally changed in this Round 4 diff.
 
-Watch items for manual QA:
+Manual regression areas completed by user:
 
-- Fresh OWNER should be forced through avatar setup once.
-- OWNER backend `avatarId` should populate after avatar save.
-- OWNER fresh login/browser should skip avatar setup after backend avatar exists.
-- EMPLOYEE should see OWNER's real layered avatar, not `WM`.
-- OWNER should still see EMPLOYEE's real layered avatar.
-- Direct URL access to frontend-only hidden employee routes can still render page shells, but backend data/actions must stay permissioned.
+- Two-user `/virtual-office` realtime movement.
+- Polling fallback when socket is unavailable or API restarts.
+- Existing `/virtual-office` controls and contact interactions.
+- Dashboard, Reports, Compliance, Employees quick smoke after the realtime diff.
 
-## 9. Verification Results
+## 7. Verification Results
 
 Commands run from `C:\Users\lilia\WorkMap\workmap`:
 
@@ -222,33 +182,55 @@ Not run:
 
 - No Prisma migration command was run because no schema/migration changed.
 - No deployed Vercel/Render smoke test was run in this QA pass.
-- Browser/manual retest was completed by the user after this QA pass using real local Cognito/browser sessions.
+- Local two-browser realtime manual QA was completed by the user after this code QA pass.
 
-## 10. Manual QA Results
+## 8. Manual Action Required
+
+Before deployed production smoke:
+
+- Set backend/API allowed WebSocket origin to the deployed frontend origin via `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL`.
+- Ensure the frontend API base URL uses HTTPS in production so the derived realtime URL becomes `wss://`.
+- Do not guess these values in code; configure them in Render/Vercel or the relevant deployment dashboard.
+
+## 9. Manual QA Results
 
 Use local ports consistently:
 
 - API: `http://localhost:3001`
 - Web: `http://localhost:3000`
 
-Final OWNER avatar scenario:
+Realtime manual QA completed by user:
 
-1. Fresh OWNER workspace creation routed OWNER through avatar/profile setup when backend avatar was missing.
-2. OWNER avatar/profile saved successfully.
-3. OWNER re-login / fresh browser did not force avatar recreation after backend avatar existed.
-4. EMPLOYEE saw OWNER's real layered avatar in `/virtual-office`, not the `WM` fallback marker.
-5. OWNER still saw EMPLOYEE's real layered avatar in `/virtual-office`.
+1. OWNER and EMPLOYEE were logged into separate browser sessions.
+2. Both users opened the same `/virtual-office` workspace/map.
+3. OWNER movement was visible to EMPLOYEE in realtime/smooth mode.
+4. EMPLOYEE movement was visible to OWNER in realtime/smooth mode.
+5. Existing virtual-office movement, contact, and presence behavior had no blocking regression reported.
+6. Dashboard, Reports, Compliance, and Employees smoke checks had no blocking regression reported.
 
-Previously completed Round 3 RBAC/isolation checks:
+Tenant isolation manual QA:
 
-6. EMPLOYEE did not see Dashboard, Reports, Integrations, Settings, or Invites in AppShell.
-7. EMPLOYEE did not see Dashboard or Integrations in `/virtual-office` command palette.
-8. Employee directory, display-name, avatar persistence, and two-user virtual-office avatar consistency checks passed.
-9. Existing tenant onboarding, invite acceptance, `/virtual-office`, Dashboard, Reports, Compliance, pilot login, and dev-token fallback had no blocking regression reported.
+1. Code review confirms room key and join validation are tenant/map scoped.
+2. No cross-tenant realtime issue was reported during manual QA.
+
+Deployment smoke:
+
+1. Not run in this QA pass.
+2. Requires production env/origin setup from Manual Action Required before deployed realtime validation.
+
+## 10. Fix Request for Codex Chat 2
+
+No required fix request at this time.
+
+If manual QA fails, ask Codex Chat 2 to investigate the exact failing path with this prompt:
+
+```text
+Review `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`. Fix the failing STAGE 2 Round 4 realtime virtual-office manual QA item: [paste exact failing step and observed behavior]. Preserve tenant isolation, Cognito/pilot/dev-token auth boundaries, polling fallback, and no per-frame database writes. Do not introduce schema/package changes unless unavoidable, and update `docs/ai-handoff/latest-implementation.md` with the fix summary and verification.
+```
 
 ## 11. Final Recommendation
 
-- QA review: passed.
+- QA review: final QA passed.
 - Return to Codex Chat 2: not required based on this review.
 - Can proceed to human manual testing: final required manual pass is complete.
 - Suggested commit: yes, recommended.

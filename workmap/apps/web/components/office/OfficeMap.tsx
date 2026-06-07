@@ -2,7 +2,14 @@
 
 import { MouseEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ContactTarget, OfficeRoomZone, PlayerDirection, PlayerState, UserPresenceStatus } from "@workmap/shared-types";
+import type {
+  ContactTarget,
+  OfficeRoomZone,
+  PlayerDirection,
+  PlayerState,
+  UserPresenceStatus,
+  VirtualOfficeRealtimePlayerState,
+} from "@workmap/shared-types";
 import {
   avatarLayersByType,
   getLayeredAvatarAssets,
@@ -27,6 +34,7 @@ import { OfficeSidePanel } from "./OfficeSidePanel";
 import { officeTilesets, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
 import { RoomContextCard } from "./RoomContextCard";
 import { statusColors } from "./presence";
+import { useVirtualOfficeRealtime } from "./useVirtualOfficeRealtime";
 import { useVirtualOfficeData } from "./useVirtualOfficeData";
 import { VirtualOfficeTopBar } from "./VirtualOfficeTopBar";
 import { VirtualOfficeShell } from "./VirtualOfficeShell";
@@ -76,6 +84,12 @@ type PositionSnapshot = {
   roomId?: string;
 };
 
+type InterpolatedRemotePlayer = RemoteOfficePlayer & {
+  targetX: number;
+  targetY: number;
+  lastRealtimeAt: number;
+};
+
 const MAP_URL = "/maps/workmap2.tmx";
 const MAP_DEV_POLL_MS = 1500;
 const CANVAS_WIDTH = 1120;
@@ -88,6 +102,9 @@ const PROXIMITY_DISTANCE = 80;
 const CHAIR_INTERACTION_DISTANCE = 46;
 const POSITION_SAVE_THROTTLE_MS = 2500;
 const POSITION_SAVE_MIN_DISTANCE = 8;
+const REALTIME_REMOTE_INTERPOLATION_RATE = 10;
+const REALTIME_REMOTE_SNAP_DISTANCE = 260;
+const REALTIME_REMOTE_STALE_MS = 20000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAP_LAYER_ORDER = [
   "Floor",
@@ -129,6 +146,10 @@ export function OfficeMap() {
   const zoomRef = useRef(1);
   const cameraOffsetRef = useRef({ x: 0, y: 0 });
   const officePeopleRef = useRef<RemoteOfficePlayer[]>(officePeople);
+  const renderedOfficePeopleRef = useRef<RemoteOfficePlayer[]>(officePeople);
+  const realtimeRemotePlayersRef = useRef(new Map<string, InterpolatedRemotePlayer>());
+  const realtimeAvatarSignatureRef = useRef("");
+  const sendRealtimeMovementRef = useRef<(position: PositionSnapshot) => void>(() => undefined);
   const selectedRemoteIdRef = useRef<string | null>(null);
   const autoPathRef = useRef<PathPoint[]>([]);
   const autoDestinationRef = useRef<PathPoint | null>(null);
@@ -172,6 +193,7 @@ export function OfficeMap() {
   const [toast, setToast] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [draggingMap, setDraggingMap] = useState(false);
+  const [realtimeAvatarSignature, setRealtimeAvatarSignature] = useState("");
 
   const mapPixels = useMemo(
     () => ({
@@ -182,8 +204,44 @@ export function OfficeMap() {
   );
   const remoteAvatarConfigSignature = useMemo(() => createRemoteAvatarConfigSignature(officePeople), [officePeople]);
 
+  const handleRealtimeRemoteState = useCallback(
+    (state: VirtualOfficeRealtimePlayerState) => {
+      if (state.userId === officeData.currentUserId || state.userId === playerRef.current.userId) {
+        return;
+      }
+
+      applyRealtimeRemoteState(realtimeRemotePlayersRef.current, officePeopleRef.current, state);
+      const nextSignature = createRemoteAvatarConfigSignature(Array.from(realtimeRemotePlayersRef.current.values()));
+
+      if (nextSignature !== realtimeAvatarSignatureRef.current) {
+        realtimeAvatarSignatureRef.current = nextSignature;
+        setRealtimeAvatarSignature(nextSignature);
+      }
+    },
+    [officeData.currentUserId],
+  );
+
+  const { connectionState: realtimeConnectionState, sendMovement: sendRealtimeMovement } = useVirtualOfficeRealtime({
+    officeMapId: officeData.officeMapId,
+    apiOptions: officeData.apiOptions,
+    currentUserId: officeData.currentUserId,
+    onRemoteState: handleRealtimeRemoteState,
+  });
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.info(`virtual-office realtime: ${realtimeConnectionState}`);
+    }
+  }, [realtimeConnectionState]);
+
+  useEffect(() => {
+    sendRealtimeMovementRef.current = sendRealtimeMovement;
+  }, [sendRealtimeMovement]);
+
   useEffect(() => {
     officePeopleRef.current = officePeople;
+    reconcileRealtimeRemotePlayers(realtimeRemotePlayersRef.current, officePeople);
+    renderedOfficePeopleRef.current = mergeRenderedRemotePlayers(officePeople, realtimeRemotePlayersRef.current);
   }, [officePeople]);
 
   useEffect(() => {
@@ -449,6 +507,7 @@ export function OfficeMap() {
     }
 
     let animationFrame = 0;
+    let cancelled = false;
     let previousTime = performance.now();
     const images = new Map<string, HTMLImageElement>();
     let loadedAvatars: LoadedAvatarMap = {};
@@ -458,7 +517,7 @@ export function OfficeMap() {
     const chairs = findChairSpots(map);
     const avatarConfigs: Record<string, LayeredAvatarConfig> = {
       ...remoteAvatarConfigs,
-      ...readRemoteAvatarConfigs(officePeopleRef.current),
+      ...readRemoteAvatarConfigs(mergeRenderedRemotePlayers(officePeopleRef.current, realtimeRemotePlayersRef.current)),
       ...(selectedAvatar ? { [playerRef.current.userId]: selectedAvatar, "local-user": selectedAvatar } : {}),
     };
     const uniqueAssets = Array.from(
@@ -509,6 +568,10 @@ export function OfficeMap() {
         }),
       ],
     ).then(() => {
+      if (cancelled) {
+        return;
+      }
+
       const loop = (time: number) => {
         const deltaSeconds = Math.min((time - previousTime) / 1000, 0.04);
         previousTime = time;
@@ -532,8 +595,14 @@ export function OfficeMap() {
           : wantsToMove
             ? movePlayer(playerRef.current, keysRef.current, deltaSeconds, map, collision)
             : moveAlongAutoPath(playerRef.current, deltaSeconds, map, collision, autoPathRef, autoDestinationRef);
+        const renderedRemotePlayers = updateRenderedRemotePlayers(
+          officePeopleRef.current,
+          realtimeRemotePlayersRef.current,
+          deltaSeconds,
+        );
+        renderedOfficePeopleRef.current = renderedRemotePlayers;
         const room = findRoom(nextPlayer.x, nextPlayer.y, officeRooms);
-        const nearest = findNearbyPlayer(nextPlayer, officePeopleRef.current);
+        const nearest = findNearbyPlayer(nextPlayer, renderedRemotePlayers);
         const chair = seatedChairRef.current ? null : findNearestChair(nextPlayer, chairs);
 
         nextPlayer.roomId = room?.id;
@@ -546,6 +615,7 @@ export function OfficeMap() {
         setActiveRoom(room);
         setNearbyTarget(nearest);
         setNearestChair(chair);
+        sendRealtimeMovementRef.current(toPositionSnapshot(nextPlayer));
         drawScene(
           canvasRef.current,
           map,
@@ -557,7 +627,7 @@ export function OfficeMap() {
           chair,
           seatedChairRef.current,
           loadedAvatars,
-          officePeopleRef.current,
+          renderedRemotePlayers,
           selectedRemoteIdRef.current,
           autoDestinationRef.current,
           zoomRef.current,
@@ -570,8 +640,11 @@ export function OfficeMap() {
       animationFrame = requestAnimationFrame(loop);
     });
 
-    return () => cancelAnimationFrame(animationFrame);
-  }, [map, mapPixels, officeRooms, remoteAvatarConfigSignature, selectedAvatar]);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [map, mapPixels, officeRooms, realtimeAvatarSignature, remoteAvatarConfigSignature, selectedAvatar]);
 
   const standUpFromChair = useCallback(() => {
     const fallback = seatedChairRef.current
@@ -608,7 +681,7 @@ export function OfficeMap() {
       }
 
       const { x, y } = getWorldPointFromEvent(event, mapPixels);
-      const remote = officePeople.find((candidate) => distance(candidate, { x, y }) <= 28);
+      const remote = renderedOfficePeopleRef.current.find((candidate) => distance(candidate, { x, y }) <= 28);
 
       if (remote) {
         setDismissedContactTargetId(null);
@@ -627,7 +700,7 @@ export function OfficeMap() {
         setSelectedDestination(destination);
       }
     },
-    [map, mapPixels, officeNavigation, officePeople],
+    [map, mapPixels, officeNavigation],
   );
 
   const handleCanvasDoubleClick = useCallback(
@@ -747,8 +820,9 @@ export function OfficeMap() {
   };
 
   const goToRemotePlayer = (remote: RemoteOfficePlayer) => {
+    const latestRemote = renderedOfficePeopleRef.current.find((candidate) => candidate.userId === remote.userId) ?? remote;
     setSelectedRemoteId(remote.userId);
-    startAutoWalk({ x: remote.x - 48, y: remote.y + 12 });
+    startAutoWalk({ x: latestRemote.x - 48, y: latestRemote.y + 12 });
   };
 
   const goToDestination = (destination: OfficeDestination) => {
@@ -874,7 +948,9 @@ export function OfficeMap() {
             target={drawerTarget}
             onClose={closeInteractionDrawer}
             onGoTo={() => {
-              const remote = officePeople.find((candidate) => candidate.userId === drawerTarget.userId);
+              const remote =
+                renderedOfficePeopleRef.current.find((candidate) => candidate.userId === drawerTarget.userId) ??
+                officePeople.find((candidate) => candidate.userId === drawerTarget.userId);
               if (remote) goToRemotePlayer(remote);
             }}
             onOpenChat={() => {
@@ -1517,6 +1593,119 @@ function isMeaningfulPositionChange(previous: PositionSnapshot, next: PositionSn
     previous.status !== next.status ||
     previous.roomId !== next.roomId
   );
+}
+
+function applyRealtimeRemoteState(
+  realtimePlayers: Map<string, InterpolatedRemotePlayer>,
+  pollingPlayers: RemoteOfficePlayer[],
+  state: VirtualOfficeRealtimePlayerState,
+) {
+  const now = Date.now();
+  const previous = realtimePlayers.get(state.userId);
+  const pollingPlayer = pollingPlayers.find((candidate) => candidate.userId === state.userId);
+  const startX = previous?.x ?? pollingPlayer?.x ?? state.x;
+  const startY = previous?.y ?? pollingPlayer?.y ?? state.y;
+  const shouldSnap =
+    !previous ||
+    now - previous.lastRealtimeAt > REALTIME_REMOTE_STALE_MS ||
+    Math.hypot(state.x - startX, state.y - startY) > REALTIME_REMOTE_SNAP_DISTANCE;
+
+  realtimePlayers.set(state.userId, {
+    userId: state.userId,
+    displayName: state.displayName,
+    avatarId: state.avatarId,
+    role: state.role,
+    x: shouldSnap ? state.x : startX,
+    y: shouldSnap ? state.y : startY,
+    targetX: state.x,
+    targetY: state.y,
+    direction: state.direction,
+    isMoving: state.isMoving,
+    status: state.status,
+    roomId: state.roomId,
+    updatedAt: state.updatedAt,
+    lastRealtimeAt: now,
+  });
+}
+
+function reconcileRealtimeRemotePlayers(
+  realtimePlayers: Map<string, InterpolatedRemotePlayer>,
+  pollingPlayers: RemoteOfficePlayer[],
+) {
+  const now = Date.now();
+  const pollingById = new Map(pollingPlayers.map((player) => [player.userId, player]));
+
+  for (const [userId, realtimePlayer] of realtimePlayers) {
+    const pollingPlayer = pollingById.get(userId);
+
+    if (now - realtimePlayer.lastRealtimeAt > REALTIME_REMOTE_STALE_MS) {
+      realtimePlayers.delete(userId);
+      continue;
+    }
+
+    if (pollingPlayer) {
+      realtimePlayer.displayName = pollingPlayer.displayName;
+      realtimePlayer.avatarId = pollingPlayer.avatarId;
+      realtimePlayer.role = pollingPlayer.role;
+    }
+  }
+}
+
+function updateRenderedRemotePlayers(
+  pollingPlayers: RemoteOfficePlayer[],
+  realtimePlayers: Map<string, InterpolatedRemotePlayer>,
+  deltaSeconds: number,
+) {
+  reconcileRealtimeRemotePlayers(realtimePlayers, pollingPlayers);
+
+  for (const realtimePlayer of realtimePlayers.values()) {
+    const dx = realtimePlayer.targetX - realtimePlayer.x;
+    const dy = realtimePlayer.targetY - realtimePlayer.y;
+    const distanceToTarget = Math.hypot(dx, dy);
+
+    if (distanceToTarget > REALTIME_REMOTE_SNAP_DISTANCE) {
+      realtimePlayer.x = realtimePlayer.targetX;
+      realtimePlayer.y = realtimePlayer.targetY;
+      continue;
+    }
+
+    if (distanceToTarget <= 1) {
+      realtimePlayer.x = realtimePlayer.targetX;
+      realtimePlayer.y = realtimePlayer.targetY;
+      continue;
+    }
+
+    const alpha = Math.min(1, deltaSeconds * REALTIME_REMOTE_INTERPOLATION_RATE);
+    realtimePlayer.x += dx * alpha;
+    realtimePlayer.y += dy * alpha;
+  }
+
+  return mergeRenderedRemotePlayers(pollingPlayers, realtimePlayers);
+}
+
+function mergeRenderedRemotePlayers(
+  pollingPlayers: RemoteOfficePlayer[],
+  realtimePlayers: Map<string, InterpolatedRemotePlayer>,
+) {
+  const playersById = new Map<string, RemoteOfficePlayer>(pollingPlayers.map((player) => [player.userId, player]));
+
+  for (const realtimePlayer of realtimePlayers.values()) {
+    playersById.set(realtimePlayer.userId, {
+      userId: realtimePlayer.userId,
+      displayName: realtimePlayer.displayName,
+      avatarId: realtimePlayer.avatarId,
+      x: realtimePlayer.x,
+      y: realtimePlayer.y,
+      direction: realtimePlayer.direction,
+      isMoving: realtimePlayer.isMoving,
+      status: realtimePlayer.status,
+      roomId: realtimePlayer.roomId,
+      updatedAt: realtimePlayer.updatedAt,
+      role: realtimePlayer.role,
+    });
+  }
+
+  return Array.from(playersById.values());
 }
 
 function findChairSpots(map: ParsedMap) {
