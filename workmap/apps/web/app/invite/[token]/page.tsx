@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { acceptInvitation } from "../../../lib/api/invitationsApi";
+import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
+import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { getCognitoApiAuthOptions, startCognitoSignIn } from "../../../lib/auth/cognitoSession";
+import { sanitizeDisplayName } from "../../../lib/auth/displayName";
 import { clearPendingInviteToken, savePendingInviteToken } from "../../../lib/auth/pendingInvite";
 import { toWorkflowRole } from "../../../lib/auth/pilotSession";
 import { getDefaultSetupState, getNextRouteForUser, saveUserSetupState } from "../../../lib/workflow/workflowState";
@@ -17,6 +20,7 @@ export default function InviteAcceptancePage() {
   const [status, setStatus] = useState("Checking invitation...");
   const [accepting, setAccepting] = useState(false);
   const [cognitoAuth, setCognitoAuth] = useState<CognitoAuthState | null>(null);
+  const [displayName, setDisplayName] = useState("");
   const token = useMemo(() => {
     const raw = params.token;
     return Array.isArray(raw) ? raw[0] ?? "" : raw ?? "";
@@ -38,7 +42,8 @@ export default function InviteAcceptancePage() {
       return;
     }
 
-    setStatus("Ready to join this workspace.");
+    setDisplayName("");
+    setStatus("Ready to join this workspace. Enter the display name teammates should see.");
   }, [token]);
 
   const signIn = async () => {
@@ -61,10 +66,17 @@ export default function InviteAcceptancePage() {
       return;
     }
 
+    const confirmedDisplayName = sanitizeDisplayName(displayName);
+
+    if (!confirmedDisplayName) {
+      setStatus("Display name must be between 2 and 80 characters.");
+      return;
+    }
+
     setAccepting(true);
     setStatus("Accepting invitation...");
 
-    const result = await acceptInvitation({ token }, cognitoAuth.options);
+    const result = await acceptInvitation({ token, displayName: confirmedDisplayName }, cognitoAuth.options);
     setAccepting(false);
 
     if (!result.ok) {
@@ -73,7 +85,14 @@ export default function InviteAcceptancePage() {
     }
 
     clearPendingInviteToken();
-    const nextState = { ...getDefaultSetupState(toWorkflowRole(result.data.user.role)), hasCompany: true };
+    const backendAvatar = decodeLayeredAvatarId(result.data.user.avatarId);
+
+    if (backendAvatar) {
+      saveLayeredAvatarConfig(backendAvatar);
+    }
+
+    const defaultState = getDefaultSetupState(toWorkflowRole(result.data.user.role));
+    const nextState = { ...defaultState, hasCompany: true, hasAvatar: Boolean(backendAvatar) || defaultState.hasAvatar };
     saveUserSetupState(nextState);
     setStatus("Invitation accepted. Opening onboarding...");
     router.replace(getNextRouteForUser(nextState));
@@ -90,9 +109,20 @@ export default function InviteAcceptancePage() {
             Checking invitation...
           </button>
         ) : cognitoAuth.available ? (
-          <button type="button" onClick={accept} disabled={accepting || !token} style={styles.primaryButton}>
-            {accepting ? "Joining..." : "Accept invitation"}
-          </button>
+          <>
+            <label style={styles.label}>
+              <span>Your display name</span>
+              <input
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="How teammates should see you"
+                style={styles.input}
+              />
+            </label>
+            <button type="button" onClick={accept} disabled={accepting || !token || !sanitizeDisplayName(displayName)} style={styles.primaryButton}>
+              {accepting ? "Joining..." : "Accept invitation"}
+            </button>
+          </>
         ) : (
           <button type="button" onClick={signIn} disabled={!token} style={styles.primaryButton}>
             Sign in with Cognito
@@ -138,6 +168,19 @@ const styles = {
     color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.5,
+  },
+  label: {
+    display: "grid",
+    gap: "6px",
+    color: wm.colors.textSecondary,
+    fontSize: "13px",
+    fontWeight: 900,
+  },
+  input: {
+    height: "42px",
+    ...wmStyles.input,
+    padding: "0 10px",
+    fontSize: "14px",
   },
   primaryButton: {
     ...wmStyles.primaryButton,

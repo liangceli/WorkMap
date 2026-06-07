@@ -11,21 +11,26 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type EmployeeDirectoryProps = {
   employees: DashboardEmployee[];
+  showProfileLinks?: boolean;
 };
 
 type VisibilityMode = "manager" | "employee";
 type StatusFilter = "all" | UserPresenceStatus;
 
-export function EmployeeDirectory({ employees }: EmployeeDirectoryProps) {
+export function EmployeeDirectory({ employees, showProfileLinks = true }: EmployeeDirectoryProps) {
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
   const [status, setStatus] = useState<StatusFilter>("all");
-  const [mode, setMode] = useState<VisibilityMode>("manager");
+  const [mode, setMode] = useState<VisibilityMode>("employee");
+  const [canSwitchMode, setCanSwitchMode] = useState(false);
 
   useEffect(() => {
     const state = getUserSetupState();
-    if (state?.role === "EMPLOYEE") {
-      setMode("employee");
+    const canUseManagerMode = Boolean(state && state.role !== "EMPLOYEE");
+
+    setCanSwitchMode(canUseManagerMode);
+    if (canUseManagerMode) {
+      setMode("manager");
     }
   }, []);
 
@@ -87,22 +92,26 @@ export function EmployeeDirectory({ employees }: EmployeeDirectoryProps) {
           </select>
         </label>
 
-        <div style={styles.segmented} aria-label="Visibility mode">
-          <button
-            type="button"
-            onClick={() => setMode("manager")}
-            style={{ ...styles.segmentButton, ...(mode === "manager" ? styles.segmentButtonActive : {}) }}
-          >
-            Manager
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("employee")}
-            style={{ ...styles.segmentButton, ...(mode === "employee" ? styles.segmentButtonActive : {}) }}
-          >
-            Employee
-          </button>
-        </div>
+        {canSwitchMode ? (
+          <div style={styles.segmented} aria-label="Visibility mode">
+            <button
+              type="button"
+              onClick={() => setMode("manager")}
+              style={{ ...styles.segmentButton, ...(mode === "manager" ? styles.segmentButtonActive : {}) }}
+            >
+              Manager
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("employee")}
+              style={{ ...styles.segmentButton, ...(mode === "employee" ? styles.segmentButtonActive : {}) }}
+            >
+              Employee
+            </button>
+          </div>
+        ) : (
+          <div style={styles.modePill}>Contact-only view</div>
+        )}
       </section>
 
       <section style={styles.summaryBar}>
@@ -146,7 +155,7 @@ export function EmployeeDirectory({ employees }: EmployeeDirectoryProps) {
                 <button type="button" style={styles.actionButton}>Teams</button>
                 <button type="button" style={styles.actionButton}>Email</button>
                 <button type="button" style={styles.actionButton}>3CX</button>
-                <a href={`/employees/${employee.id}`} style={styles.actionLink}>View</a>
+                {showProfileLinks ? <a href={`/employees/${employee.id}`} style={styles.actionLink}>View</a> : null}
               </div>
 
               {mode === "manager" ? (
@@ -244,6 +253,18 @@ const styles = {
     border: `1px solid ${wm.colors.border}`,
     borderRadius: wm.radius.md,
     overflow: "hidden",
+  },
+  modePill: {
+    display: "grid",
+    placeItems: "center",
+    minHeight: "40px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.md,
+    background: wm.colors.surfaceLow,
+    color: wm.colors.textSecondary,
+    padding: "0 12px",
+    fontSize: "13px",
+    fontWeight: 800,
   },
   segmentButton: {
     height: "40px",

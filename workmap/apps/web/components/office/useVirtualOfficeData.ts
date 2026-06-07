@@ -31,6 +31,7 @@ export type VirtualOfficeData = {
   currentUserId?: string;
   currentUserPosition?: PlayerState;
   source: VirtualOfficeDataSource;
+  loaded: boolean;
 };
 
 const MOCK_DATA: VirtualOfficeData = {
@@ -38,6 +39,7 @@ const MOCK_DATA: VirtualOfficeData = {
   destinations: officeDestinations,
   remotePlayers,
   source: "mock",
+  loaded: false,
 };
 
 const destinationTypes: OfficeDestination["type"][] = ["department", "room", "common_area", "desk_area", "support"];
@@ -130,6 +132,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
         currentUserId,
         currentUserPosition: nextCurrentUserPosition,
         source,
+        loaded: true,
       };
 
       if (process.env.NODE_ENV === "development") {
@@ -144,7 +147,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
         console.info("virtual-office data source: mock fallback", error);
       }
       if (!cancelled) {
-        setData(MOCK_DATA);
+        setData({ ...MOCK_DATA, loaded: true });
       }
     });
 
@@ -212,6 +215,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
             remotePlayers: positionsData.remotePlayers,
             currentUserPosition: positionsData.currentUserPosition ?? current.currentUserPosition,
             source: current.source === "mock" ? "partial-api" : current.source,
+            loaded: true,
           };
         });
       } else if (!positionsData.ok && process.env.NODE_ENV === "development") {

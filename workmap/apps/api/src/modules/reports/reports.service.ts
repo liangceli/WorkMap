@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
-import { canViewEmployeeActivity, type RequestContext } from "@workmap/auth";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { canViewEmployeeActivity, canViewOwnReports, type RequestContext } from "@workmap/auth";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -15,11 +15,7 @@ export class ReportsService {
   ) {}
 
   async getUsageSummary(context: RequestContext, query: SummaryQuery) {
-    if (query.userId && !canViewEmployeeActivity(context, query.userId)) {
-      throw new ForbiddenException("Employee activity is not visible to this role.");
-    }
-
-    const userId = query.userId ?? context.userId;
+    const userId = await this.resolveVisibleReportUserId(context, query.userId);
 
     if (query.userId && query.userId !== context.userId && userId === query.userId) {
       await this.audit.logSensitiveAction({
@@ -67,5 +63,37 @@ export class ReportsService {
         idleSeconds: row._sum.idleSeconds ?? 0,
       })),
     };
+  }
+
+  private async resolveVisibleReportUserId(context: RequestContext, requestedUserId?: string) {
+    const userId = requestedUserId ?? context.userId;
+
+    if (userId === context.userId) {
+      if (!canViewOwnReports(context)) {
+        throw new ForbiddenException("Reports are not visible to this role.");
+      }
+
+      return userId;
+    }
+
+    if (!canViewEmployeeActivity(context, userId)) {
+      throw new ForbiddenException("Employee activity is not visible to this role.");
+    }
+
+    const target = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        companyId: context.companyId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!target) {
+      throw new NotFoundException("Report target not found.");
+    }
+
+    return target.id;
   }
 }

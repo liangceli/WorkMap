@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPilotSession, getAuthContext } from "../../lib/api/authApi";
+import { createPilotSession, getAuthContext, getCurrentUser } from "../../lib/api/authApi";
+import { decodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
+import { saveLayeredAvatarConfig } from "../../lib/avatar/avatarStorage";
 import {
   clearCognitoSession,
   getCognitoApiAuthOptions,
@@ -90,9 +92,17 @@ export function MockLoginPanel() {
     const contextResult = await getAuthContext(cognitoAuth.options);
 
     if (contextResult.ok) {
-      const nextState = { ...getDefaultSetupState(toWorkflowRole(contextResult.data.role)), hasCompany: true };
+      const defaultState = getDefaultSetupState(toWorkflowRole(contextResult.data.role));
+      const currentUserResult = await getCurrentUser(cognitoAuth.options);
+      const backendAvatar = currentUserResult.ok ? decodeLayeredAvatarId(currentUserResult.data.avatarId) : null;
+
+      if (backendAvatar) {
+        saveLayeredAvatarConfig(backendAvatar);
+      }
+
+      const nextState = { ...defaultState, hasCompany: true, hasAvatar: Boolean(backendAvatar) || defaultState.hasAvatar };
       saveUserSetupState(nextState);
-      router.push(getNextRouteForUser(nextState));
+      router.push(contextResult.data.role === "OWNER" && !backendAvatar ? "/onboarding/avatar" : getNextRouteForUser(nextState));
       return;
     }
 

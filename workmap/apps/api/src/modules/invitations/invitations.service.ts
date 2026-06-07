@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
 import { InvitationStatus, Prisma, UserRole, UserStatus } from "@prisma/client";
-import type { CognitoJwtPayload, RequestContext } from "@workmap/auth";
+import { canInviteEmployees, type CognitoJwtPayload, type RequestContext } from "@workmap/auth";
 import { getVerifiedCognitoIdentity, isValidEmail } from "../auth/cognito-identity.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -19,6 +19,8 @@ export class InvitationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(context: RequestContext) {
+    assertCanManageInvitations(context);
+
     const invitations = await this.prisma.invitation.findMany({
       where: { companyId: context.companyId },
       include: {
@@ -39,6 +41,8 @@ export class InvitationsService {
   }
 
   async create(context: RequestContext, input: Record<string, unknown>) {
+    assertCanManageInvitations(context);
+
     const invitedEmail = parseEmail(input.email);
     const role = parseInviteRole(input.role);
     const token = randomBytes(32).toString("base64url");
@@ -76,6 +80,7 @@ export class InvitationsService {
   async accept(payload: CognitoJwtPayload, input: Record<string, unknown>) {
     const identity = getVerifiedCognitoIdentity(payload);
     const token = typeof input.token === "string" ? input.token.trim() : "";
+    const displayName = parseDisplayName(input.displayName, identity.displayName);
 
     if (token.length < 20 || token.length > 256) {
       throw new BadRequestException("A valid invitation token is required.");
@@ -145,13 +150,22 @@ export class InvitationsService {
         throw new ConflictException("This WorkMap user is already linked to another Cognito account.");
       }
 
-      const user =
-        linkedBySub ??
+      const user = linkedBySub
+        ? await tx.user.update({
+            where: { id: linkedBySub.id },
+            data: {
+              displayName,
+              status: UserStatus.AVAILABLE,
+            },
+            select: tenantUserSelect,
+          })
+        :
         (sameTenantEmailMatch
           ? await tx.user.update({
               where: { id: sameTenantEmailMatch.id },
               data: {
                 cognitoSub: identity.sub,
+                displayName,
                 role: invitation.role,
                 status: UserStatus.AVAILABLE,
               },
@@ -162,7 +176,7 @@ export class InvitationsService {
                 companyId: invitation.companyId,
                 email: identity.email,
                 cognitoSub: identity.sub,
-                displayName: identity.displayName,
+                displayName,
                 role: invitation.role,
                 status: UserStatus.AVAILABLE,
               },
@@ -190,6 +204,7 @@ export class InvitationsService {
           email: user.email,
           displayName: user.displayName,
           role: user.role,
+          avatarId: user.avatarId,
         },
         company: user.company,
         onboarding: {
@@ -208,6 +223,7 @@ const tenantUserSelect = {
   email: true,
   displayName: true,
   role: true,
+  avatarId: true,
   cognitoSub: true,
   company: {
     select: {
@@ -264,6 +280,17 @@ function parseInviteRole(value: unknown) {
   return role as UserRole;
 }
 
+function parseDisplayName(value: unknown, fallback: string) {
+  const raw = typeof value === "string" ? value : fallback;
+  const displayName = raw.trim().replace(/\s+/g, " ");
+
+  if (displayName.length < 2 || displayName.length > 80) {
+    throw new BadRequestException("displayName must be between 2 and 80 characters.");
+  }
+
+  return displayName;
+}
+
 function hashInviteToken(token: string) {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
@@ -271,4 +298,10 @@ function hashInviteToken(token: string) {
 function getAppBaseUrl() {
   const configured = process.env.WORKMAP_APP_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
   return configured.replace(/\/+$/, "");
+}
+
+function assertCanManageInvitations(context: RequestContext) {
+  if (!canInviteEmployees(context)) {
+    throw new ForbiddenException("Only workspace owners can manage invitations.");
+  }
 }

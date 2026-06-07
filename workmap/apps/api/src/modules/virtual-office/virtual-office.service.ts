@@ -39,6 +39,8 @@ export class VirtualOfficeService {
   }
 
   async listLatestPositions(companyId: string, officeMapId: string) {
+    await this.assertMapAndRoomBelongToCompany(companyId, officeMapId);
+
     return this.prisma.virtualOfficePosition.findMany({
       where: {
         companyId,

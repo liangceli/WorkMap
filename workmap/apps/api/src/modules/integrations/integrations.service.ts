@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import type { RequestContext } from "@workmap/auth";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { canManageIntegrations, canUseContactLinks, type RequestContext } from "@workmap/auth";
 import { PrismaService } from "../prisma/prisma.service.js";
 
 @Injectable()
@@ -7,6 +7,10 @@ export class IntegrationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listCompanyIntegrations(context: RequestContext) {
+    if (!canManageIntegrations(context)) {
+      throw new ForbiddenException("Integration settings are not visible to this role.");
+    }
+
     const integrations = await this.prisma.integrationAccount.findMany({
       where: {
         companyId: context.companyId,
@@ -25,6 +29,10 @@ export class IntegrationsService {
   }
 
   async getContactLinks(context: RequestContext, targetUserId: string) {
+    if (!canUseContactLinks(context)) {
+      throw new ForbiddenException("Contact links are not visible to this role.");
+    }
+
     const user = await this.prisma.user.findFirst({
       where: {
         id: targetUserId,

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, UseGuards } from "@nestjs/common";
 import type { RequestContext } from "@workmap/auth";
 import { CurrentContext } from "../auth/current-context.decorator.js";
 import { RequestContextGuard } from "../auth/request-context.guard.js";
@@ -12,6 +12,11 @@ export class UsersController {
   @Get("me")
   getMe(@CurrentContext() context: RequestContext) {
     return this.users.getCurrentUser(context);
+  }
+
+  @Patch("me")
+  updateMe(@CurrentContext() context: RequestContext, @Body() body: unknown) {
+    return this.users.updateCurrentUserProfile(context, body);
   }
 
   @Get()

@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createOwnerWorkspace } from "../../../lib/api/tenantOnboardingApi";
+import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
+import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
+import { deriveDisplayNameFromCognito, sanitizeDisplayName } from "../../../lib/auth/displayName";
 import { getCognitoApiAuthOptions } from "../../../lib/auth/cognitoSession";
 import { toWorkflowRole } from "../../../lib/auth/pilotSession";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
@@ -12,21 +15,36 @@ export default function CompanyOnboardingPage() {
   const router = useRouter();
   const [companyName, setCompanyName] = useState("Acme Operations");
   const [workspaceName, setWorkspaceName] = useState("Acme HQ");
+  const [displayName, setDisplayName] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    const cognitoAuth = getCognitoApiAuthOptions();
+
+    if (cognitoAuth.available) {
+      setDisplayName(deriveDisplayNameFromCognito(cognitoAuth.session));
+    }
+  }, []);
+
   const createWorkspace = async () => {
     const cognitoAuth = getCognitoApiAuthOptions();
+    const confirmedDisplayName = sanitizeDisplayName(displayName);
 
     if (!cognitoAuth.available) {
       continueWithDemoFallback();
       return;
     }
 
+    if (!confirmedDisplayName) {
+      setStatus("Display name must be between 2 and 80 characters.");
+      return;
+    }
+
     setSubmitting(true);
     setStatus(null);
 
-    const result = await createOwnerWorkspace({ companyName, workspaceName }, cognitoAuth.options);
+    const result = await createOwnerWorkspace({ companyName, workspaceName, displayName: confirmedDisplayName }, cognitoAuth.options);
     setSubmitting(false);
 
     if (!result.ok) {
@@ -34,8 +52,16 @@ export default function CompanyOnboardingPage() {
       return;
     }
 
-    saveUserSetupState({ ...getDefaultSetupState(toWorkflowRole(result.data.user.role)), hasCompany: true });
-    router.push(result.data.onboarding.nextRoute);
+    const defaultState = getDefaultSetupState(toWorkflowRole(result.data.user.role));
+    const backendAvatar = decodeLayeredAvatarId(result.data.user.avatarId);
+
+    if (backendAvatar) {
+      saveLayeredAvatarConfig(backendAvatar);
+    }
+
+    const nextState = { ...defaultState, hasCompany: true, hasAvatar: Boolean(backendAvatar) || defaultState.hasAvatar };
+    saveUserSetupState(nextState);
+    router.push(backendAvatar ? result.data.onboarding.nextRoute : "/onboarding/avatar");
   };
 
   const continueWithDemoFallback = () => {
@@ -59,11 +85,25 @@ export default function CompanyOnboardingPage() {
             <span>Workspace name</span>
             <input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} style={styles.input} />
           </label>
+          <label style={styles.label}>
+            <span>Your display name</span>
+            <input
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="How teammates should see you"
+              style={styles.input}
+            />
+          </label>
           <section style={styles.note}>
             <strong>Privacy-forward setup</strong>
-            <span>Tracking rules are configured before employees join. With Cognito, this creates the backend tenant and OWNER user.</span>
+            <span>Tracking rules are configured before employees join. Your confirmed display name is used in WorkMap directory and office labels.</span>
           </section>
-          <button type="button" onClick={createWorkspace} disabled={!companyName || !workspaceName || submitting} style={styles.button}>
+          <button
+            type="button"
+            onClick={createWorkspace}
+            disabled={!companyName || !workspaceName || !sanitizeDisplayName(displayName) || submitting}
+            style={styles.button}
+          >
             {submitting ? "Creating workspace..." : "Create workspace"}
           </button>
           {status ? <p style={styles.status}>{status}</p> : null}

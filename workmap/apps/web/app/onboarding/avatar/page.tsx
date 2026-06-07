@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LayeredAvatarPreview } from "../../../components/avatar/LayeredAvatarPreview";
 import {
@@ -10,7 +10,12 @@ import {
   type AvatarLayerType,
   type LayeredAvatarConfig,
 } from "../../../lib/avatar/avatarLayerAssets";
+import { getWorkMapApiAuthOptions, type WorkMapApiAuthResult } from "../../../lib/api/apiAuth";
+import { getCurrentUser } from "../../../lib/api/authApi";
+import { updateCurrentUserProfile } from "../../../lib/api/usersApi";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
+import { decodeLayeredAvatarId, encodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
+import { sanitizeDisplayName } from "../../../lib/auth/displayName";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
@@ -25,12 +30,86 @@ const groups: Array<{ type: AvatarLayerType; title: string; optional?: boolean; 
 export default function AvatarOnboardingPage() {
   const router = useRouter();
   const [config, setConfig] = useState<LayeredAvatarConfig>(defaultLayeredAvatarConfig);
+  const [displayName, setDisplayName] = useState("");
+  const [apiAuth, setApiAuth] = useState<Extract<WorkMapApiAuthResult, { available: true }> | null>(null);
+  const [profileStatus, setProfileStatus] = useState("Enter the name teammates should see in WorkMap.");
   const assetsAvailable = avatarLayersByType.body.length > 0;
   const selectedNames = useMemo(() => getSelectedNames(config), [config]);
 
-  const saveAndEnterOffice = () => {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfileName() {
+      const auth = await getWorkMapApiAuthOptions();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!auth.available) {
+        setProfileStatus("Enter the name teammates should see in WorkMap.");
+        return;
+      }
+
+      setApiAuth(auth);
+      const currentUser = await getCurrentUser(auth.options);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (currentUser.ok) {
+        const backendAvatar = decodeLayeredAvatarId(currentUser.data.avatarId);
+
+        if (backendAvatar) {
+          setConfig(backendAvatar);
+          saveLayeredAvatarConfig(backendAvatar);
+          setDisplayName(currentUser.data.displayName);
+          setProfileStatus("This profile is loaded from your WorkMap account.");
+        } else {
+          const canPrefillExistingProfileName = currentUser.data.role && currentUser.data.role !== "EMPLOYEE";
+          setDisplayName(canPrefillExistingProfileName ? currentUser.data.displayName : "");
+          setProfileStatus(
+            canPrefillExistingProfileName
+              ? "Confirm your profile name and choose your WorkMap avatar."
+              : "Enter the name teammates should see in WorkMap.",
+          );
+        }
+      }
+    }
+
+    void loadProfileName();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const saveAndEnterOffice = async () => {
     if (!config.bodyId) {
       return;
+    }
+
+    const confirmedDisplayName = sanitizeDisplayName(displayName);
+
+    if (!confirmedDisplayName) {
+      setProfileStatus("Display name must be between 2 and 80 characters.");
+      return;
+    }
+
+    if (apiAuth) {
+      setProfileStatus("Saving your profile...");
+      const profileResult = await updateCurrentUserProfile(
+        { displayName: confirmedDisplayName, avatarId: encodeLayeredAvatarId(config) },
+        apiAuth.options,
+      );
+
+      if (!profileResult.ok) {
+        setProfileStatus("WorkMap could not save that profile. Please try again.");
+        return;
+      }
+
+      setProfileStatus("Profile saved.");
     }
 
     saveLayeredAvatarConfig(config);
@@ -58,6 +137,17 @@ export default function AvatarOnboardingPage() {
               <h2 style={styles.sectionTitle}>Build your avatar</h2>
               <p style={styles.bodyText}>Pick a body, eyes, hairstyle, outfit, and optional accessory.</p>
 
+              <label style={styles.label}>
+                <span>Your display name</span>
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder="How teammates should see you"
+                  style={styles.input}
+                />
+                <span style={styles.helpText}>{profileStatus}</span>
+              </label>
+
               <div style={styles.groupStack}>
                 {groups.map((group) => (
                   <LayerGroup key={group.type} group={group} config={config} onChange={setConfig} />
@@ -74,7 +164,7 @@ export default function AvatarOnboardingPage() {
               <p style={styles.trustNote}>
                 WorkMap uses avatars for presence and collaboration. Activity visibility remains transparent and role-based.
               </p>
-              <button type="button" onClick={saveAndEnterOffice} disabled={!config.bodyId} style={styles.saveButton}>
+              <button type="button" onClick={saveAndEnterOffice} disabled={!config.bodyId || !sanitizeDisplayName(displayName)} style={styles.saveButton}>
                 Save and continue
               </button>
             </aside>
@@ -249,6 +339,26 @@ const styles = {
     color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.55,
+  },
+  label: {
+    display: "grid",
+    gap: "6px",
+    marginBottom: "18px",
+    color: wm.colors.textSecondary,
+    fontSize: "13px",
+    fontWeight: 900,
+  },
+  input: {
+    height: "42px",
+    ...wmStyles.input,
+    padding: "0 10px",
+    fontSize: "14px",
+  },
+  helpText: {
+    color: wm.colors.textMuted,
+    fontSize: "12px",
+    fontWeight: 700,
+    lineHeight: 1.4,
   },
   trustNote: {
     margin: "0 0 16px",

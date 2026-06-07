@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ContactTarget } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { getUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { OfficeIcon } from "./OfficeIcons";
 import type { RemoteOfficePlayer } from "./mockOfficeData";
@@ -21,11 +22,29 @@ type OfficeCommandPaletteProps = {
   onNavigate: (href: string) => void;
 };
 
-const actions = [
-  { id: "dashboard", title: "Open dashboard", subtitle: "Review team visibility", href: "/dashboard" },
-  { id: "compliance", title: "Review compliance", subtitle: "Collected and not collected policy", href: "/compliance" },
-  { id: "integrations", title: "Open integrations", subtitle: "Teams, Outlook, calendar, and 3CX links", href: "/integrations" },
-  { id: "away", title: "Set yourself as away", subtitle: "Frontend-only status placeholder", href: "" },
+const actions: Array<{ id: string; title: string; subtitle: string; href: string; roles: WorkMapRole[] }> = [
+  { id: "dashboard", title: "Open dashboard", subtitle: "Review team visibility", href: "/dashboard", roles: ["MANAGER", "OWNER"] },
+  {
+    id: "compliance",
+    title: "Review compliance",
+    subtitle: "Collected and not collected policy",
+    href: "/compliance",
+    roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"],
+  },
+  {
+    id: "integrations",
+    title: "Open integrations",
+    subtitle: "Teams, Outlook, calendar, and 3CX links",
+    href: "/integrations",
+    roles: ["OWNER", "IT_ADMIN"],
+  },
+  {
+    id: "away",
+    title: "Set yourself as away",
+    subtitle: "Frontend-only status placeholder",
+    href: "",
+    roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"],
+  },
 ];
 
 export function OfficeCommandPalette({
@@ -40,8 +59,13 @@ export function OfficeCommandPalette({
   onNavigate,
 }: OfficeCommandPaletteProps) {
   const [query, setQuery] = useState("");
+  const [activeRole, setActiveRole] = useState<WorkMapRole | null>(null);
   const normalized = query.trim().toLowerCase();
   const roomNameById = useMemo(() => createRoomNameMap(destinations), [destinations]);
+
+  useEffect(() => {
+    setActiveRole(getUserSetupState()?.role ?? null);
+  }, [open]);
 
   const filteredPeople = useMemo(
     () =>
@@ -58,8 +82,12 @@ export function OfficeCommandPalette({
     [destinations, normalized],
   );
   const filteredActions = useMemo(
-    () => actions.filter((action) => `${action.title} ${action.subtitle}`.toLowerCase().includes(normalized)),
-    [normalized],
+    () =>
+      actions.filter((action) => {
+        const visibleForRole = activeRole ? action.roles.includes(activeRole) : action.href === "/compliance" || action.id === "away";
+        return visibleForRole && `${action.title} ${action.subtitle}`.toLowerCase().includes(normalized);
+      }),
+    [activeRole, normalized],
   );
 
   if (!open) {

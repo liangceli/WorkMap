@@ -63,7 +63,7 @@ export function getDefaultSetupState(role: WorkMapRole): UserSetupState {
       role,
       hasCompany: false,
       hasAcknowledgedPolicy: false,
-      hasAvatar: true,
+      hasAvatar: false,
       hasCompletedDeviceSetup: true,
     };
   }

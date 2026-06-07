@@ -9,6 +9,7 @@ export function createOwnerWorkspace(
   body: {
     companyName: string;
     workspaceName: string;
+    displayName: string;
   },
   options?: ApiClientOptions,
 ) {

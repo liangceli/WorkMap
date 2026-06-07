@@ -20,6 +20,6 @@ export function createInvitation(
   return workMapApiPost<WorkMapApiCreateInvitationResponse>("/invitations", body, options);
 }
 
-export function acceptInvitation(body: { token: string }, options?: ApiClientOptions) {
+export function acceptInvitation(body: { token: string; displayName: string }, options?: ApiClientOptions) {
   return workMapApiPost<WorkMapApiWorkspaceContext>("/invitations/accept", body, options);
 }

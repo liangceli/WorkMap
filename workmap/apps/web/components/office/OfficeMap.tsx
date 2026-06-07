@@ -10,7 +10,8 @@ import {
   type LayeredAvatarConfig,
 } from "../../lib/avatar/avatarLayerAssets";
 import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/avatarFrameMaps";
-import { getAvatarConfigForOffice } from "../../lib/avatar/avatarStorage";
+import { decodeLayeredAvatarId, encodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
+import { getAvatarConfigForOffice, saveLayeredAvatarConfig } from "../../lib/avatar/avatarStorage";
 import { saveCurrentVirtualOfficePosition } from "../../lib/api/virtualOfficeApi";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { findGridPath, type PathBounds, type PathPoint } from "../../lib/office/pathfinding";
@@ -179,6 +180,7 @@ export function OfficeMap() {
     }),
     [map],
   );
+  const remoteAvatarConfigSignature = useMemo(() => createRemoteAvatarConfigSignature(officePeople), [officePeople]);
 
   useEffect(() => {
     officePeopleRef.current = officePeople;
@@ -189,7 +191,15 @@ export function OfficeMap() {
   }, [selectedRemoteId]);
 
   useEffect(() => {
-    const avatarConfig = getAvatarConfigForOffice();
+    const backendAvatarConfig = decodeLayeredAvatarId(officeData.currentUserPosition?.avatarId);
+    const localAvatarConfig = getAvatarConfigForOffice();
+    const apiCurrentUserRequiresBackendAvatar =
+      officeData.loaded && officeData.source !== "mock" && Boolean(officeData.currentUserPosition);
+    const avatarConfig = backendAvatarConfig ?? (apiCurrentUserRequiresBackendAvatar ? null : localAvatarConfig);
+
+    if (!avatarConfig && !officeData.loaded) {
+      return;
+    }
 
     if (!avatarConfig) {
       router.replace("/onboarding/avatar");
@@ -197,14 +207,18 @@ export function OfficeMap() {
       return;
     }
 
+    if (backendAvatarConfig) {
+      saveLayeredAvatarConfig(backendAvatarConfig);
+    }
+
     playerRef.current = {
       ...playerRef.current,
-      avatarId: avatarConfig.bodyId,
+      avatarId: encodeLayeredAvatarId(avatarConfig),
     };
     setPlayer(playerRef.current);
     setSelectedAvatar(avatarConfig);
     setAvatarChecked(true);
-  }, [router]);
+  }, [officeData.currentUserPosition?.avatarId, officeData.loaded, router]);
 
   useEffect(() => {
     if (!officeData.currentUserPosition || restoredPositionRef.current || localPlayerTouchedRef.current) {
@@ -214,6 +228,8 @@ export function OfficeMap() {
     restoredPositionRef.current = true;
     const restoredPlayer = {
       ...playerRef.current,
+      displayName: officeData.currentUserPosition.displayName,
+      avatarId: officeData.currentUserPosition.avatarId,
       x: officeData.currentUserPosition.x,
       y: officeData.currentUserPosition.y,
       direction: officeData.currentUserPosition.direction,
@@ -440,12 +456,11 @@ export function OfficeMap() {
     latestCollisionRef.current = collision;
     latestMapRef.current = map;
     const chairs = findChairSpots(map);
-    const avatarConfigs: Record<string, LayeredAvatarConfig> = selectedAvatar
-      ? {
-          "local-user": selectedAvatar,
-          ...remoteAvatarConfigs,
-        }
-      : remoteAvatarConfigs;
+    const avatarConfigs: Record<string, LayeredAvatarConfig> = {
+      ...remoteAvatarConfigs,
+      ...readRemoteAvatarConfigs(officePeopleRef.current),
+      ...(selectedAvatar ? { [playerRef.current.userId]: selectedAvatar, "local-user": selectedAvatar } : {}),
+    };
     const uniqueAssets = Array.from(
       new Map(
         Object.values(avatarConfigs)
@@ -556,7 +571,7 @@ export function OfficeMap() {
     });
 
     return () => cancelAnimationFrame(animationFrame);
-  }, [map, mapPixels, officeRooms, selectedAvatar]);
+  }, [map, mapPixels, officeRooms, remoteAvatarConfigSignature, selectedAvatar]);
 
   const standUpFromChair = useCallback(() => {
     const fallback = seatedChairRef.current
@@ -1561,6 +1576,27 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function createRemoteAvatarConfigSignature(remotePlayers: RemoteOfficePlayer[]) {
+  return remotePlayers
+    .map((remote) => `${remote.userId}:${remote.avatarId ?? ""}`)
+    .sort()
+    .join("|");
+}
+
+function readRemoteAvatarConfigs(remotePlayers: RemoteOfficePlayer[]): Record<string, LayeredAvatarConfig> {
+  const configs: Record<string, LayeredAvatarConfig> = {};
+
+  for (const remote of remotePlayers) {
+    const avatarConfig = decodeLayeredAvatarId(remote.avatarId);
+
+    if (avatarConfig) {
+      configs[remote.userId] = avatarConfig;
+    }
+  }
+
+  return configs;
 }
 
 function createRandomRemoteAvatarConfig(seed: string): LayeredAvatarConfig {

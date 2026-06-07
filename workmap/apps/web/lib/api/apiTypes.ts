@@ -20,8 +20,11 @@ export type WorkMapApiUser = {
   email?: string;
   displayName: string;
   role?: string;
-  department?: string | null;
+  department?: { id: string; name: string } | string | null;
   status?: UserPresenceStatus;
+  avatarId?: string | null;
+  jobTitle?: string | null;
+  contactOnly?: boolean;
 };
 
 export type WorkMapApiDevelopmentToken = {
@@ -38,6 +41,7 @@ export type WorkMapApiAuthUser = {
   email: string;
   displayName: string;
   role: string;
+  avatarId?: string | null;
 };
 
 export type WorkMapApiCompany = {

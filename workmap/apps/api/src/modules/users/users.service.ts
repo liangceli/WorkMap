@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { canViewEmployeeActivity, type RequestContext } from "@workmap/auth";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { canViewEmployeeActivity, canViewEmployeeDirectory, type RequestContext } from "@workmap/auth";
 import { AuditService } from "../audit/audit.service.js";
 import { toApiStatus } from "../common/enum-mappers.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -15,7 +15,36 @@ export class UsersService {
     return this.getUserProfile(context, context.userId);
   }
 
+  async updateCurrentUserProfile(context: RequestContext, input: unknown) {
+    const displayName = parseDisplayName(input);
+    const avatarId = parseAvatarId(input);
+    const data: { displayName?: string; avatarId?: string } = {};
+
+    if (displayName) {
+      data.displayName = displayName;
+    }
+
+    if (avatarId) {
+      data.avatarId = avatarId;
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException("At least one profile field is required.");
+    }
+
+    await this.prisma.user.update({
+      where: { id: context.userId },
+      data,
+    });
+
+    return this.getCurrentUser(context);
+  }
+
   async listDirectory(context: RequestContext) {
+    if (!canViewEmployeeDirectory(context)) {
+      throw new ForbiddenException("Employee directory is not visible to this role.");
+    }
+
     const users = await this.prisma.user.findMany({
       where: { companyId: context.companyId },
       include: {
@@ -125,4 +154,40 @@ export class UsersService {
       throw new ForbiddenException("Employee activity is not visible to this role.");
     }
   }
+}
+
+function parseDisplayName(input: unknown) {
+  if (!isRecord(input) || !("displayName" in input)) {
+    return undefined;
+  }
+
+  const displayName = typeof input.displayName === "string" ? normalizeWhitespace(input.displayName) : "";
+
+  if (displayName.length < 2 || displayName.length > 80) {
+    throw new BadRequestException("displayName must be between 2 and 80 characters.");
+  }
+
+  return displayName;
+}
+
+function parseAvatarId(input: unknown) {
+  if (!isRecord(input) || !("avatarId" in input)) {
+    return undefined;
+  }
+
+  const avatarId = typeof input.avatarId === "string" ? input.avatarId.trim() : "";
+
+  if (!avatarId.startsWith("layered:v2:") || avatarId.length > 2048) {
+    throw new BadRequestException("avatarId must be a valid WorkMap layered avatar reference.");
+  }
+
+  return avatarId;
+}
+
+function normalizeWhitespace(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

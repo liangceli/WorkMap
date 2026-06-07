@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAuthContext } from "../../../lib/api/authApi";
+import { getAuthContext, getCurrentUser } from "../../../lib/api/authApi";
+import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
+import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { completeCognitoRedirect } from "../../../lib/auth/cognitoSession";
 import { getPendingInviteToken } from "../../../lib/auth/pendingInvite";
 import { toWorkflowRole } from "../../../lib/auth/pilotSession";
@@ -48,10 +50,27 @@ export default function CognitoCallbackPage() {
         return;
       }
 
-      const nextState = { ...getDefaultSetupState(toWorkflowRole(contextResult.data.role)), hasCompany: true };
+      const defaultState = getDefaultSetupState(toWorkflowRole(contextResult.data.role));
+      const currentUserResult = await getCurrentUser({ token: result.session.idToken });
+
+      if (cancelled) {
+        return;
+      }
+
+      const backendAvatar = currentUserResult.ok ? decodeLayeredAvatarId(currentUserResult.data.avatarId) : null;
+
+      if (backendAvatar) {
+        saveLayeredAvatarConfig(backendAvatar);
+      }
+
+      const nextState = {
+        ...defaultState,
+        hasCompany: true,
+        hasAvatar: Boolean(backendAvatar) || defaultState.hasAvatar,
+      };
       saveUserSetupState(nextState);
       setStatus("Cognito sign-in complete. Opening WorkMap...");
-      router.replace(getNextRouteForUser(nextState));
+      router.replace(contextResult.data.role === "OWNER" && !backendAvatar ? "/onboarding/avatar" : getNextRouteForUser(nextState));
     }
 
     void finishSignIn();

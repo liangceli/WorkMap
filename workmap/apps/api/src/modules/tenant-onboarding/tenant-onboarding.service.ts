@@ -7,6 +7,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 type WorkspaceInput = {
   companyName: string;
   workspaceName: string;
+  displayName: string;
 };
 
 type TenantUser = {
@@ -15,6 +16,7 @@ type TenantUser = {
   email: string;
   displayName: string;
   role: UserRole;
+  avatarId: string | null;
   cognitoSub: string | null;
   company: {
     id: string;
@@ -57,7 +59,7 @@ export class TenantOnboardingService {
 
   async createWorkspace(payload: CognitoJwtPayload, input: Record<string, unknown>) {
     const identity = getVerifiedCognitoIdentity(payload);
-    const workspaceInput = parseWorkspaceInput(input);
+    const workspaceInput = parseWorkspaceInput(input, identity.displayName);
     const existingUser = await this.findUserForIdentity(identity.sub, identity.email, { bindLegacyEmailMatch: true });
 
     if (existingUser) {
@@ -95,7 +97,7 @@ export class TenantOnboardingService {
           departmentId: department.id,
           email: identity.email,
           cognitoSub: identity.sub,
-          displayName: identity.displayName,
+          displayName: workspaceInput.displayName,
           role: UserRole.OWNER,
           status: UserStatus.AVAILABLE,
           jobTitle: "Workspace owner",
@@ -106,6 +108,7 @@ export class TenantOnboardingService {
           email: true,
           displayName: true,
           role: true,
+          avatarId: true,
           cognitoSub: true,
           company: {
             select: {
@@ -202,6 +205,7 @@ export class TenantOnboardingService {
         email: user.email,
         displayName: user.displayName,
         role: user.role,
+        avatarId: user.avatarId,
       },
       company: user.company,
       onboarding: {
@@ -219,6 +223,7 @@ const tenantUserSelect = {
   email: true,
   displayName: true,
   role: true,
+  avatarId: true,
   cognitoSub: true,
   company: {
     select: {
@@ -229,9 +234,10 @@ const tenantUserSelect = {
   },
 } satisfies Prisma.UserSelect;
 
-function parseWorkspaceInput(input: Record<string, unknown>): WorkspaceInput {
+function parseWorkspaceInput(input: Record<string, unknown>, defaultDisplayName: string): WorkspaceInput {
   const companyName = typeof input.companyName === "string" ? input.companyName.trim() : "";
   const workspaceName = typeof input.workspaceName === "string" ? input.workspaceName.trim() : "";
+  const displayName = parseDisplayName(input.displayName, defaultDisplayName);
 
   if (companyName.length < 2 || companyName.length > 120) {
     throw new BadRequestException("companyName must be between 2 and 120 characters.");
@@ -244,7 +250,19 @@ function parseWorkspaceInput(input: Record<string, unknown>): WorkspaceInput {
   return {
     companyName,
     workspaceName,
+    displayName,
   };
+}
+
+function parseDisplayName(value: unknown, fallback: string) {
+  const raw = typeof value === "string" ? value : fallback;
+  const displayName = raw.trim().replace(/\s+/g, " ");
+
+  if (displayName.length < 2 || displayName.length > 80) {
+    throw new BadRequestException("displayName must be between 2 and 80 characters.");
+  }
+
+  return displayName;
 }
 
 async function createDefaultWorkspaceData(

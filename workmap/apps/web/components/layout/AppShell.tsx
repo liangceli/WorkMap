@@ -22,13 +22,13 @@ type ApiSessionSummary = {
 
 const navItems: Array<{ label: string; href: string; roles: WorkMapRole[] }> = [
   { label: "Office", href: "/virtual-office", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
-  { label: "Dashboard", href: "/dashboard", roles: ["MANAGER", "OWNER", "IT_ADMIN"] },
+  { label: "Dashboard", href: "/dashboard", roles: ["MANAGER", "OWNER"] },
   { label: "Employees", href: "/employees", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Reports", href: "/reports", roles: ["MANAGER", "OWNER"] },
-  { label: "Compliance", href: "/compliance", roles: ["EMPLOYEE", "MANAGER", "OWNER"] },
+  { label: "Compliance", href: "/compliance", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Invites", href: "/onboarding/invite", roles: ["OWNER"] },
   { label: "Integrations", href: "/integrations", roles: ["OWNER", "IT_ADMIN"] },
-  { label: "Settings", href: "/settings", roles: ["EMPLOYEE", "OWNER", "IT_ADMIN"] },
+  { label: "Settings", href: "/settings", roles: ["OWNER", "IT_ADMIN"] },
 ];
 
 export function AppShell({ children }: AppShellProps) {
@@ -153,7 +153,7 @@ export function AppShell({ children }: AppShellProps) {
             : pilotSession
             ? apiSummary
               ? `${apiSummary.userName} is in ${apiSummary.companyName} as ${formatRole(apiSummary.role)} via ${apiSummary.source}.`
-              : `${pilotSession.user.displayName} is using a backend bearer token. Role boundaries are enforced by API guards where implemented.`
+              : `${pilotSession.user.displayName} is using a backend bearer token. Core role boundaries are enforced by the API.`
             : activeRole
               ? "Navigation visibility is for workflow testing only. Sign in on /login for a backend-issued pilot token."
               : "Sign in before QA so API requests use the intended backend-issued user context."}
