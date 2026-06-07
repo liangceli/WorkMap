@@ -71,6 +71,7 @@ Development overrides:
 - `POST /invitations/accept`
 - `GET /companies/current`
 - `GET /users/me`
+- `PATCH /users/me`
 - `GET /users`
 - `GET /users/:userId`
 - `GET /devices`
@@ -114,6 +115,36 @@ Current reporting boundary:
 - Dashboard and Reports use this route for API-backed app/domain rows.
 - Department/team aggregate rows are not yet backed by a team aggregate endpoint and must remain labeled as pilot examples.
 - Sparse or empty pilot seed data should be presented as sparse data, not as a broken API.
+- Own reports are visible to all roles with `viewOwnReports`.
+- Cross-user reports require `viewEmployeeActivity`; target user must belong to the requester's company.
+- Off-tenant report targets return safe not-found behavior.
+
+## Users Contract
+
+`GET /users/me` returns the backend-resolved current user's profile.
+
+`PATCH /users/me` request body:
+
+- optional `displayName: string`, normalized and 2-80 characters
+- optional `avatarId: string`, must be a valid WorkMap `layered:v2:` avatar reference
+
+Rules:
+
+- At least one supported field is required.
+- The backend updates only `context.userId`.
+- Client `userId`, `companyId`, and `role` are not accepted or trusted.
+
+`GET /users`:
+
+- Requires `viewEmployeeDirectory`.
+- Returns same-tenant users only.
+- Rows can include `id`, `displayName`, `email`, `role`, `status`, `avatarId`, `jobTitle`, and `department`.
+
+`GET /users/:userId`:
+
+- Target must belong to `context.companyId`.
+- Users without activity visibility receive contact-only profile shape.
+- Sensitive employee detail views are audited when viewing another user.
 
 ## Pilot Auth Contract
 
@@ -209,6 +240,7 @@ Behavior:
 `GET /invitations`:
 
 - Auth: `RequestContextGuard + RolesGuard`, `OWNER` only.
+- Service also enforces `canInviteEmployees()`.
 - Returns `{ invitations }` for the authenticated owner's company.
 
 `POST /invitations` request body:
@@ -233,6 +265,20 @@ Storage rule:
 - Request body: `token: string`
 - Validates token hash, pending status, expiration, verified Cognito email match, and tenant identity conflicts.
 - Returns `WorkMapApiWorkspaceContext` with `onboarding.acceptedInvite: true` and `onboarding.nextRoute: "/compliance"`.
+
+## Integrations Contract
+
+`GET /integrations`:
+
+- Requires integration-management capability.
+- Current allowed roles: IT_ADMIN and OWNER.
+- Returns company-level integration settings for the authenticated company only.
+
+`GET /integrations/contact-links/:targetUserId`:
+
+- Available to roles with contact-link capability.
+- Target user must belong to the authenticated company.
+- Wrong-tenant targets return safe not-found behavior.
 
 ## Compliance Contract
 
@@ -260,6 +306,7 @@ Current limitation: `GET /compliance/policy` does not return acknowledgement sta
 `GET /virtual-office/map/:officeMapId/positions` returns:
 
 - `userId`, `displayName`, `avatarId`, `x`, `y`, `direction`, `isMoving`, `status`, optional `roomId`, `updatedAt`
+- `officeMapId` must belong to the authenticated user's company before positions are returned.
 
 `PUT /virtual-office/map/:officeMapId/positions/me` saves the authenticated current user's latest position.
 
@@ -328,3 +375,4 @@ Important contract assumptions:
 ## Important Gaps
 
 - No websocket/SSE realtime position sync, historical position trail, or arbitrary-user position mutation contract has been added.
+- No final global identity/account or tenant-membership API contract has been added.

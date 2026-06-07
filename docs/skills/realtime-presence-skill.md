@@ -70,8 +70,9 @@ Commit `b68dd49` added the 5-person People/Presence MVP UI.
 - No realtime broadcast/sharing of position updates was added.
 - No historical position trail was added.
 - Owner/employee manual QA observed remote users through polling; movement can appear as periodic position jumps rather than live walking animation.
-- Remote API users can fall back to `WM` marker when layered avatar configuration exists only in local frontend state and is not persisted to backend profile/avatar data.
+- Backend-backed `layered:v2:` avatar references can now render real layered avatars for current and remote API users when `User.avatarId` is present.
+- Users without valid backend `avatarId` can still fall back to `WM` marker until they complete avatar/profile setup.
 
 ## Recommended Presence Direction
 
-Polling is the current MVP/pilot presence strategy. Revisit websocket/SSE and avatar-profile sync only if pilot feedback needs smoother live movement or accurate remote avatars.
+Polling is the current MVP/pilot presence strategy. Revisit websocket/SSE only if pilot feedback needs smoother live movement.

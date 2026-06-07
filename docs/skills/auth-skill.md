@@ -22,6 +22,36 @@ Auth priority as of commit `c2c7d76` and preserved in `e5d4882`:
 2. WorkMap/pilot/dev Bearer JWT.
 3. Development headers, only when `NODE_ENV !== "production"`.
 
+## Capabilities / RBAC
+
+Commit `815df2c` added the central capability model in `packages/auth`.
+
+Capabilities include:
+
+- `manageCompany`
+- `inviteEmployees`
+- `viewEmployeeDirectory`
+- `viewEmployeeActivity`
+- `viewOwnReports`
+- `viewTeamReports`
+- `manageCompliancePolicy`
+- `viewComplianceStatus`
+- `manageIntegrations`
+- `viewDeviceHealth`
+- `accessTechnicalSettings`
+- `accessVirtualOffice`
+- `useContactLinks`
+
+Key role boundaries:
+
+- EMPLOYEE can view directory, own reports, virtual office, and contact links.
+- TEAM_LEAD/MANAGER/HR_ADMIN can view team reports/activity at company-level for the current bridge.
+- HR_ADMIN can manage compliance policy/status.
+- IT_ADMIN can manage integrations, device health, and technical settings.
+- OWNER has all listed capabilities.
+
+Backend service checks are the security boundary. Frontend navigation/command visibility is advisory.
+
 ## Cognito Auth
 
 Commit `c2c7d76` added the STAGE 2 Cognito deployment baseline. Commit `e5d4882` added stable Cognito `sub` mapping and Cognito-only onboarding/invite flows.
@@ -127,6 +157,7 @@ Frontend demo workflow role union currently includes only `EMPLOYEE`, `MANAGER`,
 
 - STAGE 2 Cognito is a deployment/auth baseline, not a complete enterprise identity lifecycle.
 - `User.cognitoSub` is now the minimal stable mapping, but global identity/account tables, multi-company membership, invite emails, MFA policy, password reset UX, and route guard overhaul remain future work.
-- Frontend route access is demo-state-based, not backend-auth-based.
+- Frontend route visibility is role-aware but not the security boundary.
+- Department/team-level RBAC remains coarse until team membership boundaries exist in the data model.
 - Authenticated virtual-office API success depends on the local backend listening on `localhost:3001`, `WORKMAP_JWT_SECRET` being configured, and demo seed data existing.
 - Pilot auth is not SSO/OAuth/MFA/password-reset-ready production auth.

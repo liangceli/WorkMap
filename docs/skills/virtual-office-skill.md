@@ -79,9 +79,17 @@ Pilot auth/privacy boundary added in commit `14fb706`:
 - People panel explains that teammates can see avatar location, workspace status, and last-seen freshness.
 - People panel also states that screen recording, keystrokes, hidden camera/mic, and message content are not shown there.
 
+Backend-backed profile/avatar behavior added in commit `815df2c`:
+
+- API positions include backend `displayName` and `avatarId`.
+- `OfficeMap` decodes valid `layered:v2:` avatar references for current and remote API players.
+- Remote avatar assets are keyed by stable `userId:avatarId` signature so normal polling does not reload avatars every 4 seconds.
+- Authenticated API users without a valid backend avatar are routed to avatar setup instead of using local-only avatar cache as completion.
+- Mock/fallback mode can still use local avatar cache when API data is unavailable.
+
 ## Current Boundary
 
-The API integration now includes current-user latest-position restore/save and basic polling presence. It still does not add websocket/SSE realtime infrastructure, backend map rendering, arbitrary user mutation, historical trails, or production auth/session changes.
+The API integration now includes current-user latest-position restore/save, backend-backed avatar/display-name profile data, and basic polling presence. It still does not add websocket/SSE realtime infrastructure, backend map rendering, arbitrary user mutation, or historical trails.
 
 The canvas source remains `/maps/workmap2.tmx`; do not use backend `OfficeMap.mapData` as the frontend canvas source unless a future task explicitly changes that architecture.
 

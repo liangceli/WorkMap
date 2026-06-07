@@ -99,6 +99,24 @@ Database setup:
 - Confirm owner can see employee in the same workspace, accepting polling-based position jumps as current scope.
 - Confirm pilot login fallback, Dashboard, Reports, Compliance, virtual-office movement/collision/chair/contact drawer, and People panel still work.
 
+## STAGE 2 RBAC / Profile QA
+
+- Confirm EMPLOYEE does not see Dashboard, Reports, Integrations, Settings, or Invites in AppShell.
+- Confirm EMPLOYEE does not see Dashboard or Integrations in `/virtual-office` command palette.
+- Confirm EMPLOYEE cannot `GET /invitations` or `POST /invitations`.
+- Confirm EMPLOYEE cannot `GET /integrations`.
+- Confirm wrong-tenant `officeMapId` cannot be used for `GET /virtual-office/map/:officeMapId/positions` or current-user position save.
+- Confirm wrong-tenant `policyId` cannot be acknowledged.
+- Confirm wrong-tenant `targetUserId` cannot be used for integration contact links.
+- Confirm EMPLOYEE cannot query another user's reports with `?userId=...`.
+- Confirm OWNER/MANAGER-style roles can query in-tenant report targets where expected, and off-tenant targets fail safely.
+- Confirm Owner A cannot see Owner B users, invites, virtual-office positions, reports, compliance acknowledgement targets, or contact links.
+- Confirm `/employees` shows real same-tenant API users when `GET /users` succeeds and mock examples only when API auth/data is unavailable.
+- Confirm `PATCH /users/me` saves display name and valid `layered:v2:` avatar reference for the backend-resolved current user.
+- Confirm first-time OWNER/EMPLOYEE setup requires/saves display name and backend avatar profile.
+- Confirm returning OWNER/EMPLOYEE with backend avatar skips avatar recreation.
+- Confirm OWNER and EMPLOYEE see each other's real layered avatars in `/virtual-office` after both have backend avatar profiles.
+
 ## Local API-Backed Virtual Office Verification Loop
 
 Use this repeatable loop after backend/local-startup changes:
@@ -293,3 +311,11 @@ For commit `e5d4882`, handoff/QA reports:
 - Secret scan found no real AWS/Cognito/Supabase/Render/Vercel/private key/database secret in reviewed files.
 - Manual QA passed for owner workspace creation, invite creation, invite link in InPrivate without hydration overlay, Cognito invite callback routing, employee acceptance through compliance/avatar/device onboarding, wrong-email rejection, invalid/already accepted invite handling, non-OWNER invite denial, pilot fallback, Dashboard, Reports, Compliance, and virtual-office rendering.
 - Owner spawn fix sets new workspaces to `x=160`, `y=545`; existing test workspaces with older `160,160` position may need cleanup/recreate.
+
+For commit `815df2c`, handoff/QA reports:
+
+- API and web typecheck, lint, and build passed.
+- No Prisma migration command was run because no schema/migration changed.
+- Secret scan found no real AWS/Cognito/Supabase/Render/Vercel/private key/database secret in reviewed files.
+- Final manual QA passed for OWNER backend avatar completion: fresh Owner routed through avatar setup, backend avatar saved, fresh login skipped avatar recreation, employee saw Owner's real layered avatar, and Owner still saw employee's real layered avatar.
+- Previously completed Round 3 checks passed for employee hidden navigation/command actions, employee directory, display-name handling, avatar persistence, two-user virtual-office avatar consistency, tenant onboarding, invite acceptance, Dashboard, Reports, Compliance, pilot login, and dev-token fallback.

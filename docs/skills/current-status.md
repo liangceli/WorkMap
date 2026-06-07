@@ -4,6 +4,16 @@ Last updated: 2026-06-07.
 
 ## Latest Accepted Work
 
+- Commit `815df2c` (`feat: add tenant RBAC and backend-backed user profiles`) completed STAGE 2 Round 3: strict multi-tenant data isolation + RBAC core, plus backend-backed display name/avatar profile follow-ups.
+- Shared auth now defines `WorkMapCapability`, `WORKMAP_ROLE_CAPABILITIES`, `roleHasCapability()`, and `hasCapability()`, while preserving helper names like `canViewEmployeeActivity()` and `canManageIntegrations()`.
+- Backend service checks now enforce invite management permission, employee directory visibility, cross-user report visibility, integration settings visibility, and office-map tenant ownership for position reads.
+- Cross-tenant report target IDs return safe not-found behavior, wrong-tenant office map position reads fail before returning data, and integration settings are restricted to OWNER/IT_ADMIN.
+- `PATCH /users/me` now lets the backend-resolved current user update `displayName` and a valid WorkMap layered avatar reference without trusting client user/company/role.
+- Frontend `/employees` is API-first when auth is available and uses mock rows only as an explicitly labeled fallback.
+- Avatar/profile completion is now backend-backed through `User.avatarId` storing compact `layered:v2:` references; local avatar config is a cache, not the authenticated completion source.
+- Owner and employee onboarding now require/confirm display name and save backend profile/avatar state; returning users with backend avatar skip avatar recreation.
+- `/virtual-office` now decodes backend avatar references for current and remote players, and authenticated API users without backend avatar are routed to avatar setup instead of relying on local-only cache.
+- AppShell and virtual-office command palette hide obvious admin/report/settings/dashboard/integration shortcuts from employee roles; backend checks remain the security boundary.
 - Commit `e5d4882` (`feat: add stage 2 tenant onboarding and invites`) completed STAGE 2 Round 2: minimal tenant onboarding and Owner/Employee invite flow.
 - Prisma now has stable `User.cognitoSub` mapping plus `InvitationStatus` and `Invitation` storage with hashed invite tokens.
 - Backend now exposes Cognito-only tenant onboarding endpoints for unmapped verified Cognito users: `GET /tenant-onboarding/status` and `POST /tenant-onboarding/workspace`.
@@ -82,17 +92,22 @@ Last updated: 2026-06-07.
 - `/onboarding/company` can create a backend workspace/company for a new verified Cognito owner.
 - `/onboarding/invite` lets Owners create copyable invite links and review recent company-scoped invitations.
 - `/invite/[token]` lets invited employees sign in with Cognito, accept a matching invite, and continue through required onboarding steps.
+- `/employees` can render same-tenant backend users from `GET /users` and falls back to labeled examples only when API auth/data is unavailable.
 - `/virtual-office` renders a canvas-based `OfficeMap` using `/maps/workmap2.tmx`, office tilesets, layered avatar assets, local movement, collision detection, click/double-click navigation, chair interaction, and remote office data that can come from validated read APIs or mock fallback.
 - `/dashboard` can now show pilot readiness across API health, auth/session, remote presence, compliance policy, and reports usage.
 - `/reports` can now show authenticated current-user app/domain usage summaries from the API, with sparse-data and pilot-example labels where backend aggregate data is not available.
-- Backend exposes guarded endpoints for auth, users, companies, devices, reports, virtual office, integrations, and compliance.
+- Backend exposes guarded endpoints for auth, tenant onboarding, invitations, users, companies, devices, reports, virtual office, integrations, and compliance.
 - Backend request context can now resolve Cognito users from verified Cognito JWTs before falling back to WorkMap pilot/dev JWTs.
+- Backend RBAC capabilities now constrain sensitive company data/actions beyond frontend navigation visibility.
 - Prisma schema contains company, department, users with optional `cognitoSub`, invitations, devices, activity events, usage summaries, office maps, rooms, virtual office positions, monitoring policies, policy acknowledgements, integrations, and audit logs.
 - Seed data creates a demo company, users, default office map/rooms, policy, device rows, virtual office positions, usage summaries, integrations, and an audit event.
 
 ## Known Issues / Risks
 
-- STAGE 2 Round 2 is still a minimal bridge. It does not implement global identity/account tables, `CompanyMembership`/`TenantMembership`, multi-company membership per identity, or a full strict multi-tenant/RBAC audit.
+- STAGE 2 remains a minimal bridge. It does not implement global identity/account tables, `CompanyMembership`/`TenantMembership`, or multi-company membership per identity.
+- Department/team-level RBAC is still coarse: TEAM_LEAD/MANAGER/HR_ADMIN visibility is company-level where the data model lacks team membership boundaries.
+- Frontend role visibility is advisory UX; backend service checks are the security boundary.
+- Direct URL access to some frontend-only/mock pages can still render page shells, but protected backend data/actions are constrained by API permissions.
 - One Cognito account currently maps to one WorkMap company user through `User.cognitoSub`.
 - Existing legacy users with duplicated Cognito email across companies require cleanup before Cognito mapping can bind safely.
 - No real email sending is implemented; Owners copy invite links from the UI.
@@ -100,7 +115,7 @@ Last updated: 2026-06-07.
 - Local DBs need migration `20260606000000_stage2_onboarding_invites` before testing Round 2 onboarding/invites.
 - Existing test workspaces created before the owner spawn fix can still have the old blocked owner position and may need DB cleanup/recreation.
 - Remote teammate movement is still polling-based and can appear as position jumps rather than live walking animation.
-- Remote API users can still show the `WM` marker because layered avatar configuration is not persisted to backend profile/avatar config in this round.
+- Users created before backend avatar/profile persistence may still need to complete avatar setup once before backend `User.avatarId` contains a valid `layered:v2:` reference.
 - Real external deployment smoke for Vercel/Render/Cognito is still pending after commit/push; the readiness doc is a checklist, not proof of deployed production success.
 - Root `.env` changes require restarting the Next dev server before `/login` reflects updated `NEXT_PUBLIC_COGNITO_*` values.
 - Local browser smoke should use `http://localhost:3000`; using `http://127.0.0.1:3000` can fail CORS when `WORKMAP_ALLOWED_ORIGIN` is `http://localhost:3000`.
@@ -137,11 +152,11 @@ Last updated: 2026-06-07.
 
 - Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.
 - Add real email delivery for invitations and a revoke/resend lifecycle.
-- Add backend avatar/profile persistence so remote Cognito users render their configured layered avatar instead of fallback markers.
+- Add a richer profile/avatar table if `User.avatarId` as compact `layered:v2:` reference becomes too limiting.
 - Add realtime presence smoothing or websocket/SSE only if pilot feedback requires live walking updates.
-- Add strict multi-tenant/RBAC tests for onboarding, invitation list/create/accept, reports, compliance, virtual-office positions, and integrations.
+- Add strict multi-tenant/RBAC automated tests for onboarding, invitation list/create/accept, reports, compliance, virtual-office positions, integrations, employee directory/profile, and devices.
 - Execute deployed smoke on real Vercel/Render/Cognito URLs after confirming environment variables and callback/logout URLs.
-- Decide the stable Cognito identity model: `cognitoSub` field vs identity table, tenant membership, invite/onboarding, and migration from pilot users.
+- Decide when to migrate from the current `User.cognitoSub` bridge to a full identity table plus tenant membership model.
 - Consider clearer manual recovery for Cognito mapping failure, including sign-out/clear-session guidance before using pilot fallback.
 - Add automated tests for Cognito token verification, email_verified enforcement, mapping ambiguity, auth priority, `/login/callback`, and root `.env` loading behavior.
 - Add a backend team/department aggregate reports endpoint so dashboard/reports can remove pilot-example aggregate rows.
@@ -157,5 +172,5 @@ Last updated: 2026-06-07.
 - Decide the production auth roadmap: SSO/OAuth, MFA, password reset, tenant admin credential lifecycle, and route guards.
 - Decide whether backend compliance policy responses should include acknowledgement status instead of relying on browser marker readability.
 - Decide whether polling is sufficient for MVP or whether websocket/SSE realtime presence is needed later.
-- Replace frontend-only demo workflow state with real auth/session wiring when ready.
+- Continue reducing reliance on frontend workflow state for authenticated routing now that backend auth/profile state exists.
 - Add tests for pathfinding, API contracts, auth guard behavior, and key UI routing workflows.

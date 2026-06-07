@@ -96,6 +96,14 @@ Reason: STAGE 2 Round 2 needed a working owner signup/workspace creation and emp
 
 Trade-off: This enables the local product foundation now, but one Cognito account maps to one WorkMap company user. Global identity/account tables, `CompanyMembership` or `TenantMembership`, multi-company membership, real email delivery, and a strict multi-tenant/RBAC audit remain future work.
 
+## 2026-06-07 - Core RBAC And Backend Profile Bridge
+
+Decision: Add a central capability matrix and enforce core tenant/RBAC checks in backend services while reusing `User.avatarId` for compact backend-backed layered avatar references.
+
+Reason: Round 3 needed strict-enough tenant isolation, role boundaries, and cross-session avatar/profile consistency without schema changes or the full identity/membership migration.
+
+Trade-off: Backend service checks now protect key data/actions, but department/team-level RBAC remains coarse and frontend route hiding is only advisory. `User.avatarId` can carry `layered:v2:` profile data for the MVP, but a richer profile/avatar table may be needed later.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

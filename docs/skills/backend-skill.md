@@ -63,6 +63,43 @@ Auth priority:
 2. WorkMap/pilot/dev Bearer JWT.
 3. Development headers outside production only.
 
+## RBAC / Tenant Isolation
+
+Commit `815df2c` added the central Round 3 capability model in `packages/auth`.
+
+Core helpers:
+
+- `WorkMapCapability`
+- `WORKMAP_ROLE_CAPABILITIES`
+- `roleHasCapability(role, capability)`
+- `hasCapability(context, capability)`
+
+Capability highlights:
+
+- `manageCompany`: OWNER.
+- `inviteEmployees`: OWNER.
+- `viewEmployeeDirectory`: all roles.
+- `viewEmployeeActivity`: TEAM_LEAD, MANAGER, HR_ADMIN, OWNER; own user is always allowed.
+- `viewOwnReports`: all roles.
+- `viewTeamReports`: TEAM_LEAD, MANAGER, HR_ADMIN, OWNER.
+- `manageCompliancePolicy` / `viewComplianceStatus`: HR_ADMIN, OWNER.
+- `manageIntegrations`, `viewDeviceHealth`, `accessTechnicalSettings`: IT_ADMIN, OWNER.
+- `accessVirtualOffice`, `useContactLinks`: all roles.
+
+Service-level enforcement added in Round 3:
+
+- Invitations service enforces `canInviteEmployees()` in addition to controller `OWNER` roles guard.
+- Reports verify requested `userId` belongs to `context.companyId` before cross-user report queries and enforce own/team report permissions.
+- Users directory checks `canViewEmployeeDirectory()` and scopes by `context.companyId`.
+- Virtual-office position reads verify `officeMapId` belongs to the requester's company before returning positions.
+- Integrations settings require `canManageIntegrations()`; contact links remain same-tenant target scoped.
+- Device visibility uses central capability logic: OWNER/IT_ADMIN can see company device health; others see only own devices.
+
+Security boundary:
+
+- Frontend role visibility is advisory UX only.
+- Backend services should not trust frontend-provided `companyId`, `tenantId`, `userId`, or `role`.
+
 ## Cognito Backend Baseline
 
 Commit `c2c7d76` added STAGE 2 Cognito request-context support. Commit `e5d4882` extended it into tenant onboarding and invite acceptance.
@@ -100,6 +137,20 @@ Invitations:
 - Acceptance validates token length, token hash lookup, pending status, expiration, verified email match, same-company constraints, and Cognito sub/email conflicts.
 - Accepted employees receive onboarding advisory `nextRoute: "/compliance"` so they do not bypass compliance/avatar/device onboarding.
 
+## User Profile / Avatar
+
+Commit `815df2c` added backend-backed display name and layered avatar profile persistence.
+
+- Route: `PATCH /users/me`.
+- Guard: `RequestContextGuard`.
+- Scope: updates only `context.userId`.
+- Accepted fields: `displayName`, `avatarId`.
+- `displayName` is normalized whitespace and must be 2-80 characters.
+- `avatarId` must be a WorkMap `layered:v2:` reference and at most 2048 characters.
+- Missing update fields return `400`.
+- Client-provided `userId`, `companyId`, and `role` are not accepted.
+- `GET /users` and `GET /users/:userId` now include `avatarId`, `jobTitle`, and department object data where available.
+
 ## Pilot Auth
 
 Commit `14fb706` added `POST /auth/pilot-login`.
@@ -121,6 +172,8 @@ Commit `14fb706` added `POST /auth/pilot-login`.
 - Auth service validates dev token email and company slug inputs.
 - Auth service validates pilot login email, password presence, company slug, and pilot hash configuration.
 - Virtual office service checks office map and room ownership before persisting positions.
+- Virtual office service checks office map ownership before reading latest positions.
+- User profile update validates current-user-only display name/avatar updates.
 
 ## Not Confirmed
 

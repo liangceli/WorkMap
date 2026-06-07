@@ -51,6 +51,13 @@ Dashboard/reports pilot UX:
 - Empty current-user usage summaries should read as sparse pilot data, not as product failure.
 - Do not imply full monitoring, screenshots, keystrokes, camera/mic, private message capture, export history, or full URL tracking unless those features are actually implemented and accepted.
 
+Role/profile UX:
+
+- Employee roles should not see obvious admin/report/settings/dashboard/integration shortcuts in AppShell or the virtual-office command palette.
+- `/employees` should clearly distinguish API-backed same-tenant users from mock/example fallback data.
+- New owner and invited employee setup should ask for a human-readable display name before relying on Cognito/email-derived fallback labels.
+- Authenticated users should complete backend-backed avatar/profile setup once; returning users with backend `layered:v2:` avatar references should not be forced to recreate avatars.
+
 ## UX Boundaries
 
 - Many workflow surfaces are demo-oriented and use mock/localStorage state.

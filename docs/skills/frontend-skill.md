@@ -16,6 +16,8 @@ Important areas:
 - `lib/auth/pilotSession.ts`: browser pilot session storage and API auth options.
 - `lib/auth/cognitoSession.ts`: Cognito Hosted UI config, PKCE transaction, token exchange, session storage, and logout URL handling.
 - `lib/auth/pendingInvite.ts`: pending invite token storage while Cognito Hosted UI sign-in completes.
+- `lib/auth/displayName.ts`: safe display-name derivation and sanitization helpers.
+- `lib/avatar/avatarProfile.ts`: compact backend layered avatar reference encode/decode helpers.
 - `lib/workflow/workflowState.ts`: frontend-only demo onboarding/login state.
 - `lib/theme/workmapTheme.ts`: central theme tokens.
 
@@ -41,7 +43,7 @@ Important areas:
 
 ## API Usage
 
-`lib/api/apiClient.ts` supports `GET` and `POST` with optional Bearer token and default development base URL `http://localhost:3001`. In production, `NEXT_PUBLIC_WORKMAP_API_URL` must be set or API calls fall back with an error result.
+`lib/api/apiClient.ts` supports `GET`, `POST`, and `PATCH` with optional Bearer token and default development base URL `http://localhost:3001`. In production, `NEXT_PUBLIC_WORKMAP_API_URL` must be set or API calls fall back with an error result.
 
 Known API wrappers include auth, users, reports, integrations, compliance, and virtual office. Some pages/components still rely on mock data instead of API calls.
 
@@ -58,6 +60,7 @@ Pilot readiness API wrappers:
 - `lib/api/tenantOnboardingApi.ts` wraps tenant onboarding status/workspace creation.
 - `lib/api/invitationsApi.ts` wraps invitation list/create/accept.
 - `lib/api/companiesApi.ts` wraps current company summary.
+- `lib/api/usersApi.ts` wraps user directory/profile reads and current-user profile updates.
 
 For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring mapped Cognito session, then stored pilot Bearer session, then development dev-token fallback, and passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
 
@@ -74,11 +77,26 @@ Pilot login/session:
 
 Tenant onboarding / invites:
 
-- `/onboarding/company` creates a backend company/workspace and OWNER user when a Cognito session is present; demo fallback remains.
+- `/onboarding/company` creates a backend company/workspace and OWNER user when a Cognito session is present, asks the Owner to confirm/edit display name, and routes Owner to avatar setup when backend avatar is missing; demo fallback remains.
 - `/onboarding/invite` lets Owners list/create copyable invite links.
-- `/invite/[token]` stores a pending invite token before Cognito sign-in, uses a stable initial `Checking invitation...` render to avoid hydration mismatch, and accepts invites after Cognito auth is available.
+- `/invite/[token]` stores a pending invite token before Cognito sign-in, uses a stable initial `Checking invitation...` render to avoid hydration mismatch, requires invited employees to enter a display name, and accepts invites after Cognito auth is available.
 - After invite acceptance, the page saves frontend workflow state with `hasCompany: true` and routes with `getNextRouteForUser(nextState)`.
 - Accepted employees should flow through compliance/avatar/device onboarding before `/virtual-office`.
+
+Backend-backed profile/avatar:
+
+- `/onboarding/avatar` requires a display name before continuing when backend profile is incomplete.
+- Avatar save writes `displayName` plus encoded `layered:v2:` avatar reference through `PATCH /users/me`.
+- Returning Cognito users call `/users/me`; if backend `avatarId` decodes as a complete layered avatar, frontend caches it and skips avatar recreation.
+- OWNER default workflow no longer treats avatar as complete without backend avatar/profile confirmation.
+- Authenticated API users should not satisfy avatar completion with local cache when backend avatar is missing/invalid.
+
+Role-aware surfaces:
+
+- AppShell hides Dashboard, Reports, Integrations, Settings, and Invites from employee roles where appropriate.
+- Virtual-office command palette hides Dashboard/Integrations shortcuts from employees.
+- `/employees` loads real same-tenant users from `GET /users` when API auth succeeds and labels mock directory data as fallback only.
+- API-backed employee directory rows do not link real UUID users to the old mock detail route.
 
 Dashboard and reports readiness:
 
@@ -121,7 +139,7 @@ No Redux/Zustand/global state library was confirmed. Current state is mostly Rea
 
 `useVirtualOfficeData.ts` performs a one-time initial async load on mount with a cancellation flag, then starts polling positions when authenticated API context is available. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; no websocket listeners were added.
 
-Cognito auth token data is cached in localStorage under `workmap.cognitoSession`. Pilot API auth token data is cached under `workmap.pilotSession`. Development API auth token data is cached under `workmap.devApiAuth`. The normal workflow state remains for routing/onboarding continuity and is not the backend authorization source.
+Cognito auth token data is cached in localStorage under `workmap.cognitoSession`. Pilot API auth token data is cached under `workmap.pilotSession`. Development API auth token data is cached under `workmap.devApiAuth`. Pending invite tokens use `workmap.pendingInviteToken`. The normal workflow state remains for routing/onboarding continuity and is not the backend authorization source.
 
 Position save writes are movement-driven and latest-position-only. They are not realtime sharing and do not create position history.
 

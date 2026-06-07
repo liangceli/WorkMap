@@ -6,7 +6,7 @@ Source of truth: `workmap/prisma/schema.prisma`.
 
 - `Company`: tenant root; owns departments, users, invitations, devices, events, summaries, office maps, rooms, positions, policies, integrations, and audit logs.
 - `Department`: company-scoped department with unique name per company.
-- `User`: company user with role, status, avatar, job title, optional department, optional unique `cognitoSub`, device/activity/report/position relations.
+- `User`: company user with role, status, avatar, job title, optional department, optional unique `cognitoSub`, optional backend avatar/profile reference in `avatarId`, device/activity/report/position relations.
 - `Invitation`: company-scoped invite with invited email, role, SHA-256 token hash, status, inviter, expiration, and acceptance timestamp.
 - `Device`: employee device with OS, hostname, agent version, last seen.
 - `ActivityEvent`: raw app/browser/idle/lock/unlock/heartbeat events.
@@ -38,5 +38,6 @@ Invitation statuses:
 - Office map database `mapData` exists, but current frontend canvas loads `/maps/workmap2.tmx` directly.
 - Virtual office positions now support current-user latest-position restore/save through API-backed local development flows.
 - `User.cognitoSub` is the current minimal Cognito identity bridge. A future global account/identity model plus `CompanyMembership` or `TenantMembership` is still recommended for multi-company membership.
+- `User.avatarId` currently stores compact WorkMap layered avatar references such as `layered:v2:<encoded config>` for authenticated profile completion. A future profile/avatar table can replace this if richer profile data is needed.
 - Invitation plaintext tokens are intentionally not stored; only `tokenHash` exists after creation.
 - Live realtime sync, historical trails, and arbitrary-user position mutation are not implemented.
