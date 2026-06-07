@@ -63,6 +63,7 @@ From `.env.example`:
 - `WORKMAP_COGNITO_USER_POOL_ID`
 - `WORKMAP_COGNITO_APP_CLIENT_ID`
 - `WORKMAP_COGNITO_COMPANY_SLUG`
+- `WORKMAP_APP_URL` is also used by invite-link generation when configured; otherwise the API falls back to `NEXT_PUBLIC_APP_URL` or `http://localhost:3000`.
 
 Pilot local startup convention:
 
@@ -91,18 +92,21 @@ Pilot auth local defaults:
 
 1. Ensure local `.env` contains `DATABASE_URL`, `API_PORT="3001"`, `NEXT_PUBLIC_APP_URL="http://localhost:3000"`, `NEXT_PUBLIC_WORKMAP_API_URL="http://localhost:3001"`, and `WORKMAP_JWT_SECRET`.
 2. Run setup from `workmap/`: `pnpm install`, `pnpm prisma:generate`, `pnpm prisma:migrate`, and `pnpm prisma:seed` when the local DB needs initialization.
-3. Start API from `workmap/`: `pnpm --filter @workmap/api dev`.
-4. Confirm `GET http://localhost:3001/health` returns 200.
-5. Start web from `workmap/`: `pnpm --filter @workmap/web dev`.
-6. Open `http://localhost:3000/login`, sign in with the seeded pilot user, and confirm the AppShell session state is clear after refresh.
-7. Open `http://localhost:3000/dashboard` and confirm API health, auth context, remote presence, compliance, and reports readiness sections show live/fallback states clearly.
-8. Open `http://localhost:3000/reports` and confirm API-backed current-user usage rows or sparse-data explanation, with aggregate/example rows clearly labeled as pilot examples.
-9. Open `http://localhost:3000/compliance`, confirm policy loading and acknowledgement behavior.
-10. Open `http://localhost:3000/virtual-office` and confirm development auth and virtual-office read requests target backend port 3001.
-11. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
-12. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
-13. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
-14. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
+3. For STAGE 2 Round 2, ensure migration `20260606000000_stage2_onboarding_invites` has been applied before testing tenant onboarding/invites.
+4. Start API from `workmap/`: `pnpm --filter @workmap/api dev`.
+5. Confirm `GET http://localhost:3001/health` returns 200.
+6. Start web from `workmap/`: `pnpm --filter @workmap/web dev`.
+7. Open `http://localhost:3000/login`, sign in with the seeded pilot user, and confirm the AppShell session state is clear after refresh.
+8. For Cognito owner onboarding, sign in with a new verified Cognito user and confirm `/onboarding/company` can create a backend workspace.
+9. For invites, create an Owner invite at `/onboarding/invite`, open `/invite/:token` in a clean/incognito browser, sign in with the invited verified email, and accept into the workspace.
+10. Open `http://localhost:3000/dashboard` and confirm API health, auth context, remote presence, compliance, and reports readiness sections show live/fallback states clearly.
+11. Open `http://localhost:3000/reports` and confirm API-backed current-user usage rows or sparse-data explanation, with aggregate/example rows clearly labeled as pilot examples.
+12. Open `http://localhost:3000/compliance`, confirm policy loading and acknowledgement behavior.
+13. Open `http://localhost:3000/virtual-office` and confirm development auth and virtual-office read requests target backend port 3001.
+14. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
+15. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
+16. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
+17. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
 
 Detailed release smoke steps live in `docs/ai-handoff/pilot-release-checklist.md`.
 
@@ -133,12 +137,14 @@ Render backend:
 - Start command: `pnpm --filter @workmap/api start`.
 - Health check path: `/health`.
 - Required server env includes `DATABASE_URL`, `WORKMAP_ALLOWED_ORIGIN`, `WORKMAP_JWT_SECRET`, `WORKMAP_PILOT_PASSWORD_HASH`, and `WORKMAP_COGNITO_*`.
+- Set `WORKMAP_APP_URL` to the deployed Vercel app URL so generated invite links are not localhost links.
 - `WORKMAP_ALLOWED_ORIGIN` must match the Vercel frontend origin.
 
 Supabase:
 
 - Use the Supabase Postgres connection string as `DATABASE_URL`.
 - Run Prisma generate/migrate/seed against the intended database.
+- Include migration `20260606000000_stage2_onboarding_invites` before Round 2 deployed smoke.
 - No Supabase RLS or multi-tenant schema work is included in STAGE 2.
 
 Cognito:

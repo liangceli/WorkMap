@@ -19,6 +19,8 @@ Modules confirmed in `AppModule`:
 - `IntegrationsModule`
 - `ComplianceModule`
 - `AuditModule`
+- `TenantOnboardingModule`
+- `InvitationsModule`
 - `HealthController`
 
 Runtime/local startup notes:
@@ -63,15 +65,40 @@ Auth priority:
 
 ## Cognito Backend Baseline
 
-Commit `c2c7d76` added STAGE 2 Cognito request-context support.
+Commit `c2c7d76` added STAGE 2 Cognito request-context support. Commit `e5d4882` extended it into tenant onboarding and invite acceptance.
 
 - `CognitoJwtService` verifies Cognito JWTs with JWKS, RS256, issuer, audience/client id, expiry, and `nbf`.
 - JWKS are cached for about one hour per issuer.
 - Cognito config is read from `WORKMAP_COGNITO_ISSUER` or derived from `WORKMAP_COGNITO_REGION` and `WORKMAP_COGNITO_USER_POOL_ID`, plus `WORKMAP_COGNITO_APP_CLIENT_ID`.
-- `AuthService.resolveCognitoContext()` requires verified email and maps Cognito email to an existing WorkMap `User`.
-- `WORKMAP_COGNITO_COMPANY_SLUG` can scope the temporary email mapping to one company.
-- Ambiguous same-email cross-company matches are rejected until mapping is scoped or a stable identity model is added.
-- No Prisma schema/migration was added for Cognito `sub` mapping in this round.
+- `AuthService.resolveCognitoContext()` now prefers `User.cognitoSub`.
+- Legacy email mapping remains as a one-time compatibility bridge when exactly one verified email match exists; it can bind `cognitoSub` to that user.
+- Ambiguous same-email cross-company matches and cross-company Cognito sub conflicts are rejected.
+- `CognitoOnlyGuard` allows verified Cognito users without existing WorkMap mapping to call only onboarding/invite acceptance endpoints.
+- `getVerifiedCognitoIdentity()` centralizes verified email, Cognito subject, and display-name extraction.
+
+## Tenant Onboarding / Invitations
+
+Commit `e5d4882` added the minimal safe bridge for tenant onboarding and invites.
+
+Tenant onboarding:
+
+- Routes: `GET /tenant-onboarding/status`, `POST /tenant-onboarding/workspace`.
+- Guard: `CognitoOnlyGuard`.
+- `GET /tenant-onboarding/status` returns `needs_workspace` for an unmapped verified Cognito user or `workspace_ready` for an existing mapped user.
+- `POST /tenant-onboarding/workspace` creates a real `Company`, General department, OWNER user with `cognitoSub`, default office map/rooms, owner virtual-office position, and default monitoring policy.
+- New owner default spawn is `x=160`, `y=545`, aligned with the frontend local player spawn and verified as non-blocked.
+
+Invitations:
+
+- Routes: `GET /invitations`, `POST /invitations`, `POST /invitations/accept`.
+- `GET` and `POST /invitations` use `RequestContextGuard + RolesGuard` and require `OWNER`.
+- `POST /invitations/accept` uses `CognitoOnlyGuard` so an unmapped Cognito employee can accept an invite.
+- Invitable roles are `EMPLOYEE`, `TEAM_LEAD`, `MANAGER`, `HR_ADMIN`, and `IT_ADMIN`; `OWNER` is not invitable through this flow.
+- Invite tokens are generated with `randomBytes(32).toString("base64url")`.
+- Only SHA-256 `tokenHash` is stored in the database; the plain token/link is returned once on creation.
+- Invite TTL is 7 days.
+- Acceptance validates token length, token hash lookup, pending status, expiration, verified email match, same-company constraints, and Cognito sub/email conflicts.
+- Accepted employees receive onboarding advisory `nextRoute: "/compliance"` so they do not bypass compliance/avatar/device onboarding.
 
 ## Pilot Auth
 
@@ -98,5 +125,5 @@ Commit `14fb706` added `POST /auth/pilot-login`.
 ## Not Confirmed
 
 - No websocket gateway was found.
-- No complete production account lifecycle, tenant provisioning, MFA, or password reset implementation was confirmed.
+- No complete production account lifecycle, global identity/membership table, multi-company membership, MFA, password reset, or real email delivery implementation was confirmed.
 - No background activity ingestion controller route was confirmed during intake, despite activity-related schema/module presence.

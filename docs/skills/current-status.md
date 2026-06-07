@@ -1,9 +1,20 @@
 # Current Status
 
-Last updated: 2026-06-06.
+Last updated: 2026-06-07.
 
 ## Latest Accepted Work
 
+- Commit `e5d4882` (`feat: add stage 2 tenant onboarding and invites`) completed STAGE 2 Round 2: minimal tenant onboarding and Owner/Employee invite flow.
+- Prisma now has stable `User.cognitoSub` mapping plus `InvitationStatus` and `Invitation` storage with hashed invite tokens.
+- Backend now exposes Cognito-only tenant onboarding endpoints for unmapped verified Cognito users: `GET /tenant-onboarding/status` and `POST /tenant-onboarding/workspace`.
+- Owner workspace creation creates a real `Company`, General department, OWNER user, default office map/rooms, owner position, and default monitoring policy.
+- Backend now exposes owner-scoped invitation list/create plus Cognito-only invite acceptance: `GET /invitations`, `POST /invitations`, and `POST /invitations/accept`.
+- Invitation creation stores only a SHA-256 token hash in the database and returns the plain invite link/token once to the Owner UI.
+- Invite acceptance validates Cognito JWT, verified email, invite token hash, pending status, expiration, email match, and cross-tenant conflicts before creating/binding the employee user.
+- Frontend now includes `/onboarding/invite`, `/invite/[token]`, invite API helpers, tenant onboarding API helpers, company summary helper, and pending invite token storage.
+- Cognito callback now preserves pending invite routing and routes mapped users through `getNextRouteForUser(nextState)` instead of hardcoding `/virtual-office`.
+- Invite acceptance now avoids first-render hydration mismatch and routes accepted employees through the existing onboarding workflow, starting at `/compliance`.
+- New owner workspace default spawn is `x=160`, `y=545`, matching the frontend local spawn and avoiding the previously blocked `160,160`.
 - Commit `c2c7d76` (`feat: add stage 2 cognito deployment baseline`) completed the STAGE 2 Cognito/deployment baseline and root `.env` local loading follow-up.
 - Web local dev/build now loads the workspace root `workmap/.env` from `apps/web/next.config.ts` without overwriting existing platform/shell env values, so `apps/web/.env.local` is no longer required for local STAGE 2 Cognito public config.
 - `.env.example` now separates frontend public env, backend/server env, Cognito backend verification env, pilot fallback env, and local port defaults.
@@ -67,21 +78,33 @@ Last updated: 2026-06-06.
 - Monorepo scaffold is active with Next.js web, NestJS API, Prisma/Postgres schema, and shared packages.
 - Web app includes routes for login, onboarding, dashboard, employees, reports, compliance, integrations, settings, avatar debug, and `/virtual-office`.
 - `/login` now supports Cognito Hosted UI sign-in when `NEXT_PUBLIC_COGNITO_*` config is available, while preserving pilot fallback.
-- `/login/callback` completes Cognito code exchange, validates backend WorkMap mapping through `/auth/me`, and routes mapped users into `/virtual-office`.
+- `/login/callback` completes Cognito code exchange, validates backend WorkMap mapping through `/auth/me`, preserves pending invite routing, and sends mapped users through the normal workflow route.
+- `/onboarding/company` can create a backend workspace/company for a new verified Cognito owner.
+- `/onboarding/invite` lets Owners create copyable invite links and review recent company-scoped invitations.
+- `/invite/[token]` lets invited employees sign in with Cognito, accept a matching invite, and continue through required onboarding steps.
 - `/virtual-office` renders a canvas-based `OfficeMap` using `/maps/workmap2.tmx`, office tilesets, layered avatar assets, local movement, collision detection, click/double-click navigation, chair interaction, and remote office data that can come from validated read APIs or mock fallback.
 - `/dashboard` can now show pilot readiness across API health, auth/session, remote presence, compliance policy, and reports usage.
 - `/reports` can now show authenticated current-user app/domain usage summaries from the API, with sparse-data and pilot-example labels where backend aggregate data is not available.
 - Backend exposes guarded endpoints for auth, users, companies, devices, reports, virtual office, integrations, and compliance.
 - Backend request context can now resolve Cognito users from verified Cognito JWTs before falling back to WorkMap pilot/dev JWTs.
-- Prisma schema contains company, department, users, devices, activity events, usage summaries, office maps, rooms, virtual office positions, monitoring policies, policy acknowledgements, integrations, and audit logs.
+- Prisma schema contains company, department, users with optional `cognitoSub`, invitations, devices, activity events, usage summaries, office maps, rooms, virtual office positions, monitoring policies, policy acknowledgements, integrations, and audit logs.
 - Seed data creates a demo company, users, default office map/rooms, policy, device rows, virtual office positions, usage summaries, integrations, and an audit event.
 
 ## Known Issues / Risks
 
+- STAGE 2 Round 2 is still a minimal bridge. It does not implement global identity/account tables, `CompanyMembership`/`TenantMembership`, multi-company membership per identity, or a full strict multi-tenant/RBAC audit.
+- One Cognito account currently maps to one WorkMap company user through `User.cognitoSub`.
+- Existing legacy users with duplicated Cognito email across companies require cleanup before Cognito mapping can bind safely.
+- No real email sending is implemented; Owners copy invite links from the UI.
+- `WORKMAP_APP_URL` should be configured server-side in deployment so generated invite links do not fall back to `http://localhost:3000`.
+- Local DBs need migration `20260606000000_stage2_onboarding_invites` before testing Round 2 onboarding/invites.
+- Existing test workspaces created before the owner spawn fix can still have the old blocked owner position and may need DB cleanup/recreation.
+- Remote teammate movement is still polling-based and can appear as position jumps rather than live walking animation.
+- Remote API users can still show the `WM` marker because layered avatar configuration is not persisted to backend profile/avatar config in this round.
 - Real external deployment smoke for Vercel/Render/Cognito is still pending after commit/push; the readiness doc is a checklist, not proof of deployed production success.
 - Root `.env` changes require restarting the Next dev server before `/login` reflects updated `NEXT_PUBLIC_COGNITO_*` values.
 - Local browser smoke should use `http://localhost:3000`; using `http://127.0.0.1:3000` can fail CORS when `WORKMAP_ALLOWED_ORIGIN` is `http://localhost:3000`.
-- Cognito mapping is temporary STAGE 2 email mapping. Future schema-backed Cognito `sub`/identity mapping and tenant provisioning remain undecided.
+- Cognito mapping now uses `User.cognitoSub` when available and can bind one exact legacy email match. Full global identity and membership architecture remains future work.
 - If a Cognito session exists but backend mapping fails, frontend API auth returns unavailable and does not silently fall back to pilot auth until Cognito session is cleared.
 - Cognito Hosted UI sign-in requires verified email and an existing WorkMap user record with matching email; unmapped, unverified, or ambiguous users are rejected.
 - Dashboard can show a mixed state of live API checks and pilot example/sample sections; labels must remain explicit.
@@ -98,7 +121,7 @@ Last updated: 2026-06-06.
 - The implementation test updated local dev DB position for `engineer@workmap.demo` to `x=333`, `y=444`, `direction=right`.
 - API `dev` script is now build-then-run, not watch/hot reload.
 - `load-local-env.ts` is imported unconditionally by the API entry. It preserves existing env vars, but deployment expectations should stay explicit.
-- Enterprise production auth/session is partially started through STAGE 2 Cognito baseline, but account lifecycle, MFA policy, password reset flows, tenant admin management, stable Cognito identity mapping, and full route guards remain unimplemented.
+- Enterprise production auth/session is partially started through STAGE 2 Cognito and tenant onboarding, but account lifecycle, MFA policy, password reset flows, tenant admin management, global identity/membership tables, and full route guards remain unimplemented.
 - Pilot auth is pilot-ready but not enterprise production auth: no SSO/OAuth, MFA, password reset, tenant credential lifecycle, or full route permission overhaul.
 - Production pilot login requires explicit `WORKMAP_PILOT_PASSWORD_HASH`; without it, pilot login is disabled in production.
 - Compliance acknowledgement readback is not exposed by the backend policy endpoint; frontend stores a browser marker only after successful backend acknowledgement.
@@ -107,11 +130,16 @@ Last updated: 2026-06-06.
 - API-derived remote players use fallback role text (`Team member`) and may route profiles by raw user id.
 - Current user's latest local position can now be restored from and saved to the backend in development/API-backed mode.
 - Basic polling presence is implemented for remote players; no websocket/SSE realtime infrastructure was added.
-- Web onboarding/login flow uses frontend-only localStorage workflow state and is not real authentication.
+- Workflow routing still uses frontend localStorage state, but backend authorization now comes from Cognito, pilot JWT, or development-only auth paths.
 - `docs/references/` remains untracked reference material and should not be committed accidentally.
 
 ## Recommended Next Tasks
 
+- Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.
+- Add real email delivery for invitations and a revoke/resend lifecycle.
+- Add backend avatar/profile persistence so remote Cognito users render their configured layered avatar instead of fallback markers.
+- Add realtime presence smoothing or websocket/SSE only if pilot feedback requires live walking updates.
+- Add strict multi-tenant/RBAC tests for onboarding, invitation list/create/accept, reports, compliance, virtual-office positions, and integrations.
 - Execute deployed smoke on real Vercel/Render/Cognito URLs after confirming environment variables and callback/logout URLs.
 - Decide the stable Cognito identity model: `cognitoSub` field vs identity table, tenant membership, invite/onboarding, and migration from pilot users.
 - Consider clearer manual recovery for Cognito mapping failure, including sign-out/clear-session guidance before using pilot fallback.

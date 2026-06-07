@@ -2,58 +2,64 @@
 
 ## 1. Completed Task
 
-STAGE 2 Cognito deployment baseline and root `.env` local loading follow-up were completed and accepted in commit `c2c7d76` (`feat: add stage 2 cognito deployment baseline`).
+STAGE 2 Round 2 Tenant Onboarding + Owner/Employee Invite Flow was completed and accepted in commit `e5d4882` (`feat: add stage 2 tenant onboarding and invites`).
 
 ## 2. Accepted Changes
 
-- `.env.example` now separates frontend public env, backend/server env, Cognito backend verification env, pilot fallback env, and local port defaults.
-- Added `docs/ai-handoff/stage2-deployment-readiness.md` for Vercel, Render, Supabase, Cognito setup, mapping, and smoke checks.
-- Backend now verifies Cognito JWTs with issuer/audience/expiry/nbf/RS256 JWKS checks.
-- Backend Cognito mapping requires verified email and maps to an existing WorkMap user, optionally scoped by `WORKMAP_COGNITO_COMPANY_SLUG`.
-- `RequestContextGuard` now resolves Cognito Bearer first, WorkMap JWT second, and dev headers only outside production.
-- Frontend now supports Cognito Hosted UI PKCE sign-in, `/login/callback`, Cognito session storage, and Cognito logout URL handling.
-- Frontend API auth now prefers mapped Cognito sessions, then pilot sessions, then development dev-token/dev-cache.
-- `apps/web/next.config.ts` now loads root `workmap/.env` for local dev/build without overriding platform/shell env values.
-- Pilot auth fallback, backend `email_verified` enforcement, dev-token production disablement, Prisma schema/migrations, and virtual-office behavior were preserved.
+- Added `User.cognitoSub`, `InvitationStatus`, and `Invitation` with hashed invite-token storage.
+- Added migration `20260606000000_stage2_onboarding_invites`.
+- Added Cognito-only guard/decorator/identity helper for verified Cognito users without existing WorkMap mapping.
+- Added tenant onboarding APIs for status and owner workspace creation.
+- Owner workspace creation now creates company, General department, OWNER user, default office map/rooms, owner position, and default monitoring policy.
+- Added owner-scoped invite list/create APIs and Cognito-only invite acceptance.
+- Invite acceptance validates token hash, status, expiration, verified email match, and cross-tenant identity conflicts.
+- Added frontend owner workspace creation, owner invite UI, employee invite acceptance page, pending invite token storage, and API helpers.
+- Fixed QA findings: invite acceptance routes through onboarding, invite page avoids hydration mismatch, callback preserves pending invite routing, and new owner spawn uses non-blocked `x=160`, `y=545`.
 
 ## 3. Verification Summary
 
 Reported passing from `workmap/`:
 
+- `pnpm prisma:generate`
+- `pnpm exec prisma migrate dev --skip-seed`
 - `pnpm --filter @workmap/web lint`
 - `pnpm --filter @workmap/web typecheck`
 - `pnpm --filter @workmap/web build`
 - `pnpm --filter @workmap/api lint`
 - `pnpm --filter @workmap/api typecheck`
 - `pnpm --filter @workmap/api build`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
 
-QA also reports secret/key review passed with no real committed secrets.
+QA reports secret scan passed with no real committed secrets.
 
-Local smoke passed for API `/health`, pilot login, and web `/login`, `/dashboard`, `/reports`, `/compliance`, and `/virtual-office`.
+Manual QA passed for owner workspace creation, invite creation/listing, fresh invite link in InPrivate without hydration overlay, Cognito invite callback routing, employee invite acceptance through compliance/avatar/device onboarding, wrong-email rejection, invalid/already accepted invite handling, non-OWNER invite denial, pilot login fallback, Dashboard, Reports, Compliance, and virtual-office rendering.
 
-`/login` showed `Sign in with Cognito` locally when root `.env` contained the required public Cognito config, without printing real env values.
-
-User manual progress confirmed local `/login`, seeded pilot login, basic `/virtual-office` entry, `/dashboard`, `/reports`, `/compliance`, Supabase manual migration SQL, and minimal seed insertion.
+Owner default spawn was verified at approximately `x=160`, `y=545` and movable.
 
 ## 4. Remaining Risks
 
-- Real Vercel/Render/Cognito deployed smoke is still pending after env and callback/logout URLs are configured.
-- Cognito user mapping is temporary email-based STAGE 2 mapping; stable Cognito `sub`/identity mapping and tenant provisioning remain future work.
-- If Cognito session exists but backend mapping fails, frontend API auth does not silently fall back to pilot until Cognito session is cleared.
-- Root `.env` changes require restarting the web dev server.
-- Local browser smoke should use `http://localhost:3000`; `127.0.0.1` can hit CORS origin mismatch.
-- Full production account lifecycle, MFA policy, password reset UX, tenant admin, and route guard overhaul remain future work.
+- This is a minimal bridge, not the final SaaS identity/membership architecture.
+- One Cognito account maps to one WorkMap company user; multi-company membership is not supported yet.
+- No real invite email sending exists; invite links are shown/copyable in the Owner UI.
+- `WORKMAP_APP_URL` should be set server-side in deployment so invite links do not fall back to localhost.
+- Existing test workspaces created before the spawn fix may still need cleanup/recreation.
+- Remote users still update through polling and may appear as position jumps; no websocket/SSE was added.
+- Backend avatar/profile sync is not implemented, so remote Cognito users can show fallback markers.
+- Real Vercel/Render/Cognito deployed smoke remains pending.
 - `docs/references/` remains unrelated untracked reference material.
 
 ## 5. Updated Docs
 
 - `docs/skills/current-status.md`
-- `docs/skills/deployment-skill.md`
-- `docs/skills/auth-skill.md`
 - `docs/skills/backend-skill.md`
 - `docs/skills/api-contract-skill.md`
+- `docs/skills/auth-skill.md`
+- `docs/skills/deployment-skill.md`
 - `docs/skills/frontend-skill.md`
-- `docs/skills/ui-ux-skill.md`
+- `docs/skills/data-model-skill.md`
+- `docs/skills/realtime-presence-skill.md`
 - `docs/skills/qa-skill.md`
 - `docs/skills/project-summary.md`
 - `docs/skills/decision-log.md`
@@ -61,8 +67,8 @@ User manual progress confirmed local `/login`, seeded pilot login, basic `/virtu
 
 ## 6. Recommended Next Tasks
 
-- Configure real Vercel, Render, Supabase, and Cognito environment values.
-- Update Cognito callback/logout URLs to the deployed Vercel domain.
-- Run deployed smoke against real Vercel/Render URLs.
-- Decide stable Cognito identity mapping and tenant provisioning.
-- Add automated tests for Cognito JWT verification, mapping failure paths, auth priority, `/login/callback`, and root `.env` loading.
+- Design global identity/account plus `CompanyMembership` or `TenantMembership` migration.
+- Add real invitation email delivery, resend, and revoke flows.
+- Add backend avatar/profile persistence for remote user rendering.
+- Add strict multi-tenant/RBAC automated tests around onboarding, invites, reports, compliance, virtual office, and integrations.
+- Configure deployed env values and run Vercel/Render/Cognito smoke.

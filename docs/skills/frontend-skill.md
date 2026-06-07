@@ -15,6 +15,7 @@ Important areas:
 - `lib/api`: frontend API client and endpoint wrappers.
 - `lib/auth/pilotSession.ts`: browser pilot session storage and API auth options.
 - `lib/auth/cognitoSession.ts`: Cognito Hosted UI config, PKCE transaction, token exchange, session storage, and logout URL handling.
+- `lib/auth/pendingInvite.ts`: pending invite token storage while Cognito Hosted UI sign-in completes.
 - `lib/workflow/workflowState.ts`: frontend-only demo onboarding/login state.
 - `lib/theme/workmapTheme.ts`: central theme tokens.
 
@@ -24,8 +25,10 @@ Important areas:
 - `/login`: pilot sign-in surface with frontend fallback.
 - `/login/callback`: Cognito Hosted UI callback and WorkMap mapping surface.
 - `/onboarding/company`
+- `/onboarding/invite`
 - `/onboarding/avatar`
 - `/onboarding/device-setup`
+- `/invite/[token]`
 - `/dashboard`
 - `/employees`
 - `/employees/[id]`
@@ -52,8 +55,11 @@ Pilot readiness API wrappers:
 
 - `lib/api/healthApi.ts` wraps `GET /health`.
 - Reports API types now match backend `/reports/usage-summary` with `apps[]` and `websites[]` rows containing active/idle seconds.
+- `lib/api/tenantOnboardingApi.ts` wraps tenant onboarding status/workspace creation.
+- `lib/api/invitationsApi.ts` wraps invitation list/create/accept.
+- `lib/api/companiesApi.ts` wraps current company summary.
 
-For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring stored pilot Bearer session before development dev-token fallback, then passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
+For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring mapped Cognito session, then stored pilot Bearer session, then development dev-token fallback, and passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
 
 Pilot login/session:
 
@@ -61,10 +67,18 @@ Pilot login/session:
 - `authApi.ts` exposes `createPilotSession()`.
 - `pilotSession.ts` stores `workmap.pilotSession`, clears expired sessions, exposes Bearer API options, maps backend roles to workflow roles, and clears session on logout.
 - `cognitoSession.ts` stores Cognito sessions under `workmap.cognitoSession` and PKCE transactions under `workmap.cognitoTransaction`.
-- `/login/callback` exchanges the Cognito code, stores Cognito session, calls `/auth/me` with the Cognito id token, and maps the returned WorkMap role into workflow state before opening `/virtual-office`.
+- `/login/callback` exchanges the Cognito code, stores Cognito session, prioritizes pending invite routing, calls `/auth/me` for normal mapped users, and routes through `getNextRouteForUser(nextState)` instead of hardcoding `/virtual-office`.
 - `apiAuth.ts` prefers mapped Cognito session, then pilot session, then development dev-token/dev-cache fallback.
 - `AppShell` shows pilot session state, role/session context, backend Bearer messaging, and logout behavior.
 - AppShell now prefers the pilot session role when present, limits fallback navigation before session/workflow setup, and links unclear/missing-session states back to `/login`.
+
+Tenant onboarding / invites:
+
+- `/onboarding/company` creates a backend company/workspace and OWNER user when a Cognito session is present; demo fallback remains.
+- `/onboarding/invite` lets Owners list/create copyable invite links.
+- `/invite/[token]` stores a pending invite token before Cognito sign-in, uses a stable initial `Checking invitation...` render to avoid hydration mismatch, and accepts invites after Cognito auth is available.
+- After invite acceptance, the page saves frontend workflow state with `hasCompany: true` and routes with `getNextRouteForUser(nextState)`.
+- Accepted employees should flow through compliance/avatar/device onboarding before `/virtual-office`.
 
 Dashboard and reports readiness:
 
@@ -107,7 +121,7 @@ No Redux/Zustand/global state library was confirmed. Current state is mostly Rea
 
 `useVirtualOfficeData.ts` performs a one-time initial async load on mount with a cancellation flag, then starts polling positions when authenticated API context is available. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; no websocket listeners were added.
 
-Pilot API auth token data is cached in localStorage under `workmap.pilotSession`. Development API auth token data is cached under `workmap.devApiAuth`. The normal login/onboarding workflow remains for continuity and fallback, not production authorization.
+Cognito auth token data is cached in localStorage under `workmap.cognitoSession`. Pilot API auth token data is cached under `workmap.pilotSession`. Development API auth token data is cached under `workmap.devApiAuth`. The normal workflow state remains for routing/onboarding continuity and is not the backend authorization source.
 
 Position save writes are movement-driven and latest-position-only. They are not realtime sharing and do not create position history.
 

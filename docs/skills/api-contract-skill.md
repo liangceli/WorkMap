@@ -64,6 +64,11 @@ Development overrides:
 - `POST /auth/pilot-login`
 - `POST /auth/dev-token`
 - `GET /auth/me`
+- `GET /tenant-onboarding/status`
+- `POST /tenant-onboarding/workspace`
+- `GET /invitations`
+- `POST /invitations`
+- `POST /invitations/accept`
 - `GET /companies/current`
 - `GET /users/me`
 - `GET /users`
@@ -165,9 +170,69 @@ Backend verification:
 - Signature must verify through Cognito JWKS with RS256.
 - Expired or not-yet-active tokens are rejected.
 - `email_verified` must be true.
-- Cognito email must map to exactly one existing WorkMap user, unless company slug scopes the lookup.
+- Cognito `sub` maps through `User.cognitoSub` when available.
+- A legacy exact verified email match can be bound to the Cognito sub when safe.
+- Cross-company or ambiguous matches are rejected.
 
 `GET /auth/me` under Cognito Bearer returns the resolved WorkMap request context from Prisma. It does not trust frontend-provided company/user/role.
+
+## Tenant Onboarding Contract
+
+These routes use Cognito Bearer auth through `CognitoOnlyGuard`.
+
+`GET /tenant-onboarding/status` returns either:
+
+- `state: "needs_workspace"` plus `cognito.sub`, `cognito.email`, `cognito.displayName`
+- `state: "workspace_ready"` plus `cognito`, `context`, `user`, `company`, and `onboarding`
+
+`POST /tenant-onboarding/workspace` request body:
+
+- `companyName: string` between 2 and 120 characters
+- `workspaceName: string` between 2 and 120 characters
+
+Response body is `WorkMapApiWorkspaceContext`:
+
+- `context`: `companyId`, `userId`, `role`
+- `user`: `id`, `companyId`, `companySlug`, `email`, `displayName`, `role`
+- `company`: `id`, `name`, `slug`
+- `onboarding`: `createdWorkspace`, `acceptedInvite`, `nextRoute`
+
+Behavior:
+
+- Creates a real company/workspace for an unmapped verified Cognito owner.
+- Creates the owner as role `OWNER` with `User.cognitoSub`.
+- Creates default office map/rooms, owner position, and compliance policy.
+- Existing safely matched users are returned rather than duplicated.
+
+## Invitation Contract
+
+`GET /invitations`:
+
+- Auth: `RequestContextGuard + RolesGuard`, `OWNER` only.
+- Returns `{ invitations }` for the authenticated owner's company.
+
+`POST /invitations` request body:
+
+- `email: string`
+- `role: "EMPLOYEE" | "TEAM_LEAD" | "MANAGER" | "HR_ADMIN" | "IT_ADMIN"`
+
+`POST /invitations` response:
+
+- `invitation`: `id`, `invitedEmail`, `role`, `status`, `invitedBy`, `expiresAt`, `acceptedAt`, `createdAt`, `updatedAt`
+- `inviteLink`: full link generated from `WORKMAP_APP_URL`, `NEXT_PUBLIC_APP_URL`, or local fallback
+- `token`: plaintext invite token returned once
+
+Storage rule:
+
+- Plain invite token is not stored.
+- Database stores unique SHA-256 `tokenHash`.
+
+`POST /invitations/accept`:
+
+- Auth: Cognito Bearer through `CognitoOnlyGuard`.
+- Request body: `token: string`
+- Validates token hash, pending status, expiration, verified Cognito email match, and tenant identity conflicts.
+- Returns `WorkMapApiWorkspaceContext` with `onboarding.acceptedInvite: true` and `onboarding.nextRoute: "/compliance"`.
 
 ## Compliance Contract
 

@@ -80,6 +80,25 @@ Database setup:
 - Confirm backend stopped does not crash frontend pages that already have fallback behavior.
 - For deployed smoke, set real Vercel, Render, Supabase, and Cognito env values directly in platform consoles and verify real callback/logout URLs.
 
+## STAGE 2 Tenant Onboarding / Invite QA
+
+- Apply migration `20260606000000_stage2_onboarding_invites` before testing.
+- Use real local Cognito users with verified email addresses.
+- Sign in with a new verified Cognito owner and confirm callback routes to `/onboarding/company`.
+- Create a workspace and confirm the owner becomes `OWNER`.
+- Confirm owner enters `/onboarding/invite` and AppShell shows backend company/user/role/session source.
+- Create an employee invite and copy the invite link.
+- Open the invite link in a clean/incognito browser and confirm no hydration overlay appears.
+- Sign in/sign up with Cognito using the invited verified email.
+- Confirm callback returns to `/invite/:token` when a pending invite exists.
+- Accept the invite and confirm the employee lands on `/compliance`, then `/onboarding/avatar`, then `/onboarding/device-setup`, then `/virtual-office`.
+- Confirm wrong verified email, invalid invite, expired invite, and already accepted invite fail safely.
+- Confirm non-OWNER cannot list or create invitations.
+- Confirm Owner cannot list/manage another company's invites by changing client-side values.
+- Confirm fresh owner workspace spawns in `/virtual-office` around `x=160`, `y=545` and can move away.
+- Confirm owner can see employee in the same workspace, accepting polling-based position jumps as current scope.
+- Confirm pilot login fallback, Dashboard, Reports, Compliance, virtual-office movement/collision/chair/contact drawer, and People panel still work.
+
 ## Local API-Backed Virtual Office Verification Loop
 
 Use this repeatable loop after backend/local-startup changes:
@@ -262,3 +281,15 @@ For commit `c2c7d76`, handoff/QA reports:
 - `/login` showed `Sign in with Cognito` in the local environment, confirming root `.env` public Cognito config was visible to the web dev server without printing env values.
 - User manual progress confirmed local `/login`, pilot login, basic `/virtual-office` entry, `/dashboard`, `/reports`, `/compliance`, Supabase manual migration SQL, and minimal seed insertion.
 - Render/Vercel deployed smoke is deferred until after deployed env/callback/logout URLs are configured; an earlier Render failure was from an older `main` commit and should not be treated as this implementation failing.
+
+For commit `e5d4882`, handoff/QA reports:
+
+- `pnpm prisma:generate` passed after Prisma engine lock/sandbox issues were cleared.
+- `pnpm exec prisma migrate dev --skip-seed` passed and applied migration `20260606000000_stage2_onboarding_invites` locally.
+- API lint/typecheck/build passed.
+- Web lint/typecheck/build passed after clearing a stale `.next` build cache once.
+- Monorepo lint/typecheck/build passed.
+- Follow-up API lint/typecheck/build passed after the owner spawn fix.
+- Secret scan found no real AWS/Cognito/Supabase/Render/Vercel/private key/database secret in reviewed files.
+- Manual QA passed for owner workspace creation, invite creation, invite link in InPrivate without hydration overlay, Cognito invite callback routing, employee acceptance through compliance/avatar/device onboarding, wrong-email rejection, invalid/already accepted invite handling, non-OWNER invite denial, pilot fallback, Dashboard, Reports, Compliance, and virtual-office rendering.
+- Owner spawn fix sets new workspaces to `x=160`, `y=545`; existing test workspaces with older `160,160` position may need cleanup/recreate.

@@ -16,7 +16,7 @@ Supported context sources:
 
 `GET /auth/me` returns the resolved request context.
 
-Auth priority as of commit `c2c7d76`:
+Auth priority as of commit `c2c7d76` and preserved in `e5d4882`:
 
 1. Cognito Bearer JWT.
 2. WorkMap/pilot/dev Bearer JWT.
@@ -24,7 +24,7 @@ Auth priority as of commit `c2c7d76`:
 
 ## Cognito Auth
 
-Commit `c2c7d76` added the STAGE 2 Cognito deployment baseline.
+Commit `c2c7d76` added the STAGE 2 Cognito deployment baseline. Commit `e5d4882` added stable Cognito `sub` mapping and Cognito-only onboarding/invite flows.
 
 Backend behavior:
 
@@ -33,18 +33,27 @@ Backend behavior:
 - Verification checks issuer, audience/client id, expiry, `nbf`, and signature.
 - `AuthService.resolveCognitoContext()` requires a Cognito subject and verified email.
 - `email_verified` must be boolean `true` or string `"true"`.
-- STAGE 2 maps Cognito email to an existing WorkMap user; if `WORKMAP_COGNITO_COMPANY_SLUG` is configured, lookup is company-scoped.
-- If the same email maps to multiple companies and no company slug is configured, the request is rejected as ambiguous.
+- Backend prefers `User.cognitoSub` for stable Cognito mapping.
+- A single legacy verified email match can be bound to the Cognito sub as a compatibility bridge.
+- If the same email maps to multiple companies, or a Cognito sub/email conflict crosses companies, the request is rejected.
 - WorkMap `companyId`, `userId`, and `role` come from Prisma, not frontend claims.
+- `CognitoOnlyGuard` allows verified Cognito users without an existing WorkMap user mapping to call tenant onboarding and invite acceptance endpoints only.
 
 Frontend behavior:
 
 - `lib/auth/cognitoSession.ts` manages Hosted UI config, PKCE transaction state, token exchange, session storage, and logout URL generation.
 - Cognito session storage key: `workmap.cognitoSession`.
 - Cognito transaction storage key: `workmap.cognitoTransaction`.
-- `/login/callback` completes the code exchange, calls backend `/auth/me`, saves workflow role state, and routes mapped users to `/virtual-office`.
+- `/login/callback` completes the code exchange, checks pending invite token first, calls backend `/auth/me` for normal mapped users, saves workflow role state with `hasCompany: true`, and routes through `getNextRouteForUser(nextState)`.
+- Pending invite token storage key: `workmap.pendingInviteToken`.
 - `getWorkMapApiAuthOptions()` uses a mapped Cognito session before pilot or dev-token auth.
 - If a Cognito session exists but backend mapping fails, API auth returns unavailable rather than silently using pilot fallback. Clear/sign out Cognito session before testing pilot fallback again.
+
+Tenant onboarding / invites:
+
+- New unmapped verified Cognito owners can create a workspace through `POST /tenant-onboarding/workspace`.
+- Owner invite list/create requires mapped WorkMap auth and `OWNER`.
+- Employee invite acceptance uses Cognito-only auth, verified email, and hashed invite token validation.
 
 ## Pilot Auth
 
@@ -117,7 +126,7 @@ Frontend demo workflow role union currently includes only `EMPLOYEE`, `MANAGER`,
 ## Risks
 
 - STAGE 2 Cognito is a deployment/auth baseline, not a complete enterprise identity lifecycle.
-- Stable Cognito `sub` mapping, tenant provisioning, invite flows, MFA policy, password reset UX, and route guard overhaul remain future work.
+- `User.cognitoSub` is now the minimal stable mapping, but global identity/account tables, multi-company membership, invite emails, MFA policy, password reset UX, and route guard overhaul remain future work.
 - Frontend route access is demo-state-based, not backend-auth-based.
 - Authenticated virtual-office API success depends on the local backend listening on `localhost:3001`, `WORKMAP_JWT_SECRET` being configured, and demo seed data existing.
 - Pilot auth is not SSO/OAuth/MFA/password-reset-ready production auth.

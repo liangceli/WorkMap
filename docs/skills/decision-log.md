@@ -88,6 +88,14 @@ Reason: Local STAGE 2 testing should use one root `.env` for API and Web, so `/l
 
 Trade-off: The small loader intentionally handles simple `.env` lines only and requires a Next dev-server restart after env changes. Platform env values remain authoritative for deployment.
 
+## 2026-06-07 - Minimal Tenant Onboarding And Invite Bridge
+
+Decision: Implement tenant onboarding and invitations using the existing `Company` tenant model, company-scoped `User`, `User.cognitoSub`, and an `Invitation` table with hashed tokens.
+
+Reason: STAGE 2 Round 2 needed a working owner signup/workspace creation and employee invite acceptance flow without a broad migration across all company/user-scoped models.
+
+Trade-off: This enables the local product foundation now, but one Cognito account maps to one WorkMap company user. Global identity/account tables, `CompanyMembership` or `TenantMembership`, multi-company membership, real email delivery, and a strict multi-tenant/RBAC audit remain future work.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.
