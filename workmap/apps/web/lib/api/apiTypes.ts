@@ -40,6 +40,12 @@ export type WorkMapApiAuthUser = {
   role: string;
 };
 
+export type WorkMapApiCompany = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
 export type WorkMapApiRequestContext = {
   companyId: string;
   userId: string;
@@ -51,6 +57,61 @@ export type WorkMapApiPilotSession = {
   tokenType: "Bearer";
   expiresAt: string;
   user: WorkMapApiAuthUser;
+};
+
+export type WorkMapApiWorkspaceContext = {
+  context: WorkMapApiRequestContext;
+  user: WorkMapApiAuthUser;
+  company: WorkMapApiCompany;
+  onboarding: {
+    createdWorkspace: boolean;
+    acceptedInvite: boolean;
+    nextRoute: string;
+  };
+};
+
+export type WorkMapApiTenantStatus =
+  | {
+      state: "needs_workspace";
+      cognito: {
+        sub: string;
+        email: string;
+        displayName: string;
+      };
+    }
+  | ({
+      state: "workspace_ready";
+      cognito: {
+        sub: string;
+        email: string;
+        displayName: string;
+      };
+    } & WorkMapApiWorkspaceContext);
+
+export type WorkMapApiInvitation = {
+  id: string;
+  invitedEmail: string;
+  role: string;
+  status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
+  invitedBy: {
+    id: string;
+    displayName: string;
+    email: string;
+  };
+  expiresAt: string;
+  acceptedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkMapApiCreateInvitationResponse = {
+  invitation: WorkMapApiInvitation;
+  inviteLink: string;
+  token: string;
+};
+
+export type WorkMapApiInvitationList = {
+  invitations: WorkMapApiInvitation[];
 };
 
 export type WorkMapApiOfficeRoom = {

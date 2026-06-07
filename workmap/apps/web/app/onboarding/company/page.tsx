@@ -2,15 +2,43 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { createOwnerWorkspace } from "../../../lib/api/tenantOnboardingApi";
+import { getCognitoApiAuthOptions } from "../../../lib/auth/cognitoSession";
+import { toWorkflowRole } from "../../../lib/auth/pilotSession";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
-import { updateUserSetupState } from "../../../lib/workflow/workflowState";
+import { getDefaultSetupState, saveUserSetupState, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
 export default function CompanyOnboardingPage() {
   const router = useRouter();
   const [companyName, setCompanyName] = useState("Acme Operations");
   const [workspaceName, setWorkspaceName] = useState("Acme HQ");
+  const [status, setStatus] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const continueToCompliance = () => {
+  const createWorkspace = async () => {
+    const cognitoAuth = getCognitoApiAuthOptions();
+
+    if (!cognitoAuth.available) {
+      continueWithDemoFallback();
+      return;
+    }
+
+    setSubmitting(true);
+    setStatus(null);
+
+    const result = await createOwnerWorkspace({ companyName, workspaceName }, cognitoAuth.options);
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setStatus(result.error);
+      return;
+    }
+
+    saveUserSetupState({ ...getDefaultSetupState(toWorkflowRole(result.data.user.role)), hasCompany: true });
+    router.push(result.data.onboarding.nextRoute);
+  };
+
+  const continueWithDemoFallback = () => {
     updateUserSetupState({ hasCompany: true }, "OWNER");
     router.push("/compliance");
   };
@@ -33,11 +61,12 @@ export default function CompanyOnboardingPage() {
           </label>
           <section style={styles.note}>
             <strong>Privacy-forward setup</strong>
-            <span>Tracking rules are configured before employees join.</span>
+            <span>Tracking rules are configured before employees join. With Cognito, this creates the backend tenant and OWNER user.</span>
           </section>
-          <button type="button" onClick={continueToCompliance} disabled={!companyName || !workspaceName} style={styles.button}>
-            Continue to compliance setup
+          <button type="button" onClick={createWorkspace} disabled={!companyName || !workspaceName || submitting} style={styles.button}>
+            {submitting ? "Creating workspace..." : "Create workspace"}
           </button>
+          {status ? <p style={styles.status}>{status}</p> : null}
         </section>
       </section>
     </main>
@@ -107,5 +136,12 @@ const styles = {
     padding: "12px 14px",
     cursor: "pointer",
     fontWeight: 900,
+  },
+  status: {
+    margin: 0,
+    color: wm.colors.errorText,
+    fontSize: "13px",
+    fontWeight: 800,
+    lineHeight: 1.4,
   },
 };

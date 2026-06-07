@@ -2,6 +2,7 @@ import { pbkdf2Sync, timingSafeEqual } from "node:crypto";
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import type { CognitoJwtPayload, RequestContext, WorkMapJwtPayload, WorkMapRole } from "@workmap/auth";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { getVerifiedCognitoIdentity, isValidEmail } from "./cognito-identity.js";
 import { JwtService } from "./jwt.service.js";
 
 type DevTokenInput = {
@@ -55,30 +56,52 @@ export class AuthService {
   }
 
   async resolveCognitoContext(payload: CognitoJwtPayload): Promise<RequestContext> {
-    const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
-
-    if (!payload.sub) {
-      throw new UnauthorizedException("Cognito token is missing subject.");
-    }
-
-    if (!isVerifiedEmailClaim(payload.email_verified)) {
-      throw new UnauthorizedException("Cognito email must be verified before WorkMap user mapping.");
-    }
-
-    if (!isValidEmail(email)) {
-      throw new UnauthorizedException("Cognito token is not mapped to a WorkMap user email.");
-    }
+    const identity = getVerifiedCognitoIdentity(payload);
 
     const companySlug = process.env.WORKMAP_COGNITO_COMPANY_SLUG?.trim();
-    const users = await this.prisma.user.findMany({
+    const userBySub = await this.prisma.user.findFirst({
       where: {
-        email,
+        cognitoSub: identity.sub,
         company: companySlug ? { slug: companySlug } : undefined,
       },
       select: {
         id: true,
         companyId: true,
         role: true,
+      },
+    });
+
+    if (userBySub) {
+      return {
+        companyId: userBySub.companyId,
+        userId: userBySub.id,
+        role: userBySub.role,
+      };
+    }
+
+    const linkedElsewhere = await this.prisma.user.findFirst({
+      where: {
+        cognitoSub: identity.sub,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (linkedElsewhere) {
+      throw new UnauthorizedException("Cognito user is linked to another WorkMap company.");
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        email: identity.email,
+        company: companySlug ? { slug: companySlug } : undefined,
+      },
+      select: {
+        id: true,
+        companyId: true,
+        role: true,
+        cognitoSub: true,
       },
       take: 2,
     });
@@ -92,6 +115,17 @@ export class AuthService {
     }
 
     const [user] = users;
+
+    if (user.cognitoSub && user.cognitoSub !== identity.sub) {
+      throw new UnauthorizedException("WorkMap user email is already linked to another Cognito account.");
+    }
+
+    if (!user.cognitoSub) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { cognitoSub: identity.sub },
+      });
+    }
 
     return {
       companyId: user.companyId,
@@ -270,14 +304,6 @@ function verifyPilotPassword(password: string) {
   const actual = pbkdf2Sync(password, salt, iterations, expected.length, "sha256");
 
   return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
-
-function isValidEmail(value: string) {
-  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isVerifiedEmailClaim(value: CognitoJwtPayload["email_verified"]) {
-  return value === true || value === "true";
 }
 
 function isValidCompanySlug(value: string) {

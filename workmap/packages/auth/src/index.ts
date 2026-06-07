@@ -22,6 +22,7 @@ export type CognitoJwtPayload = {
   client_id?: string;
   email?: string;
   email_verified?: boolean | "true" | "false" | string;
+  name?: string;
   username?: string;
   "cognito:username"?: string;
   iat?: number;

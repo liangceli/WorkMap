@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
+import { getCurrentCompany } from "../../lib/api/companiesApi";
+import { getCurrentUser } from "../../lib/api/authApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { clearPilotSession, getPilotSession, toWorkflowRole, type StoredPilotSession } from "../../lib/auth/pilotSession";
@@ -10,12 +13,20 @@ type AppShellProps = {
   children: ReactNode;
 };
 
+type ApiSessionSummary = {
+  companyName: string;
+  userName: string;
+  role: string;
+  source: string;
+};
+
 const navItems: Array<{ label: string; href: string; roles: WorkMapRole[] }> = [
   { label: "Office", href: "/virtual-office", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Dashboard", href: "/dashboard", roles: ["MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Employees", href: "/employees", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Reports", href: "/reports", roles: ["MANAGER", "OWNER"] },
   { label: "Compliance", href: "/compliance", roles: ["EMPLOYEE", "MANAGER", "OWNER"] },
+  { label: "Invites", href: "/onboarding/invite", roles: ["OWNER"] },
   { label: "Integrations", href: "/integrations", roles: ["OWNER", "IT_ADMIN"] },
   { label: "Settings", href: "/settings", roles: ["EMPLOYEE", "OWNER", "IT_ADMIN"] },
 ];
@@ -24,12 +35,45 @@ export function AppShell({ children }: AppShellProps) {
   const [setupState, setSetupState] = useState<UserSetupState | null>(null);
   const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
   const [pilotSession, setPilotSession] = useState<StoredPilotSession | null>(null);
+  const [apiSummary, setApiSummary] = useState<ApiSessionSummary | null>(null);
   const activeRole = cognitoSession ? setupState?.role ?? null : pilotSession ? toWorkflowRole(pilotSession.user.role) : setupState?.role ?? null;
 
   useEffect(() => {
     setSetupState(getUserSetupState());
     setCognitoSession(getCognitoSession());
     setPilotSession(getPilotSession());
+
+    let cancelled = false;
+
+    async function loadApiSummary() {
+      const auth = await getWorkMapApiAuthOptions();
+
+      if (!auth.available) {
+        return;
+      }
+
+      const [companyResult, userResult] = await Promise.all([
+        getCurrentCompany(auth.options),
+        getCurrentUser(auth.options),
+      ]);
+
+      if (cancelled || !companyResult.ok || !userResult.ok) {
+        return;
+      }
+
+      setApiSummary({
+        companyName: companyResult.data.name,
+        userName: userResult.data.displayName,
+        role: userResult.data.role ?? auth.source,
+        source: auth.source,
+      });
+    }
+
+    void loadApiSummary();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const visibleItems = useMemo(() => {
@@ -41,10 +85,14 @@ export function AppShell({ children }: AppShellProps) {
   }, [activeRole]);
 
   const roleLabel = cognitoSession
-    ? activeRole
+    ? apiSummary?.role
+      ? `Cognito / ${formatRole(apiSummary.role)}`
+      : activeRole
       ? `Cognito / ${formatRole(activeRole)}`
       : "Cognito / mapping"
-    : pilotSession
+    : apiSummary?.role
+      ? formatRole(apiSummary.role)
+      : pilotSession
       ? formatRole(pilotSession.user.role)
       : activeRole
         ? formatRole(activeRole)
@@ -86,6 +134,7 @@ export function AppShell({ children }: AppShellProps) {
                 setCognitoSession(null);
                 setPilotSession(null);
                 setSetupState(null);
+                setApiSummary(null);
               }}
             >
               Log out
@@ -98,9 +147,13 @@ export function AppShell({ children }: AppShellProps) {
         <strong>{sessionSource}</strong>
         <span>
           {cognitoSession
-            ? `${cognitoSession.claims.email ?? cognitoSession.claims.sub} is using a Cognito bearer token. WorkMap user/company/role mapping is resolved by the backend.`
+            ? apiSummary
+              ? `${apiSummary.userName} is in ${apiSummary.companyName} as ${formatRole(apiSummary.role)} via ${apiSummary.source}.`
+              : `${cognitoSession.claims.email ?? cognitoSession.claims.sub} is using a Cognito bearer token. WorkMap user/company/role mapping is resolved by the backend.`
             : pilotSession
-            ? `${pilotSession.user.displayName} is using a backend bearer token. Role boundaries are enforced by API guards where implemented.`
+            ? apiSummary
+              ? `${apiSummary.userName} is in ${apiSummary.companyName} as ${formatRole(apiSummary.role)} via ${apiSummary.source}.`
+              : `${pilotSession.user.displayName} is using a backend bearer token. Role boundaries are enforced by API guards where implemented.`
             : activeRole
               ? "Navigation visibility is for workflow testing only. Sign in on /login for a backend-issued pilot token."
               : "Sign in before QA so API requests use the intended backend-issued user context."}

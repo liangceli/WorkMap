@@ -23,7 +23,7 @@ export function savePilotSession(session: StoredPilotSession) {
 
   window.localStorage.setItem(PILOT_SESSION_STORAGE_KEY, JSON.stringify(session));
   const role = toWorkflowRole(session.user.role);
-  saveUserSetupState(getDefaultSetupState(role));
+  saveUserSetupState({ ...getDefaultSetupState(role), hasCompany: true });
 }
 
 export function getPilotSession(): StoredPilotSession | null {

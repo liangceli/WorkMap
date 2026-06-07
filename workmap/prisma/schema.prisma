@@ -81,6 +81,13 @@ enum OfficeRoomType {
   OTHER
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
 model Company {
   id              String               @id @default(uuid()) @db.Uuid
   name            String
@@ -100,6 +107,7 @@ model Company {
   acknowledgements PolicyAcknowledgement[]
   integrations    IntegrationAccount[]
   auditLogs       AuditLog[]
+  invitations     Invitation[]
 }
 
 model Department {
@@ -120,6 +128,7 @@ model User {
   companyId             String                  @db.Uuid
   departmentId          String?                 @db.Uuid
   email                 String
+  cognitoSub            String?                 @unique
   displayName           String
   role                  UserRole                @default(EMPLOYEE)
   status                UserStatus              @default(OFFLINE)
@@ -138,10 +147,31 @@ model User {
   integrationAccounts   IntegrationAccount[]
   auditLogsAuthored     AuditLog[]              @relation("AuditActor")
   auditLogsTargeting    AuditLog[]              @relation("AuditTarget")
+  invitationsSent       Invitation[]            @relation("InvitationInvitedBy")
 
   @@unique([companyId, email])
   @@index([companyId, departmentId])
   @@index([companyId, role])
+}
+
+model Invitation {
+  id              String           @id @default(uuid()) @db.Uuid
+  companyId       String           @db.Uuid
+  invitedEmail    String
+  role            UserRole         @default(EMPLOYEE)
+  tokenHash       String           @unique
+  status          InvitationStatus @default(PENDING)
+  invitedByUserId String           @db.Uuid
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy       User             @relation("InvitationInvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
+  @@index([companyId, invitedEmail])
+  @@index([invitedByUserId])
 }
 
 model Device {

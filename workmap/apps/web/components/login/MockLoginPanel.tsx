@@ -2,15 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPilotSession } from "../../lib/api/authApi";
+import { createPilotSession, getAuthContext } from "../../lib/api/authApi";
 import {
   clearCognitoSession,
+  getCognitoApiAuthOptions,
   getCognitoConfigStatus,
   getCognitoLogoutUrl,
   getCognitoSession,
   startCognitoSignIn,
   type StoredCognitoSession,
 } from "../../lib/auth/cognitoSession";
+import { getPendingInviteToken } from "../../lib/auth/pendingInvite";
 import { clearPilotSession, getPilotSession, savePilotSession, toWorkflowRole, type StoredPilotSession } from "../../lib/auth/pilotSession";
 import {
   getDefaultSetupState,
@@ -73,8 +75,29 @@ export function MockLoginPanel() {
 
     savePilotSession(result.data);
     setSession(result.data);
-    const nextState = getDefaultSetupState(toWorkflowRole(result.data.user.role));
+    const nextState = { ...getDefaultSetupState(toWorkflowRole(result.data.user.role)), hasCompany: true };
     router.push(getNextRouteForUser(nextState));
+  };
+
+  const continueCognito = async () => {
+    const cognitoAuth = getCognitoApiAuthOptions();
+
+    if (!cognitoAuth.available) {
+      setStatus(cognitoAuth.reason);
+      return;
+    }
+
+    const contextResult = await getAuthContext(cognitoAuth.options);
+
+    if (contextResult.ok) {
+      const nextState = { ...getDefaultSetupState(toWorkflowRole(contextResult.data.role)), hasCompany: true };
+      saveUserSetupState(nextState);
+      router.push(getNextRouteForUser(nextState));
+      return;
+    }
+
+    const inviteToken = getPendingInviteToken();
+    router.push(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/onboarding/company");
   };
 
   const continueDemo = () => {
@@ -111,8 +134,8 @@ export function MockLoginPanel() {
             <span>{cognitoSession.claims.email ?? cognitoSession.claims.sub}</span>
             <span>expires {new Date(cognitoSession.expiresAt).toLocaleString()}</span>
             <div style={styles.sessionActions}>
-              <button type="button" onClick={() => router.push("/virtual-office")} style={styles.secondaryButton}>
-                Open office
+              <button type="button" onClick={continueCognito} style={styles.secondaryButton}>
+                Continue
               </button>
               {cognitoLogoutUrl ? (
                 <a href={cognitoLogoutUrl} onClick={logout} style={styles.secondaryButton}>

@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAuthContext } from "../../../lib/api/authApi";
 import { completeCognitoRedirect } from "../../../lib/auth/cognitoSession";
+import { getPendingInviteToken } from "../../../lib/auth/pendingInvite";
 import { toWorkflowRole } from "../../../lib/auth/pilotSession";
-import { getDefaultSetupState, saveUserSetupState } from "../../../lib/workflow/workflowState";
+import { getDefaultSetupState, getNextRouteForUser, saveUserSetupState } from "../../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 
 export default function CognitoCallbackPage() {
@@ -33,16 +34,24 @@ export default function CognitoCallbackPage() {
         return;
       }
 
-      if (!contextResult.ok) {
-        setStatus(
-          `Cognito sign-in succeeded, but WorkMap could not map this user yet: ${contextResult.error}. Ask an admin to map the Cognito user email to an existing WorkMap user.`,
-        );
+      const inviteToken = getPendingInviteToken();
+
+      if (inviteToken) {
+        setStatus("Cognito sign-in complete. Opening your invitation...");
+        router.replace(`/invite/${encodeURIComponent(inviteToken)}`);
         return;
       }
 
-      saveUserSetupState(getDefaultSetupState(toWorkflowRole(contextResult.data.role)));
+      if (!contextResult.ok) {
+        setStatus("Cognito sign-in complete. Opening workspace setup...");
+        router.replace("/onboarding/company");
+        return;
+      }
+
+      const nextState = { ...getDefaultSetupState(toWorkflowRole(contextResult.data.role)), hasCompany: true };
+      saveUserSetupState(nextState);
       setStatus("Cognito sign-in complete. Opening WorkMap...");
-      router.replace("/virtual-office");
+      router.replace(getNextRouteForUser(nextState));
     }
 
     void finishSignIn();
