@@ -4,6 +4,14 @@ Last updated: 2026-06-07.
 
 ## Latest Accepted Work
 
+- Commit `1d2836c` (`feat: add realtime virtual office movement`) completed STAGE 2 Round 4: realtime virtual-office movement with smooth remote avatars.
+- Backend now exposes a native WebSocket realtime gateway at `/virtual-office/realtime`, using shared virtual-office realtime event types from `packages/shared-types`.
+- `RequestContextResolverService` centralizes HTTP and WebSocket request-context resolution while preserving auth priority: Cognito Bearer, WorkMap/pilot/dev Bearer, then development headers for HTTP outside production.
+- WebSocket handshakes authenticate through the same request-context path, validate office map ownership, compute tenant-scoped rooms as `companyId:officeMapId`, and broadcast movement only to other sockets in the same company/map room.
+- Realtime movement validates joined map/room context, rate-limits accepted movement snapshots, and intentionally avoids database writes on every frame; durable latest-position persistence remains the existing HTTP save loop.
+- Frontend now derives `ws://`/`wss://` URLs from the API base URL, connects through `useVirtualOfficeRealtime.ts` when token-backed API auth and `officeMapId` are available, sends throttled local movement snapshots, and keeps polling as fallback/reconciliation.
+- `OfficeMap.tsx` now renders remote users through realtime refs with interpolation, large/stale-position snap guards, stable avatar signatures, and contact hit testing based on rendered realtime positions.
+- QA reports local two-browser OWNER/EMPLOYEE realtime movement passed in both directions, with no blocking regression in virtual-office movement/contact/presence or Dashboard/Reports/Compliance/Employees smoke.
 - Commit `815df2c` (`feat: add tenant RBAC and backend-backed user profiles`) completed STAGE 2 Round 3: strict multi-tenant data isolation + RBAC core, plus backend-backed display name/avatar profile follow-ups.
 - Shared auth now defines `WorkMapCapability`, `WORKMAP_ROLE_CAPABILITIES`, `roleHasCapability()`, and `hasCapability()`, while preserving helper names like `canViewEmployeeActivity()` and `canManageIntegrations()`.
 - Backend service checks now enforce invite management permission, employee directory visibility, cross-user report visibility, integration settings visibility, and office-map tenant ownership for position reads.
@@ -114,7 +122,10 @@ Last updated: 2026-06-07.
 - `WORKMAP_APP_URL` should be configured server-side in deployment so generated invite links do not fall back to `http://localhost:3000`.
 - Local DBs need migration `20260606000000_stage2_onboarding_invites` before testing Round 2 onboarding/invites.
 - Existing test workspaces created before the owner spawn fix can still have the old blocked owner position and may need DB cleanup/recreation.
-- Remote teammate movement is still polling-based and can appear as position jumps rather than live walking animation.
+- Realtime virtual-office movement is now in-memory per API process. Horizontal API scaling needs shared pub/sub before multiple backend instances can safely broadcast the same office room.
+- Browser WebSocket auth passes the access token in the socket URL query because native WebSocket cannot set `Authorization` headers; deployed environments should use HTTPS/WSS and avoid logging query strings.
+- Production realtime deployment needs `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL` aligned with the deployed frontend origin.
+- `office:presence` is emitted by the gateway, but the frontend primarily renders `player:state` updates plus polling reconciliation for People/presence stability.
 - Users created before backend avatar/profile persistence may still need to complete avatar setup once before backend `User.avatarId` contains a valid `layered:v2:` reference.
 - Real external deployment smoke for Vercel/Render/Cognito is still pending after commit/push; the readiness doc is a checklist, not proof of deployed production success.
 - Root `.env` changes require restarting the Next dev server before `/login` reflects updated `NEXT_PUBLIC_COGNITO_*` values.
@@ -144,7 +155,7 @@ Last updated: 2026-06-07.
 - Backend `zoneData`, navigation `anchor`, and navigation `bounds` must match the current TMX pixel coordinate system to be accepted safely.
 - API-derived remote players use fallback role text (`Team member`) and may route profiles by raw user id.
 - Current user's latest local position can now be restored from and saved to the backend in development/API-backed mode.
-- Basic polling presence is implemented for remote players; no websocket/SSE realtime infrastructure was added.
+- Realtime WebSocket movement is implemented for remote players, while polling remains the reconciliation/fallback path and latest-position durability still uses HTTP saves.
 - Workflow routing still uses frontend localStorage state, but backend authorization now comes from Cognito, pilot JWT, or development-only auth paths.
 - `docs/references/` remains untracked reference material and should not be committed accidentally.
 
@@ -153,7 +164,10 @@ Last updated: 2026-06-07.
 - Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.
 - Add real email delivery for invitations and a revoke/resend lifecycle.
 - Add a richer profile/avatar table if `User.avatarId` as compact `layered:v2:` reference becomes too limiting.
-- Add realtime presence smoothing or websocket/SSE only if pilot feedback requires live walking updates.
+- Run deployed WSS smoke on real Vercel/Render/Cognito URLs after confirming frontend/API origins and HTTPS socket behavior.
+- Add a shared pub/sub adapter before running more than one API instance for realtime virtual-office rooms.
+- Add automated realtime tenant-isolation, wrong-map join rejection, invalid-room movement rejection, reconnect/fallback, and no-per-frame-DB-write regression tests.
+- Monitor realtime throttle/interpolation values during pilot use and tune only if real movement feels laggy or noisy.
 - Add strict multi-tenant/RBAC automated tests for onboarding, invitation list/create/accept, reports, compliance, virtual-office positions, integrations, employee directory/profile, and devices.
 - Execute deployed smoke on real Vercel/Render/Cognito URLs after confirming environment variables and callback/logout URLs.
 - Decide when to migrate from the current `User.cognitoSub` bridge to a full identity table plus tenant membership model.
@@ -171,6 +185,6 @@ Last updated: 2026-06-07.
 - Decide the production auth/session model separately from the development auth bridge.
 - Decide the production auth roadmap: SSO/OAuth, MFA, password reset, tenant admin credential lifecycle, and route guards.
 - Decide whether backend compliance policy responses should include acknowledgement status instead of relying on browser marker readability.
-- Decide whether polling is sufficient for MVP or whether websocket/SSE realtime presence is needed later.
+- Decide when realtime movement needs shared pub/sub, richer presence events, or additional socket observability beyond the current single-instance MVP.
 - Continue reducing reliance on frontend workflow state for authenticated routing now that backend auth/profile state exists.
 - Add tests for pathfinding, API contracts, auth guard behavior, and key UI routing workflows.

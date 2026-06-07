@@ -87,9 +87,19 @@ Backend-backed profile/avatar behavior added in commit `815df2c`:
 - Authenticated API users without a valid backend avatar are routed to avatar setup instead of using local-only avatar cache as completion.
 - Mock/fallback mode can still use local avatar cache when API data is unavailable.
 
+Realtime movement added in commit `1d2836c`:
+
+- `/virtual-office` can connect to `/virtual-office/realtime` when `officeMapId` and token-backed API auth options are available.
+- Local movement snapshots are sent through `useVirtualOfficeRealtime.ts`.
+- Remote users in the same company/map room receive smooth movement updates through `player:state`.
+- Remote avatar positions interpolate on the canvas instead of jumping only on polling cycles.
+- Large jumps or stale realtime state snap safely rather than easing through impossible paths.
+- Polling positions remains active as fallback and reconciliation for People panel/profile/freshness stability.
+- Realtime movement does not persist every frame. Latest-position durability still uses the existing HTTP save loop.
+
 ## Current Boundary
 
-The API integration now includes current-user latest-position restore/save, backend-backed avatar/display-name profile data, and basic polling presence. It still does not add websocket/SSE realtime infrastructure, backend map rendering, arbitrary user mutation, or historical trails.
+The API integration now includes current-user latest-position restore/save, backend-backed avatar/display-name profile data, polling presence, and native WebSocket realtime movement. It still does not add backend map rendering, arbitrary user mutation, historical trails, or shared pub/sub for multi-instance realtime deployment.
 
 The canvas source remains `/maps/workmap2.tmx`; do not use backend `OfficeMap.mapData` as the frontend canvas source unless a future task explicitly changes that architecture.
 

@@ -81,6 +81,7 @@ Development overrides:
 - `GET /virtual-office/navigation`
 - `GET /virtual-office/map/:officeMapId/positions`
 - `PUT /virtual-office/map/:officeMapId/positions/me`
+- `WS /virtual-office/realtime`
 - `GET /integrations`
 - `GET /integrations/contact-links/:targetUserId`
 - `GET /compliance/policy`
@@ -356,6 +357,48 @@ QA-confirmed local API reads with Bearer token:
 - Commit `effb188` reuses repeated `GET /virtual-office/map/:officeMapId/positions` calls for basic polling presence; no new backend route was added.
 - Commit `b68dd49` verified invalid save `roomId=open-office-north` returns controlled 400 and omitted `roomId` save succeeds.
 
+## Virtual Office Realtime Contract
+
+Commit `1d2836c` added a native WebSocket contract for realtime movement.
+
+Endpoint:
+
+- `WS /virtual-office/realtime`
+
+Frontend URL derivation:
+
+- `http://` API base becomes `ws://`.
+- `https://` API base becomes `wss://`.
+- No new public env var was added; the socket URL is derived from the existing API base URL.
+
+Auth:
+
+- Handshake requires the same backend request context as guarded HTTP APIs.
+- Browser clients pass the Bearer token as query `token` because native WebSocket cannot set custom `Authorization` headers.
+- Server-side/non-browser callers may provide `Authorization: Bearer ...`.
+- Deployed production should use WSS and avoid query-string logging.
+
+Client-to-server events:
+
+- `office:join`: `{ officeMapId }`
+- `office:leave`
+- `player:move`: `{ x, y, direction, isMoving, status, roomId? }`
+
+Server-to-client events:
+
+- `player:state`: `{ userId, displayName, avatarId, role, officeMapId, x, y, direction, isMoving, status, roomId?, updatedAt }`
+- `office:presence`: `{ officeMapId, users: [...] }`
+- `office:error`: `{ message }`
+
+Rules:
+
+- `office:join` validates auth, `canAccessVirtualOffice()`, UUID-shaped `officeMapId`, and same-company office map ownership.
+- The backend computes room scope as `companyId:officeMapId`; clients cannot select tenant/company scope.
+- `player:move` is accepted only after a valid join.
+- Optional `roomId` must belong to the joined office map.
+- Movement snapshots are rate-limited server-side and broadcast only to other sockets in the same company/map room.
+- Movement broadcasts do not write to Prisma. Latest persisted position still uses `PUT /virtual-office/map/:officeMapId/positions/me`.
+
 ## Frontend Virtual Office Data Loader
 
 Accepted in commit `abe673c` and updated in later commits: `/virtual-office` has a frontend data loader that asks for development auth in local browser development, then attempts:
@@ -374,5 +417,6 @@ Important contract assumptions:
 
 ## Important Gaps
 
-- No websocket/SSE realtime position sync, historical position trail, or arbitrary-user position mutation contract has been added.
+- No shared pub/sub contract for multi-instance realtime broadcast has been added.
+- No historical position trail or arbitrary-user position mutation contract has been added.
 - No final global identity/account or tenant-membership API contract has been added.

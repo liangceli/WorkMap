@@ -2,48 +2,36 @@
 
 ## 1. Completed Task
 
-STAGE 2 Round 3 Strict Multi-Tenant Data Isolation + RBAC Core and backend-backed user profiles were completed and accepted in commit `815df2c` (`feat: add tenant RBAC and backend-backed user profiles`).
+STAGE 2 Round 4 Realtime Virtual Office Movement + Smooth Remote Avatars was completed and accepted in commit `1d2836c` (`feat: add realtime virtual office movement`).
 
 ## 2. Accepted Changes
 
-- Added central `WorkMapCapability` / `WORKMAP_ROLE_CAPABILITIES` model in `packages/auth`.
-- Hardened backend service checks for invitations, reports, users directory/profile, virtual-office position reads, integrations, devices, and same-tenant contact links.
-- Employees no longer see obvious admin/report/settings/dashboard/integration shortcuts in AppShell or command palette.
-- `/employees` is API-first with labeled mock fallback only when API auth/data is unavailable.
-- Added `PATCH /users/me` for backend-resolved current-user display name and avatar reference updates.
-- Added compact `layered:v2:` backend avatar reference helpers and persisted profile completion through `User.avatarId`.
-- Owner and employee onboarding now confirm/save display name and backend avatar profile.
-- Cognito callback/Login Continue now read `/users/me` so backend avatar completion controls onboarding route.
-- `/virtual-office` decodes backend avatar references for current and remote players and avoids local-cache-only avatar completion for authenticated API users.
+- Added shared virtual-office realtime event/payload types in `packages/shared-types`.
+- Added `RequestContextResolverService` so HTTP guards and WebSocket handshake auth use the same Cognito, WorkMap/pilot, and development context resolution path.
+- Added a native WebSocket gateway at `/virtual-office/realtime` without adding `socket.io`, `ws`, Nest WebSocket packages, Prisma schema changes, or per-frame database writes.
+- Gateway validates auth, virtual-office capability, office-map ownership, optional room ownership, and broadcasts only within backend-computed `companyId:officeMapId` rooms.
+- Frontend now derives realtime `ws://`/`wss://` URLs from the existing API base URL and connects through `useVirtualOfficeRealtime.ts` when token-backed API auth and `officeMapId` are available.
+- `OfficeMap.tsx` now sends throttled local movement snapshots and renders remote avatars with realtime refs, interpolation, snap guards, stable avatar asset signatures, and rendered-position contact hit testing.
+- Existing polling presence and HTTP latest-position save/restore remain as fallback, reconciliation, and durability paths.
 
 ## 3. Verification Summary
 
-Reported passing from `workmap/`:
-
-- `pnpm --filter @workmap/api typecheck`
-- `pnpm --filter @workmap/web typecheck`
-- `pnpm --filter @workmap/api lint`
-- `pnpm --filter @workmap/web lint`
-- `pnpm --filter @workmap/api build`
-- `pnpm --filter @workmap/web build`
-
-No Prisma migration command was run because no schema/migration changed.
-
-QA reports secret scan passed with no real committed secrets.
-
-Manual QA passed for the final OWNER avatar/profile scenario: fresh Owner routed through avatar setup, backend avatar saved, fresh login skipped avatar recreation, Employee saw Owner's real layered avatar, and Owner still saw Employee's real layered avatar. Prior Round 3 manual checks also passed for employee nav restrictions, command palette restrictions, employee directory/profile/avatar persistence, tenant onboarding, invite acceptance, Dashboard, Reports, Compliance, pilot login, and dev-token fallback.
+- API lint, typecheck, and build passed.
+- Web lint, typecheck, and build passed.
+- No Prisma migration was needed because no schema/migration changed.
+- Secret review found no real committed secrets in reviewed files; `.env` remained excluded and was not read.
+- Code review confirmed WebSocket auth, tenant/map room isolation, same-room broadcast only, sender exclusion, movement validation/rate limiting, and no per-frame Prisma writes.
+- Manual local QA passed with OWNER and EMPLOYEE in separate browsers seeing each other's realtime movement smoothly in both directions.
+- Manual smoke found no blocking regression for virtual-office movement/contact/presence or Dashboard/Reports/Compliance/Employees.
 
 ## 4. Remaining Risks
 
-- This is a minimal bridge, not the final SaaS identity/membership architecture.
-- One Cognito account maps to one WorkMap company user; multi-company membership is not supported yet.
-- Department/team-level RBAC is still coarse where the data model lacks team membership boundaries.
-- Frontend role visibility is advisory UX; backend service checks are the security boundary.
-- Direct URL access to some frontend-only/mock pages can still render shells, but backend data/actions are permissioned.
-- No real invite email sending exists; invite links are shown/copyable in the Owner UI.
-- `WORKMAP_APP_URL` should be set server-side in deployment so invite links do not fall back to localhost.
-- Remote users still update through polling and may appear as position jumps; no websocket/SSE was added.
-- Real Vercel/Render/Cognito deployed smoke remains pending.
+- Realtime gateway is in-memory per API process; horizontal scaling requires shared pub/sub.
+- Browser WebSocket auth passes token as query `token`; deployed use should be WSS and avoid retaining full socket query strings in logs.
+- Production realtime needs origin config aligned through `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL`.
+- `office:presence` is emitted, but frontend rendering mainly uses `player:state` plus polling reconciliation.
+- Real deployed Vercel/Render/Cognito/WSS smoke remains pending.
+- Minimal STAGE 2 identity bridge limitations remain: no global identity table, multi-company membership, real invite emails, or mature department/team-level RBAC.
 - `docs/references/` remains unrelated untracked reference material.
 
 ## 5. Updated Docs
@@ -53,10 +41,9 @@ Manual QA passed for the final OWNER avatar/profile scenario: fresh Owner routed
 - `docs/skills/api-contract-skill.md`
 - `docs/skills/auth-skill.md`
 - `docs/skills/frontend-skill.md`
-- `docs/skills/data-model-skill.md`
 - `docs/skills/realtime-presence-skill.md`
 - `docs/skills/virtual-office-skill.md`
-- `docs/skills/ui-ux-skill.md`
+- `docs/skills/deployment-skill.md`
 - `docs/skills/qa-skill.md`
 - `docs/skills/project-summary.md`
 - `docs/skills/decision-log.md`
@@ -64,9 +51,8 @@ Manual QA passed for the final OWNER avatar/profile scenario: fresh Owner routed
 
 ## 6. Recommended Next Tasks
 
-- Design global identity/account plus `CompanyMembership` or `TenantMembership` migration.
-- Add real invitation email delivery, resend, and revoke flows.
-- Add strict multi-tenant/RBAC automated tests around onboarding, invites, reports, compliance, virtual office, integrations, employees/profile, and devices.
-- Decide whether `User.avatarId` remains sufficient or should migrate to a richer profile/avatar table.
-- Mature department/team-level RBAC once team membership boundaries exist.
-- Configure deployed env values and run Vercel/Render/Cognito smoke.
+- Run deployed WSS smoke on real Vercel/Render/Cognito URLs with two authenticated users.
+- Add shared pub/sub before running multiple API instances for realtime virtual-office rooms.
+- Add automated realtime tests for tenant isolation, wrong-map join rejection, invalid-room movement rejection, reconnect/fallback behavior, and no per-frame DB writes.
+- Monitor pilot movement smoothness and tune throttle/interpolation values only from observed need.
+- Continue the global identity/account plus tenant membership migration design.

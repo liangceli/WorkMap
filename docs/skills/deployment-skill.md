@@ -105,8 +105,9 @@ Pilot auth local defaults:
 13. Open `http://localhost:3000/virtual-office` and confirm development auth and virtual-office read requests target backend port 3001.
 14. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
 15. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
-16. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
-17. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
+16. For realtime movement QA, open two authenticated browsers in the same company/map and confirm `/virtual-office/realtime` connects, movement is smooth in both directions, and polling still reconciles after refresh.
+17. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
+18. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
 
 Detailed release smoke steps live in `docs/ai-handoff/pilot-release-checklist.md`.
 
@@ -139,6 +140,8 @@ Render backend:
 - Required server env includes `DATABASE_URL`, `WORKMAP_ALLOWED_ORIGIN`, `WORKMAP_JWT_SECRET`, `WORKMAP_PILOT_PASSWORD_HASH`, and `WORKMAP_COGNITO_*`.
 - Set `WORKMAP_APP_URL` to the deployed Vercel app URL so generated invite links are not localhost links.
 - `WORKMAP_ALLOWED_ORIGIN` must match the Vercel frontend origin.
+- `/virtual-office/realtime` uses WebSocket upgrade on the same API origin. Ensure the platform/proxy supports WebSocket upgrades.
+- Single-instance API deployment is acceptable for the current in-memory realtime gateway. Multi-instance deployment needs shared pub/sub first.
 
 Supabase:
 
@@ -153,6 +156,13 @@ Cognito:
 - Backend maps verified Cognito email to an existing WorkMap user for STAGE 2.
 - Stable Cognito `sub` mapping and tenant provisioning remain future work.
 
+Realtime WebSocket deployment:
+
+- The frontend derives `ws://` or `wss://` from `NEXT_PUBLIC_WORKMAP_API_URL`; deployed HTTPS API URLs should become WSS automatically.
+- `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL` should match the deployed frontend origin so WebSocket origin checks pass.
+- Browser socket auth sends the Bearer token as query `token`; use WSS and avoid retaining full socket query strings in logs.
+- Run deployed smoke with two authenticated users in one company/map before considering realtime movement production-ready.
+
 ## Deployment Caution
 
 `load-local-env.ts` is imported by the API main entry and registers compiled workspace aliases when the compiled local paths exist. It does not overwrite existing environment variables. Production/deployed startup should provide required env vars explicitly and should be reviewed if deployment uses the same compiled entry path.
@@ -162,5 +172,6 @@ The web root `.env` loader is for local monorepo ergonomics. Vercel/Render produ
 ## Deployment Unknowns
 
 - Redis is listed in env example but no confirmed runtime usage was found during intake.
+- The accepted realtime gateway is in-memory and does not currently use Redis/pub-sub.
 - Desktop agent, browser extension, and worker are currently placeholder scaffolds.
 - External Vercel/Render/Cognito deployed smoke remains pending for the accepted STAGE 2 baseline.

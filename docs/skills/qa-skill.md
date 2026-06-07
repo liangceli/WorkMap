@@ -47,6 +47,8 @@ Database setup:
 - In local development with backend and seed data available, virtual-office read calls should include `Authorization: Bearer <token>`.
 - Positions polling should repeat about every 4 seconds while the tab is visible.
 - Positions polling should slow to about every 15 seconds while the tab is hidden and refresh promptly when visible again.
+- Realtime movement should connect to `/virtual-office/realtime` when token-backed API auth and `officeMapId` are available.
+- Two authenticated browsers in the same company/map should see each other move smoothly in both directions.
 - Console should report `virtual-office API auth available: yes (dev-token)` or `yes (cache)` for authenticated development reads, or `no` when fallback is expected.
 - Console should report `virtual-office data source: api`, `partial-api`, or `mock fallback` according to API availability and validation.
 - Valid API rooms, destinations, and remote players should display safely; invalid or empty API parts should fall back safely.
@@ -96,7 +98,7 @@ Database setup:
 - Confirm non-OWNER cannot list or create invitations.
 - Confirm Owner cannot list/manage another company's invites by changing client-side values.
 - Confirm fresh owner workspace spawns in `/virtual-office` around `x=160`, `y=545` and can move away.
-- Confirm owner can see employee in the same workspace, accepting polling-based position jumps as current scope.
+- Confirm owner can see employee in the same workspace; after commit `1d2836c`, same-map movement should be realtime/smooth when the socket is connected, with polling still available as fallback.
 - Confirm pilot login fallback, Dashboard, Reports, Compliance, virtual-office movement/collision/chair/contact drawer, and People panel still work.
 
 ## STAGE 2 RBAC / Profile QA
@@ -160,6 +162,22 @@ Use this repeatable loop after backend/local-startup changes:
 - Confirm freshness windows: under 30 seconds keeps backend status, 30 seconds to 5 minutes maps to `idle`, and older than 5 minutes maps to `offline`.
 - Stop or break the backend and confirm the page does not crash and keeps last good remote state or initial mock fallback.
 - Confirm current-user save/restore still works and polling does not overwrite local movement.
+
+## Realtime Virtual Office Manual QA
+
+- Start API and web from `workmap/` with token-backed auth available.
+- Open `http://localhost:3000/virtual-office` in two authenticated browser sessions for users in the same company and office map.
+- Confirm the browser opens `/virtual-office/realtime` with `ws://` locally or `wss://` on HTTPS deployments.
+- Confirm OWNER movement is visible to EMPLOYEE smoothly and promptly.
+- Confirm EMPLOYEE movement is visible to OWNER smoothly and promptly.
+- Confirm direction, stop state, room/status changes, and large reposition/snap cases do not leave remote avatars drifting incorrectly.
+- Confirm the current user never appears as a duplicate remote avatar.
+- Confirm People panel, command palette People rows, contact drawer, and click hit testing still use the visible rendered teammate positions.
+- Refresh one browser and confirm polling/read APIs reconcile display name, avatar, role, freshness, and latest durable position.
+- Break or stop the socket path and confirm the page does not crash and polling/fallback behavior remains understandable.
+- Confirm a wrong-company or invalid `officeMapId` cannot join and does not leak remote movement.
+- Confirm invalid optional `roomId` movement is rejected and does not broadcast across rooms/maps.
+- Confirm server logs or browser output do not expose real secrets. In deployment, avoid retaining full WebSocket query strings because the token is passed as query `token`.
 
 ## People / Team Experience Manual QA
 
@@ -319,3 +337,14 @@ For commit `815df2c`, handoff/QA reports:
 - Secret scan found no real AWS/Cognito/Supabase/Render/Vercel/private key/database secret in reviewed files.
 - Final manual QA passed for OWNER backend avatar completion: fresh Owner routed through avatar setup, backend avatar saved, fresh login skipped avatar recreation, employee saw Owner's real layered avatar, and Owner still saw employee's real layered avatar.
 - Previously completed Round 3 checks passed for employee hidden navigation/command actions, employee directory, display-name handling, avatar persistence, two-user virtual-office avatar consistency, tenant onboarding, invite acceptance, Dashboard, Reports, Compliance, pilot login, and dev-token fallback.
+
+For commit `1d2836c`, handoff/QA reports:
+
+- API lint, typecheck, and build passed.
+- Web lint, typecheck, and build passed.
+- No Prisma migration command was run because no schema/migration changed.
+- Secret review found no real committed secrets in reviewed files; `.env` stayed excluded and was not read.
+- Code review confirmed WebSocket auth, tenant/map room isolation, same-room broadcast only, sender exclusion, movement validation/rate limiting, and no per-frame Prisma writes.
+- User manual QA passed for OWNER and EMPLOYEE in separate browsers seeing each other's realtime movement smoothly in both directions.
+- User smoke found no blocking regression for virtual-office movement/contact/presence or Dashboard/Reports/Compliance/Employees.
+- Remaining QA risk: deployed WSS smoke and multi-instance/pub-sub behavior are still unverified.

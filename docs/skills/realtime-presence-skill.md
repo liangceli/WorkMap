@@ -30,6 +30,8 @@ Current-user latest position can now be saved through `PUT /virtual-office/map/:
 
 Dashboard pilot readiness now also reads virtual-office positions as a status snapshot. This should remain a lightweight readiness/read path and should not replace the polling model used by `/virtual-office`.
 
+Realtime movement is now available through `/virtual-office/realtime` when token-backed API auth and `officeMapId` are available. Polling remains the fallback/reconciliation path and latest-position durability path.
+
 ## Basic Polling Presence
 
 Commit `effb188` added basic polling presence for the 5-person pilot.
@@ -64,15 +66,30 @@ Commit `b68dd49` added the 5-person People/Presence MVP UI.
 - Command palette People results use the same freshness and room/area context.
 - Backend/mock/fallback/empty states are described in UI copy.
 
+## Realtime Movement
+
+Commit `1d2836c` added native WebSocket movement for same-company, same-office-map users.
+
+- Socket endpoint: `/virtual-office/realtime`.
+- Auth: same request-context resolver as guarded HTTP APIs; browser clients pass token query param.
+- Join scope: server validates `officeMapId` ownership and computes room key as `companyId:officeMapId`.
+- Movement event: `player:move` with `x`, `y`, `direction`, `isMoving`, `status`, and optional `roomId`.
+- Broadcast event: `player:state` to other sockets in the same company/map room.
+- Presence event: `office:presence` is emitted by the gateway, but the frontend primarily renders `player:state` plus polling reconciliation.
+- Server accepts movement snapshots at a minimum interval around 50ms.
+- Frontend sends visible movement around 110ms, hidden-tab movement around 1000ms, and important stop/room/status changes promptly.
+- Realtime movement does not write each frame to the database.
+- Remote avatar rendering interpolates toward latest realtime targets and snaps for large jumps or stale state.
+
 ## Not Confirmed
 
-- No websocket or server-sent events implementation was found.
-- No realtime broadcast/sharing of position updates was added.
+- No server-sent events implementation was found.
+- No shared pub/sub adapter for multi-instance WebSocket broadcast was added.
 - No historical position trail was added.
-- Owner/employee manual QA observed remote users through polling; movement can appear as periodic position jumps rather than live walking animation.
+- Realtime manual QA passed locally for two browsers in one workspace, but deployed WSS smoke is still pending.
 - Backend-backed `layered:v2:` avatar references can now render real layered avatars for current and remote API users when `User.avatarId` is present.
 - Users without valid backend `avatarId` can still fall back to `WM` marker until they complete avatar/profile setup.
 
 ## Recommended Presence Direction
 
-Polling is the current MVP/pilot presence strategy. Revisit websocket/SSE only if pilot feedback needs smoother live movement.
+Use WebSocket `player:state` for live movement, keep polling for reconciliation/fallback, and keep HTTP latest-position saves for durability. Add shared pub/sub before horizontal API scaling, then add automated tenant-isolation and reconnect/fallback regression tests.

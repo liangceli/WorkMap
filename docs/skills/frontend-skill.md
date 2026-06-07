@@ -61,6 +61,7 @@ Pilot readiness API wrappers:
 - `lib/api/invitationsApi.ts` wraps invitation list/create/accept.
 - `lib/api/companiesApi.ts` wraps current company summary.
 - `lib/api/usersApi.ts` wraps user directory/profile reads and current-user profile updates.
+- `lib/api/realtimeApi.ts` derives virtual-office realtime WebSocket URLs from the existing API base URL, converting `http` to `ws` and `https` to `wss`.
 
 For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring mapped Cognito session, then stored pilot Bearer session, then development dev-token fallback, and passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
 
@@ -125,6 +126,19 @@ Basic polling presence:
 - API-valid empty remote results are treated as an empty remote list rather than reverting to mock remote people.
 - Remote freshness maps `updatedAt` to existing statuses: recent keeps backend status, 30 seconds to 5 minutes maps to `idle`, and older than 5 minutes maps to `offline`.
 
+Realtime virtual-office movement:
+
+- `components/office/useVirtualOfficeRealtime.ts` owns the browser WebSocket connection for `/virtual-office/realtime`.
+- It connects only when `officeMapId` and token-backed API auth options are available.
+- It sends `office:join`, throttled `player:move` snapshots, and `office:leave`.
+- Visible movement sends are throttled around 110ms; hidden tabs slow to about 1000ms.
+- Important stop, room, or status changes are sent promptly.
+- Reconnect/fallback behavior leaves polling active so the page still has a reconciliation path.
+- `OfficeMap.tsx` stores realtime remote state in refs to avoid React render storms and canvas reloads.
+- Remote avatars interpolate toward latest realtime targets; large jumps and stale updates snap safely.
+- Canvas contact hit testing uses rendered realtime positions so teammate clicks match where avatars appear.
+- Avatar asset loading uses stable `userId:avatarId` signatures and cancellation guards.
+
 People/Presence UI:
 
 - `presence.ts` exposes shared status color, status label, freshness status, and freshness label helpers.
@@ -137,11 +151,11 @@ People/Presence UI:
 
 No Redux/Zustand/global state library was confirmed. Current state is mostly React local state plus localStorage helpers for demo workflow and avatar selection.
 
-`useVirtualOfficeData.ts` performs a one-time initial async load on mount with a cancellation flag, then starts polling positions when authenticated API context is available. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; no websocket listeners were added.
+`useVirtualOfficeData.ts` performs a one-time initial async load on mount with a cancellation flag, then starts polling positions when authenticated API context is available. `useVirtualOfficeRealtime.ts` adds socket movement on top when token-backed API auth and `officeMapId` are available. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; realtime movement frames are not the durable persistence path.
 
 Cognito auth token data is cached in localStorage under `workmap.cognitoSession`. Pilot API auth token data is cached under `workmap.pilotSession`. Development API auth token data is cached under `workmap.devApiAuth`. Pending invite tokens use `workmap.pendingInviteToken`. The normal workflow state remains for routing/onboarding continuity and is not the backend authorization source.
 
-Position save writes are movement-driven and latest-position-only. They are not realtime sharing and do not create position history.
+Position save writes are movement-driven and latest-position-only. Realtime sharing now broadcasts live movement separately and does not create position history.
 
 ## UI Rules
 

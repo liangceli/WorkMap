@@ -2,7 +2,7 @@
 
 ## Backend Auth
 
-Backend auth is centered on `RequestContextGuard`.
+Backend auth is centered on `RequestContextGuard` for HTTP and `RequestContextResolverService` for reusable HTTP/WebSocket context resolution.
 
 Supported context sources:
 
@@ -21,6 +21,14 @@ Auth priority as of commit `c2c7d76` and preserved in `e5d4882`:
 1. Cognito Bearer JWT.
 2. WorkMap/pilot/dev Bearer JWT.
 3. Development headers, only when `NODE_ENV !== "production"`.
+
+WebSocket realtime auth:
+
+- `/virtual-office/realtime` resolves handshake context through `RequestContextResolverService`.
+- Browser clients pass the Bearer token as query `token` because native WebSocket cannot set custom `Authorization` headers.
+- Server-side/non-browser callers may provide `Authorization: Bearer ...`.
+- Development headers remain an HTTP-only fallback outside production; sockets should use token-backed auth.
+- The gateway does not trust client-provided company/user/role scope. Tenant room scope is computed from the resolved backend context and validated office map.
 
 ## Capabilities / RBAC
 
@@ -161,3 +169,4 @@ Frontend demo workflow role union currently includes only `EMPLOYEE`, `MANAGER`,
 - Department/team-level RBAC remains coarse until team membership boundaries exist in the data model.
 - Authenticated virtual-office API success depends on the local backend listening on `localhost:3001`, `WORKMAP_JWT_SECRET` being configured, and demo seed data existing.
 - Pilot auth is not SSO/OAuth/MFA/password-reset-ready production auth.
+- WebSocket token query auth should be used only over WSS in deployed environments, and platform logging should avoid persisting socket query strings.

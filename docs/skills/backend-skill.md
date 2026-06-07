@@ -43,11 +43,29 @@ Current-user latest-position persistence was added in commit `1a0a19f`.
 - Persistence behavior: upserts one latest `VirtualOfficePosition` row for the authenticated user.
 - Validation: existing service checks map/company ownership and optional room/map/company consistency.
 
+## Virtual Office Realtime
+
+Commit `1d2836c` added native WebSocket realtime movement for `/virtual-office`.
+
+- Endpoint: `/virtual-office/realtime`.
+- Implementation: `virtual-office-realtime.gateway.ts` attaches to the Node HTTP server `upgrade` event and handles WebSocket frames directly; no `socket.io`, `ws`, or Nest WebSocket package was added.
+- Provider registration: `VirtualOfficeRealtimeGateway` is registered by `VirtualOfficeModule`.
+- Auth: handshake context is resolved through `RequestContextResolverService`; clients can provide a Bearer token through `Authorization` or query `token`.
+- Unauthenticated handshakes are rejected with `401`.
+- Origin: production deployments should configure `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL` to the deployed frontend origin.
+- Join validation: `office:join` requires `canAccessVirtualOffice()`, a UUID-shaped `officeMapId`, and an office map that belongs to the authenticated company.
+- Room isolation: room keys are backend-computed as `companyId:officeMapId`; clients cannot choose tenant/company scope.
+- Movement validation: `player:move` is accepted only after a validated join, with finite coordinates, supported direction/status, and optional room id belonging to the joined office map.
+- Broadcast behavior: movement is broadcast only to other sockets in the same company/map room; the sender is excluded.
+- Rate limiting: accepted movement snapshots are rate-limited per socket, with a minimum interval around 50ms.
+- Persistence boundary: realtime movement frames are not written to Prisma. Durable latest-position save/restore remains `PUT /virtual-office/map/:officeMapId/positions/me` plus positions polling.
+- Scaling boundary: the gateway is in-memory per API process. Multi-instance deployment needs shared pub/sub before horizontal scaling.
+
 ## Request Context
 
 Most business endpoints use `RequestContextGuard`.
 
-`AuthModule` is marked `@Global()` and exports `AuthService`, `JwtService`, `RequestContextGuard`, and `RolesGuard` so guards/providers resolve across feature modules at runtime.
+`AuthModule` is marked `@Global()` and exports `AuthService`, `JwtService`, `RequestContextResolverService`, `RequestContextGuard`, and `RolesGuard` so guards/providers resolve across feature modules at runtime.
 
 Context can come from:
 
@@ -55,7 +73,7 @@ Context can come from:
 - WorkMap Bearer JWT verified by `JwtService`.
 - Development-only headers: `x-workmap-company-id`, `x-workmap-user-id`, `x-workmap-role`.
 
-In production, Bearer token is required.
+In production, Bearer token is required for HTTP APIs. WebSocket realtime movement also requires a resolved request context during handshake.
 
 Auth priority:
 
@@ -177,6 +195,6 @@ Commit `14fb706` added `POST /auth/pilot-login`.
 
 ## Not Confirmed
 
-- No websocket gateway was found.
+- No shared pub/sub adapter for multi-instance realtime broadcast was confirmed.
 - No complete production account lifecycle, global identity/membership table, multi-company membership, MFA, password reset, or real email delivery implementation was confirmed.
 - No background activity ingestion controller route was confirmed during intake, despite activity-related schema/module presence.

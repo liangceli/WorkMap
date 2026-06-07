@@ -104,6 +104,14 @@ Reason: Round 3 needed strict-enough tenant isolation, role boundaries, and cros
 
 Trade-off: Backend service checks now protect key data/actions, but department/team-level RBAC remains coarse and frontend route hiding is only advisory. `User.avatarId` can carry `layered:v2:` profile data for the MVP, but a richer profile/avatar table may be needed later.
 
+## 2026-06-07 - Native WebSocket Realtime Movement
+
+Decision: Add virtual-office realtime movement through a narrow native WebSocket gateway at `/virtual-office/realtime`, while preserving polling reconciliation and HTTP latest-position persistence.
+
+Reason: Round 4 needed smooth same-workspace avatar movement without adding broad realtime infrastructure, package dependencies, per-frame database writes, or movement/pathfinding rewrites.
+
+Trade-off: The gateway is in-memory per API process and needs shared pub/sub before horizontal scaling. Browser auth passes the Bearer token in the WebSocket URL query because native WebSocket cannot set `Authorization` headers, so deployed use should be WSS with careful log handling.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.
