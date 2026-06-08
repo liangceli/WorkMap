@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { getCurrentCompany } from "../../lib/api/companiesApi";
 import { getCurrentUser } from "../../lib/api/authApi";
+import { getWorkMapPlatformApiAuthOptions } from "../../lib/api/platformAuth";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { clearPilotSession, getPilotSession, toWorkflowRole, type StoredPilotSession } from "../../lib/auth/pilotSession";
@@ -20,7 +21,21 @@ type ApiSessionSummary = {
   source: string;
 };
 
-const navItems: Array<{ label: string; href: string; roles: WorkMapRole[] }> = [
+type PlatformSessionSummary = {
+  userName: string;
+  email: string;
+  platformRole: "PLATFORM_ADMIN";
+  source: string;
+};
+
+type NavItem = {
+  label: string;
+  href: string;
+  roles?: WorkMapRole[];
+  platformOnly?: boolean;
+};
+
+const navItems: NavItem[] = [
   { label: "Office", href: "/virtual-office", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Dashboard", href: "/dashboard", roles: ["MANAGER", "OWNER"] },
   { label: "Employees", href: "/employees", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
@@ -29,6 +44,7 @@ const navItems: Array<{ label: string; href: string; roles: WorkMapRole[] }> = [
   { label: "Invites", href: "/onboarding/invite", roles: ["OWNER"] },
   { label: "Integrations", href: "/integrations", roles: ["OWNER", "IT_ADMIN"] },
   { label: "Settings", href: "/settings", roles: ["OWNER", "IT_ADMIN"] },
+  { label: "Platform Admin", href: "/platform-admin", platformOnly: true },
 ];
 
 export function AppShell({ children }: AppShellProps) {
@@ -36,6 +52,7 @@ export function AppShell({ children }: AppShellProps) {
   const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
   const [pilotSession, setPilotSession] = useState<StoredPilotSession | null>(null);
   const [apiSummary, setApiSummary] = useState<ApiSessionSummary | null>(null);
+  const [platformSummary, setPlatformSummary] = useState<PlatformSessionSummary | null>(null);
   const activeRole = cognitoSession ? setupState?.role ?? null : pilotSession ? toWorkflowRole(pilotSession.user.role) : setupState?.role ?? null;
 
   useEffect(() => {
@@ -46,6 +63,17 @@ export function AppShell({ children }: AppShellProps) {
     let cancelled = false;
 
     async function loadApiSummary() {
+      const platformAuth = await getWorkMapPlatformApiAuthOptions();
+
+      if (!cancelled && platformAuth.available) {
+        setPlatformSummary({
+          userName: platformAuth.context.identity.displayName,
+          email: platformAuth.context.identity.email,
+          platformRole: platformAuth.context.platformRole,
+          source: platformAuth.source,
+        });
+      }
+
       const auth = await getWorkMapApiAuthOptions();
 
       if (!auth.available) {
@@ -77,14 +105,24 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   const visibleItems = useMemo(() => {
-    if (!activeRole) {
-      return navItems.filter((item) => ["/virtual-office", "/compliance", "/settings"].includes(item.href));
+    const isPlatformAdmin = platformSummary?.platformRole === "PLATFORM_ADMIN";
+
+    if (isPlatformAdmin && !activeRole) {
+      return navItems.filter((item) => item.platformOnly);
     }
 
-    return navItems.filter((item) => item.roles.includes(activeRole));
-  }, [activeRole]);
+    if (!activeRole) {
+      return navItems.filter(
+        (item) => ["/virtual-office", "/compliance", "/settings"].includes(item.href) || (item.platformOnly && isPlatformAdmin),
+      );
+    }
 
-  const roleLabel = cognitoSession
+    return navItems.filter((item) => (item.platformOnly ? isPlatformAdmin : item.roles?.includes(activeRole)));
+  }, [activeRole, platformSummary?.platformRole]);
+
+  const roleLabel = platformSummary
+    ? "Platform Admin"
+    : cognitoSession
     ? apiSummary?.role
       ? `Cognito / ${formatRole(apiSummary.role)}`
       : activeRole
@@ -97,7 +135,15 @@ export function AppShell({ children }: AppShellProps) {
       : activeRole
         ? formatRole(activeRole)
         : "Sign in needed";
-  const sessionSource = cognitoSession ? "Cognito session" : pilotSession ? "Pilot session" : activeRole ? "Frontend demo fallback" : "No session";
+  const sessionSource = platformSummary
+    ? "Platform admin session"
+    : cognitoSession
+    ? "Cognito session"
+    : pilotSession
+    ? "Pilot session"
+    : activeRole
+    ? "Frontend demo fallback"
+    : "No session";
 
   return (
     <main style={styles.page}>
@@ -135,6 +181,7 @@ export function AppShell({ children }: AppShellProps) {
                 setPilotSession(null);
                 setSetupState(null);
                 setApiSummary(null);
+                setPlatformSummary(null);
               }}
             >
               Log out
@@ -146,7 +193,9 @@ export function AppShell({ children }: AppShellProps) {
       <section style={styles.notice}>
         <strong>{sessionSource}</strong>
         <span>
-          {cognitoSession
+          {platformSummary
+            ? `${platformSummary.userName} (${platformSummary.email}) has platform admin access via ${platformSummary.source}. Tenant data shown here is privacy-safe metadata only.`
+            : cognitoSession
             ? apiSummary
               ? `${apiSummary.userName} is in ${apiSummary.companyName} as ${formatRole(apiSummary.role)} via ${apiSummary.source}.`
               : `${cognitoSession.claims.email ?? cognitoSession.claims.sub} is using a Cognito bearer token. WorkMap user/company/role mapping is resolved by the backend.`

@@ -397,3 +397,22 @@ model AuditLog {
   @@index([companyId, targetUserId, createdAt])
   @@index([companyId, action, createdAt])
 }
+
+model PlatformAuditLog {
+  id                String   @id @default(uuid()) @db.Uuid
+  actorEmail        String?
+  actorCognitoSub   String?
+  actorDisplayName  String?
+  actorPlatformRole String
+  action            String
+  targetCompanyId   String?  @db.Uuid
+  resourceType      String
+  resourceId        String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([actorCognitoSub, createdAt])
+  @@index([targetCompanyId, createdAt])
+  @@index([action, createdAt])
+}

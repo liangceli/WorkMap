@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPilotSession, getAuthContext, getCurrentUser } from "../../lib/api/authApi";
+import { getPlatformContext } from "../../lib/api/platformApi";
 import { decodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../lib/avatar/avatarStorage";
 import {
@@ -89,6 +90,14 @@ export function MockLoginPanel() {
       return;
     }
 
+    const inviteToken = getPendingInviteToken();
+    const platformContextResult = await getPlatformContext(cognitoAuth.options);
+
+    if (!inviteToken && platformContextResult.ok) {
+      router.push("/platform-admin");
+      return;
+    }
+
     const contextResult = await getAuthContext(cognitoAuth.options);
 
     if (contextResult.ok) {
@@ -106,7 +115,6 @@ export function MockLoginPanel() {
       return;
     }
 
-    const inviteToken = getPendingInviteToken();
     router.push(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/onboarding/company");
   };
 

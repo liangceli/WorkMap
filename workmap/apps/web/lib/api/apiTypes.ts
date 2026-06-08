@@ -56,6 +56,16 @@ export type WorkMapApiRequestContext = {
   role: string;
 };
 
+export type WorkMapApiPlatformContext = {
+  platformRole: "PLATFORM_ADMIN";
+  identity: {
+    email: string;
+    cognitoSub: string;
+    displayName: string;
+  };
+  source: "cognito";
+};
+
 export type WorkMapApiPilotSession = {
   accessToken: string;
   tokenType: "Bearer";
@@ -226,5 +236,77 @@ export type WorkMapApiUsageSummary = {
     productivityLabel: string | null;
     activeSeconds: number;
     idleSeconds: number;
+  }>;
+};
+
+export type WorkMapApiPlatformTenantSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  updatedAt: string;
+  ownerCount: number;
+  employeeCount: number;
+  userCount: number;
+  deviceCount: number;
+  inviteCount: number;
+  integrationCount: number;
+  policyConfigured: boolean;
+  defaultOfficeMapConfigured: boolean;
+};
+
+export type WorkMapApiPlatformTenantHealth = {
+  readiness: {
+    hasOwner: boolean;
+    hasUsers: boolean;
+    hasDefaultOfficeMap: boolean;
+    hasMonitoringPolicy: boolean;
+  };
+  counts: {
+    owners: number;
+    users: number;
+    pendingInvites: number;
+    devices: number;
+    activeDevices24h: number;
+    enabledIntegrations: number;
+  };
+  lastActivityAt: string | null;
+  lastVirtualOfficePositionAt: string | null;
+};
+
+export type WorkMapApiPlatformTenantList = {
+  tenants: WorkMapApiPlatformTenantSummary[];
+};
+
+export type WorkMapApiPlatformTenantDetail = {
+  tenant: WorkMapApiPlatformTenantSummary & {
+    roleCounts: Record<string, number>;
+  };
+  health: WorkMapApiPlatformTenantHealth;
+};
+
+export type WorkMapApiPlatformTenantHealthResponse = {
+  health: WorkMapApiPlatformTenantHealth;
+};
+
+export type WorkMapApiPlatformAuditList = {
+  audit: Array<{
+    id: string;
+    action: string;
+    resourceType: string;
+    resourceId: string | null;
+    targetCompany: {
+      id: string;
+      name: string;
+      slug: string;
+    } | null;
+    actor: {
+      email: string | null;
+      cognitoSub: string | null;
+      displayName: string | null;
+      platformRole: string;
+    };
+    metadata: unknown;
+    createdAt: string;
   }>;
 };

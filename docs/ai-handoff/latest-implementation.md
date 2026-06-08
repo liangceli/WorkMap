@@ -2,229 +2,248 @@
 
 ## 1. Original Task Brief
 
-STAGE 2 Round 4: Realtime Virtual Office Movement + Smooth Remote Avatars.
+STAGE 2 Round 5 Platform Admin Boundary follow-up fix.
 
-Implement real-time multi-user movement for `/virtual-office` so authenticated users in the same company/workspace/office map can see each other move through WebSocket updates. The backend must authenticate sockets, enforce company/officeMap isolation, broadcast only within the same tenant room, avoid database writes on every movement frame, preserve existing polling and durable position save/restore, and keep remote avatars visually smooth through interpolation.
+Fix the QA blocker: Platform Admin must be an independent platform-level identity, not a tenant/company user and not a tenant OWNER reuse. A configured Platform Admin identity must authenticate and access `/platform-admin` even when it does not belong to any tenant/company. Tenant OWNER, EMPLOYEE, and IT_ADMIN users must still receive 403 from `/platform/*` and blocked UI on `/platform-admin`. Platform Admin must see only privacy-safe tenant metadata, health, and audit summaries.
 
-Explicitly out of scope: Render/Vercel troubleshooting, desktop agent, browser extension, app/domain tracking, map expansion, billing, full membership migration, Prisma schema changes unless unavoidable, TMX/map asset changes, movement/collision/pathfinding rewrites, and chair/contact drawer redesign.
+Preserve Cognito auth, pilot/dev fallback for tenant users, tenant onboarding, invite flow, strict tenant RBAC, realtime virtual office, polling fallback, Dashboard, Reports, Compliance, and Employees. Do not implement support impersonation, tenant mutation, billing, enterprise SSO/SAML/MFA, desktop agent, browser extension, map expansion, or websocket changes.
+
+Follow-up frontend manual QA fix: clicking tenants in `/platform-admin` triggered the React/Next style overlay because the tenant button mixed `border` shorthand with active-state `borderColor`. This was fixed without changing backend auth/schema or platform data behavior.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/packages/shared-types/src/index.ts` | Added shared virtual-office realtime event and payload types for join, move, player state, presence, and errors. |
-| `workmap/apps/api/src/modules/auth/request-context-resolver.service.ts` | New reusable auth resolver for Cognito Bearer, WorkMap/pilot Bearer, and existing development headers for HTTP guard reuse. |
-| `workmap/apps/api/src/modules/auth/auth.module.ts` | Registered/exported the shared request context resolver. |
-| `workmap/apps/api/src/modules/auth/request-context.guard.ts` | Reused the resolver so HTTP request context behavior stays aligned with WebSocket auth logic. |
-| `workmap/apps/api/src/modules/virtual-office/virtual-office.service.ts` | Added realtime join context lookup: validates officeMap ownership, loads current user profile/avatar/status/role, and returns valid room IDs for move validation. |
-| `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts` | New native WebSocket gateway attached to `/virtual-office/realtime`; authenticates handshake, manages tenant-scoped rooms, validates movement, rate-limits broadcasts, and sends presence/error events. |
-| `workmap/apps/api/src/modules/virtual-office/virtual-office.module.ts` | Registered the realtime gateway provider. |
-| `workmap/apps/web/lib/api/realtimeApi.ts` | Added API-base-derived realtime URL helper; `http` becomes `ws`, `https` becomes `wss`, and no new env is required. |
-| `workmap/apps/web/components/office/useVirtualOfficeRealtime.ts` | New frontend hook for socket connection, join, reconnect, throttled movement sends, fallback state, and remote player-state handling. |
-| `workmap/apps/web/components/office/OfficeMap.tsx` | Wired realtime movement into the existing animation loop, added remote interpolation refs, preserved polling reconciliation, and used rendered remote positions for canvas hit testing/contact navigation. |
-| `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA and Project Context & Docs. |
+| `workmap/packages/auth/src/index.ts` | Added `PlatformRequestContext` and kept platform capabilities separate from tenant `RequestContext`/roles. |
+| `workmap/apps/api/src/modules/auth/current-platform-context.decorator.ts` | Added a dedicated decorator/request key for platform-level request context. |
+| `workmap/apps/api/src/modules/auth/platform-admin-allowlist.ts` | Added backend-only Cognito email/sub allowlist resolution for platform admin bootstrap. |
+| `workmap/apps/api/src/modules/auth/platform-context.guard.ts` | Added a guard that authenticates Cognito directly, allows only configured platform identities, and returns 403 for valid tenant users. |
+| `workmap/apps/api/src/modules/auth/auth.module.ts` | Registered/exported the new platform guard. |
+| `workmap/apps/api/src/modules/platform/platform.module.ts` | Added the platform-admin backend module. |
+| `workmap/apps/api/src/modules/platform/platform.controller.ts` | Added `/platform/me`, tenant list/detail/health, and platform audit endpoints using `PlatformContextGuard`. |
+| `workmap/apps/api/src/modules/platform/platform.service.ts` | Returns privacy-safe tenant metadata/health and writes platform-level audit rows without tying global actions to a customer tenant. |
+| `workmap/apps/api/src/app.module.ts` | Registered `PlatformModule`. |
+| `workmap/prisma/schema.prisma` | Added `PlatformAuditLog` for independent platform audit events. |
+| `workmap/prisma/migrations/20260607000000_platform_audit_log/migration.sql` | Adds the `PlatformAuditLog` table and indexes. |
+| `workmap/apps/web/lib/api/apiTypes.ts` | Added platform context and platform response types. |
+| `workmap/apps/web/lib/api/platformApi.ts` | Added frontend wrappers for `/platform/*`, including `/platform/me`. |
+| `workmap/apps/web/lib/api/platformAuth.ts` | Added Cognito-only platform auth helper that does not call tenant `/auth/me`. |
+| `workmap/apps/web/app/platform-admin/page.tsx` | Updated the page to use independent platform auth and privacy-safe platform APIs; fixed tenant button styles to use consistent longhand border properties during active/inactive rerenders. |
+| `workmap/apps/web/components/layout/AppShell.tsx` | Shows Platform Admin navigation/session summary only when `/platform/me` succeeds. |
+| `workmap/apps/web/app/login/callback/page.tsx` | Routes configured platform admins to `/platform-admin` after Cognito callback before tenant onboarding fallback. |
+| `workmap/apps/web/components/login/MockLoginPanel.tsx` | Mirrors callback routing for the existing Cognito continue path. |
+| `workmap/.env.example` | Added blank platform admin allowlist placeholders. No real identities were added. |
+| `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA. |
 
-Pre-existing workspace note:
+Pre-existing workspace notes:
 
-- `docs/references/` remains unrelated untracked workspace content and was not modified.
+- `docs/ai-handoff/latest-qa.md` is modified because it contains the QA input/blocker. It was read as source context and not used as implementation code.
+- `docs/references/SkyOffice/` is unrelated untracked workspace content and was not modified.
 
 ## 3. Implementation Summary
 
-Implemented Round 4 realtime movement without adding dependencies, changing Prisma schema, or replacing existing polling/persistence.
+Implemented the platform-admin boundary as an independent Cognito platform context.
 
-Backend:
+Key behavior:
 
-- Added a native WebSocket gateway on the existing Nest HTTP server via the Node `upgrade` event.
-- Endpoint: `/virtual-office/realtime`.
-- Authenticates during handshake using the same Cognito/WorkMap JWT resolution path as HTTP APIs.
-- Uses room key `companyId:officeMapId`.
-- Validates `officeMapId` belongs to the authenticated user's company before joining.
-- Validates optional `roomId` against rooms belonging to the joined office map.
-- Broadcasts movement only to other sockets in the same company/map room.
-- Does not write WebSocket movement frames to the database.
+- Platform Admin no longer depends on `User.role`, `User.companyId`, tenant OWNER, or tenant `/auth/me`.
+- Platform endpoints use `PlatformContextGuard`, not tenant `RequestContextGuard`.
+- `PlatformContextGuard` verifies a Cognito bearer token, extracts verified Cognito identity, then checks backend env allowlists:
+  - `WORKMAP_PLATFORM_ADMIN_EMAILS`
+  - `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`
+- A configured platform admin gets a `PlatformRequestContext` with `platformRole: "PLATFORM_ADMIN"` and Cognito identity fields.
+- Valid tenant users who are not configured platform admins receive 403 from `/platform/*`.
+- Missing/invalid Cognito platform credentials receive 401.
+- Tenant OWNER does not imply platform access.
 
-Frontend:
+No support impersonation, tenant mutation, platform billing, or cross-tenant employee activity drill-down was added.
 
-- Connects only when API auth options and `officeMapId` are available.
-- Joins the current office map room.
-- Sends local movement snapshots at a throttled cadence.
-- Keeps polling presence active as fallback/reconciliation.
-- Stores remote realtime targets in refs to avoid React re-render storms.
-- Interpolates canvas-rendered remote avatars toward their latest realtime target positions.
+Frontend QA fix:
+
+- The tenant selector button now uses `borderWidth`, `borderStyle`, and `borderColor` consistently in both base and active styles.
+- It no longer mixes `border` shorthand with `borderColor`, which avoids the React dev overlay when switching active tenants.
+- Platform Admin identity, backend capability checks, Cognito-only platform auth, privacy-safe metadata, and `PlatformAuditLog` behavior were not changed by this follow-up.
 
 ## 4. User-Visible Changes
 
-- Same-company users in the same `/virtual-office` map should see each other move in near real time.
-- Remote avatars should glide toward new positions instead of waiting for 4-second polling jumps.
-- Existing local movement, collision, double-click auto-walk, chair interaction, contact drawer, People panel, position save/restore, and polling fallback are preserved.
-- In development console, `/virtual-office` logs realtime connection state such as `fallback`, `connecting`, `connected`, or `reconnecting`.
+- `/platform-admin` can now be opened by a configured Cognito platform admin even if that Cognito identity has no WorkMap tenant/company user.
+- Non-platform tenant OWNER/EMPLOYEE/IT_ADMIN users are blocked from `/platform-admin`.
+- AppShell shows Platform Admin navigation only when `/platform/me` succeeds.
+- Login/callback and the existing Cognito continue path route configured platform admins to `/platform-admin` instead of tenant onboarding.
+- Platform Admin sees only safe tenant metadata, readiness/health summaries, and platform audit events.
 
 ## 5. Technical Notes
 
-### WebSocket Architecture
+### Independent Platform Context
 
-- Backend gateway file: `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts`.
-- It uses Node's native HTTP upgrade + WebSocket frame handling instead of adding `socket.io`, `ws`, or Nest WebSocket packages.
-- Reason: no existing WebSocket dependency was present, and the required protocol surface is intentionally narrow.
-- No package or lockfile changes were made.
+Tenant context remains:
 
-### Auth Handshake
+```ts
+RequestContext = {
+  companyId: string;
+  userId: string;
+  role: WorkMapRole;
+}
+```
 
-- Browser connects to:
-  - `ws://<api-host>/virtual-office/realtime?token=<accessToken>` locally
-  - `wss://<api-host>/virtual-office/realtime?token=<accessToken>` when API base URL is HTTPS
-- The backend converts the query token into Bearer auth during handshake.
-- Auth resolution order is the existing order:
-  - Cognito Bearer token
-  - WorkMap/pilot Bearer token
-  - development headers only for HTTP guard outside production
-- WebSocket uses Bearer tokens from the frontend auth bridge; it does not trust client-provided `companyId`, `userId`, `role`, or tenant data.
-- Origin check uses existing env patterns: `WORKMAP_ALLOWED_ORIGIN`, `NEXT_PUBLIC_APP_URL`, or local `http://localhost:3000` defaults.
+Platform context is separate:
 
-### Tenant Room Isolation
+```ts
+PlatformRequestContext = {
+  platformRole: "PLATFORM_ADMIN";
+  identity: {
+    email: string;
+    cognitoSub: string;
+    displayName: string;
+  };
+  source: "cognito";
+}
+```
 
-- Room key is computed only on the backend as `companyId:officeMapId`.
-- On `office:join`, backend verifies:
-  - authenticated context exists
-  - role has `canAccessVirtualOffice`
-  - `officeMapId` is a valid UUID
-  - office map belongs to `context.companyId`
-- On `player:move`, backend verifies:
-  - socket already joined a validated room
-  - x/y are finite numbers
-  - direction/status/isMoving are valid
-  - optional `roomId` is a UUID and belongs to the joined office map
-- Broadcast excludes the sender and is limited to the same backend room set.
+This keeps tenant RBAC and platform RBAC from being accidentally merged.
 
-### Event Names / Payloads
+### Platform Endpoints
 
-Client to server:
+Added:
 
-- `office:join`: `{ officeMapId }`
-- `office:leave`
-- `player:move`: `{ x, y, direction, isMoving, status, roomId? }`
+- `GET /platform/me`
+- `GET /platform/tenants`
+- `GET /platform/tenants/:companyId`
+- `GET /platform/tenants/:companyId/health`
+- `GET /platform/audit`
 
-Server to client:
+Privacy-safe fields include:
 
-- `player:state`: `{ userId, displayName, avatarId, role, officeMapId, x, y, direction, isMoving, status, roomId?, updatedAt }`
-- `office:presence`: `{ officeMapId, users: [...] }`
-- `office:error`: `{ message }`
+- company id/name/slug
+- created/updated timestamps
+- owner/user/employee counts
+- device/invite/integration counts
+- policy configured yes/no
+- default office map configured yes/no
+- readiness flags
+- latest aggregate activity timestamp
+- latest aggregate virtual-office position timestamp
 
-### Movement Throttle Strategy
+Excluded:
 
-- Frontend sends at roughly 110ms while visible.
-- Hidden tabs slow to roughly 1000ms.
-- Important changes such as stop, room change, or status change send promptly.
-- Server also rate-limits accepted movement per socket to a minimum 50ms interval.
-- Existing `PUT /virtual-office/map/:officeMapId/positions/me` remains the durable latest-position persistence path and is still throttled separately.
+- employee app/domain details
+- browsing details
+- message content
+- virtual-office movement history
+- secrets/tokens
+- raw cross-tenant employee activity rows
 
-### Remote Interpolation Strategy
+### Platform Audit
 
-- `OfficeMap` keeps realtime remote state in refs, not React state.
-- Each remote has rendered `x/y`, target `x/y`, direction, status, and `lastRealtimeAt`.
-- Each canvas frame interpolates rendered position toward target using a fixed interpolation rate.
-- Large jumps over 260px or stale realtime states snap safely instead of sliding unrealistically.
-- Realtime avatar signature only changes when remote `userId:avatarId` changes, so normal movement does not reload avatar assets or restart the TMX loop.
-- A cancellation guard was added to the map asset loading effect so old async loads cannot start duplicate animation loops after dependency changes.
+Added `PlatformAuditLog` so platform actions are not misleadingly forced into tenant `AuditLog`.
 
-### Fallback / Polling Behavior
+Logged actions:
 
-- Existing `useVirtualOfficeData()` polling remains active.
-- Polling still reconciles remote players and current-user position.
-- If WebSocket auth/connect fails, the page remains usable with polling/mock fallback.
-- If a realtime remote becomes stale, the interpolation ref is dropped and polling becomes the source of truth again.
+- `PLATFORM_TENANT_LIST_VIEWED`
+- `PLATFORM_TENANT_DETAIL_VIEWED`
+- `PLATFORM_TENANT_HEALTH_VIEWED`
+- `PLATFORM_AUDIT_VIEWED`
+
+Global platform actions have no `targetCompanyId`. Tenant-targeted reads include `targetCompanyId`. The table stores platform actor email/sub/displayName/platformRole without requiring a tenant `User`.
+
+### Frontend Platform Auth
+
+`getWorkMapPlatformApiAuthOptions()` uses Cognito session tokens and `/platform/me`. It intentionally does not call tenant `/auth/me`, so independent platform admins are not forced into company onboarding or tenant mapping.
+
+The existing tenant auth helper remains unchanged for tenant app surfaces.
 
 ## 6. Verification Results
 
 Commands run from `workmap/`:
 
 ```powershell
-pnpm --filter @workmap/api lint
+pnpm prisma:generate
 pnpm --filter @workmap/api typecheck
-pnpm --filter @workmap/api build
-pnpm --filter @workmap/web lint
 pnpm --filter @workmap/web typecheck
+pnpm --filter @workmap/api lint
+pnpm --filter @workmap/web lint
+pnpm --filter @workmap/api build
 pnpm --filter @workmap/web build
 ```
 
 Results:
 
-- API lint passed.
+- `pnpm prisma:generate` passed after stopping local WorkMap node processes that were locking the Prisma engine DLL.
 - API typecheck passed.
-- API build passed.
-- Web lint passed.
 - Web typecheck passed.
+- API lint passed.
+- Web lint passed.
+- API build passed.
 - Web build passed.
-- Web build still prints the existing warning that the Next.js plugin was not detected in the ESLint config.
+- Web build still prints the existing warning that the Next.js plugin was not detected in ESLint config.
 - `workmap/apps/web/tsconfig.tsbuildinfo` was restored after build verification.
+
+Follow-up frontend style fix verification:
+
+- `pnpm --filter @workmap/web typecheck` passed.
+- `pnpm --filter @workmap/web lint` passed.
+- `pnpm --filter @workmap/web build` passed.
+- No backend files were changed for this specific frontend QA bug, so API verification was not rerun.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was restored again after web build.
+
+Secret scan:
+
+- Ran a high-confidence local scan excluding `.env`, `node_modules`, `.next`, and `*.tsbuildinfo`.
+- Checked for AWS key-shaped values, private key blocks, non-empty secret env assignments, and non-empty committed `WORKMAP_PLATFORM_ADMIN_EMAILS` / `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`.
+- Result: no high-confidence secret matches.
 
 Not run:
 
-- No Prisma migration command was run because no schema/migration changed.
-- No local browser realtime two-user manual QA was run in this chat.
-- No deployed Render/Vercel smoke was run, per task scope.
+- The new migration was not applied to a database in this chat.
+- No browser manual QA was run in this chat.
+- No Render/Vercel deployed smoke was run, per task scope.
 
 ## 7. Manual QA Suggestions
 
-Use local ports consistently:
+Before manual QA:
 
-- API: `http://localhost:3001`
-- Web: `http://localhost:3000`
+1. Apply the new Prisma migration locally using the repo's normal migration flow.
+2. Configure a real platform admin identity directly in local `.env` or platform env settings.
+3. Use `WORKMAP_PLATFORM_ADMIN_EMAILS` and/or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`.
+4. Do not paste real values into chat or commit them.
+5. Restart API after env changes.
 
-Realtime QA:
+Manual checks:
 
-1. Start API and web.
-2. Log in as OWNER in browser A.
-3. Log in as EMPLOYEE in browser B or InPrivate.
-4. Confirm both users are in the same company/workspace.
-5. Open `/virtual-office` in both browsers.
-6. Move OWNER and confirm EMPLOYEE sees OWNER move smoothly.
-7. Move EMPLOYEE and confirm OWNER sees EMPLOYEE move smoothly.
-8. Confirm direction and walking/stop state look reasonable.
-9. Confirm current user is not duplicated as a remote player.
-10. Confirm People panel and contact drawer still work.
-11. Refresh one browser and confirm latest position restore still works.
-12. Stop/restart API or block socket if practical and confirm polling/fallback remains safe.
-
-Tenant isolation QA:
-
-1. Use or create two different companies.
-2. Open `/virtual-office` as users from different companies.
-3. Confirm they do not receive each other's realtime movement.
-4. Try invalid or wrong-company `officeMapId` join if practical.
-5. Confirm join fails safely and no cross-tenant events are received.
-
-Regression QA:
-
-1. WASD/arrow movement.
-2. Collision.
-3. Double-click auto-walk.
-4. Chair `E` interaction.
-5. Room/zone status.
-6. Contact drawer.
-7. Dashboard.
-8. Reports.
-9. Compliance.
-10. Employees page.
+1. Login with a configured Cognito platform admin that has no tenant/company user.
+2. Confirm `/platform-admin` loads.
+3. Confirm `GET /platform/me` returns platform context with `PLATFORM_ADMIN`.
+4. Confirm tenant list/detail/health/audit load with only privacy-safe metadata.
+5. Confirm platform admin is not forced through owner onboarding just because no tenant exists.
+6. Click each tenant in `/platform-admin`.
+7. Confirm no React/Next style overlay appears.
+8. Confirm health/detail data updates when switching tenants.
+9. Login as tenant OWNER not in the platform allowlist.
+10. Confirm `/platform-admin` is blocked and `/platform/*` returns 403.
+11. Login as EMPLOYEE not in the platform allowlist.
+12. Confirm `/platform-admin` is blocked and `/platform/*` returns 403.
+13. Confirm tenant OWNER can still use owner workspace/invite flows.
+14. Confirm EMPLOYEE can still use tenant app flows.
+15. Confirm `/virtual-office`, Dashboard, Reports, Compliance, and Employees still work.
+16. Confirm no employee app/domain details, browsing details, movement history, secrets, or raw employee activity rows are visible in Platform Admin.
 
 ## 8. Risks / Notes
 
-- This is an in-memory realtime gateway. Multiple API instances would need a shared pub/sub adapter before scaled deployment can provide cross-instance realtime rooms.
-- The browser passes the access token in the WebSocket URL query because native `WebSocket` cannot set custom Authorization headers. This should be WSS in deployed HTTPS environments.
-- `office:presence` is emitted by the backend, but the current frontend uses `player:state` plus existing polling for rendered positions and People panel stability.
-- The gateway intentionally does not persist every move; latest-position durability still depends on the existing throttled HTTP save path.
-- Existing minimal bridge limitations remain: `Company` is the tenant root and `User.companyId + User.role` is still the current membership model.
-- No full `CompanyMembership` / `TenantMembership` migration was introduced.
-- No secrets or real `.env` values were read or committed.
-- `docs/references/` remains unrelated untracked content.
+- Platform admin bootstrap still uses env allowlists, not a persisted platform identity admin console.
+- A future global identity/platform identity table would be cleaner for lifecycle management, but this round intentionally used the smallest safe bridge.
+- The new `PlatformAuditLog` migration must be applied before `/platform/*` audit writes work against a database.
+- Platform audit has no foreign key to `Company`; this avoids coupling global actions to tenant users, but deleted tenants may appear as `targetCompany: null` in historical audit entries.
+- Platform Admin is read-only in this round. No impersonation, tenant mutation, suspend/delete tenant, billing, or support workflow exists.
+- Pilot/dev fallback remains tenant-scoped and does not create platform admin access.
+- `docs/references/SkyOffice/` remains unrelated untracked content.
 
 ## 9. Docs Update Suggestions
 
-- `docs/skills/realtime-presence-skill.md`: record native WebSocket endpoint, event names, room model, throttling, interpolation, and polling fallback.
-- `docs/skills/backend-skill.md`: document `RequestContextResolverService`, WebSocket auth reuse, tenant room isolation, and no-per-frame-DB-write rule.
-- `docs/skills/api-contract-skill.md`: document `/virtual-office/realtime` event payloads and failure behavior for unauthenticated/invalid officeMap joins.
-- `docs/skills/current-status.md`: update status from polling-only to WebSocket movement plus polling reconciliation.
-- `docs/skills/project-summary.md`: note remaining deployment scaling risk for multi-instance realtime pub/sub.
+- `docs/skills/backend-skill.md`: document `PlatformContextGuard`, platform env allowlists, and `PlatformAuditLog`.
+- `docs/skills/api-contract-skill.md`: document `/platform/me`, `/platform/tenants`, `/platform/tenants/:companyId`, `/platform/tenants/:companyId/health`, `/platform/audit`, and 401/403 behavior.
+- `docs/skills/auth-skill.md`: record that platform auth is Cognito-only and independent of tenant `/auth/me`.
+- `docs/skills/current-status.md`: record that Round 5 now has an independent platform-admin boundary plus migration.
+- `docs/skills/deployment-skill.md`: document deployment env setup for blank placeholder vars `WORKMAP_PLATFORM_ADMIN_EMAILS` and `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`.
 
 ## 10. Next Chat Input
 

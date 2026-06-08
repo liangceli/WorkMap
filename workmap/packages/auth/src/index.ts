@@ -1,9 +1,21 @@
 export type WorkMapRole = "EMPLOYEE" | "TEAM_LEAD" | "MANAGER" | "HR_ADMIN" | "IT_ADMIN" | "OWNER";
 
+export type WorkMapPlatformRole = "PLATFORM_ADMIN";
+
 export type RequestContext = {
   companyId: string;
   userId: string;
   role: WorkMapRole;
+};
+
+export type PlatformRequestContext = {
+  platformRole: WorkMapPlatformRole;
+  identity: {
+    email: string;
+    cognitoSub: string;
+    displayName: string;
+  };
+  source: "cognito";
 };
 
 export type WorkMapJwtPayload = {
@@ -44,6 +56,11 @@ export type WorkMapCapability =
   | "accessTechnicalSettings"
   | "accessVirtualOffice"
   | "useContactLinks";
+
+export type WorkMapPlatformCapability =
+  | "viewTenantList"
+  | "viewTenantHealth"
+  | "viewPlatformAudit";
 
 export const WORKMAP_ROLE_CAPABILITIES = {
   EMPLOYEE: [
@@ -104,12 +121,32 @@ export const WORKMAP_ROLE_CAPABILITIES = {
   ],
 } as const satisfies Record<WorkMapRole, readonly WorkMapCapability[]>;
 
+export const WORKMAP_PLATFORM_ROLE_CAPABILITIES = {
+  PLATFORM_ADMIN: ["viewTenantList", "viewTenantHealth", "viewPlatformAudit"],
+} as const satisfies Record<WorkMapPlatformRole, readonly WorkMapPlatformCapability[]>;
+
 export function roleHasCapability(role: WorkMapRole, capability: WorkMapCapability) {
   return (WORKMAP_ROLE_CAPABILITIES[role] as readonly WorkMapCapability[]).includes(capability);
 }
 
 export function hasCapability(actor: RequestContext, capability: WorkMapCapability) {
   return roleHasCapability(actor.role, capability);
+}
+
+export function platformRoleHasCapability(role: WorkMapPlatformRole, capability: WorkMapPlatformCapability) {
+  return (WORKMAP_PLATFORM_ROLE_CAPABILITIES[role] as readonly WorkMapPlatformCapability[]).includes(capability);
+}
+
+type PlatformCapabilityActor = {
+  platformRole?: WorkMapPlatformRole;
+};
+
+export function hasPlatformCapability(actor: PlatformCapabilityActor, capability: WorkMapPlatformCapability) {
+  return Boolean(actor.platformRole && platformRoleHasCapability(actor.platformRole, capability));
+}
+
+export function isPlatformAdmin(actor: PlatformCapabilityActor) {
+  return actor.platformRole === "PLATFORM_ADMIN";
 }
 
 export function canManageCompany(actor: RequestContext) {
@@ -162,4 +199,16 @@ export function canAccessVirtualOffice(actor: RequestContext) {
 
 export function canUseContactLinks(actor: RequestContext) {
   return hasCapability(actor, "useContactLinks");
+}
+
+export function canViewPlatformTenantList(actor: PlatformCapabilityActor) {
+  return hasPlatformCapability(actor, "viewTenantList");
+}
+
+export function canViewPlatformTenantHealth(actor: PlatformCapabilityActor) {
+  return hasPlatformCapability(actor, "viewTenantHealth");
+}
+
+export function canViewPlatformAudit(actor: PlatformCapabilityActor) {
+  return hasPlatformCapability(actor, "viewPlatformAudit");
 }

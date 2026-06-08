@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAuthContext, getCurrentUser } from "../../../lib/api/authApi";
+import { getPlatformContext } from "../../../lib/api/platformApi";
 import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { completeCognitoRedirect } from "../../../lib/auth/cognitoSession";
@@ -30,17 +31,29 @@ export default function CognitoCallbackPage() {
         return;
       }
 
-      const contextResult = await getAuthContext({ token: result.session.idToken });
-
-      if (cancelled) {
-        return;
-      }
-
       const inviteToken = getPendingInviteToken();
 
       if (inviteToken) {
         setStatus("Cognito sign-in complete. Opening your invitation...");
         router.replace(`/invite/${encodeURIComponent(inviteToken)}`);
+        return;
+      }
+
+      const platformContextResult = await getPlatformContext({ token: result.session.idToken });
+
+      if (cancelled) {
+        return;
+      }
+
+      if (platformContextResult.ok) {
+        setStatus("Cognito sign-in complete. Opening platform admin...");
+        router.replace("/platform-admin");
+        return;
+      }
+
+      const contextResult = await getAuthContext({ token: result.session.idToken });
+
+      if (cancelled) {
         return;
       }
 
