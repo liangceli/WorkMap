@@ -58,6 +58,14 @@ Role/profile UX:
 - New owner and invited employee setup should ask for a human-readable display name before relying on Cognito/email-derived fallback labels.
 - Authenticated users should complete backend-backed avatar/profile setup once; returning users with backend `layered:v2:` avatar references should not be forced to recreate avatars.
 
+Platform Admin UX:
+
+- `/platform-admin` should feel like a quiet operational admin surface, not a tenant owner dashboard or marketing page.
+- Platform Admin UI should show only privacy-safe tenant metadata, readiness/health summaries, and platform audit summaries.
+- Clearly block tenant-only users from Platform Admin surfaces; tenant OWNER is not platform admin.
+- Platform Admin navigation/session UI should appear only after `/platform/me` succeeds.
+- Tenant switching controls should keep styling stable across active/inactive states. Use consistent longhand border properties; avoid mixing `border` shorthand with `borderColor`, which previously caused a React/Next style overlay.
+
 ## UX Boundaries
 
 - Many workflow surfaces are demo-oriented and use mock/localStorage state.

@@ -1,9 +1,18 @@
 # Current Status
 
-Last updated: 2026-06-07.
+Last updated: 2026-06-08.
 
 ## Latest Accepted Work
 
+- Commit `afe65e7` (`feat: add independent platform admin boundary`) completed STAGE 2 Round 5: an independent Platform Admin boundary separate from tenant/company users.
+- Platform Admin now authenticates as a Cognito platform identity through backend env allowlists, not through tenant `User.role`, `User.companyId`, tenant OWNER reuse, or tenant `/auth/me`.
+- Backend now includes `PlatformContextGuard`, `PlatformRequestContext`, `CurrentPlatformContext`, `PlatformModule`, and `/platform/*` APIs for platform identity, privacy-safe tenant metadata/detail/health, and platform audit summaries.
+- Platform admin allowlists are configured only through backend env: `WORKMAP_PLATFORM_ADMIN_EMAILS` and `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`; `.env.example` contains blank placeholders only.
+- Non-platform tenant OWNER, EMPLOYEE, and IT_ADMIN users receive 403 from `/platform/*` and do not get usable `/platform-admin` access.
+- Prisma now includes `PlatformAuditLog` through migration `20260607000000_platform_audit_log`, so global platform reads are not forced into tenant-scoped `AuditLog`.
+- Frontend now has `/platform-admin`, `platformApi.ts`, `platformAuth.ts`, platform response types, AppShell Platform Admin nav/session gating through `/platform/me`, and Cognito callback routing that sends configured platform admins to `/platform-admin` before tenant onboarding fallback.
+- `/platform-admin` intentionally shows only privacy-safe tenant metadata, readiness/health summaries, and platform audit events. It does not expose employee app/domain details, browsing details, movement history, secrets/tokens, raw activity rows, impersonation, tenant mutation, or billing controls.
+- QA reports final manual browser QA passed after the local platform audit migration and tenant button style fix: independent Cognito Platform Admin loaded `/platform-admin`, tenant switching worked without React/Next style overlay, tenant OWNER/EMPLOYEE were blocked, tenant onboarding/invites and realtime virtual office regressions passed.
 - Commit `1d2836c` (`feat: add realtime virtual office movement`) completed STAGE 2 Round 4: realtime virtual-office movement with smooth remote avatars.
 - Backend now exposes a native WebSocket realtime gateway at `/virtual-office/realtime`, using shared virtual-office realtime event types from `packages/shared-types`.
 - `RequestContextResolverService` centralizes HTTP and WebSocket request-context resolution while preserving auth priority: Cognito Bearer, WorkMap/pilot/dev Bearer, then development headers for HTTP outside production.
@@ -108,11 +117,16 @@ Last updated: 2026-06-07.
 - Backend request context can now resolve Cognito users from verified Cognito JWTs before falling back to WorkMap pilot/dev JWTs.
 - Backend RBAC capabilities now constrain sensitive company data/actions beyond frontend navigation visibility.
 - Prisma schema contains company, department, users with optional `cognitoSub`, invitations, devices, activity events, usage summaries, office maps, rooms, virtual office positions, monitoring policies, policy acknowledgements, integrations, and audit logs.
+- Prisma also contains `PlatformAuditLog` for independent platform-admin audit events that are not owned by a tenant user.
 - Seed data creates a demo company, users, default office map/rooms, policy, device rows, virtual office positions, usage summaries, integrations, and an audit event.
 
 ## Known Issues / Risks
 
 - STAGE 2 remains a minimal bridge. It does not implement global identity/account tables, `CompanyMembership`/`TenantMembership`, or multi-company membership per identity.
+- Platform Admin is independent from tenant users, but bootstrap still uses env allowlists rather than a persisted platform identity lifecycle/admin console.
+- The `PlatformAuditLog` migration must be applied before `/platform/*` audit writes work against a database.
+- Platform audit rows do not foreign-key to `Company`; historical rows for deleted tenants may show `targetCompany: null`.
+- Platform Admin is read-only in this round. No support impersonation, tenant mutation, suspend/delete tenant, billing, or support workflow exists.
 - Department/team-level RBAC is still coarse: TEAM_LEAD/MANAGER/HR_ADMIN visibility is company-level where the data model lacks team membership boundaries.
 - Frontend role visibility is advisory UX; backend service checks are the security boundary.
 - Direct URL access to some frontend-only/mock pages can still render page shells, but protected backend data/actions are constrained by API permissions.
@@ -162,6 +176,9 @@ Last updated: 2026-06-07.
 ## Recommended Next Tasks
 
 - Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.
+- Design a long-term platform identity/admin lifecycle to replace env allowlist bootstrap when support operations mature.
+- Apply `20260607000000_platform_audit_log` in deployed databases before deployed `/platform-admin` testing.
+- Configure platform admin allowlists only in secure deployment env settings and run deployed platform-admin smoke with a configured Cognito platform identity plus blocked tenant OWNER/EMPLOYEE checks.
 - Add real email delivery for invitations and a revoke/resend lifecycle.
 - Add a richer profile/avatar table if `User.avatarId` as compact `layered:v2:` reference becomes too limiting.
 - Run deployed WSS smoke on real Vercel/Render/Cognito URLs after confirming frontend/API origins and HTTPS socket behavior.

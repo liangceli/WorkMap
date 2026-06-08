@@ -29,6 +29,7 @@ Database setup:
 - `/login` shows `Sign in with Cognito` when root `workmap/.env` provides complete `NEXT_PUBLIC_COGNITO_*` config and the web dev server has been restarted.
 - `/login` shows Cognito missing-config guidance when public Cognito env is incomplete, while keeping pilot fallback available.
 - `/login/callback` completes Cognito token exchange and backend `/auth/me` mapping for a verified, mapped Cognito user.
+- `/login/callback` routes a configured Cognito Platform Admin to `/platform-admin` before tenant onboarding fallback.
 - Unmapped Cognito users, unverified email claims, and ambiguous email mappings should fail in a controlled way.
 - Clear/sign out Cognito session before verifying pilot fallback after Cognito mapping failure.
 - `/login` creates a pilot session with seeded pilot credentials when the backend is running.
@@ -59,6 +60,7 @@ Database setup:
 - Command palette people and room navigation still work with API or mock data.
 - Desktop and narrow viewport layouts remain usable, with no new blocking API loader.
 - Dashboard/employees/reports/compliance/integrations/settings routes render.
+- `/platform-admin` loads only for configured Platform Admin identities and blocks tenant-only users.
 - API `GET /health` responds when backend is running.
 - Dev token endpoint works against seeded demo users outside production.
 - Local browser smoke should use `http://localhost:3000`, not `http://127.0.0.1:3000`, when `WORKMAP_ALLOWED_ORIGIN` is configured for localhost.
@@ -118,6 +120,23 @@ Database setup:
 - Confirm first-time OWNER/EMPLOYEE setup requires/saves display name and backend avatar profile.
 - Confirm returning OWNER/EMPLOYEE with backend avatar skips avatar recreation.
 - Confirm OWNER and EMPLOYEE see each other's real layered avatars in `/virtual-office` after both have backend avatar profiles.
+
+## STAGE 2 Platform Admin QA
+
+- Apply migration `20260607000000_platform_audit_log` before local or deployed platform-admin testing.
+- Configure a real platform admin identity through `WORKMAP_PLATFORM_ADMIN_EMAILS` and/or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` in local/deployment env only.
+- Do not paste real platform admin emails/subs/secrets into chat, logs, docs, or commits.
+- Restart the API after platform admin env changes.
+- Sign in with a configured Cognito Platform Admin that has no tenant/company `User`.
+- Confirm `/login/callback` routes to `/platform-admin`, not tenant onboarding.
+- Confirm `GET /platform/me` returns `platformRole: "PLATFORM_ADMIN"` and Cognito identity fields.
+- Confirm `/platform-admin` loads tenant list, tenant detail, tenant health, and platform audit summaries.
+- Confirm tenant switching updates detail/health data and does not trigger a React/Next style overlay.
+- Confirm Platform Admin sees only privacy-safe metadata: tenant identity/counts/readiness, aggregate timestamps, and platform audit events.
+- Confirm Platform Admin does not see employee app/domain details, browsing details, message/email content, virtual-office movement history, secrets, raw activity rows, support impersonation, tenant mutation, or billing controls.
+- Sign in as tenant OWNER not in the platform allowlist and confirm no Platform Admin nav plus direct `/platform-admin` blocked UI and `/platform/*` returns 403.
+- Sign in as EMPLOYEE not in the platform allowlist and confirm no Platform Admin nav plus direct `/platform-admin` blocked UI and `/platform/*` returns 403.
+- Confirm tenant onboarding, invite acceptance, `/virtual-office` realtime, Dashboard, Reports, Compliance, and Employees still pass smoke after platform-admin changes.
 
 ## Local API-Backed Virtual Office Verification Loop
 
@@ -348,3 +367,14 @@ For commit `1d2836c`, handoff/QA reports:
 - User manual QA passed for OWNER and EMPLOYEE in separate browsers seeing each other's realtime movement smoothly in both directions.
 - User smoke found no blocking regression for virtual-office movement/contact/presence or Dashboard/Reports/Compliance/Employees.
 - Remaining QA risk: deployed WSS smoke and multi-instance/pub-sub behavior are still unverified.
+
+For commit `afe65e7`, handoff/QA reports:
+
+- `pnpm prisma:generate` passed during implementation after clearing a local Windows Prisma engine DLL lock.
+- API typecheck, lint, and build passed.
+- Web typecheck, lint, and build passed.
+- Follow-up web typecheck, lint, and build passed after the `/platform-admin` tenant button style fix.
+- QA review commands passed for API/web typecheck, API/web lint, API build, and web build from `apps/web`; root `pnpm build` also passed after clearing a transient `.next` `PageNotFoundError`.
+- Secret scans excluding `.env`, `node_modules`, `.next`, and `*.tsbuildinfo` found no high-confidence secrets; platform admin env placeholders remained blank.
+- User manual QA passed after applying the local `PlatformAuditLog` migration: independent Cognito Platform Admin loaded `/platform-admin`, tenant list/detail/health/audit rendered, tenant switching worked without style overlay, tenant OWNER/EMPLOYEE were blocked, tenant onboarding/invites passed, `/virtual-office` realtime passed, and Dashboard/Reports/Compliance/Employees smoke passed.
+- Remaining deployment action: apply `20260607000000_platform_audit_log` and configure platform admin allowlists in deployed API env before deployed platform-admin testing.

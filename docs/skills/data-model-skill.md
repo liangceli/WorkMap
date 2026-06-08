@@ -17,6 +17,7 @@ Source of truth: `workmap/prisma/schema.prisma`.
 - `MonitoringPolicy`, `PolicyAcknowledgement`: compliance policy and user acknowledgement.
 - `IntegrationAccount`: company or user integration accounts.
 - `AuditLog`: company-scoped audit events.
+- `PlatformAuditLog`: independent platform-admin audit events that are not owned by a tenant `User`.
 
 ## Enums
 
@@ -40,4 +41,6 @@ Invitation statuses:
 - `User.cognitoSub` is the current minimal Cognito identity bridge. A future global account/identity model plus `CompanyMembership` or `TenantMembership` is still recommended for multi-company membership.
 - `User.avatarId` currently stores compact WorkMap layered avatar references such as `layered:v2:<encoded config>` for authenticated profile completion. A future profile/avatar table can replace this if richer profile data is needed.
 - Invitation plaintext tokens are intentionally not stored; only `tokenHash` exists after creation.
-- Live realtime sync, historical trails, and arbitrary-user position mutation are not implemented.
+- `PlatformAuditLog` intentionally has no foreign key to `Company`; tenant-targeted platform audit rows store optional `targetCompanyId` so historical rows can survive tenant deletion.
+- Platform admin identity is not yet persisted as a first-class model; Round 5 uses backend env allowlists for bootstrap.
+- Live realtime sync is implemented for movement, but historical trails and arbitrary-user position mutation are not implemented.

@@ -21,6 +21,7 @@ Modules confirmed in `AppModule`:
 - `AuditModule`
 - `TenantOnboardingModule`
 - `InvitationsModule`
+- `PlatformModule`
 - `HealthController`
 
 Runtime/local startup notes:
@@ -80,6 +81,49 @@ Auth priority:
 1. Cognito Bearer JWT.
 2. WorkMap/pilot/dev Bearer JWT.
 3. Development headers outside production only.
+
+## Platform Admin Boundary
+
+Commit `afe65e7` added an independent platform-admin backend boundary.
+
+Platform context is separate from tenant request context:
+
+- Tenant context remains `RequestContext` with `companyId`, `userId`, and `role`.
+- Platform context is `PlatformRequestContext` with `platformRole: "PLATFORM_ADMIN"` and Cognito identity fields.
+- `CurrentPlatformContext` reads platform context from a dedicated request key.
+
+Platform auth behavior:
+
+- `/platform/*` routes use `PlatformContextGuard`, not `RequestContextGuard`.
+- `PlatformContextGuard` verifies Cognito Bearer auth directly through the existing Cognito verifier.
+- Platform access is allowed only when verified Cognito email or sub is present in backend env allowlists:
+  - `WORKMAP_PLATFORM_ADMIN_EMAILS`
+  - `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`
+- Missing/invalid Cognito platform credentials return `401`.
+- Valid tenant users who are not configured platform admins return `403`.
+- Tenant OWNER, EMPLOYEE, and IT_ADMIN roles do not imply platform access.
+- Pilot/dev fallback remains tenant-scoped and does not create Platform Admin access.
+
+Platform module:
+
+- Routes live under `/platform`.
+- `GET /platform/me` returns the platform context.
+- `GET /platform/tenants` returns privacy-safe tenant metadata.
+- `GET /platform/tenants/:companyId` returns tenant detail without employee activity drill-down.
+- `GET /platform/tenants/:companyId/health` returns tenant readiness/health summaries.
+- `GET /platform/audit` returns platform audit summaries.
+
+Privacy boundary:
+
+- Platform endpoints may return company id/name/slug, timestamps, owner/user/employee counts, device/invite/integration counts, policy/default map configured flags, readiness flags, latest aggregate activity timestamp, and latest aggregate virtual-office position timestamp.
+- Platform endpoints must not expose employee app/domain details, browsing URLs/details, message/email content, virtual-office movement history, secrets/tokens, raw cross-tenant employee activity rows, support impersonation, tenant mutation, or billing controls.
+
+Platform audit:
+
+- `PlatformAuditLog` records platform reads without requiring a tenant `User`.
+- Logged actions include `PLATFORM_TENANT_LIST_VIEWED`, `PLATFORM_TENANT_DETAIL_VIEWED`, `PLATFORM_TENANT_HEALTH_VIEWED`, and `PLATFORM_AUDIT_VIEWED`.
+- Global platform actions have no `targetCompanyId`; tenant-targeted reads include `targetCompanyId`.
+- The table intentionally has no foreign key to `Company`, so historical rows can survive tenant deletion.
 
 ## RBAC / Tenant Isolation
 
@@ -196,5 +240,6 @@ Commit `14fb706` added `POST /auth/pilot-login`.
 ## Not Confirmed
 
 - No shared pub/sub adapter for multi-instance realtime broadcast was confirmed.
+- No persisted platform identity/admin lifecycle or platform admin console was confirmed; Round 5 uses backend env allowlists.
 - No complete production account lifecycle, global identity/membership table, multi-company membership, MFA, password reset, or real email delivery implementation was confirmed.
 - No background activity ingestion controller route was confirmed during intake, despite activity-related schema/module presence.

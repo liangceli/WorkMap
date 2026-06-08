@@ -64,6 +64,11 @@ Development overrides:
 - `POST /auth/pilot-login`
 - `POST /auth/dev-token`
 - `GET /auth/me`
+- `GET /platform/me`
+- `GET /platform/tenants`
+- `GET /platform/tenants/:companyId`
+- `GET /platform/tenants/:companyId/health`
+- `GET /platform/audit`
 - `GET /tenant-onboarding/status`
 - `POST /tenant-onboarding/workspace`
 - `GET /invitations`
@@ -207,6 +212,53 @@ Backend verification:
 - Cross-company or ambiguous matches are rejected.
 
 `GET /auth/me` under Cognito Bearer returns the resolved WorkMap request context from Prisma. It does not trust frontend-provided company/user/role.
+
+## Platform Admin Contract
+
+Commit `afe65e7` added independent platform-admin APIs.
+
+Auth:
+
+- Platform APIs use Cognito Bearer auth only.
+- They do not use tenant `/auth/me`, tenant `RequestContextGuard`, pilot login, dev-token, development headers, or tenant role checks.
+- Access requires verified Cognito identity plus backend allowlist match in `WORKMAP_PLATFORM_ADMIN_EMAILS` or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`.
+- Missing/invalid Cognito credentials return `401`.
+- Valid tenant users who are not configured platform admins return `403`.
+- Tenant OWNER does not imply platform access.
+
+`GET /platform/me` returns:
+
+- `platformRole: "PLATFORM_ADMIN"`
+- `identity`: `email`, `cognitoSub`, `displayName`
+- `source: "cognito"`
+
+`GET /platform/tenants` returns privacy-safe tenant summary rows:
+
+- company id/name/slug
+- created/updated timestamps
+- owner/user/employee counts
+- device/invite/integration counts
+- policy/default office map configured flags
+- readiness flags
+- latest aggregate activity timestamp
+- latest aggregate virtual-office position timestamp
+
+`GET /platform/tenants/:companyId` returns privacy-safe tenant detail for one company.
+
+`GET /platform/tenants/:companyId/health` returns tenant readiness/health summary.
+
+`GET /platform/audit` returns platform audit summaries from `PlatformAuditLog`.
+
+Privacy exclusions:
+
+- no employee app/domain details
+- no browsing URL/details
+- no message/email content
+- no virtual-office movement history
+- no secrets/tokens
+- no raw cross-tenant employee activity rows
+- no support impersonation
+- no tenant mutation or billing controls
 
 ## Tenant Onboarding Contract
 
@@ -420,3 +472,4 @@ Important contract assumptions:
 - No shared pub/sub contract for multi-instance realtime broadcast has been added.
 - No historical position trail or arbitrary-user position mutation contract has been added.
 - No final global identity/account or tenant-membership API contract has been added.
+- No persisted platform identity lifecycle, platform admin management API, tenant mutation, impersonation, or billing API has been added.

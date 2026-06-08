@@ -93,6 +93,28 @@ Tenant onboarding / invites:
 - Owner invite list/create requires mapped WorkMap auth and `OWNER`.
 - Employee invite acceptance uses Cognito-only auth, verified email, and hashed invite token validation.
 
+## Platform Admin Auth
+
+Commit `afe65e7` added a platform-level auth boundary that is independent from tenant auth.
+
+Backend behavior:
+
+- Platform APIs use `PlatformContextGuard`.
+- `PlatformContextGuard` verifies Cognito Bearer tokens directly and does not call tenant `/auth/me`.
+- A verified Cognito identity must match `WORKMAP_PLATFORM_ADMIN_EMAILS` or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`.
+- A successful platform request receives `PlatformRequestContext` with `platformRole: "PLATFORM_ADMIN"`, Cognito email/sub/displayName, and `source: "cognito"`.
+- Missing/invalid Cognito platform credentials return `401`.
+- Valid tenant users who are not allowlisted platform admins return `403`.
+- Tenant `OWNER`, `EMPLOYEE`, `IT_ADMIN`, pilot login, dev-token, and development headers do not grant platform access.
+
+Frontend behavior:
+
+- `lib/api/platformAuth.ts` uses the stored Cognito session and `/platform/me`.
+- Platform auth intentionally avoids tenant `/auth/me`, so an independent platform admin without a tenant user is not forced into workspace onboarding.
+- `/login/callback` routes configured platform admins to `/platform-admin` before tenant onboarding fallback.
+- `/login` Cognito continue mirrors the same platform-admin routing behavior.
+- AppShell shows Platform Admin navigation/session summary only when `/platform/me` succeeds.
+
 ## Pilot Auth
 
 Commit `14fb706` added pilot-ready auth for the 5-person pilot.
@@ -170,3 +192,5 @@ Frontend demo workflow role union currently includes only `EMPLOYEE`, `MANAGER`,
 - Authenticated virtual-office API success depends on the local backend listening on `localhost:3001`, `WORKMAP_JWT_SECRET` being configured, and demo seed data existing.
 - Pilot auth is not SSO/OAuth/MFA/password-reset-ready production auth.
 - WebSocket token query auth should be used only over WSS in deployed environments, and platform logging should avoid persisting socket query strings.
+- Platform admin bootstrap uses env allowlists, not a persisted platform identity lifecycle or admin console.
+- Real platform admin emails/subs must be configured only in secure local/deployment env settings and never committed.

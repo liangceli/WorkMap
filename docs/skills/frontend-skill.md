@@ -40,6 +40,7 @@ Important areas:
 - `/settings`
 - `/avatar-debug`
 - `/virtual-office`
+- `/platform-admin`
 
 ## API Usage
 
@@ -62,6 +63,8 @@ Pilot readiness API wrappers:
 - `lib/api/companiesApi.ts` wraps current company summary.
 - `lib/api/usersApi.ts` wraps user directory/profile reads and current-user profile updates.
 - `lib/api/realtimeApi.ts` derives virtual-office realtime WebSocket URLs from the existing API base URL, converting `http` to `ws` and `https` to `wss`.
+- `lib/api/platformApi.ts` wraps the independent `/platform/*` APIs.
+- `lib/api/platformAuth.ts` uses Cognito-only platform auth and `/platform/me`; it intentionally does not call tenant `/auth/me`.
 
 For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring mapped Cognito session, then stored pilot Bearer session, then development dev-token fallback, and passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
 
@@ -75,6 +78,18 @@ Pilot login/session:
 - `apiAuth.ts` prefers mapped Cognito session, then pilot session, then development dev-token/dev-cache fallback.
 - `AppShell` shows pilot session state, role/session context, backend Bearer messaging, and logout behavior.
 - AppShell now prefers the pilot session role when present, limits fallback navigation before session/workflow setup, and links unclear/missing-session states back to `/login`.
+
+Platform Admin:
+
+- `/platform-admin` is a platform-level admin surface, not a tenant OWNER page.
+- It requires `getWorkMapPlatformApiAuthOptions()` and `/platform/me` success.
+- Independent platform admins can access it even when they do not have a tenant/company `User`.
+- Tenant users who are not configured platform admins see blocked UI and do not get Platform Admin AppShell navigation.
+- `/login/callback` routes configured platform admins to `/platform-admin` before tenant onboarding fallback.
+- The existing Cognito continue path in `/login` mirrors platform-admin routing.
+- AppShell shows Platform Admin navigation/session summary only when `/platform/me` succeeds.
+- Platform Admin should display only privacy-safe tenant metadata, tenant readiness/health, and platform audit summaries.
+- Tenant selector buttons should use consistent longhand border properties across active/inactive states; do not mix `border` shorthand with `borderColor`, which previously triggered a React/Next style overlay when switching tenants.
 
 Tenant onboarding / invites:
 
@@ -154,6 +169,8 @@ No Redux/Zustand/global state library was confirmed. Current state is mostly Rea
 `useVirtualOfficeData.ts` performs a one-time initial async load on mount with a cancellation flag, then starts polling positions when authenticated API context is available. `useVirtualOfficeRealtime.ts` adds socket movement on top when token-backed API auth and `officeMapId` are available. Position writes are handled from `OfficeMap.tsx` through throttled/debounced current-user latest-position saves; realtime movement frames are not the durable persistence path.
 
 Cognito auth token data is cached in localStorage under `workmap.cognitoSession`. Pilot API auth token data is cached under `workmap.pilotSession`. Development API auth token data is cached under `workmap.devApiAuth`. Pending invite tokens use `workmap.pendingInviteToken`. The normal workflow state remains for routing/onboarding continuity and is not the backend authorization source.
+
+Platform auth reuses the Cognito session token but validates access through `/platform/me`, not tenant mapping. Platform Admin routing should not write tenant workflow state or force independent platform identities into company onboarding.
 
 Position save writes are movement-driven and latest-position-only. Realtime sharing now broadcasts live movement separately and does not create position history.
 

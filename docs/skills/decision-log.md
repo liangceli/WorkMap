@@ -112,6 +112,14 @@ Reason: Round 4 needed smooth same-workspace avatar movement without adding broa
 
 Trade-off: The gateway is in-memory per API process and needs shared pub/sub before horizontal scaling. Browser auth passes the Bearer token in the WebSocket URL query because native WebSocket cannot set `Authorization` headers, so deployed use should be WSS with careful log handling.
 
+## 2026-06-08 - Independent Platform Admin Boundary
+
+Decision: Add Platform Admin as an independent Cognito allowlist-based platform context, separate from tenant `User`, tenant OWNER role, and tenant `/auth/me`.
+
+Reason: Platform operations need a safe cross-tenant metadata/health/audit surface, but reusing tenant OWNER would collapse customer tenant RBAC into platform support access.
+
+Trade-off: This creates a clean boundary and privacy-safe read-only platform surface now, but bootstrap uses backend env allowlists rather than a persisted platform identity lifecycle/admin console. `PlatformAuditLog` is intentionally separate from tenant `AuditLog` and does not foreign-key to `Company`, so historical deleted-tenant audit references may resolve to `targetCompany: null`.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.
