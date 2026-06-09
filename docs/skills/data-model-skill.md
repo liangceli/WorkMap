@@ -11,7 +11,7 @@ Source of truth: `workmap/prisma/schema.prisma`.
 - `Device`: employee device with OS, hostname, agent version, last seen.
 - `ActivityEvent`: raw app/browser/idle/lock/unlock/heartbeat events.
 - `AppUsageSummary`, `WebsiteUsageSummary`: daily summarized usage records.
-- `OfficeMap`: company map metadata, dimensions, tile size, JSON map data, default flag.
+- `OfficeMap`: company map metadata, dimensions, tile size, JSON map data, default flag. As of Round 6, valid `mapData` is used as the virtual-office map manifest storage layer.
 - `OfficeRoom`: room/zone metadata, `zoneData`, optional `autoStatus`.
 - `VirtualOfficePosition`: latest position per user, map/room, coordinates, direction, moving flag, status.
 - `MonitoringPolicy`, `PolicyAcknowledgement`: compliance policy and user acknowledgement.
@@ -36,8 +36,9 @@ Invitation statuses:
 
 ## Data Model Gaps
 
-- Office map database `mapData` exists, but current frontend canvas loads `/maps/workmap2.tmx` directly.
+- Office map database `mapData` now stores validated virtual-office map manifests for new owner workspaces. Legacy or invalid `mapData` falls back to the shared default manifest at runtime.
 - Virtual office positions now support current-user latest-position restore/save through API-backed local development flows.
+- `VirtualOfficePosition` does not store map version. Strict stale-position invalidation after future map replacement remains a data-model gap.
 - `User.cognitoSub` is the current minimal Cognito identity bridge. A future global account/identity model plus `CompanyMembership` or `TenantMembership` is still recommended for multi-company membership.
 - `User.avatarId` currently stores compact WorkMap layered avatar references such as `layered:v2:<encoded config>` for authenticated profile completion. A future profile/avatar table can replace this if richer profile data is needed.
 - Invitation plaintext tokens are intentionally not stored; only `tokenHash` exists after creation.

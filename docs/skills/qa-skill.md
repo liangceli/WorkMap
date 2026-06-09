@@ -41,6 +41,7 @@ Database setup:
 - Onboarding routes advance in expected order.
 - `/virtual-office` redirects to avatar onboarding when avatar is missing.
 - `/virtual-office` loads TMX map and tileset images.
+- `/virtual-office` uses the active validated map manifest for TMX path, canvas size, collision layers, render layers, rooms, navigation, and spawn.
 - With backend stopped or unavailable, `/virtual-office` still renders through mock fallback without runtime crashes.
 - With backend unauthorized, `/virtual-office` keeps mock fallback rather than blocking the page.
 - With backend/API available, Network should show `/virtual-office/map`, `/virtual-office/navigation`, and `/virtual-office/map/:officeMapId/positions` attempts.
@@ -53,6 +54,7 @@ Database setup:
 - Console should report `virtual-office API auth available: yes (dev-token)` or `yes (cache)` for authenticated development reads, or `no` when fallback is expected.
 - Console should report `virtual-office data source: api`, `partial-api`, or `mock fallback` according to API availability and validation.
 - Valid API rooms, destinations, and remote players should display safely; invalid or empty API parts should fall back safely.
+- Invalid or out-of-bounds map manifest rooms, navigation anchors/bounds, and player positions should be ignored or fall back safely.
 - WASD/arrow movement works and respects collision.
 - Double-click auto-walk finds paths or shows `No clear path`.
 - `E` near chairs sits/stands.
@@ -155,7 +157,26 @@ Use this repeatable loop after backend/local-startup changes:
 - Open `http://localhost:3000/virtual-office`.
 - Confirm browser Network shows virtual-office API reads on backend port 3001 with Bearer authorization.
 - Confirm canvas, avatar, movement, collision, double-click auto-walk, chair `E` interaction, contact drawer, desktop layout, and narrow layout still work.
+- Confirm the local player uses the active manifest safe/default spawn when no backend saved position exists, and saved backend position restore still wins when present.
 - Stop backend and refresh `/virtual-office`; confirm mock fallback still renders without runtime crash.
+
+## Map Manifest Manual QA
+
+- Start API on `http://localhost:3001` and web on `http://localhost:3000`.
+- Open `/virtual-office` as Owner and confirm the current TMX map loads and looks functionally unchanged.
+- Confirm the current user spawns at a valid active-manifest safe/default spawn and can move.
+- With no saved current-user position and no local movement, confirm the player does not remain stuck on an old module-level default spawn after API office data loads.
+- Move, wait for save, refresh, and confirm valid saved backend position restore remains authoritative.
+- If practical, manually set an out-of-bounds saved position in the local DB and confirm the UI uses safe spawn instead of crashing.
+- Confirm invalid/out-of-bounds `PUT /virtual-office/map/:officeMapId/positions/me` returns controlled 400.
+- Confirm realtime out-of-bounds movement is rejected with `office:error` and does not broadcast unsafe coordinates.
+- Confirm rooms and destination labels are readable in People panel and command palette; raw backend room UUIDs should not appear.
+- Confirm double-click auto-walk, WASD/arrow movement, collision, chair `E`, and contact drawer hit testing still work.
+- Confirm realtime movement still works between two users in the same map.
+- Confirm polling fallback still works when websocket is unavailable.
+- Create a new owner workspace and confirm default map, rooms, and owner spawn are usable.
+- Confirm tenant A cannot access tenant B office map APIs.
+- Confirm Dashboard, Reports, Compliance, Employees, tenant onboarding, invite flow, and Platform Admin smoke pass after map manifest changes.
 
 ## Position Persistence Manual QA
 
@@ -378,3 +399,14 @@ For commit `afe65e7`, handoff/QA reports:
 - Secret scans excluding `.env`, `node_modules`, `.next`, and `*.tsbuildinfo` found no high-confidence secrets; platform admin env placeholders remained blank.
 - User manual QA passed after applying the local `PlatformAuditLog` migration: independent Cognito Platform Admin loaded `/platform-admin`, tenant list/detail/health/audit rendered, tenant switching worked without style overlay, tenant OWNER/EMPLOYEE were blocked, tenant onboarding/invites passed, `/virtual-office` realtime passed, and Dashboard/Reports/Compliance/Employees smoke passed.
 - Remaining deployment action: apply `20260607000000_platform_audit_log` and configure platform admin allowlists in deployed API env before deployed platform-admin testing.
+
+For commit `4e09788`, handoff/QA reports:
+
+- API typecheck, web typecheck, API lint, web lint, API build, and web build passed from `workmap/`.
+- `git diff --check` passed with only CRLF normalization warnings.
+- No Prisma migration or `prisma:generate` was needed because schema did not change.
+- Secret review found no real secrets in reviewed implementation files; one broad scan false positive was in unrelated untracked `docs/references/SkyOffice/yarn.lock`.
+- Code review confirmed manifest validation, frontend fallback, room/navigation/position bounds filtering, owner workspace manifest creation, backend navigation generation from manifest, current-user save bounds 400, realtime bounds `office:error`, readable room mapping, and active-manifest spawn follow-up.
+- User manual QA passed for current TMX map rendering, active-manifest safe spawn, saved-position restore, movement/collision/auto-walk/chair/contact drawer, readable room labels, two-user realtime movement, polling refresh/restore, new owner workspace default map/rooms/spawn, and Dashboard/Employees/Reports/Compliance/Settings/Invite/Platform Admin smoke.
+- Manual DB mutation for invalid/out-of-bounds saved position was skipped; this remains covered by code review and machine verification.
+- Non-blocking UX notes: saved-position restore may briefly show default spawn before jumping to saved backend position; chair interaction has no dedicated sitting pose/animation yet.

@@ -4,9 +4,9 @@
 
 The `/virtual-office` route renders a full-screen canvas virtual office. It currently uses:
 
-- A Tiled TMX map at `/maps/workmap2.tmx`.
+- A validated virtual-office map manifest, currently pointing at the Tiled TMX map `/maps/workmap2.tmx`.
 - Office tileset images under `public/modern-office`.
-- Local player state initialized at a fixed coordinate.
+- Local player state initialized from the active manifest safe/default spawn unless a valid saved backend position restores first.
 - Layered avatar assets from the avatar customization system.
 - Room zones, destinations, and remote players from validated virtual-office read APIs when safe, with `components/office/mockOfficeData.ts` fallback.
 - Keyboard movement and click/double-click map interactions.
@@ -97,11 +97,25 @@ Realtime movement added in commit `1d2836c`:
 - Polling positions remains active as fallback and reconciliation for People panel/profile/freshness stability.
 - Realtime movement does not persist every frame. Latest-position durability still uses the existing HTTP save loop.
 
+Safe map manifest architecture added in commit `4e09788`:
+
+- `WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST` in shared types centralizes current TMX path, map/canvas dimensions, tile size, default spawn, safe fallback spawn, collision layer names, render layer order, rooms, and navigation destinations.
+- Existing `OfficeMap.mapData` is now used as the manifest storage layer for new owner workspaces.
+- No Prisma schema migration was added.
+- Frontend `virtualOfficeMapAdapter.ts` validates API map, room, navigation, and position data before use.
+- Invalid or missing API map config falls back to the shared default manifest.
+- Mock/fallback rooms and navigation are derived from the default manifest rather than separate hardcoded coordinate lists.
+- Backend tenant onboarding creates default owner workspace map, rooms, and spawn from the manifest.
+- Backend `/virtual-office/navigation` is generated from the resolved manifest.
+- People panel and command palette can map backend room UUIDs and manifest destination ids to readable area names.
+- Current-user saved positions outside active manifest bounds are ignored or rejected; blocked/out-of-bounds local players relocate to the nearest walkable point around safe spawn.
+- If there is no saved backend position and the user has not moved locally, `OfficeMap` realigns the local player to the active manifest safe/default spawn after office data loads.
+
 ## Current Boundary
 
-The API integration now includes current-user latest-position restore/save, backend-backed avatar/display-name profile data, polling presence, and native WebSocket realtime movement. It still does not add backend map rendering, arbitrary user mutation, historical trails, or shared pub/sub for multi-instance realtime deployment.
+The API integration now includes current-user latest-position restore/save, backend-backed avatar/display-name profile data, polling presence, native WebSocket realtime movement, and validated manifest-driven map configuration. It still does not add a visual map editor, backend map rendering, arbitrary user mutation, historical trails, map-versioned saved positions, or shared pub/sub for multi-instance realtime deployment.
 
-The canvas source remains `/maps/workmap2.tmx`; do not use backend `OfficeMap.mapData` as the frontend canvas source unless a future task explicitly changes that architecture.
+The current default manifest still points at `/maps/workmap2.tmx`. Future map changes should update validated manifests in `OfficeMap.mapData`; do not scatter new hardcoded map dimensions, rooms, or spawn coordinates across frontend/backend files.
 
 Known coordinate caveat: backend room coordinates currently do not perfectly match the TMX/mock room zones. The same local player coordinate can show API-backed `Sales Zone` while fallback shows generic `Office`.
 

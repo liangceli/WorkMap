@@ -355,6 +355,8 @@ Current limitation: `GET /compliance/policy` does not return acknowledgement sta
 `GET /virtual-office/navigation` returns room-derived navigation destinations:
 
 - `id`, `name`, `type`, `anchor`, `bounds`, `autoStatus`, `peopleCount`
+- optional `roomId`
+- optional `description`
 
 `GET /virtual-office/map/:officeMapId/positions` returns:
 
@@ -398,6 +400,16 @@ Validation:
 - `roomId`, when present, must be a string.
 - Service validation ensures the map and optional room belong to the authenticated company.
 - As of commit `b68dd49`, optional `roomId` must be a backend OfficeRoom UUID shape. Invalid values such as local/mock ids return a controlled `400 BadRequestException` instead of reaching Prisma.
+- As of commit `4e09788`, coordinates must also be within the resolved active map manifest bounds. Out-of-bounds saves return controlled 400.
+
+Map manifest contract:
+
+- `OfficeMap.mapData` may contain a validated virtual-office map manifest.
+- New owner workspaces store the shared default manifest in `OfficeMap.mapData`.
+- Legacy or invalid `mapData` falls back to the shared default manifest at runtime.
+- Manifest-controlled values include TMX path, map/canvas dimensions, tile size, spawn points, collision layer names, render layer order, room definitions, and navigation destinations.
+- API rooms/navigation/positions should be interpreted in the active manifest pixel coordinate system.
+- Frontend and backend reject or ignore out-of-bounds rooms, navigation anchors/bounds, and positions rather than rendering unsafe data.
 
 QA-confirmed local API reads with Bearer token:
 
@@ -448,6 +460,7 @@ Rules:
 - The backend computes room scope as `companyId:officeMapId`; clients cannot select tenant/company scope.
 - `player:move` is accepted only after a valid join.
 - Optional `roomId` must belong to the joined office map.
+- Movement coordinates must be within the resolved active map manifest bounds; out-of-bounds socket movement emits `office:error`.
 - Movement snapshots are rate-limited server-side and broadcast only to other sockets in the same company/map room.
 - Movement broadcasts do not write to Prisma. Latest persisted position still uses `PUT /virtual-office/map/:officeMapId/positions/me`.
 
@@ -463,13 +476,14 @@ The loader validates response shapes before adapting them into frontend rooms, n
 
 Important contract assumptions:
 
-- Backend `zoneData`, navigation `anchor`, and navigation `bounds` must use the same pixel coordinate space as the current TMX map.
-- Backend `OfficeMap.mapData` is not used for frontend canvas rendering.
+- Backend `zoneData`, navigation `anchor`, and navigation `bounds` must use the active manifest pixel coordinate system.
+- Backend `OfficeMap.mapData` now stores the map manifest when valid; frontend falls back to the shared default manifest when it is missing/invalid.
 - API positions do not currently include frontend role/profile-route metadata; frontend maps role to `Team member`.
 
 ## Important Gaps
 
 - No shared pub/sub contract for multi-instance realtime broadcast has been added.
 - No historical position trail or arbitrary-user position mutation contract has been added.
+- No saved-position `mapVersion` field or strict stale-position invalidation contract has been added.
 - No final global identity/account or tenant-membership API contract has been added.
 - No persisted platform identity lifecycle, platform admin management API, tenant mutation, impersonation, or billing API has been added.

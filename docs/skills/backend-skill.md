@@ -43,6 +43,21 @@ Current-user latest-position persistence was added in commit `1a0a19f`.
 - Service path: existing `VirtualOfficeService.persistLatestPosition`.
 - Persistence behavior: upserts one latest `VirtualOfficePosition` row for the authenticated user.
 - Validation: existing service checks map/company ownership and optional room/map/company consistency.
+- As of commit `4e09788`, persisted positions are also validated against the resolved active map manifest bounds; out-of-bounds current-user saves return controlled 400.
+
+## Virtual Office Map Manifest
+
+Commit `4e09788` added the safe map expansion architecture without a Prisma schema change.
+
+- Existing `OfficeMap.mapData` JSON is the manifest storage layer.
+- New owner workspaces store `WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST` in `OfficeMap.mapData`.
+- Legacy or invalid `mapData` falls back to the shared default manifest at runtime.
+- The shared default manifest defines schema version, map key/version, display name, TMX path, map dimensions, tile size, canvas size, default spawn, safe fallback spawn, collision layer names, render layer order, room definitions, and navigation destinations.
+- `VirtualOfficeService` resolves and validates the manifest before generating navigation or validating positions.
+- `/virtual-office/navigation` is generated from manifest destinations rather than hardcoded room rectangles.
+- Navigation destinations can include `roomId` when a manifest destination maps to a backend `OfficeRoom`.
+- Tenant onboarding now creates the default office map, rooms, and owner spawn from the shared manifest.
+- No visual map editor, map-art replacement, map migration, or backend map renderer was added.
 
 ## Virtual Office Realtime
 
@@ -57,6 +72,7 @@ Commit `1d2836c` added native WebSocket realtime movement for `/virtual-office`.
 - Join validation: `office:join` requires `canAccessVirtualOffice()`, a UUID-shaped `officeMapId`, and an office map that belongs to the authenticated company.
 - Room isolation: room keys are backend-computed as `companyId:officeMapId`; clients cannot choose tenant/company scope.
 - Movement validation: `player:move` is accepted only after a validated join, with finite coordinates, supported direction/status, and optional room id belonging to the joined office map.
+- As of commit `4e09788`, join context carries resolved manifest bounds and out-of-bounds movement is rejected with `office:error`.
 - Broadcast behavior: movement is broadcast only to other sockets in the same company/map room; the sender is excluded.
 - Rate limiting: accepted movement snapshots are rate-limited per socket, with a minimum interval around 50ms.
 - Persistence boundary: realtime movement frames are not written to Prisma. Durable latest-position save/restore remains `PUT /virtual-office/map/:officeMapId/positions/me` plus positions polling.
@@ -235,6 +251,7 @@ Commit `14fb706` added `POST /auth/pilot-login`.
 - Auth service validates pilot login email, password presence, company slug, and pilot hash configuration.
 - Virtual office service checks office map and room ownership before persisting positions.
 - Virtual office service checks office map ownership before reading latest positions.
+- Virtual office service validates manifests and map bounds before generating navigation or accepting persisted positions.
 - User profile update validates current-user-only display name/avatar updates.
 
 ## Not Confirmed

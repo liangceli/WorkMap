@@ -20,6 +20,8 @@ Important areas:
 - `lib/avatar/avatarProfile.ts`: compact backend layered avatar reference encode/decode helpers.
 - `lib/workflow/workflowState.ts`: frontend-only demo onboarding/login state.
 - `lib/theme/workmapTheme.ts`: central theme tokens.
+- `lib/office/virtualOfficeMapAdapter.ts`: validates API map manifest/room/navigation/position data and derives safe fallback map config.
+- `lib/office/officeNavigationConfig.ts`: derives office navigation destinations from the shared default map manifest.
 
 ## Routes Confirmed
 
@@ -67,6 +69,19 @@ Pilot readiness API wrappers:
 - `lib/api/platformAuth.ts` uses Cognito-only platform auth and `/platform/me`; it intentionally does not call tenant `/auth/me`.
 
 For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring mapped Cognito session, then stored pilot Bearer session, then development dev-token fallback, and passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
+
+Map manifest behavior:
+
+- Round 6 added a shared default virtual-office map manifest and frontend adapter.
+- `useVirtualOfficeData.ts` routes API map/room/navigation/position data through `virtualOfficeMapAdapter.ts`.
+- `OfficeMap.tsx` uses the active manifest for TMX path, canvas size, collision layer names, render layer order, default spawn, and safe fallback spawn.
+- Invalid API map config falls back to the default manifest.
+- Rooms with invalid or out-of-bounds `zoneData` are filtered out.
+- Navigation destinations with invalid or out-of-bounds anchors/bounds are filtered out.
+- Player positions outside active manifest bounds are ignored before rendering/restoring.
+- With no saved backend position and no local movement, `OfficeMap` realigns the local player to the active manifest safe/default spawn after office data loads.
+- Saved backend position restore remains authoritative when valid.
+- `mockOfficeData.ts` and `officeNavigationConfig.ts` derive fallback rooms/navigation from the shared default manifest.
 
 Pilot login/session:
 

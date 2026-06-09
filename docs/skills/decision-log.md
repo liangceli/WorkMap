@@ -120,6 +120,14 @@ Reason: Platform operations need a safe cross-tenant metadata/health/audit surfa
 
 Trade-off: This creates a clean boundary and privacy-safe read-only platform surface now, but bootstrap uses backend env allowlists rather than a persisted platform identity lifecycle/admin console. `PlatformAuditLog` is intentionally separate from tenant `AuditLog` and does not foreign-key to `Company`, so historical deleted-tenant audit references may resolve to `targetCompany: null`.
 
+## 2026-06-09 - Manifest-Driven Virtual Office Map Architecture
+
+Decision: Use validated virtual-office map manifests stored in existing `OfficeMap.mapData`, with a shared default manifest as runtime fallback, instead of adding a schema migration or replacing the current TMX art.
+
+Reason: Future map expansion/replacement needs one source of truth for TMX path, canvas size, collision/render layers, spawns, rooms, navigation, and bounds so avatar restore, pathfinding, People labels, realtime, polling, and tenant onboarding do not break when map data changes.
+
+Trade-off: This keeps Round 6 safe and migration-free, but saved positions still do not store `mapVersion`. Runtime bounds checks and safe-spawn relocation mitigate stale/invalid positions now; strict stale-position invalidation needs future position version metadata and manifest-vs-TMX validation tooling.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

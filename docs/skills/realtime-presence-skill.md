@@ -80,12 +80,15 @@ Commit `1d2836c` added native WebSocket movement for same-company, same-office-m
 - Frontend sends visible movement around 110ms, hidden-tab movement around 1000ms, and important stop/room/status changes promptly.
 - Realtime movement does not write each frame to the database.
 - Remote avatar rendering interpolates toward latest realtime targets and snaps for large jumps or stale state.
+- As of commit `4e09788`, realtime join context carries the resolved active map manifest bounds.
+- Out-of-bounds realtime movement is rejected with `office:error`; the websocket payload shape did not change.
 
 ## Not Confirmed
 
 - No server-sent events implementation was found.
 - No shared pub/sub adapter for multi-instance WebSocket broadcast was added.
 - No historical position trail was added.
+- No persisted map-version invalidation was added for saved positions.
 - Realtime manual QA passed locally for two browsers in one workspace, but deployed WSS smoke is still pending.
 - Backend-backed `layered:v2:` avatar references can now render real layered avatars for current and remote API users when `User.avatarId` is present.
 - Users without valid backend `avatarId` can still fall back to `WM` marker until they complete avatar/profile setup.

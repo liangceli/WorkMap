@@ -1,9 +1,19 @@
 # Current Status
 
-Last updated: 2026-06-08.
+Last updated: 2026-06-09.
 
 ## Latest Accepted Work
 
+- Commit `4e09788` (`feat: add safe virtual office map manifest architecture`) completed STAGE 2 Round 6: safe, data-driven virtual-office map expansion architecture.
+- Shared types now include `WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST`, manifest types, bounds helpers, and runtime validation for TMX path, map/canvas dimensions, spawn points, collision layers, render layers, rooms, and navigation destinations.
+- `OfficeMap.mapData` is now the manifest storage layer for new owner workspaces; no Prisma schema migration was added.
+- Frontend `/virtual-office` now routes API map/room/navigation/position data through `virtualOfficeMapAdapter.ts`, validates bounds, and falls back to the shared default manifest safely when API map data is missing or invalid.
+- TMX path, canvas size, collision layer names, render layer order, default/safe spawn, mock rooms, and navigation destinations are now manifest-driven instead of scattered hardcoded frontend/backend constants.
+- Backend tenant onboarding now creates owner workspace map, rooms, and owner spawn from the shared manifest.
+- Backend virtual-office navigation now derives from the resolved manifest, includes destination `roomId` when available, validates persisted positions against map bounds, and falls back safely for legacy/invalid `mapData`.
+- `PUT /virtual-office/map/:officeMapId/positions/me` rejects out-of-bounds coordinates with controlled 400, and realtime movement rejects out-of-bounds socket movement with `office:error` without changing the WebSocket protocol.
+- Round 6 follow-up fixed the no-saved-position path: after active office data loads, an untouched local player realigns to the active manifest's safe/default spawn, while saved backend position restore remains authoritative.
+- QA reports code review, machine verification, and required manual QA passed for unchanged map rendering, safe spawn, saved-position restore, movement/collision/pathfinding/chair/contact drawer, readable room labels, realtime/polling, new owner workspace default map/spawn, and Dashboard/Employees/Reports/Compliance/Settings/Invite/Platform Admin smoke.
 - Commit `afe65e7` (`feat: add independent platform admin boundary`) completed STAGE 2 Round 5: an independent Platform Admin boundary separate from tenant/company users.
 - Platform Admin now authenticates as a Cognito platform identity through backend env allowlists, not through tenant `User.role`, `User.companyId`, tenant OWNER reuse, or tenant `/auth/me`.
 - Backend now includes `PlatformContextGuard`, `PlatformRequestContext`, `CurrentPlatformContext`, `PlatformModule`, and `/platform/*` APIs for platform identity, privacy-safe tenant metadata/detail/health, and platform audit summaries.
@@ -97,7 +107,7 @@ Last updated: 2026-06-08.
 - Commit `abe673c` (`Wire virtual office to read APIs with mock fallback`) connected `/virtual-office` to existing virtual-office read APIs in a conservative read-only way.
 - The frontend now attempts `GET /virtual-office/map`, `GET /virtual-office/navigation`, and then `GET /virtual-office/map/:officeMapId/positions` after a valid map id is available.
 - `useVirtualOfficeData.ts` starts from mock data, validates API response shapes, adapts safe rooms/navigation/remote player fields, and keeps mock fallback for unavailable, unauthorized, invalid, empty, or partial API responses.
-- Canvas rendering still uses `/maps/workmap2.tmx`; backend `OfficeMap.mapData` is not used as the frontend canvas source.
+- Canvas rendering currently uses the default manifest's `/maps/workmap2.tmx`; valid backend `OfficeMap.mapData` can now provide the active map manifest, with default-manifest fallback when missing or invalid.
 - No backend business logic outside current-user latest-position persistence, Prisma changes, websocket, or SSE realtime infrastructure were added.
 
 ## Confirmed Current State
@@ -110,7 +120,7 @@ Last updated: 2026-06-08.
 - `/onboarding/invite` lets Owners create copyable invite links and review recent company-scoped invitations.
 - `/invite/[token]` lets invited employees sign in with Cognito, accept a matching invite, and continue through required onboarding steps.
 - `/employees` can render same-tenant backend users from `GET /users` and falls back to labeled examples only when API auth/data is unavailable.
-- `/virtual-office` renders a canvas-based `OfficeMap` using `/maps/workmap2.tmx`, office tilesets, layered avatar assets, local movement, collision detection, click/double-click navigation, chair interaction, and remote office data that can come from validated read APIs or mock fallback.
+- `/virtual-office` renders a canvas-based `OfficeMap` using the active validated map manifest, currently pointing at `/maps/workmap2.tmx`, with office tilesets, layered avatar assets, local movement, collision detection, click/double-click navigation, chair interaction, realtime movement, polling fallback, and remote office data that can come from validated read APIs or mock fallback.
 - `/dashboard` can now show pilot readiness across API health, auth/session, remote presence, compliance policy, and reports usage.
 - `/reports` can now show authenticated current-user app/domain usage summaries from the API, with sparse-data and pilot-example labels where backend aggregate data is not available.
 - Backend exposes guarded endpoints for auth, tenant onboarding, invitations, users, companies, devices, reports, virtual office, integrations, and compliance.
@@ -127,6 +137,10 @@ Last updated: 2026-06-08.
 - The `PlatformAuditLog` migration must be applied before `/platform/*` audit writes work against a database.
 - Platform audit rows do not foreign-key to `Company`; historical rows for deleted tenants may show `targetCompany: null`.
 - Platform Admin is read-only in this round. No support impersonation, tenant mutation, suspend/delete tenant, billing, or support workflow exists.
+- Saved virtual-office positions still do not persist `mapVersion`; strict stale-position invalidation remains future work.
+- Current runtime safety handles out-of-bounds and blocked virtual-office positions, but there is no full historical saved-position migration yet.
+- The default virtual-office manifest still references the current TMX map art and layer names.
+- Future map replacement should add automated manifest-vs-TMX validation in CI or a dev script.
 - Department/team-level RBAC is still coarse: TEAM_LEAD/MANAGER/HR_ADMIN visibility is company-level where the data model lacks team membership boundaries.
 - Frontend role visibility is advisory UX; backend service checks are the security boundary.
 - Direct URL access to some frontend-only/mock pages can still render page shells, but protected backend data/actions are constrained by API permissions.
@@ -166,7 +180,7 @@ Last updated: 2026-06-08.
 - Production pilot login requires explicit `WORKMAP_PILOT_PASSWORD_HASH`; without it, pilot login is disabled in production.
 - Compliance acknowledgement readback is not exposed by the backend policy endpoint; frontend stores a browser marker only after successful backend acknowledgement.
 - The dev auth bridge assumes seeded demo users from `prisma/seed.ts` exist locally, unless public dev env overrides are supplied.
-- Backend `zoneData`, navigation `anchor`, and navigation `bounds` must match the current TMX pixel coordinate system to be accepted safely.
+- Backend `zoneData`, navigation `anchor`, and navigation `bounds` must match the active virtual-office manifest pixel coordinate system to be accepted safely.
 - API-derived remote players use fallback role text (`Team member`) and may route profiles by raw user id.
 - Current user's latest local position can now be restored from and saved to the backend in development/API-backed mode.
 - Realtime WebSocket movement is implemented for remote players, while polling remains the reconciliation/fallback path and latest-position durability still uses HTTP saves.
@@ -176,6 +190,9 @@ Last updated: 2026-06-08.
 ## Recommended Next Tasks
 
 - Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.
+- Add map-version metadata to saved virtual-office positions or a companion version field before strict map replacement/stale-position invalidation.
+- Add automated manifest-vs-TMX validation so future map art/layer changes cannot silently break collision, render order, spawn, rooms, or navigation.
+- Keep future map editor/admin work constrained to writing validated manifests into `OfficeMap.mapData`.
 - Design a long-term platform identity/admin lifecycle to replace env allowlist bootstrap when support operations mature.
 - Apply `20260607000000_platform_audit_log` in deployed databases before deployed `/platform-admin` testing.
 - Configure platform admin allowlists only in secure deployment env settings and run deployed platform-admin smoke with a configured Cognito platform identity plus blocked tenant OWNER/EMPLOYEE checks.
