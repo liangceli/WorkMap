@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { AvatarDirection, OfficeRoomType, Prisma, UserRole, UserStatus } from "@prisma/client";
 import type { CognitoJwtPayload, RequestContext } from "@workmap/auth";
+import { WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST, type UserPresenceStatus } from "@workmap/shared-types";
 import { getVerifiedCognitoIdentity } from "../auth/cognito-identity.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -24,8 +25,6 @@ type TenantUser = {
     slug: string;
   };
 };
-
-const DEFAULT_OWNER_SPAWN = { x: 160, y: 545 } as const;
 
 @Injectable()
 export class TenantOnboardingService {
@@ -273,85 +272,54 @@ async function createDefaultWorkspaceData(
     workspaceName: string;
   },
 ) {
+  const mapManifest = WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST;
   const officeMap = await tx.officeMap.create({
     data: {
       companyId: input.companyId,
       name: input.workspaceName,
       slug: "default-office",
-      width: 1280,
-      height: 720,
-      tileSize: 32,
+      width: mapManifest.dimensions.width,
+      height: mapManifest.dimensions.height,
+      tileSize: mapManifest.dimensions.tileSize,
       isDefault: true,
-      mapData: {
-        version: 1,
-        layers: ["floor", "wall", "furniture", "collision", "interaction"],
-      },
+      mapData: mapManifest as unknown as Prisma.InputJsonValue,
     },
     select: {
       id: true,
     },
   });
 
-  const openOffice = await tx.officeRoom.create({
-    data: {
-      companyId: input.companyId,
-      officeMapId: officeMap.id,
-      name: "Open Office",
-      type: OfficeRoomType.OPEN_OFFICE,
-      autoStatus: UserStatus.AVAILABLE,
-      zoneData: rectangleZone(0, 0, 640, 360),
-    },
-    select: {
-      id: true,
-    },
-  });
+  const roomsByKey = new Map<string, { id: string }>();
+  for (const room of mapManifest.rooms) {
+    const createdRoom = await tx.officeRoom.create({
+      data: {
+        companyId: input.companyId,
+        officeMapId: officeMap.id,
+        name: room.name,
+        type: room.type as OfficeRoomType,
+        autoStatus: toPrismaStatus(room.autoStatus),
+        zoneData: rectangleZone(room.key, mapManifest.mapKey, mapManifest.mapVersion, room.bounds),
+      },
+      select: {
+        id: true,
+      },
+    });
 
-  await tx.officeRoom.createMany({
-    data: [
-      {
-        companyId: input.companyId,
-        officeMapId: officeMap.id,
-        name: "Focus Room",
-        type: OfficeRoomType.FOCUS,
-        autoStatus: UserStatus.FOCUS,
-        zoneData: rectangleZone(640, 0, 320, 220),
-      },
-      {
-        companyId: input.companyId,
-        officeMapId: officeMap.id,
-        name: "Break Room",
-        type: OfficeRoomType.BREAK,
-        autoStatus: UserStatus.BREAK,
-        zoneData: rectangleZone(960, 0, 320, 220),
-      },
-      {
-        companyId: input.companyId,
-        officeMapId: officeMap.id,
-        name: "Meeting Room",
-        type: OfficeRoomType.MEETING,
-        autoStatus: UserStatus.BUSY,
-        zoneData: rectangleZone(640, 220, 320, 250),
-      },
-      {
-        companyId: input.companyId,
-        officeMapId: officeMap.id,
-        name: "Team Zone",
-        type: OfficeRoomType.DEPARTMENT_ZONE,
-        autoStatus: UserStatus.AVAILABLE,
-        zoneData: rectangleZone(0, 360, 640, 360),
-      },
-    ],
-  });
+    roomsByKey.set(room.key, createdRoom);
+  }
+
+  const ownerSpawn = mapManifest.defaultSpawn;
+  const ownerSpawnRoom = ownerSpawn.roomKey ? roomsByKey.get(ownerSpawn.roomKey) : undefined;
 
   await tx.virtualOfficePosition.create({
     data: {
       companyId: input.companyId,
       userId: input.userId,
       officeMapId: officeMap.id,
-      officeRoomId: openOffice.id,
-      x: DEFAULT_OWNER_SPAWN.x,
-      y: DEFAULT_OWNER_SPAWN.y,
-      direction: AvatarDirection.DOWN,
+      officeRoomId: ownerSpawnRoom?.id,
+      x: ownerSpawn.x,
+      y: ownerSpawn.y,
+      direction: ownerSpawn.direction.toUpperCase() as AvatarDirection,
       isMoving: false,
       status: UserStatus.AVAILABLE,
     },
@@ -377,8 +345,26 @@ async function createDefaultWorkspaceData(
   });
 }
 
-function rectangleZone(x: number, y: number, width: number, height: number) {
-  return { shape: "rectangle", x, y, width, height };
+function rectangleZone(
+  roomKey: string,
+  mapKey: string,
+  mapVersion: string,
+  bounds: { x: number; y: number; width: number; height: number },
+) {
+  return {
+    shape: "rectangle",
+    roomKey,
+    mapKey,
+    mapVersion,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+  };
+}
+
+function toPrismaStatus(status: UserPresenceStatus) {
+  return status.toUpperCase() as UserStatus;
 }
 
 function slugify(value: string) {

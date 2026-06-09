@@ -149,8 +149,10 @@ export type WorkMapApiOfficeMap = {
 
 export type WorkMapApiNavigationDestination = {
   id: string;
+  roomId?: string;
   name: string;
   type: string;
+  description?: string;
   anchor?: unknown;
   bounds?: unknown;
   autoStatus?: UserPresenceStatus | null;

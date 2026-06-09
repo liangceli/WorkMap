@@ -2,162 +2,172 @@
 
 ## 1. Original Task Brief
 
-STAGE 2 Round 5 Platform Admin Boundary follow-up fix.
+STAGE 2 Round 6: Map Expansion Safe Architecture.
 
-Fix the QA blocker: Platform Admin must be an independent platform-level identity, not a tenant/company user and not a tenant OWNER reuse. A configured Platform Admin identity must authenticate and access `/platform-admin` even when it does not belong to any tenant/company. Tenant OWNER, EMPLOYEE, and IT_ADMIN users must still receive 403 from `/platform/*` and blocked UI on `/platform-admin`. Platform Admin must see only privacy-safe tenant metadata, health, and audit summaries.
+Implement a safe, data-driven virtual office map expansion architecture so future map decoration, replacement, or expansion does not break avatar spawn, position restore, collision, pathfinding, room labels, navigation destinations, People panel room context, realtime movement, polling fallback, contact drawer hit testing, or tenant-specific workspace setup.
 
-Preserve Cognito auth, pilot/dev fallback for tenant users, tenant onboarding, invite flow, strict tenant RBAC, realtime virtual office, polling fallback, Dashboard, Reports, Compliance, and Employees. Do not implement support impersonation, tenant mutation, billing, enterprise SSO/SAML/MFA, desktop agent, browser extension, map expansion, or websocket changes.
-
-Follow-up frontend manual QA fix: clicking tenants in `/platform-admin` triggered the React/Next style overlay because the tenant button mixed `border` shorthand with active-state `borderColor`. This was fixed without changing backend auth/schema or platform data behavior.
+Do not build a visual map editor, do not redesign the current map, do not replace TMX art/assets, do not rewrite websocket/realtime movement, and do not troubleshoot Render/Vercel deployment.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/packages/auth/src/index.ts` | Added `PlatformRequestContext` and kept platform capabilities separate from tenant `RequestContext`/roles. |
-| `workmap/apps/api/src/modules/auth/current-platform-context.decorator.ts` | Added a dedicated decorator/request key for platform-level request context. |
-| `workmap/apps/api/src/modules/auth/platform-admin-allowlist.ts` | Added backend-only Cognito email/sub allowlist resolution for platform admin bootstrap. |
-| `workmap/apps/api/src/modules/auth/platform-context.guard.ts` | Added a guard that authenticates Cognito directly, allows only configured platform identities, and returns 403 for valid tenant users. |
-| `workmap/apps/api/src/modules/auth/auth.module.ts` | Registered/exported the new platform guard. |
-| `workmap/apps/api/src/modules/platform/platform.module.ts` | Added the platform-admin backend module. |
-| `workmap/apps/api/src/modules/platform/platform.controller.ts` | Added `/platform/me`, tenant list/detail/health, and platform audit endpoints using `PlatformContextGuard`. |
-| `workmap/apps/api/src/modules/platform/platform.service.ts` | Returns privacy-safe tenant metadata/health and writes platform-level audit rows without tying global actions to a customer tenant. |
-| `workmap/apps/api/src/app.module.ts` | Registered `PlatformModule`. |
-| `workmap/prisma/schema.prisma` | Added `PlatformAuditLog` for independent platform audit events. |
-| `workmap/prisma/migrations/20260607000000_platform_audit_log/migration.sql` | Adds the `PlatformAuditLog` table and indexes. |
-| `workmap/apps/web/lib/api/apiTypes.ts` | Added platform context and platform response types. |
-| `workmap/apps/web/lib/api/platformApi.ts` | Added frontend wrappers for `/platform/*`, including `/platform/me`. |
-| `workmap/apps/web/lib/api/platformAuth.ts` | Added Cognito-only platform auth helper that does not call tenant `/auth/me`. |
-| `workmap/apps/web/app/platform-admin/page.tsx` | Updated the page to use independent platform auth and privacy-safe platform APIs; fixed tenant button styles to use consistent longhand border properties during active/inactive rerenders. |
-| `workmap/apps/web/components/layout/AppShell.tsx` | Shows Platform Admin navigation/session summary only when `/platform/me` succeeds. |
-| `workmap/apps/web/app/login/callback/page.tsx` | Routes configured platform admins to `/platform-admin` after Cognito callback before tenant onboarding fallback. |
-| `workmap/apps/web/components/login/MockLoginPanel.tsx` | Mirrors callback routing for the existing Cognito continue path. |
-| `workmap/.env.example` | Added blank platform admin allowlist placeholders. No real identities were added. |
+| `workmap/packages/shared-types/src/index.ts` | Added the default virtual office map manifest, manifest types, bounds helpers, and runtime validator. |
+| `workmap/apps/web/lib/office/virtualOfficeMapAdapter.ts` | New frontend adapter that validates API map/room/navigation/position data and falls back to the default manifest safely. |
+| `workmap/apps/web/lib/office/officeNavigationConfig.ts` | Replaced hardcoded destination constants with destinations derived from the shared default manifest. |
+| `workmap/apps/web/components/office/mockOfficeData.ts` | Replaced hardcoded mock room zones with zones derived from the shared default manifest. |
+| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | Routes API map data through the validated adapter, tracks map manifest/config source, validates rooms/navigation/positions, and preserves fallback behavior. |
+| `workmap/apps/web/components/office/OfficeMap.tsx` | Uses manifest TMX path, canvas size, collision layers, render layer order, and safe spawn; rejects invalid restored positions, relocates blocked/out-of-bounds players to safe spawn, and now aligns the untouched no-saved-position local player to the active manifest spawn after office data loads. |
+| `workmap/apps/web/components/office/OfficeSidePanel.tsx` | Maps both destination ids and backend room UUIDs to readable area names. |
+| `workmap/apps/web/components/office/OfficeCommandPalette.tsx` | Maps both destination ids and backend room UUIDs to readable area names. |
+| `workmap/apps/web/lib/api/apiTypes.ts` | Added optional `roomId` and `description` on navigation destination responses. |
+| `workmap/apps/api/src/modules/tenant-onboarding/tenant-onboarding.service.ts` | Creates default owner workspace map, rooms, and owner spawn from the shared manifest. |
+| `workmap/apps/api/src/modules/virtual-office/virtual-office.service.ts` | Generates navigation from manifest data, validates persisted positions against map bounds, and falls back safely for legacy/invalid mapData. |
+| `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts` | Carries manifest bounds in realtime join context and rejects out-of-bounds realtime movement without changing the websocket protocol. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA. |
 
-Pre-existing workspace notes:
+Pre-existing workspace note:
 
-- `docs/ai-handoff/latest-qa.md` is modified because it contains the QA input/blocker. It was read as source context and not used as implementation code.
-- `docs/references/SkyOffice/` is unrelated untracked workspace content and was not modified.
+- `docs/references/SkyOffice/` remains unrelated untracked workspace content and was not modified.
 
 ## 3. Implementation Summary
 
-Implemented the platform-admin boundary as an independent Cognito platform context.
+Implemented the Round 6 safe map architecture without Prisma schema changes.
 
-Key behavior:
+Core approach:
 
-- Platform Admin no longer depends on `User.role`, `User.companyId`, tenant OWNER, or tenant `/auth/me`.
-- Platform endpoints use `PlatformContextGuard`, not tenant `RequestContextGuard`.
-- `PlatformContextGuard` verifies a Cognito bearer token, extracts verified Cognito identity, then checks backend env allowlists:
-  - `WORKMAP_PLATFORM_ADMIN_EMAILS`
-  - `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`
-- A configured platform admin gets a `PlatformRequestContext` with `platformRole: "PLATFORM_ADMIN"` and Cognito identity fields.
-- Valid tenant users who are not configured platform admins receive 403 from `/platform/*`.
-- Missing/invalid Cognito platform credentials receive 401.
-- Tenant OWNER does not imply platform access.
+- Use existing `OfficeMap.mapData` JSON as the map manifest storage layer.
+- Add a shared default manifest in `@workmap/shared-types`.
+- Make owner workspace creation write the default manifest into `OfficeMap.mapData`.
+- Make frontend and backend validate manifest/room/navigation/position data before trusting it.
+- Fall back to the shared default manifest when API map config is missing or invalid.
+- Keep the current TMX map art and rendering behavior functionally unchanged.
 
-No support impersonation, tenant mutation, platform billing, or cross-tenant employee activity drill-down was added.
+No visual map editor, map art replacement, realtime rewrite, schema migration, or deployment troubleshooting was added.
 
-Frontend QA fix:
+Round 6 QA follow-up:
 
-- The tenant selector button now uses `borderWidth`, `borderStyle`, and `borderColor` consistently in both base and active styles.
-- It no longer mixes `border` shorthand with `borderColor`, which avoids the React dev overlay when switching active tenants.
-- Platform Admin identity, backend capability checks, Cognito-only platform auth, privacy-safe metadata, and `PlatformAuditLog` behavior were not changed by this follow-up.
+- Fixed the no-saved-position path so `OfficeMap` no longer keeps the module-level default spawn after a valid active `officeData.mapManifest` loads.
+- If the current user has no restored backend position and has not moved locally, the local player is initialized/relocated from the active manifest's safe/default spawn.
+- The existing saved-position restore path remains authoritative.
+- The existing blocked/out-of-bounds relocation path after TMX/collision load remains unchanged.
 
-## 4. User-Visible Changes
+## 4. Current Map Architecture Audit
 
-- `/platform-admin` can now be opened by a configured Cognito platform admin even if that Cognito identity has no WorkMap tenant/company user.
-- Non-platform tenant OWNER/EMPLOYEE/IT_ADMIN users are blocked from `/platform-admin`.
-- AppShell shows Platform Admin navigation only when `/platform/me` succeeds.
-- Login/callback and the existing Cognito continue path route configured platform admins to `/platform-admin` instead of tenant onboarding.
-- Platform Admin sees only safe tenant metadata, readiness/health summaries, and platform audit events.
+Existing architecture found during audit:
 
-## 5. Technical Notes
+- TMX rendering loads `/maps/workmap2.tmx` in `OfficeMap.tsx`.
+- The TMX file is 50 x 30 tiles at 32px each, so current pixel bounds are 1600 x 960.
+- Collision is derived from named TMX layers.
+- Pathfinding uses the parsed TMX tile grid and collision grid.
+- Chair interaction is derived from the `chairs` TMX layer.
+- Contact drawer hit testing uses avatar proximity in pixel coordinates.
+- People panel room labels use `roomId` and destination names.
+- Realtime movement joins by verified company + `officeMapId`.
+- Polling fallback fetches `/virtual-office/map/:officeMapId/positions`.
+- Owner workspace creation previously duplicated map width/height, rooms, and owner spawn in backend code.
+- Frontend fallback rooms/navigation previously duplicated current-map coordinates in separate files.
 
-### Independent Platform Context
+Hardcoded assumptions reduced this round:
 
-Tenant context remains:
+- TMX path is now manifest-driven.
+- Canvas size is now manifest-driven.
+- Collision layer names are now manifest-driven.
+- Render layer order is now manifest-driven.
+- Default and safe fallback spawn are now manifest-driven.
+- Mock/fallback rooms and navigation are now derived from the manifest.
+- Owner workspace default rooms/spawn/mapData are now generated from the manifest.
 
-```ts
-RequestContext = {
-  companyId: string;
-  userId: string;
-  role: WorkMapRole;
-}
-```
+Known remaining current-map assumptions:
 
-Platform context is separate:
+- The manifest still names current TMX collision/render layers.
+- The visual TMX art remains the current map.
+- Chair interaction still relies on the TMX `chairs` layer.
+- Full stale-position version migration is not implemented because `VirtualOfficePosition` has no persisted map version field yet.
 
-```ts
-PlatformRequestContext = {
-  platformRole: "PLATFORM_ADMIN";
-  identity: {
-    email: string;
-    cognitoSub: string;
-    displayName: string;
-  };
-  source: "cognito";
-}
-```
+## 5. Map Config / Manifest Strategy
 
-This keeps tenant RBAC and platform RBAC from being accidentally merged.
+Added `WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST` with:
 
-### Platform Endpoints
+- `schemaVersion`
+- `mapKey`
+- `mapVersion`
+- `displayName`
+- `tmxPath`
+- map dimensions and tile size
+- canvas size
+- default spawn
+- safe fallback spawn
+- collision layer names
+- render layer order
+- room definitions
+- navigation destinations
 
-Added:
+Validation helper:
 
-- `GET /platform/me`
-- `GET /platform/tenants`
-- `GET /platform/tenants/:companyId`
-- `GET /platform/tenants/:companyId/health`
-- `GET /platform/audit`
+- `validateVirtualOfficeMapManifest()`
+- `isVirtualOfficePointInBounds()`
+- `isVirtualOfficeRectInBounds()`
 
-Privacy-safe fields include:
+Storage strategy:
 
-- company id/name/slug
-- created/updated timestamps
-- owner/user/employee counts
-- device/invite/integration counts
-- policy configured yes/no
-- default office map configured yes/no
-- readiness flags
-- latest aggregate activity timestamp
-- latest aggregate virtual-office position timestamp
+- New owner workspaces store the manifest in existing `OfficeMap.mapData`.
+- No Prisma migration was required.
+- Existing/legacy maps without a valid manifest fall back to the shared default manifest at runtime.
 
-Excluded:
+## 6. Room / Zone / Navigation Validation
 
-- employee app/domain details
-- browsing details
-- message content
-- virtual-office movement history
-- secrets/tokens
-- raw cross-tenant employee activity rows
+Frontend:
 
-### Platform Audit
+- `virtualOfficeMapAdapter.ts` validates API rooms, navigation destinations, anchors, bounds, and player positions.
+- Rooms with invalid or out-of-bounds `zoneData` are filtered out.
+- Navigation destinations with invalid anchors/bounds are filtered out.
+- Player positions outside map bounds are ignored rather than rendered or restored.
+- If API rooms/navigation are invalid or empty, the UI falls back to default manifest data for that part.
 
-Added `PlatformAuditLog` so platform actions are not misleadingly forced into tenant `AuditLog`.
+Backend:
 
-Logged actions:
+- `/virtual-office/navigation` is generated from the resolved manifest.
+- Destination `roomId` is included when a manifest destination maps to a backend `OfficeRoom`.
+- People panel and command palette can map backend room UUIDs to readable destination names.
+- `PUT /virtual-office/map/:officeMapId/positions/me` rejects out-of-bounds coordinates with controlled 400.
+- Realtime movement rejects out-of-bounds socket movement with a controlled `office:error` event.
 
-- `PLATFORM_TENANT_LIST_VIEWED`
-- `PLATFORM_TENANT_DETAIL_VIEWED`
-- `PLATFORM_TENANT_HEALTH_VIEWED`
-- `PLATFORM_AUDIT_VIEWED`
+## 7. Spawn Safety / Stale Position Behavior
 
-Global platform actions have no `targetCompanyId`. Tenant-targeted reads include `targetCompanyId`. The table stores platform actor email/sub/displayName/platformRole without requiring a tenant `User`.
+Spawn behavior:
 
-### Frontend Platform Auth
+- Owner default workspace spawn now comes from `manifest.defaultSpawn`.
+- Frontend fallback/local spawn now comes from `manifest.safeFallbackSpawn`.
+- When `officeData.mapManifest` is loaded and there is no backend current-user position, an untouched local player is realigned to the active manifest safe spawn instead of staying on the shared default manifest spawn.
+- The active-spawn realignment sets the existing persist guard so the old default spawn is not saved back to the backend during the same render cycle.
+- If an API-restored current-user position is out of manifest bounds, the frontend uses safe spawn instead.
+- After TMX/collision load, if the player is blocked or out-of-bounds, the frontend relocates to the nearest walkable point around safe spawn.
 
-`getWorkMapPlatformApiAuthOptions()` uses Cognito session tokens and `/platform/me`. It intentionally does not call tenant `/auth/me`, so independent platform admins are not forced into company onboarding or tenant mapping.
+Stale position behavior:
 
-The existing tenant auth helper remains unchanged for tenant app surfaces.
+- There is no persisted map version on `VirtualOfficePosition` yet.
+- Current mitigation is runtime safety:
+  - out-of-bounds positions are rejected/ignored
+  - blocked restored positions are relocated to safe spawn
+  - realtime out-of-bounds movement is rejected
+- Future strict map-version invalidation should add map version metadata to saved positions or a companion position-version field.
 
-## 6. Verification Results
+## 8. Realtime / Polling Compatibility
 
-Commands run from `workmap/`:
+- Realtime still joins by verified tenant context + `officeMapId`.
+- Websocket protocol was not changed.
+- Realtime join context now carries the resolved manifest for bounds checks.
+- Movement broadcasts still include the same player state payload shape.
+- Polling still calls `/virtual-office/map/:officeMapId/positions`.
+- Polling positions are validated client-side against the active manifest before rendering.
+- Remote interpolation continues to use incoming pixel coordinates and no longer needs fixed old map dimensions.
+
+## 9. Verification Results
+
+Commands run from `workmap/` and rerun after the Round 6 spawn follow-up:
 
 ```powershell
-pnpm prisma:generate
 pnpm --filter @workmap/api typecheck
 pnpm --filter @workmap/web typecheck
 pnpm --filter @workmap/api lint
@@ -168,83 +178,68 @@ pnpm --filter @workmap/web build
 
 Results:
 
-- `pnpm prisma:generate` passed after stopping local WorkMap node processes that were locking the Prisma engine DLL.
 - API typecheck passed.
 - Web typecheck passed.
 - API lint passed.
 - Web lint passed.
 - API build passed.
 - Web build passed.
-- Web build still prints the existing warning that the Next.js plugin was not detected in ESLint config.
+- Web build still prints the existing Next.js ESLint plugin warning.
 - `workmap/apps/web/tsconfig.tsbuildinfo` was restored after build verification.
-
-Follow-up frontend style fix verification:
-
-- `pnpm --filter @workmap/web typecheck` passed.
-- `pnpm --filter @workmap/web lint` passed.
-- `pnpm --filter @workmap/web build` passed.
-- No backend files were changed for this specific frontend QA bug, so API verification was not rerun.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was restored again after web build.
-
-Secret scan:
-
-- Ran a high-confidence local scan excluding `.env`, `node_modules`, `.next`, and `*.tsbuildinfo`.
-- Checked for AWS key-shaped values, private key blocks, non-empty secret env assignments, and non-empty committed `WORKMAP_PLATFORM_ADMIN_EMAILS` / `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`.
-- Result: no high-confidence secret matches.
 
 Not run:
 
-- The new migration was not applied to a database in this chat.
+- No Prisma migration or `prisma:generate` was needed because schema did not change.
 - No browser manual QA was run in this chat.
-- No Render/Vercel deployed smoke was run, per task scope.
+- No deployed Render/Vercel smoke was run, per task scope.
 
-## 7. Manual QA Suggestions
+## 10. Manual QA Suggestions
 
-Before manual QA:
+Use local ports consistently:
 
-1. Apply the new Prisma migration locally using the repo's normal migration flow.
-2. Configure a real platform admin identity directly in local `.env` or platform env settings.
-3. Use `WORKMAP_PLATFORM_ADMIN_EMAILS` and/or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`.
-4. Do not paste real values into chat or commit them.
-5. Restart API after env changes.
+- API: `http://localhost:3001`
+- Web: `http://localhost:3000`
 
 Manual checks:
 
-1. Login with a configured Cognito platform admin that has no tenant/company user.
-2. Confirm `/platform-admin` loads.
-3. Confirm `GET /platform/me` returns platform context with `PLATFORM_ADMIN`.
-4. Confirm tenant list/detail/health/audit load with only privacy-safe metadata.
-5. Confirm platform admin is not forced through owner onboarding just because no tenant exists.
-6. Click each tenant in `/platform-admin`.
-7. Confirm no React/Next style overlay appears.
-8. Confirm health/detail data updates when switching tenants.
-9. Login as tenant OWNER not in the platform allowlist.
-10. Confirm `/platform-admin` is blocked and `/platform/*` returns 403.
-11. Login as EMPLOYEE not in the platform allowlist.
-12. Confirm `/platform-admin` is blocked and `/platform/*` returns 403.
-13. Confirm tenant OWNER can still use owner workspace/invite flows.
-14. Confirm EMPLOYEE can still use tenant app flows.
-15. Confirm `/virtual-office`, Dashboard, Reports, Compliance, and Employees still work.
-16. Confirm no employee app/domain details, browsing details, movement history, secrets, or raw employee activity rows are visible in Platform Admin.
+1. Start API and web.
+2. Login as Owner.
+3. Open `/virtual-office`.
+4. Confirm current TMX map loads and looks functionally unchanged.
+5. Confirm current user spawns at the configured safe spawn and can move.
+6. With a valid non-default/edited active map manifest and no saved current-user position, confirm the current user spawns at that active manifest's safe/default spawn.
+7. Confirm saved position restore still wins over manifest spawn.
+8. If practical, manually place an invalid/out-of-bounds position in the DB and confirm the UI uses safe spawn instead of crashing.
+9. Confirm rooms and destination labels are readable and no UUIDs appear in People panel or command palette.
+10. Confirm double-click auto-walk still works.
+11. Confirm WASD/arrow movement and collision still work.
+12. Confirm chair `E` interaction still works.
+13. Confirm contact drawer hit testing still works.
+14. Confirm realtime movement still works with another user.
+15. Confirm polling fallback still works when websocket is unavailable.
+16. Create a new owner workspace and confirm default map/rooms/owner spawn are usable.
+17. Confirm tenant A cannot access tenant B officeMap/map APIs.
+18. Confirm Dashboard, Reports, Compliance, Employees, tenant onboarding, invite flow, and Platform Admin still smoke pass.
 
-## 8. Risks / Notes
+## 11. Risks / Notes
 
-- Platform admin bootstrap still uses env allowlists, not a persisted platform identity admin console.
-- A future global identity/platform identity table would be cleaner for lifecycle management, but this round intentionally used the smallest safe bridge.
-- The new `PlatformAuditLog` migration must be applied before `/platform/*` audit writes work against a database.
-- Platform audit has no foreign key to `Company`; this avoids coupling global actions to tenant users, but deleted tenants may appear as `targetCompany: null` in historical audit entries.
-- Platform Admin is read-only in this round. No impersonation, tenant mutation, suspend/delete tenant, billing, or support workflow exists.
-- Pilot/dev fallback remains tenant-scoped and does not create platform admin access.
+- No schema migration means saved positions still do not store `mapVersion`.
+- Existing legacy `OfficeMap` rows may still have older width/height/mapData, but runtime manifest fallback protects current UI/API behavior.
+- The default manifest still references current TMX layer names and current map art.
+- Future map editor/admin should write validated manifests into `OfficeMap.mapData`.
+- Future strict stale-position handling should persist map version on positions.
+- Future map replacement should add automated manifest-vs-TMX validation in CI or a dev script.
+- No secrets or env values were changed.
 - `docs/references/SkyOffice/` remains unrelated untracked content.
 
-## 9. Docs Update Suggestions
+## 12. Docs Update Suggestions
 
-- `docs/skills/backend-skill.md`: document `PlatformContextGuard`, platform env allowlists, and `PlatformAuditLog`.
-- `docs/skills/api-contract-skill.md`: document `/platform/me`, `/platform/tenants`, `/platform/tenants/:companyId`, `/platform/tenants/:companyId/health`, `/platform/audit`, and 401/403 behavior.
-- `docs/skills/auth-skill.md`: record that platform auth is Cognito-only and independent of tenant `/auth/me`.
-- `docs/skills/current-status.md`: record that Round 5 now has an independent platform-admin boundary plus migration.
-- `docs/skills/deployment-skill.md`: document deployment env setup for blank placeholder vars `WORKMAP_PLATFORM_ADMIN_EMAILS` and `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`.
+- `docs/skills/backend-skill.md`: document `OfficeMap.mapData` manifest strategy and virtual-office bounds validation.
+- `docs/skills/frontend-skill.md`: document `virtualOfficeMapAdapter.ts` and manifest-driven map fallback behavior.
+- `docs/skills/api-contract-skill.md`: document optional `roomId` / `description` on navigation destination responses and position 400 behavior.
+- `docs/skills/realtime-presence-skill.md`: document realtime manifest bounds checks and unchanged websocket payload shape.
+- `docs/skills/current-status.md`: record Round 6 map expansion architecture, no schema migration, and remaining stale-position version risk.
 
-## 10. Next Chat Input
+## 13. Next Chat Input
 
 Review the current implementation using `docs/ai-handoff/latest-implementation.md` and the current git diff. Update `docs/ai-handoff/latest-qa.md`.

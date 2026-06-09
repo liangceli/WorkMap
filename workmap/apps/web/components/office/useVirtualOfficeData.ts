@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { OfficeRoomZone, PlayerDirection, PlayerState, UserPresenceStatus } from "@workmap/shared-types";
+import type {
+  OfficeRoomZone,
+  PlayerDirection,
+  PlayerState,
+  UserPresenceStatus,
+  VirtualOfficeMapManifest,
+} from "@workmap/shared-types";
 import {
   getVirtualOfficeMap,
   listVirtualOfficeNavigation,
@@ -10,13 +16,18 @@ import {
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import type {
   ApiClientOptions,
-  WorkMapApiNavigationDestination,
   WorkMapApiOfficeMap,
-  WorkMapApiOfficeRoom,
   WorkMapApiPlayerPosition,
 } from "../../lib/api/apiTypes";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
-import { officeDestinations } from "../../lib/office/officeNavigationConfig";
+import {
+  getDefaultOfficeDestinations,
+  readApiNavigationDestinations,
+  readApiOfficeRooms,
+  resolveVirtualOfficeMapConfig,
+  isPlayerPositionValidForMap,
+  type VirtualOfficeMapConfigSource,
+} from "../../lib/office/virtualOfficeMapAdapter";
 import { remotePlayers, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
 import { statusFromFreshness } from "./presence";
 
@@ -27,6 +38,9 @@ export type VirtualOfficeData = {
   destinations: OfficeDestination[];
   remotePlayers: RemoteOfficePlayer[];
   officeMapId?: string;
+  mapManifest: VirtualOfficeMapManifest;
+  mapConfigSource: VirtualOfficeMapConfigSource;
+  mapValidationWarnings: string[];
   apiOptions?: ApiClientOptions;
   currentUserId?: string;
   currentUserPosition?: PlayerState;
@@ -36,13 +50,15 @@ export type VirtualOfficeData = {
 
 const MOCK_DATA: VirtualOfficeData = {
   rooms: roomZones,
-  destinations: officeDestinations,
+  destinations: getDefaultOfficeDestinations(),
   remotePlayers,
+  mapManifest: resolveVirtualOfficeMapConfig().manifest,
+  mapConfigSource: "default-manifest",
+  mapValidationWarnings: [],
   source: "mock",
   loaded: false,
 };
 
-const destinationTypes: OfficeDestination["type"][] = ["department", "room", "common_area", "desk_area", "support"];
 const statuses: UserPresenceStatus[] = ["available", "busy", "focus", "idle", "break", "offline", "on_call"];
 const directions: PlayerDirection[] = ["up", "down", "left", "right"];
 const PRESENCE_POLL_VISIBLE_MS = 4000;
@@ -77,12 +93,20 @@ export function useVirtualOfficeData(): VirtualOfficeData {
       let nextRemotePlayers = MOCK_DATA.remotePlayers;
       let nextOfficeMapId: string | undefined;
       let nextCurrentUserPosition: PlayerState | undefined;
+      let nextMapManifest = MOCK_DATA.mapManifest;
+      let nextMapConfigSource = MOCK_DATA.mapConfigSource;
+      let nextMapValidationWarnings: string[] = [];
       let usedApiPart = false;
       let usedMockPart = false;
 
       if (mapResult.ok && isApiOfficeMap(mapResult.data)) {
+        const mapConfig = resolveVirtualOfficeMapConfig(mapResult.data);
         nextOfficeMapId = mapResult.data.id;
-        const rooms = mapResult.data.rooms.map(toRoomZone).filter((room): room is OfficeRoomZone => Boolean(room));
+        nextMapManifest = mapConfig.manifest;
+        nextMapConfigSource = mapConfig.source;
+        nextMapValidationWarnings = mapConfig.warnings;
+        const rooms = readApiOfficeRooms(mapResult.data.rooms, mapConfig.manifest);
+
         if (rooms.length > 0) {
           nextRooms = rooms;
           usedApiPart = true;
@@ -95,7 +119,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
           return;
         }
 
-        const positionsData = readPositionsData(positionsResult, currentUserId);
+        const positionsData = readPositionsData(positionsResult, currentUserId, mapConfig.manifest);
         if (positionsData.ok) {
           nextCurrentUserPosition = positionsData.currentUserPosition;
           nextRemotePlayers = positionsData.remotePlayers;
@@ -108,9 +132,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
       }
 
       if (navigationResult.ok && Array.isArray(navigationResult.data)) {
-        const destinations = navigationResult.data
-          .map(toOfficeDestination)
-          .filter((destination): destination is OfficeDestination => Boolean(destination));
+        const destinations = readApiNavigationDestinations(navigationResult.data, nextMapManifest);
 
         if (destinations.length > 0) {
           nextDestinations = destinations;
@@ -128,6 +150,9 @@ export function useVirtualOfficeData(): VirtualOfficeData {
         destinations: nextDestinations,
         remotePlayers: nextRemotePlayers,
         officeMapId: nextOfficeMapId,
+        mapManifest: nextMapManifest,
+        mapConfigSource: nextMapConfigSource,
+        mapValidationWarnings: nextMapValidationWarnings,
         apiOptions,
         currentUserId,
         currentUserPosition: nextCurrentUserPosition,
@@ -137,6 +162,9 @@ export function useVirtualOfficeData(): VirtualOfficeData {
 
       if (process.env.NODE_ENV === "development") {
         console.info(`virtual-office data source: ${usedApiPart ? "api" : "mock fallback"}`);
+        if (nextMapValidationWarnings.length > 0) {
+          console.info("virtual-office map manifest fallback", nextMapValidationWarnings);
+        }
       }
 
       setData(nextData);
@@ -201,7 +229,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
       }
 
       inFlight = false;
-      const positionsData = readPositionsData(positionsResult, currentUserId);
+      const positionsData = readPositionsData(positionsResult, currentUserId, data.mapManifest);
 
       if (positionsData.ok && requestId > latestAppliedRequest) {
         latestAppliedRequest = requestId;
@@ -248,7 +276,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [data.apiOptions, data.currentUserId, data.officeMapId]);
+  }, [data.apiOptions, data.currentUserId, data.mapManifest, data.officeMapId]);
 
   return data;
 }
@@ -256,6 +284,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
 function readPositionsData(
   positionsResult: Awaited<ReturnType<typeof listVirtualOfficePositions>>,
   currentUserId?: string,
+  mapManifest: VirtualOfficeMapManifest = MOCK_DATA.mapManifest,
 ):
   | { ok: true; remotePlayers: RemoteOfficePlayer[]; currentUserPosition?: PlayerState }
   | { ok: false; error: string } {
@@ -263,11 +292,13 @@ function readPositionsData(
     return { ok: false, error: positionsResult.ok ? "Invalid positions response." : positionsResult.error };
   }
 
-  const apiPlayers = positionsResult.data.map(toPlayerState).filter((player): player is PlayerState => Boolean(player));
+  const apiPlayers = positionsResult.data
+    .map((position) => toPlayerState(position, mapManifest))
+    .filter((player): player is PlayerState => Boolean(player));
   const currentUserPosition = currentUserId ? apiPlayers.find((position) => position.userId === currentUserId) : undefined;
   const remotePlayers = positionsResult.data
     .filter((position) => !currentUserId || position.userId !== currentUserId)
-    .map(toRemoteOfficePlayer)
+    .map((position) => toRemoteOfficePlayer(position, mapManifest))
     .filter((player): player is RemoteOfficePlayer => Boolean(player));
 
   return { ok: true, remotePlayers, currentUserPosition };
@@ -281,41 +312,8 @@ function isApiOfficeMap(value: unknown): value is WorkMapApiOfficeMap {
   return typeof value.id === "string" && Array.isArray(value.rooms);
 }
 
-function toRoomZone(room: WorkMapApiOfficeRoom): OfficeRoomZone | null {
-  const zone = readRect(room.zoneData);
-  if (!zone) {
-    return null;
-  }
-
-  return {
-    id: room.id,
-    name: room.name,
-    status: toStatus(room.autoStatus, "available"),
-    ...zone,
-  };
-}
-
-function toOfficeDestination(destination: WorkMapApiNavigationDestination): OfficeDestination | null {
-  const anchor = readPoint(destination.anchor);
-  const bounds = readRect(destination.bounds);
-
-  if (!anchor || !bounds || typeof destination.id !== "string" || typeof destination.name !== "string") {
-    return null;
-  }
-
-  return {
-    id: destination.id,
-    name: destination.name,
-    type: toDestinationType(destination.type),
-    description: "WorkMap office area.",
-    anchor,
-    bounds,
-    autoStatus: toStatus(destination.autoStatus, undefined),
-  };
-}
-
-function toRemoteOfficePlayer(position: WorkMapApiPlayerPosition): RemoteOfficePlayer | null {
-  const player = toPlayerState(position);
+function toRemoteOfficePlayer(position: WorkMapApiPlayerPosition, mapManifest: VirtualOfficeMapManifest): RemoteOfficePlayer | null {
+  const player = toPlayerState(position, mapManifest);
   if (!player) {
     return null;
   }
@@ -327,13 +325,17 @@ function toRemoteOfficePlayer(position: WorkMapApiPlayerPosition): RemoteOfficeP
   };
 }
 
-function toPlayerState(position: WorkMapApiPlayerPosition): PlayerState | null {
+function toPlayerState(position: WorkMapApiPlayerPosition, mapManifest: VirtualOfficeMapManifest): PlayerState | null {
   if (
     typeof position.userId !== "string" ||
     typeof position.displayName !== "string" ||
     !Number.isFinite(position.x) ||
     !Number.isFinite(position.y)
   ) {
+    return null;
+  }
+
+  if (!isPlayerPositionValidForMap(position, mapManifest)) {
     return null;
   }
 
@@ -351,32 +353,6 @@ function toPlayerState(position: WorkMapApiPlayerPosition): PlayerState | null {
   };
 }
 
-function readPoint(value: unknown): { x: number; y: number } | null {
-  if (!isObject(value) || !isFiniteNumber(value.x) || !isFiniteNumber(value.y)) {
-    return null;
-  }
-
-  return { x: value.x, y: value.y };
-}
-
-function readRect(value: unknown): { x: number; y: number; width: number; height: number } | null {
-  if (!isObject(value)) {
-    return null;
-  }
-
-  const rect = isObject(value.bounds) ? value.bounds : value;
-  if (!isFiniteNumber(rect.x) || !isFiniteNumber(rect.y) || !isFiniteNumber(rect.width) || !isFiniteNumber(rect.height)) {
-    return null;
-  }
-
-  // Assumption: backend zoneData/bounds use the same pixel coordinate space as the current TMX map.
-  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-}
-
-function toDestinationType(value: string): OfficeDestination["type"] {
-  return destinationTypes.includes(value as OfficeDestination["type"]) ? (value as OfficeDestination["type"]) : "room";
-}
-
 function toStatus<TFallback extends UserPresenceStatus | undefined>(
   value: UserPresenceStatus | null | undefined,
   fallback: TFallback,
@@ -386,8 +362,4 @@ function toStatus<TFallback extends UserPresenceStatus | undefined>(
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
 }

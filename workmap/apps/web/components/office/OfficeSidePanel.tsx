@@ -324,7 +324,16 @@ function panelSubtitle(panel: OfficePanelKey) {
 }
 
 function createRoomNameMap(destinations: OfficeDestination[]) {
-  return new Map(destinations.map((destination) => [destination.id, destination.name]));
+  const entries = new Map<string, string>();
+
+  for (const destination of destinations) {
+    entries.set(destination.id, destination.name);
+    if (destination.roomId) {
+      entries.set(destination.roomId, destination.name);
+    }
+  }
+
+  return entries;
 }
 
 function friendlyRoom(roomId: string | undefined, roomNameById: Map<string, string>) {

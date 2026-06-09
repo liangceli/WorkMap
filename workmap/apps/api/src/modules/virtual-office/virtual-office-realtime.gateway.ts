@@ -3,12 +3,14 @@ import { HttpAdapterHost } from "@nestjs/core";
 import { canAccessVirtualOffice, type RequestContext } from "@workmap/auth";
 import type {
   UserPresenceStatus,
+  VirtualOfficeMapManifest,
   VirtualOfficeRealtimeClientEvent,
   VirtualOfficeRealtimeMovePayload,
   VirtualOfficeRealtimePlayerState,
   VirtualOfficeRealtimePresenceUser,
   VirtualOfficeRealtimeServerEvent,
 } from "@workmap/shared-types";
+import { isVirtualOfficePointInBounds } from "@workmap/shared-types";
 import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
@@ -31,6 +33,7 @@ type RealtimeClient = {
   roomIds: Set<string>;
   roomKey?: string;
   officeMapId?: string;
+  mapManifest?: VirtualOfficeMapManifest;
   profile?: {
     displayName: string;
     avatarId: string;
@@ -215,6 +218,7 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
 
     client.officeMapId = officeMapId;
     client.roomIds = joinContext.roomIds;
+    client.mapManifest = joinContext.mapManifest;
     client.profile = joinContext.user;
     client.roomKey = createRoomKey(client.context.companyId, officeMapId);
 
@@ -225,7 +229,7 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
   }
 
   private handleMove(client: RealtimeClient, payload: VirtualOfficeRealtimeMovePayload) {
-    if (!client.roomKey || !client.officeMapId || !client.profile) {
+    if (!client.roomKey || !client.officeMapId || !client.profile || !client.mapManifest) {
       this.sendError(client, "Join an office map before sending movement.");
       return;
     }
@@ -234,6 +238,11 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
 
     if (position.roomId && !client.roomIds.has(position.roomId)) {
       this.sendError(client, "Office room does not belong to joined office map.");
+      return;
+    }
+
+    if (!isVirtualOfficePointInBounds({ x: position.x, y: position.y }, client.mapManifest)) {
+      this.sendError(client, "Movement is outside the configured office map bounds.");
       return;
     }
 
@@ -294,6 +303,7 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
 
     client.roomKey = undefined;
     client.officeMapId = undefined;
+    client.mapManifest = undefined;
     client.roomIds = new Set();
 
     if (officeMapId) {

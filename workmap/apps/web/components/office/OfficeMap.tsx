@@ -8,8 +8,10 @@ import type {
   PlayerDirection,
   PlayerState,
   UserPresenceStatus,
+  VirtualOfficeMapManifest,
   VirtualOfficeRealtimePlayerState,
 } from "@workmap/shared-types";
+import { WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST } from "@workmap/shared-types";
 import {
   avatarLayersByType,
   getLayeredAvatarAssets,
@@ -22,6 +24,11 @@ import { getAvatarConfigForOffice, saveLayeredAvatarConfig } from "../../lib/ava
 import { saveCurrentVirtualOfficePosition } from "../../lib/api/virtualOfficeApi";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { findGridPath, type PathBounds, type PathPoint } from "../../lib/office/pathfinding";
+import {
+  getSpawnPlayerPatch,
+  isPlayerPositionValidForMap,
+  validateParsedTmxAgainstManifest,
+} from "../../lib/office/virtualOfficeMapAdapter";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { FloatingRoomPill } from "./FloatingRoomPill";
 import { InteractionDrawer } from "./InteractionDrawer";
@@ -90,10 +97,10 @@ type InterpolatedRemotePlayer = RemoteOfficePlayer & {
   lastRealtimeAt: number;
 };
 
-const MAP_URL = "/maps/workmap2.tmx";
 const MAP_DEV_POLL_MS = 1500;
-const CANVAS_WIDTH = 1120;
-const CANVAS_HEIGHT = 680;
+const DEFAULT_CANVAS_WIDTH = WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.canvas.width;
+const DEFAULT_CANVAS_HEIGHT = WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.canvas.height;
+const DEFAULT_SPAWN = WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.safeFallbackSpawn;
 const PLAYER_RADIUS = 14;
 const PLAYER_COLLISION_DISTANCE = 34;
 const PLAYER_SPEED = 180;
@@ -106,20 +113,6 @@ const REALTIME_REMOTE_INTERPOLATION_RATE = 10;
 const REALTIME_REMOTE_SNAP_DISTANCE = 260;
 const REALTIME_REMOTE_STALE_MS = 20000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const MAP_LAYER_ORDER = [
-  "Floor",
-  "Carpet",
-  "plants",
-  "WallsPaper",
-  "corner",
-  "Walls",
-  "Tools",
-  "furniture",
-  "Shadows",
-  "chairs",
-  "some ons on table",
-] as const;
-const COLLISION_LAYERS = new Set(["WallsPaper", "corner", "Walls", "Tools", "furniture", "chairs", "plants", "some ons on table"]);
 const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {
   "demo-manager": createRandomRemoteAvatarConfig("demo-manager"),
   "demo-engineer": createRandomRemoteAvatarConfig("demo-engineer"),
@@ -137,6 +130,10 @@ export function OfficeMap() {
   const officeRooms = officeData.rooms;
   const officePeople = officeData.remotePlayers;
   const officeNavigation = officeData.destinations;
+  const mapManifest = officeData.mapManifest;
+  const collisionLayerNames = useMemo(() => new Set(mapManifest.collision.layerNames), [mapManifest]);
+  const canvasWidth = mapManifest.canvas.width;
+  const canvasHeight = mapManifest.canvas.height;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const keysRef = useRef(new Set<string>());
   const nearestChairRef = useRef<ChairSpot | null>(null);
@@ -158,6 +155,7 @@ export function OfficeMap() {
   const dragRef = useRef<{ dragging: boolean; x: number; y: number; moved: boolean }>({ dragging: false, x: 0, y: 0, moved: false });
   const restoredPositionRef = useRef(false);
   const localPlayerTouchedRef = useRef(false);
+  const activeSpawnManifestRef = useRef<string | null>(null);
   const lastPersistedPositionRef = useRef<PositionSnapshot | null>(null);
   const restorePersistGuardRef = useRef<PositionSnapshot | null>(null);
   const lastPersistAttemptAtRef = useRef(0);
@@ -166,12 +164,11 @@ export function OfficeMap() {
     userId: "local-user",
     displayName: "You",
     avatarId: "placeholder-local",
-    x: 160,
-    y: 545,
-    direction: "down",
+    x: DEFAULT_SPAWN.x,
+    y: DEFAULT_SPAWN.y,
+    direction: DEFAULT_SPAWN.direction,
     isMoving: false,
     status: "available",
-    roomId: "open-office-north",
     updatedAt: new Date().toISOString(),
   });
 
@@ -284,7 +281,7 @@ export function OfficeMap() {
     }
 
     restoredPositionRef.current = true;
-    const restoredPlayer = {
+    const restoredCandidate = {
       ...playerRef.current,
       displayName: officeData.currentUserPosition.displayName,
       avatarId: officeData.currentUserPosition.avatarId,
@@ -296,13 +293,42 @@ export function OfficeMap() {
       roomId: officeData.currentUserPosition.roomId,
       updatedAt: new Date().toISOString(),
     };
+    const restoredPlayer = isPlayerPositionValidForMap(restoredCandidate, mapManifest)
+      ? restoredCandidate
+      : createSafeSpawnPlayer(restoredCandidate, mapManifest, officeRooms);
 
     playerRef.current = restoredPlayer;
     const restoredSnapshot = toPositionSnapshot(restoredPlayer);
     lastPersistedPositionRef.current = restoredSnapshot;
     restorePersistGuardRef.current = restoredSnapshot;
     setPlayer(restoredPlayer);
-  }, [officeData.currentUserPosition]);
+  }, [mapManifest, officeData.currentUserPosition, officeRooms]);
+
+  useEffect(() => {
+    if (
+      !officeData.loaded ||
+      officeData.currentUserPosition ||
+      restoredPositionRef.current ||
+      localPlayerTouchedRef.current
+    ) {
+      return;
+    }
+
+    const manifestSpawnSignature = getMapManifestSpawnSignature(mapManifest);
+
+    if (activeSpawnManifestRef.current === manifestSpawnSignature) {
+      return;
+    }
+
+    const activeSpawnPlayer = createSafeSpawnPlayer(playerRef.current, mapManifest, officeRooms);
+    const activeSpawnSnapshot = toPositionSnapshot(activeSpawnPlayer);
+
+    activeSpawnManifestRef.current = manifestSpawnSignature;
+    playerRef.current = activeSpawnPlayer;
+    lastPersistedPositionRef.current = activeSpawnSnapshot;
+    restorePersistGuardRef.current = activeSpawnSnapshot;
+    setPlayer(activeSpawnPlayer);
+  }, [mapManifest, officeData.currentUserPosition, officeData.loaded, officeRooms]);
 
   useEffect(() => {
     if (!avatarChecked || !selectedAvatar) {
@@ -312,7 +338,7 @@ export function OfficeMap() {
     let cancelled = false;
 
     const loadMap = () => {
-      fetch(MAP_URL, { cache: "no-store" })
+      fetch(mapManifest.tmxPath, { cache: "no-store" })
         .then((response) => {
         if (!response.ok) {
           throw new Error(`Failed to load map: ${response.status}`);
@@ -320,10 +346,17 @@ export function OfficeMap() {
         return response.text();
       })
       .then((xml) => {
-        if (!cancelled && mapXmlRef.current !== xml) {
-          mapXmlRef.current = xml;
-          setMap(parseTmx(xml));
+        const mapSignature = `${mapManifest.mapKey}:${mapManifest.mapVersion}:${xml}`;
+
+        if (!cancelled && mapXmlRef.current !== mapSignature) {
+          const parsedMap = parseTmx(xml, mapManifest.render.layerOrder);
+          const warnings = validateParsedTmxAgainstManifest(parsedMap, mapManifest);
+          mapXmlRef.current = mapSignature;
+          setMap(parsedMap);
           setLoadError(null);
+          if (warnings.length > 0 && process.env.NODE_ENV === "development") {
+            console.info("virtual-office TMX manifest warning", warnings);
+          }
         }
       })
       .catch((error: Error) => {
@@ -345,7 +378,7 @@ export function OfficeMap() {
         window.clearInterval(intervalId);
       }
     };
-  }, [avatarChecked, selectedAvatar]);
+  }, [avatarChecked, mapManifest, selectedAvatar]);
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -511,9 +544,14 @@ export function OfficeMap() {
     let previousTime = performance.now();
     const images = new Map<string, HTMLImageElement>();
     let loadedAvatars: LoadedAvatarMap = {};
-    const collision = buildCollisionGrid(map);
+    const collision = buildCollisionGrid(map, collisionLayerNames);
     latestCollisionRef.current = collision;
     latestMapRef.current = map;
+    if (!isPlayerUsableOnMap(playerRef.current, map, collision, mapManifest)) {
+      const safePlayer = createSafeSpawnPlayer(playerRef.current, mapManifest, officeRooms, map, collision);
+      playerRef.current = safePlayer;
+      setPlayer(safePlayer);
+    }
     const chairs = findChairSpots(map);
     const avatarConfigs: Record<string, LayeredAvatarConfig> = {
       ...remoteAvatarConfigs,
@@ -644,7 +682,7 @@ export function OfficeMap() {
       cancelled = true;
       cancelAnimationFrame(animationFrame);
     };
-  }, [map, mapPixels, officeRooms, realtimeAvatarSignature, remoteAvatarConfigSignature, selectedAvatar]);
+  }, [collisionLayerNames, map, mapManifest, mapPixels, officeRooms, realtimeAvatarSignature, remoteAvatarConfigSignature, selectedAvatar]);
 
   const standUpFromChair = useCallback(() => {
     const fallback = seatedChairRef.current
@@ -897,8 +935,8 @@ export function OfficeMap() {
           {loadError ? <div style={styles.error}>{loadError}</div> : null}
           <canvas
             ref={canvasRef}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
+            width={canvasWidth}
+            height={canvasHeight}
             onClick={handleCanvasClick}
             onDoubleClick={handleCanvasDoubleClick}
             onMouseDown={handleMouseDown}
@@ -1002,7 +1040,7 @@ export function OfficeMap() {
   );
 }
 
-function parseTmx(xml: string): ParsedMap {
+function parseTmx(xml: string, layerOrder: string[]): ParsedMap {
   const document = new DOMParser().parseFromString(xml, "application/xml");
   const mapElement = document.querySelector("map");
 
@@ -1022,7 +1060,7 @@ function parseTmx(xml: string): ParsedMap {
         .map((value) => Number(value.trim()))
         .filter((value) => !Number.isNaN(value)),
     };
-  }).sort((left, right) => getLayerOrder(left.name) - getLayerOrder(right.name));
+  }).sort((left, right) => getLayerOrder(left.name, layerOrder) - getLayerOrder(right.name, layerOrder));
 
   return {
     width: Number(mapElement.getAttribute("width") ?? "0"),
@@ -1033,9 +1071,9 @@ function parseTmx(xml: string): ParsedMap {
   };
 }
 
-function getLayerOrder(layerName: string) {
-  const index = MAP_LAYER_ORDER.indexOf(layerName as (typeof MAP_LAYER_ORDER)[number]);
-  return index === -1 ? MAP_LAYER_ORDER.length : index;
+function getLayerOrder(layerName: string, layerOrder: string[]) {
+  const index = layerOrder.indexOf(layerName);
+  return index === -1 ? layerOrder.length : index;
 }
 
 function drawScene(
@@ -1495,11 +1533,11 @@ function hasMovementInput(keys: Set<string>) {
   );
 }
 
-function buildCollisionGrid(map: ParsedMap) {
+function buildCollisionGrid(map: ParsedMap, collisionLayerNames: Set<string>) {
   const collision = Array.from({ length: map.width * map.height }, () => false);
 
   for (const layer of map.layers) {
-    if (!COLLISION_LAYERS.has(layer.name)) {
+    if (!collisionLayerNames.has(layer.name)) {
       continue;
     }
 
@@ -1561,6 +1599,69 @@ function findDestinationAtPoint(x: number, y: number, destinations: OfficeDestin
     const bounds = destination.bounds;
     return bounds && x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height;
   });
+}
+
+function createSafeSpawnPlayer(
+  player: PlayerState,
+  manifest: VirtualOfficeMapManifest,
+  rooms: OfficeRoomZone[],
+  map?: ParsedMap,
+  collision?: boolean[],
+): PlayerState {
+  const spawn = getSpawnPlayerPatch(manifest);
+  const point = map && collision ? findNearestWalkablePoint(spawn, map, collision) ?? spawn : spawn;
+  const room = findRoom(point.x, point.y, rooms);
+
+  return {
+    ...player,
+    x: point.x,
+    y: point.y,
+    direction: spawn.direction,
+    isMoving: false,
+    roomId: room?.id,
+    status: room?.status ?? "available",
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function getMapManifestSpawnSignature(manifest: VirtualOfficeMapManifest) {
+  const spawn = getSpawnPlayerPatch(manifest);
+  return `${manifest.mapKey}:${manifest.mapVersion}:${spawn.x}:${spawn.y}:${spawn.direction}`;
+}
+
+function isPlayerUsableOnMap(
+  player: PlayerState,
+  map: ParsedMap,
+  collision: boolean[],
+  manifest: VirtualOfficeMapManifest,
+) {
+  return isPlayerPositionValidForMap(player, manifest) && !isBlocked(player.x, player.y, map, collision);
+}
+
+function findNearestWalkablePoint(point: PathPoint, map: ParsedMap, collision: boolean[]) {
+  if (!isBlocked(point.x, point.y, map, collision)) {
+    return point;
+  }
+
+  const originTileX = Math.floor(point.x / map.tileWidth);
+  const originTileY = Math.floor(point.y / map.tileHeight);
+
+  for (let radius = 1; radius <= 8; radius += 1) {
+    for (let y = originTileY - radius; y <= originTileY + radius; y += 1) {
+      for (let x = originTileX - radius; x <= originTileX + radius; x += 1) {
+        const candidate = {
+          x: x * map.tileWidth + map.tileWidth / 2,
+          y: y * map.tileHeight + map.tileHeight / 2,
+        };
+
+        if (!isBlocked(candidate.x, candidate.y, map, collision)) {
+          return candidate;
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 function toPositionSnapshot(player: PlayerState): PositionSnapshot {
@@ -1749,7 +1850,7 @@ function getCamera(
   mapPixels: { width: number; height: number },
   zoom = 1,
   offset = { x: 0, y: 0 },
-  viewport: ViewportSize = { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+  viewport: ViewportSize = { width: DEFAULT_CANVAS_WIDTH, height: DEFAULT_CANVAS_HEIGHT },
 ) {
   void mapPixels;
 

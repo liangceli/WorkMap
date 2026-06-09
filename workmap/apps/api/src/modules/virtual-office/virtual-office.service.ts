@@ -1,6 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { AvatarDirection, OfficeRoomType, UserStatus } from "@prisma/client";
-import type { PlayerDirection, UserPresenceStatus } from "@workmap/shared-types";
+import {
+  WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST,
+  isVirtualOfficePointInBounds,
+  validateVirtualOfficeMapManifest,
+  type PlayerDirection,
+  type UserPresenceStatus,
+  type VirtualOfficeMapManifest,
+} from "@workmap/shared-types";
 import { PrismaService } from "../prisma/prisma.service.js";
 
 type PersistPositionInput = {
@@ -23,6 +30,7 @@ export type VirtualOfficeRealtimeJoinContext = {
     status: UserPresenceStatus;
   };
   roomIds: Set<string>;
+  mapManifest: VirtualOfficeMapManifest;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -89,6 +97,7 @@ export class VirtualOfficeService {
 
   async listNavigationDestinations(companyId: string) {
     const officeMap = await this.getDefaultOfficeMap(companyId);
+    const manifest = resolveOfficeMapManifest(officeMap.mapData);
     const positionCounts = await this.prisma.virtualOfficePosition.groupBy({
       by: ["officeRoomId"],
       where: {
@@ -105,27 +114,32 @@ export class VirtualOfficeService {
         .filter((item) => item.officeRoomId)
         .map((item) => [item.officeRoomId as string, item._count._all]),
     );
+    const roomByKey = createRoomByManifestKey(officeMap.rooms, manifest);
 
-    return officeMap.rooms.map((room) => {
-      const bounds = parseRectangleBounds(room.zoneData);
-      const anchor = bounds
-        ? { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
-        : { x: officeMap.width / 2, y: officeMap.height / 2 };
+    return manifest.navigation.map((destination) => {
+      const room = destination.roomKey ? roomByKey.get(destination.roomKey) : undefined;
 
       return {
-        id: room.id,
-        name: room.name,
-        type: toDestinationType(room.type),
-        anchor,
-        bounds,
-        autoStatus: room.autoStatus ? toApiStatus(room.autoStatus) : undefined,
-        peopleCount: peopleCountByRoomId.get(room.id) ?? 0,
+        id: destination.key,
+        roomId: room?.id,
+        name: destination.name,
+        type: destination.type,
+        description: destination.description,
+        anchor: destination.anchor,
+        bounds: destination.bounds,
+        autoStatus: destination.autoStatus,
+        peopleCount: room ? peopleCountByRoomId.get(room.id) ?? 0 : 0,
       };
     });
   }
 
   async persistLatestPosition(input: PersistPositionInput) {
-    await this.assertMapAndRoomBelongToCompany(input.companyId, input.officeMapId, input.officeRoomId);
+    const officeMap = await this.assertMapAndRoomBelongToCompany(input.companyId, input.officeMapId, input.officeRoomId);
+    const manifest = resolveOfficeMapManifest(officeMap.mapData);
+
+    if (!isVirtualOfficePointInBounds({ x: input.x, y: input.y }, manifest)) {
+      throw new BadRequestException("Position is outside the configured office map bounds.");
+    }
 
     return this.prisma.virtualOfficePosition.upsert({
       where: { userId: input.userId },
@@ -157,7 +171,7 @@ export class VirtualOfficeService {
     userId: string,
     officeMapId: string,
   ): Promise<VirtualOfficeRealtimeJoinContext> {
-    await this.assertMapAndRoomBelongToCompany(companyId, officeMapId);
+    const officeMap = await this.assertMapAndRoomBelongToCompany(companyId, officeMapId);
 
     const [user, rooms] = await Promise.all([
       this.prisma.user.findFirst({
@@ -195,6 +209,7 @@ export class VirtualOfficeService {
         status: toApiStatus(user.status),
       },
       roomIds: new Set(rooms.map((room) => room.id)),
+      mapManifest: resolveOfficeMapManifest(officeMap.mapData),
     };
   }
 
@@ -204,7 +219,7 @@ export class VirtualOfficeService {
         id: officeMapId,
         companyId,
       },
-      select: { id: true },
+      select: { id: true, mapData: true },
     });
 
     if (!officeMap) {
@@ -212,7 +227,7 @@ export class VirtualOfficeService {
     }
 
     if (!officeRoomId) {
-      return;
+      return officeMap;
     }
 
     if (!uuidPattern.test(officeRoomId)) {
@@ -231,6 +246,8 @@ export class VirtualOfficeService {
     if (!officeRoom) {
       throw new BadRequestException("Office room does not belong to office map.");
     }
+
+    return officeMap;
   }
 }
 
@@ -246,39 +263,39 @@ function toApiStatus(status: UserStatus) {
   return status.toLowerCase() as UserPresenceStatus;
 }
 
-function toDestinationType(type: OfficeRoomType) {
-  switch (type) {
-    case OfficeRoomType.DEPARTMENT_ZONE:
-      return "department";
-    case OfficeRoomType.OPEN_OFFICE:
-      return "common_area";
-    case OfficeRoomType.FOCUS:
-    case OfficeRoomType.BREAK:
-    case OfficeRoomType.MEETING:
-    case OfficeRoomType.OTHER:
-      return "room";
-  }
+function resolveOfficeMapManifest(mapData: unknown): VirtualOfficeMapManifest {
+  const validation = validateVirtualOfficeMapManifest(mapData);
+  return validation.ok ? validation.manifest : WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST;
 }
 
-type RectangleBounds = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
+function createRoomByManifestKey(
+  rooms: Array<{
+    id: string;
+    name: string;
+    type: OfficeRoomType;
+    zoneData: unknown;
+    autoStatus: UserStatus | null;
+  }>,
+  manifest: VirtualOfficeMapManifest,
+) {
+  const roomByKey = new Map<string, (typeof rooms)[number]>();
 
-function parseRectangleBounds(value: unknown): RectangleBounds | undefined {
-  if (!isRecord(value) || value.shape !== "rectangle") {
+  for (const room of rooms) {
+    const roomKey = readRoomKey(room.zoneData) ?? manifest.rooms.find((candidate) => candidate.name === room.name)?.key;
+    if (roomKey) {
+      roomByKey.set(roomKey, room);
+    }
+  }
+
+  return roomByKey;
+}
+
+function readRoomKey(value: unknown) {
+  if (!isRecord(value) || typeof value.roomKey !== "string") {
     return undefined;
   }
 
-  const { x, y, width, height } = value;
-
-  if (![x, y, width, height].every((item) => typeof item === "number" && Number.isFinite(item))) {
-    return undefined;
-  }
-
-  return { x, y, width, height } as RectangleBounds;
+  return value.roomKey;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

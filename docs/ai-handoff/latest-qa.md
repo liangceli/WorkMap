@@ -2,85 +2,84 @@
 
 ## 1. Overall Conclusion
 
-QA review result: STAGE 2 Round 5 final QA passes.
+QA review result: STAGE 2 Round 6 active-manifest spawn follow-up passes code review and machine verification.
 
 This pass reviewed:
 
 - `docs/ai-handoff/latest-implementation.md`
 - current `git status --short`
 - current `git diff --stat`
-- current tracked implementation diff
-- untracked implementation files for independent Platform Admin auth, platform APIs, frontend platform auth, `/platform-admin`, and the `PlatformAuditLog` migration
+- current implementation diff
+- `workmap/apps/web/components/office/OfficeMap.tsx` active manifest spawn follow-up
+- untracked `workmap/apps/web/lib/office/virtualOfficeMapAdapter.ts`
 
-No blocking issue remains.
+The previous QA blocker is resolved:
 
-The independent Platform Admin blocker is addressed:
+- `OfficeMap` no longer leaves an untouched no-saved-position local player on the module-level default spawn after active office data loads.
+- When `officeData.loaded` is true, there is no backend `currentUserPosition`, no restored position, and the local player has not moved, the component now derives spawn from the active `officeData.mapManifest`.
+- Saved backend position restore remains authoritative.
+- User-touched local movement is not overwritten.
+- Blocked/out-of-bounds relocation after TMX/collision load remains in place.
+- The active-spawn follow-up sets `lastPersistedPositionRef` and `restorePersistGuardRef`, so the old/default initial position is not immediately persisted back during the same render cycle.
 
-- Platform Admin no longer requires a tenant `User`.
-- Platform Admin no longer requires `companyId`.
-- `/platform/*` endpoints use `PlatformContextGuard`, not tenant `RequestContextGuard`.
-- `/platform/me` authenticates configured Cognito platform identities independently of tenant onboarding.
-- Platform audit writes to `PlatformAuditLog`, not tenant-scoped `AuditLog`.
-
-Final manual browser QA was completed by the user and passed after local migration and the tenant-button style fix.
+No blocking issue remains from code review.
 
 ## 2. Workspace Notes
 
-Reviewed tracked files include:
+Reviewed modified files:
 
 - `docs/ai-handoff/latest-implementation.md`
-- `workmap/.env.example`
-- `workmap/apps/api/src/app.module.ts`
-- `workmap/apps/api/src/modules/auth/auth.module.ts`
-- `workmap/apps/web/app/login/callback/page.tsx`
-- `workmap/apps/web/components/layout/AppShell.tsx`
-- `workmap/apps/web/components/login/MockLoginPanel.tsx`
+- `workmap/packages/shared-types/src/index.ts`
+- `workmap/apps/web/lib/office/virtualOfficeMapAdapter.ts`
+- `workmap/apps/web/lib/office/officeNavigationConfig.ts`
+- `workmap/apps/web/components/office/mockOfficeData.ts`
+- `workmap/apps/web/components/office/useVirtualOfficeData.ts`
+- `workmap/apps/web/components/office/OfficeMap.tsx`
+- `workmap/apps/web/components/office/OfficeSidePanel.tsx`
+- `workmap/apps/web/components/office/OfficeCommandPalette.tsx`
 - `workmap/apps/web/lib/api/apiTypes.ts`
-- `workmap/packages/auth/src/index.ts`
-- `workmap/prisma/schema.prisma`
-
-Reviewed untracked implementation files include:
-
-- `workmap/apps/api/src/modules/auth/current-platform-context.decorator.ts`
-- `workmap/apps/api/src/modules/auth/platform-admin-allowlist.ts`
-- `workmap/apps/api/src/modules/auth/platform-context.guard.ts`
-- `workmap/apps/api/src/modules/platform/`
-- `workmap/apps/web/app/platform-admin/`
-- `workmap/apps/web/lib/api/platformApi.ts`
-- `workmap/apps/web/lib/api/platformAuth.ts`
-- `workmap/prisma/migrations/20260607000000_platform_audit_log/`
+- `workmap/apps/api/src/modules/tenant-onboarding/tenant-onboarding.service.ts`
+- `workmap/apps/api/src/modules/virtual-office/virtual-office.service.ts`
+- `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts`
 
 Workspace notes:
 
 - `docs/references/` remains unrelated untracked workspace content. Do not stage it unless explicitly intended.
 - `.env` was not read during this QA pass.
-- `.env.example` contains only blank platform admin allowlist placeholders.
-- No package or lockfile dependency change was introduced.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was restored after build verification and should not be included in commit.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by build/typecheck and restored after verification.
+- No Prisma schema or migration change was introduced.
+- No deployment configuration was reviewed or changed in this round.
 
-## 3. Security / Privacy Review
+## 3. Diff Review
 
 Result: passed.
 
-- No real secret was found in reviewed files.
-- `WORKMAP_PLATFORM_ADMIN_EMAILS` and `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` appear only as blank placeholders, docs references, and backend env reads.
-- Platform Admin is Cognito allowlist based and independent from tenant `OWNER`.
-- Non-platform tenant users should receive 403 from `/platform/*`.
-- Platform Admin output is limited to tenant metadata, readiness/health summaries, and platform audit summaries.
+Passed areas:
 
-No reviewed platform endpoint exposes:
+- Shared `WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST` centralizes current TMX path, dimensions, canvas size, spawn points, collision layer names, render order, rooms, and navigation destinations.
+- Runtime manifest validation rejects invalid map dimensions, canvas values, layer lists, rooms, navigation anchors/bounds, and spawn points.
+- Frontend adapter validates API map data and falls back to the default manifest when invalid or missing.
+- API rooms/navigation/positions are filtered against active manifest bounds before use.
+- Owner workspace creation stores the default manifest in existing `OfficeMap.mapData`.
+- Backend navigation is generated from the resolved manifest instead of hardcoded room rectangles.
+- Backend `PUT /virtual-office/map/:officeMapId/positions/me` rejects out-of-bounds positions with a controlled 400.
+- Realtime join context carries the resolved manifest and socket movement rejects out-of-bounds positions with a controlled `office:error`.
+- People panel and command palette can map backend room UUIDs to readable manifest destination names.
+- The active-manifest spawn follow-up covers the no-saved-position path without changing saved-position restore semantics.
+- No websocket protocol rewrite, map editor, TMX art replacement, schema migration, multi-tenant expansion, deployment work, desktop agent, or browser extension work was added.
 
-- employee app/domain details
-- browsing URLs/details
-- message/email content
-- virtual-office movement history
-- secrets/tokens
-- raw cross-tenant employee activity rows
-- support impersonation or tenant mutation controls
+## 4. Security / Secret Review
 
-## 4. Verification Results
+Result: passed.
 
-Commands run during QA/code review:
+- No real secret was found in reviewed implementation files.
+- No AWS, Cognito, Supabase, Render, or Vercel key was hardcoded.
+- `.env` was not read.
+- A broad secret-pattern scan returned only an unrelated false positive in `docs/references/SkyOffice/yarn.lock`, which is untracked reference content and should not be staged.
+
+## 5. Verification Results
+
+Commands run from `workmap/`:
 
 ```powershell
 pnpm --filter @workmap/api typecheck
@@ -88,7 +87,13 @@ pnpm --filter @workmap/web typecheck
 pnpm --filter @workmap/api lint
 pnpm --filter @workmap/web lint
 pnpm --filter @workmap/api build
-pnpm build
+pnpm --filter @workmap/web build
+```
+
+Additional command:
+
+```powershell
+git diff --check
 ```
 
 Results:
@@ -98,47 +103,60 @@ Results:
 - API lint passed.
 - Web lint passed.
 - API build passed.
-- Web build passed when run from `workmap/apps/web`.
+- Web build passed.
+- `git diff --check` passed with only existing CRLF normalization warnings.
 - Web build still prints the existing Next.js ESLint plugin warning.
 
-Additional notes:
+Not run:
 
-- `pnpm --filter @workmap/web build` initially hit a transient Next `PageNotFoundError`; after clearing `apps/web/.next`, direct `pnpm build` from `apps/web` passed.
-- `pnpm prisma:generate` was blocked during one QA attempt by a Windows Prisma engine DLL lock, but the user later applied the local migration successfully enough for `/platform-admin` to load tenant/audit data.
-- Secret scans excluding `.env`, `node_modules`, `.next`, and `*.tsbuildinfo` found no high-confidence matches.
+- No Prisma migration was run because this round does not change the schema.
+- No browser manual QA was run in this chat.
+- No deployed Render/Vercel smoke was run, per Round 6 scope.
 
-## 5. Manual QA Results
+## 6. Manual QA Results
 
-Completed by user:
+Manual browser QA was completed by the user after the active-manifest spawn follow-up.
 
-1. Local `PlatformAuditLog` migration was applied.
-2. Independent Cognito Platform Admin identity logged in successfully.
-3. Platform Admin routed to `/platform-admin`, not tenant onboarding.
-4. `/platform-admin` loaded tenant list, health summary, and platform audit.
-5. Tenant switching worked for all listed tenants.
-6. No React/Next style overlay appeared after the tenant-button style fix.
-7. Health/detail data updated safely when switching tenants.
-8. Platform Admin page showed only privacy-safe metadata.
-9. No employee app/domain details, browsing details, secrets, movement history, or raw employee activity rows were visible.
-10. Tenant OWNER not in platform allowlist had no Platform Admin nav and direct `/platform-admin` was blocked.
-11. EMPLOYEE not in platform allowlist had no Platform Admin nav and direct `/platform-admin` was blocked.
-12. Tenant onboarding / invite flow regression passed.
-13. `/virtual-office` realtime regression passed.
-14. Dashboard, Reports, Compliance, and Employees regression smoke passed.
+Use local ports consistently:
 
-## 6. Manual Action Required
+- API: `http://localhost:3001`
+- Web: `http://localhost:3000`
 
-Before deployed platform-admin testing:
+Passed manual checks:
 
-- Apply `20260607000000_platform_audit_log` to the deployed database.
-- Configure `WORKMAP_PLATFORM_ADMIN_EMAILS` and/or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` in the API deployment environment.
-- Do not commit real platform admin emails/subs/secrets.
-- Restart the API deployment after env and migration changes.
+1. Owner opened `/virtual-office`; current TMX map loaded and looked unchanged.
+2. Current user spawned in a valid active-manifest safe/default spawn area and could move.
+3. Saved position restore still worked after moving, waiting, and refreshing.
+4. WASD/arrow movement, collision, double-click auto-walk, and invalid double-click targets behaved normally.
+5. Chair `E` interaction did not crash or lock the user.
+6. People panel and command palette showed readable room/destination names, not UUIDs.
+7. Contact drawer hit testing worked between Owner and Employee.
+8. Owner and Employee could see each other in the same map.
+9. Realtime movement updated in both windows.
+10. Refresh/polling-related remote position restore worked in both directions.
+11. New owner workspace created default map/rooms/owner spawn correctly.
+12. Dashboard, Employees, Reports, Compliance, Settings, Invite, and Platform Admin smoke checks passed.
 
-## 7. Final Recommendation
+Skipped manual check:
 
-- QA review: final QA passed.
+- Manual DB mutation for invalid/out-of-bounds saved position was skipped. This remains covered by code review and machine verification, but was not manually exercised against a live DB row.
+
+Non-blocking UX notes:
+
+- Saved position restore briefly shows the default spawn before jumping to the saved backend position. This is a visual flicker, not a data loss or spawn correctness blocker.
+- Chair interaction currently works as a state/interaction behavior, but there is no dedicated sitting pose/animation yet. Sitting avatar animation should be a future visual enhancement.
+
+## 7. Residual Risks / Notes
+
+- Saved positions still do not store `mapVersion`; strict stale-position invalidation remains future work.
+- Current runtime safety handles out-of-bounds and blocked positions but does not provide full historical position migration.
+- Default manifest still references the current TMX layer names and current map art.
+- Future map replacement should add automated manifest-vs-TMX validation in CI or a dev script.
+- `docs/references/` remains unrelated untracked content and should not be staged.
+
+## 8. Final Recommendation
+
+- QA review: passes code review, machine verification, and required manual QA.
 - Return to Codex Chat 2: not required.
-- Can proceed to human manual testing: final required manual pass is complete.
-- Suggested commit: yes, recommended.
-- Do not stage `docs/references/`.
+- Can proceed to human manual testing: completed for required scope.
+- Suggested commit: yes.

@@ -1,4 +1,5 @@
 import type { OfficeRoomZone, PlayerState } from "@workmap/shared-types";
+import { WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST } from "@workmap/shared-types";
 
 export type RemoteOfficePlayer = PlayerState & {
   role: string;
@@ -10,14 +11,12 @@ export type OfficeTileset = {
   imagePath: string;
 };
 
-export const roomZones: OfficeRoomZone[] = [
-  { id: "open-office-north", name: "Open Office", status: "available", x: 32, y: 64, width: 736, height: 384 },
-  { id: "focus-room", name: "Focus Room", status: "focus", x: 864, y: 64, width: 224, height: 384 },
-  { id: "meeting-room", name: "Meeting Room", status: "busy", x: 1120, y: 64, width: 416, height: 384 },
-  { id: "engineering-zone", name: "Engineering Zone", status: "available", x: 32, y: 640, width: 736, height: 288 },
-  { id: "sales-zone", name: "Sales Zone", status: "available", x: 864, y: 640, width: 416, height: 288 },
-  { id: "break-room", name: "Break Room", status: "break", x: 1344, y: 768, width: 192, height: 160 },
-];
+export const roomZones: OfficeRoomZone[] = WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.rooms.map((room) => ({
+  id: room.key,
+  name: room.name,
+  status: room.autoStatus,
+  ...room.bounds,
+}));
 
 export const remotePlayers: RemoteOfficePlayer[] = [
   {
