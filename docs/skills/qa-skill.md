@@ -88,6 +88,23 @@ Database setup:
 - Confirm backend stopped does not crash frontend pages that already have fallback behavior.
 - For deployed smoke, set real Vercel, Render, Supabase, and Cognito env values directly in platform consoles and verify real callback/logout URLs.
 
+## STAGE 2 Alpha Production Readiness QA
+
+Use `docs/ai-handoff/alpha-production-readiness.md` as the source of truth before claiming alpha readiness.
+
+- Keep real secrets, bearer tokens, database URLs, Cognito secrets, platform admin identities, and extension/agent tokens out of chat, docs, logs, and commits.
+- Configure Vercel public env, Render server env, Supabase `DATABASE_URL`, Cognito Hosted UI callback/logout/scopes, `WORKMAP_APP_URL`, and exact `WORKMAP_ALLOWED_ORIGINS` before deployed smoke.
+- Apply required Prisma migrations in order: `20260529043117_v1`, `20260606000000_stage2_onboarding_invites`, `20260607000000_platform_audit_log`, and `20260609000000_stage2_activity_source`.
+- Verify deployed `GET /health` returns liveness 200.
+- Verify deployed `GET /health/readiness` returns database-ready 200 after migrations and DB connectivity are correct.
+- Verify a broken database readiness state returns safe 503 output without secrets or raw database details when practical.
+- Confirm production CORS accepts only exact configured frontend origins and does not use `*`.
+- Confirm deployed `/virtual-office/realtime` connects over WSS from the real Vercel origin after `WORKMAP_ALLOWED_ORIGINS` is configured.
+- Run owner Cognito sign-in, workspace creation, invite creation, employee Cognito invite acceptance, compliance/avatar/device onboarding, virtual-office realtime/polling, reports, dashboard, employees, settings, invite, and compliance smoke.
+- Run activity hardening checks for malformed/cross-tenant device ids, spoof heartbeat, bad/future/old timestamps, zero/negative/too-long durations, empty/malformed app labels, malformed/full URL domain normalization, batch size over 50, ignored client tenant/user/role fields, employee `scope=company` 403, owner aggregate-only reports, and Platform Admin privacy boundary.
+- Confirm Platform Admin uses only configured backend allowlists and does not expose employee app/domain details or raw activity rows.
+- Run a final secret scan before deploy/commit handoff.
+
 ## STAGE 2 Tenant Onboarding / Invite QA
 
 - Apply migration `20260606000000_stage2_onboarding_invites` before testing.
@@ -289,6 +306,18 @@ Use this repeatable loop after backend/local-startup changes:
 - Add coverage for `useVirtualOfficeData.ts` adapters/fallback behavior when a frontend test harness is introduced.
 
 ## Latest Verification Notes
+
+For commit `8719f5d`, handoff/QA reports:
+
+- API and web typecheck, lint, and build passed.
+- Desktop-agent and browser-extension typecheck, lint, and build passed; desktop build passed after rerun outside the sandbox due to a Windows `dist` permission issue.
+- `pnpm prisma:generate` passed after local Node processes locking Prisma files were stopped.
+- `git diff --check` passed with CRLF normalization warnings only.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` found no high-confidence matches.
+- Code review confirmed shared HTTP CORS/WebSocket origin allowlist behavior, preferred `WORKMAP_ALLOWED_ORIGINS`, production browser-origin rejection when no allowlist is configured, local-only localhost origins, safe missing-origin server-to-server behavior, `/health/readiness` DB readiness without secrets, and alpha deployment documentation.
+- No real deployed Vercel/Render/Supabase/Cognito smoke was run.
+- No live browser alpha smoke or live invalid-input activity hardening requests were run.
+- QA recommendation: code/docs can proceed toward controlled alpha deployment preparation, but deployed alpha readiness remains blocked on external service setup and deployed smoke.
 
 For commit `abe673c`, the implementation handoff reports these passed from `workmap/`:
 

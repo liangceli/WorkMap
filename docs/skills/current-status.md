@@ -4,11 +4,12 @@ Last updated: 2026-06-11.
 
 ## Latest Accepted Work
 
-- STAGE 2 Round 8 alpha production readiness is in progress in the current implementation diff.
+- Commit `8719f5d` (`chore: harden alpha deployment readiness`) completed STAGE 2 Round 8: alpha production readiness, deployment documentation, CORS/WebSocket origin hardening, and API readiness checks.
 - `docs/ai-handoff/alpha-production-readiness.md` now captures Vercel/Render/Supabase/Cognito env setup, migration order, WSS expectations, activity hardening checklist, full alpha smoke checklist, and release blocker statuses.
-- API CORS is being hardened around explicit origin allowlists through `WORKMAP_ALLOWED_ORIGINS` / `WORKMAP_ALLOWED_ORIGIN`, shared with WebSocket origin checks.
+- API CORS now uses explicit origin allowlists through preferred `WORKMAP_ALLOWED_ORIGINS` and fallback `WORKMAP_ALLOWED_ORIGIN`, shared with WebSocket origin checks.
 - API now has `/health/readiness` for database connectivity readiness without exposing secrets, while `/health` remains a lightweight liveness endpoint.
 - External Vercel/Render/Supabase/Cognito configuration and deployed alpha smoke remain Manual Action Required; no real secrets should be committed or pasted into chat.
+- Round 8 did not add a Prisma migration or deploy the app. Code/docs can proceed toward controlled alpha deployment preparation, but deployed alpha readiness is not proven until external platform setup and smoke pass.
 - Commit `ec1b6d1` (`feat: add activity tracking ingestion loop`) completed STAGE 2 Round 7: desktop-agent/browser-extension activity ingestion loop with reports, dashboard, and compliance transparency.
 - Prisma now has `ActivityEventSource` plus `ActivityEvent.source`, backed by migration `20260609000000_stage2_activity_source`; existing browser rows are backfilled as `BROWSER_EXTENSION`.
 - Backend now exposes guarded `POST /devices/register`, `POST /devices/heartbeat`, `POST /activity/app-usage`, and `POST /activity/domain-usage`.
@@ -152,7 +153,7 @@ Last updated: 2026-06-11.
 - Desktop-agent is a harness/scaffold, not production active-window tracking. No native active-window dependency, offline durable queue, retry/backoff, packaging, or pairing UX was added.
 - Browser extension is a local Manifest V3 scaffold. Permissions review, packaging, store distribution, CORS/origin hardening, pairing UX, offline queueing, and deployed extension testing remain future work.
 - New activity migration `20260609000000_stage2_activity_source` must be applied before activity ingestion works against a database.
-- Optional invalid-input hardening manual checks were skipped for cross-user/cross-tenant device id, bad timestamp, too-long duration, and malformed domain.
+- Round 8 documents the full activity hardening checklist, but live invalid-input requests against a deployed API are still pending for cross-user/cross-tenant device ids, bad timestamps, duration bounds, malformed domains, and URL normalization.
 - Platform Admin is independent from tenant users, but bootstrap still uses env allowlists rather than a persisted platform identity lifecycle/admin console.
 - The `PlatformAuditLog` migration must be applied before `/platform/*` audit writes work against a database.
 - Platform audit rows do not foreign-key to `Company`; historical rows for deleted tenants may show `targetCompany: null`.
@@ -172,10 +173,11 @@ Last updated: 2026-06-11.
 - Existing test workspaces created before the owner spawn fix can still have the old blocked owner position and may need DB cleanup/recreation.
 - Realtime virtual-office movement is now in-memory per API process. Horizontal API scaling needs shared pub/sub before multiple backend instances can safely broadcast the same office room.
 - Browser WebSocket auth passes the access token in the socket URL query because native WebSocket cannot set `Authorization` headers; deployed environments should use HTTPS/WSS and avoid logging query strings.
-- Production realtime deployment needs `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL` aligned with the deployed frontend origin.
+- Production HTTP CORS and realtime WebSocket deployment need `WORKMAP_ALLOWED_ORIGINS` set to the exact deployed frontend origin(s). `WORKMAP_ALLOWED_ORIGIN` remains only a backward-compatible single-origin fallback.
+- In production, if no allowed browser origins are configured, browser HTTP CORS and browser WebSocket origins are rejected; missing `Origin` remains allowed for server-to-server or health-style requests.
 - `office:presence` is emitted by the gateway, but the frontend primarily renders `player:state` updates plus polling reconciliation for People/presence stability.
 - Users created before backend avatar/profile persistence may still need to complete avatar setup once before backend `User.avatarId` contains a valid `layered:v2:` reference.
-- Real external deployment smoke for Vercel/Render/Cognito is still pending after commit/push; the readiness doc is a checklist, not proof of deployed production success.
+- Real external deployment smoke for Vercel/Render/Supabase/Cognito is still pending after commit/push; the readiness doc is a checklist, not proof of deployed production success.
 - Root `.env` changes require restarting the Next dev server before `/login` reflects updated `NEXT_PUBLIC_COGNITO_*` values.
 - Local browser smoke should use `http://localhost:3000`; using `http://127.0.0.1:3000` can fail CORS when `WORKMAP_ALLOWED_ORIGIN` is `http://localhost:3000`.
 - Cognito mapping now uses `User.cognitoSub` when available and can bind one exact legacy email match. Full global identity and membership architecture remains future work.
@@ -223,11 +225,13 @@ Last updated: 2026-06-11.
 - Add real email delivery for invitations and a revoke/resend lifecycle.
 - Add a richer profile/avatar table if `User.avatarId` as compact `layered:v2:` reference becomes too limiting.
 - Run deployed WSS smoke on real Vercel/Render/Cognito URLs after confirming frontend/API origins and HTTPS socket behavior.
+- Configure `WORKMAP_ALLOWED_ORIGINS`, `WORKMAP_APP_URL`, Vercel public env, Render server env, Cognito callback/logout URLs, Supabase `DATABASE_URL`, and all required Prisma migrations before claiming alpha readiness.
+- Verify deployed `/health` and `/health/readiness` before owner/invite/realtime/activity smoke.
 - Add a shared pub/sub adapter before running more than one API instance for realtime virtual-office rooms.
 - Add automated realtime tenant-isolation, wrong-map join rejection, invalid-room movement rejection, reconnect/fallback, and no-per-frame-DB-write regression tests.
 - Monitor realtime throttle/interpolation values during pilot use and tune only if real movement feels laggy or noisy.
 - Add strict multi-tenant/RBAC automated tests for onboarding, invitation list/create/accept, reports, compliance, virtual-office positions, integrations, employee directory/profile, and devices.
-- Execute deployed smoke on real Vercel/Render/Cognito URLs after confirming environment variables and callback/logout URLs.
+- Execute deployed smoke on real Vercel/Render/Supabase/Cognito after confirming environment variables, migrations, health/readiness, and callback/logout URLs.
 - Decide when to migrate from the current `User.cognitoSub` bridge to a full identity table plus tenant membership model.
 - Consider clearer manual recovery for Cognito mapping failure, including sign-out/clear-session guidance before using pilot fallback.
 - Add automated tests for Cognito token verification, email_verified enforcement, mapping ambiguity, auth priority, `/login/callback`, and root `.env` loading behavior.

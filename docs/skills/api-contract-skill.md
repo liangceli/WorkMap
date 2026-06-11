@@ -61,6 +61,7 @@ Development overrides:
 ## Confirmed Endpoints
 
 - `GET /health`
+- `GET /health/readiness`
 - `POST /auth/pilot-login`
 - `POST /auth/dev-token`
 - `GET /auth/me`
@@ -108,6 +109,33 @@ Expected frontend type:
 - `timestamp: string`
 
 The Dashboard uses this endpoint to distinguish live API readiness from fallback/error copy.
+
+`GET /health/readiness` returns database readiness for deployed alpha checks.
+
+Expected successful shape:
+
+- `status: "ready"`
+- `service: string`
+- `database: "ok"`
+- `timestamp: string`
+
+Expected database-failure behavior:
+
+- HTTP status `503`.
+- Safe unavailable fields such as `status: "not_ready"` and `database: "unavailable"`.
+- No connection strings, secrets, stack traces, or raw database error detail.
+
+## Production Origin Contract
+
+Commit `8719f5d` made browser origin handling explicit for alpha deployment.
+
+- Preferred env is `WORKMAP_ALLOWED_ORIGINS`, a comma-separated exact origin allowlist.
+- `WORKMAP_ALLOWED_ORIGIN` remains a single-origin fallback.
+- Localhost browser origins are auto-added only outside production.
+- In production, browser requests with an `Origin` not in the allowlist are rejected by CORS.
+- In production, if no allowlist is configured, browser origins are rejected.
+- Requests without an `Origin` header remain allowed for server-to-server and health-style checks.
+- `WS /virtual-office/realtime` uses the same origin allowlist for WebSocket upgrade checks.
 
 ## Reports Contract
 

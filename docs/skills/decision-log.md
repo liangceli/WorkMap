@@ -134,7 +134,15 @@ Decision: Add guarded app/domain activity ingestion, tenant/user-bound devices, 
 
 Reason: WorkMap needs an end-to-end activity loop for app usage, browser domain usage, dashboard readiness, reports, and compliance boundaries without crossing into hidden surveillance.
 
-Trade-off: The backend loop and UI reporting are now real enough for pilot validation, but the desktop agent is not production active-window tracking and the browser extension is not packaged/store-ready. Offline queues, retry/backoff, secure pairing/token lifecycle, revocation, CORS/origin hardening, and production distribution remain future work.
+Trade-off: The backend loop and UI reporting are now real enough for pilot validation, but the desktop agent is not production active-window tracking and the browser extension is not packaged/store-ready. Offline queues, retry/backoff, secure pairing/token lifecycle, revocation, extension-specific origin/pairing hardening, and production distribution remain future work.
+
+## 2026-06-11 - Alpha Origin Allowlist And Readiness Gate
+
+Decision: Centralize HTTP CORS and WebSocket origin checks in a shared allowlist helper, prefer `WORKMAP_ALLOWED_ORIGINS` for exact deployed browser origins, and add `/health/readiness` as a separate database readiness endpoint.
+
+Reason: Controlled alpha deployment needs explicit browser-origin security for Vercel/Render, consistent WSS origin behavior, and a safe way to distinguish API liveness from database readiness before owner/invite/activity smoke.
+
+Trade-off: Production browser HTTP and WSS traffic now depends on exact external env configuration; a misconfigured or missing allowlist blocks browser origins. Missing `Origin` remains allowed for server-to-server/health-style requests, and deployed alpha readiness still requires manual Vercel, Render, Supabase, Cognito, migration, and smoke verification.
 
 ## Existing Project Decisions Confirmed From Code
 

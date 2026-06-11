@@ -82,6 +82,10 @@ Commit `1d2836c` added native WebSocket movement for same-company, same-office-m
 - Remote avatar rendering interpolates toward latest realtime targets and snaps for large jumps or stale state.
 - As of commit `4e09788`, realtime join context carries the resolved active map manifest bounds.
 - Out-of-bounds realtime movement is rejected with `office:error`; the websocket payload shape did not change.
+- As of commit `8719f5d`, WebSocket upgrade origin checks reuse the shared HTTP CORS allowlist from `apps/api/src/config/allowed-origins.ts`.
+- Production WSS deployments must set `WORKMAP_ALLOWED_ORIGINS` to the exact deployed frontend origin(s); otherwise browser WebSocket origins are rejected.
+- `WORKMAP_ALLOWED_ORIGIN` remains a backward-compatible single-origin fallback.
+- Missing `Origin` remains allowed for non-browser/server-side callers, but browser alpha smoke should verify the real Vercel origin can connect over WSS.
 
 ## Not Confirmed
 

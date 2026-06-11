@@ -168,7 +168,7 @@ Render backend:
 - Build command: `pnpm install && pnpm --filter @workmap/api build`.
 - Start command: `pnpm --filter @workmap/api start`.
 - Health check path: `/health`.
-- Required server env includes `DATABASE_URL`, `WORKMAP_ALLOWED_ORIGIN`, `WORKMAP_JWT_SECRET`, `WORKMAP_PILOT_PASSWORD_HASH`, and `WORKMAP_COGNITO_*`.
+- Required server env includes `DATABASE_URL`, `WORKMAP_ALLOWED_ORIGINS`, `WORKMAP_JWT_SECRET`, `WORKMAP_PILOT_PASSWORD_HASH`, and `WORKMAP_COGNITO_*`.
 - For `/platform-admin`, set `WORKMAP_PLATFORM_ADMIN_EMAILS` and/or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` in Render environment settings only.
 - Set `WORKMAP_APP_URL` to the deployed Vercel app URL so generated invite links are not localhost links.
 - `WORKMAP_ALLOWED_ORIGINS` must match the Vercel frontend origin(s). `WORKMAP_ALLOWED_ORIGIN` is a single-origin fallback.
@@ -197,13 +197,13 @@ Desktop agent / browser extension:
 Cognito:
 
 - Configure Hosted UI domain, browser PKCE app client, callback/logout URLs, and `openid email profile` scopes.
-- Backend maps verified Cognito email to an existing WorkMap user for STAGE 2.
-- Stable Cognito `sub` mapping and tenant provisioning remain future work.
+- Backend maps verified Cognito users through `User.cognitoSub` when available and can bind one safe exact legacy email match.
+- Full global identity/account and tenant-membership architecture remains future work.
 
 Realtime WebSocket deployment:
 
 - The frontend derives `ws://` or `wss://` from `NEXT_PUBLIC_WORKMAP_API_URL`; deployed HTTPS API URLs should become WSS automatically.
-- `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL` should match the deployed frontend origin so WebSocket origin checks pass.
+- `WORKMAP_ALLOWED_ORIGINS` should include the exact deployed frontend origin(s) so HTTP CORS and WebSocket origin checks pass. `WORKMAP_ALLOWED_ORIGIN` remains a single-origin fallback.
 - Browser socket auth sends the Bearer token as query `token`; use WSS and avoid retaining full socket query strings in logs.
 - Run deployed smoke with two authenticated users in one company/map before considering realtime movement production-ready.
 
@@ -218,4 +218,4 @@ The web root `.env` loader is for local monorepo ergonomics. Vercel/Render produ
 - Redis is listed in env example but no confirmed runtime usage was found during intake.
 - The accepted realtime gateway is in-memory and does not currently use Redis/pub-sub.
 - Desktop agent and browser extension are now local scaffolds/harnesses for activity ingestion, but not production-ready tracking clients.
-- External Vercel/Render/Cognito deployed smoke remains pending for the accepted STAGE 2 baseline.
+- External Vercel/Render/Supabase/Cognito deployed smoke remains pending for the accepted STAGE 2 baseline.

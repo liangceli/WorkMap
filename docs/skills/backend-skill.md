@@ -31,6 +31,28 @@ Runtime/local startup notes:
 - It also registers compiled local aliases for `@workmap/auth` and `@workmap/shared-types` so the nested Nest build output can run locally.
 - The API `dev` script is `nest build && node dist/apps/api/src/main.js`.
 
+## HTTP CORS / Origin Allowlist
+
+Commit `8719f5d` hardened alpha deployment origins for HTTP CORS and WebSocket upgrades.
+
+- Shared origin logic lives in `apps/api/src/config/allowed-origins.ts`.
+- Preferred production env is `WORKMAP_ALLOWED_ORIGINS`, a comma-separated list of exact browser origins.
+- `WORKMAP_ALLOWED_ORIGIN` remains a backward-compatible single-origin fallback.
+- `NEXT_PUBLIC_APP_URL` is only a final backend fallback for origin inference.
+- Localhost origins are auto-added only outside production.
+- In production, if no allowed origins are configured, browser origins are rejected and the API logs a warning.
+- Requests without an `Origin` header remain allowed for non-browser/server-to-server flows such as health checks.
+- The virtual-office realtime gateway reuses the same allowlist for WebSocket origin checks.
+
+## Health / Readiness
+
+Commit `8719f5d` split liveness from database readiness.
+
+- `GET /health` remains a lightweight API liveness endpoint and should not depend on database connectivity.
+- `GET /health/readiness` runs a Prisma `SELECT 1` readiness check.
+- Healthy readiness returns safe status fields such as `status: ready` and `database: ok`.
+- Database failure returns 503 with safe unavailable fields and must not expose connection strings, secrets, stack traces, or raw database errors.
+
 ## Virtual Office Persistence
 
 Current-user latest-position persistence was added in commit `1a0a19f`.
@@ -68,7 +90,7 @@ Commit `1d2836c` added native WebSocket realtime movement for `/virtual-office`.
 - Provider registration: `VirtualOfficeRealtimeGateway` is registered by `VirtualOfficeModule`.
 - Auth: handshake context is resolved through `RequestContextResolverService`; clients can provide a Bearer token through `Authorization` or query `token`.
 - Unauthenticated handshakes are rejected with `401`.
-- Origin: production deployments should configure `WORKMAP_ALLOWED_ORIGIN` or `NEXT_PUBLIC_APP_URL` to the deployed frontend origin.
+- Origin: production deployments should configure `WORKMAP_ALLOWED_ORIGINS` to the exact deployed frontend origin(s). `WORKMAP_ALLOWED_ORIGIN` remains a backward-compatible single-origin fallback.
 - Join validation: `office:join` requires `canAccessVirtualOffice()`, a UUID-shaped `officeMapId`, and an office map that belongs to the authenticated company.
 - Room isolation: room keys are backend-computed as `companyId:officeMapId`; clients cannot choose tenant/company scope.
 - Movement validation: `player:move` is accepted only after a validated join, with finite coordinates, supported direction/status, and optional room id belonging to the joined office map.
