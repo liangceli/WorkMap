@@ -36,8 +36,10 @@ Database setup:
 - AppShell session state remains clear after refresh and links missing/unclear session states back to `/login`.
 - `/dashboard` renders API health, auth/session, remote presence, compliance, and reports readiness with clear live/fallback/error labels.
 - `/reports` renders API-backed current-user app/domain rows when available, or clear sparse-data copy when no rows exist.
-- `/reports` and `/dashboard` keep department/team aggregate rows labeled as pilot examples until a backend aggregate endpoint exists.
+- `/reports` and `/dashboard` show backend-backed tracking coverage and role-appropriate own/company app/domain summaries when activity data exists.
+- EMPLOYEE direct request to `/reports/usage-summary?scope=company` should return 403.
 - `/compliance` still loads backend policy and acknowledgement flows under pilot Bearer auth.
+- `/compliance` and acknowledgement modal should explain app usage, browser domain usage, device heartbeat, and explicit non-collected data.
 - Onboarding routes advance in expected order.
 - `/virtual-office` redirects to avatar onboarding when avatar is missing.
 - `/virtual-office` loads TMX map and tileset images.
@@ -139,6 +141,25 @@ Database setup:
 - Sign in as tenant OWNER not in the platform allowlist and confirm no Platform Admin nav plus direct `/platform-admin` blocked UI and `/platform/*` returns 403.
 - Sign in as EMPLOYEE not in the platform allowlist and confirm no Platform Admin nav plus direct `/platform-admin` blocked UI and `/platform/*` returns 403.
 - Confirm tenant onboarding, invite acceptance, `/virtual-office` realtime, Dashboard, Reports, Compliance, and Employees still pass smoke after platform-admin changes.
+
+## STAGE 2 Activity Tracking QA
+
+- Apply migration `20260609000000_stage2_activity_source` before local or deployed activity testing.
+- Restart API after migration.
+- Use a real authenticated local WorkMap Bearer token without pasting it into chat or committing it.
+- Register a device through `POST /devices/register`.
+- Submit one app usage event through `POST /activity/app-usage` or the desktop-agent `--sample-once` harness.
+- Submit one domain usage event through `POST /activity/domain-usage` or the browser-extension scaffold.
+- Confirm app usage response records `DESKTOP_AGENT` / `APP`.
+- Confirm domain usage response records `BROWSER_EXTENSION` / `BROWSER`.
+- Confirm Employee `/reports` shows own app/domain summaries and device coverage.
+- Confirm domain reports show hostname only, not full URL path, query, or fragment.
+- Confirm Owner `/reports` shows company aggregate app/domain summaries without raw employee event rows.
+- Confirm EMPLOYEE direct `/reports/usage-summary?scope=company` returns 403.
+- Confirm Dashboard tracking coverage updates when device/activity rows exist.
+- Confirm Compliance policy and acknowledgement modal list collected app name/duration, browser domain/duration, timestamps, device heartbeat, and explicitly excluded screenshots, screen recording, keystrokes, clipboard, camera/microphone, private messages/emails, page content, full URL paths/queries, form inputs, and passwords.
+- Confirm Platform Admin does not expose employee-level app/domain details or raw activity rows.
+- Hardening checks when time allows: cross-user/cross-tenant device id, bad timestamp, too-long duration, malformed domain, and full URL normalization.
 
 ## Local API-Backed Virtual Office Verification Loop
 
@@ -410,3 +431,13 @@ For commit `4e09788`, handoff/QA reports:
 - User manual QA passed for current TMX map rendering, active-manifest safe spawn, saved-position restore, movement/collision/auto-walk/chair/contact drawer, readable room labels, two-user realtime movement, polling refresh/restore, new owner workspace default map/rooms/spawn, and Dashboard/Employees/Reports/Compliance/Settings/Invite/Platform Admin smoke.
 - Manual DB mutation for invalid/out-of-bounds saved position was skipped; this remains covered by code review and machine verification.
 - Non-blocking UX notes: saved-position restore may briefly show default spawn before jumping to saved backend position; chair interaction has no dedicated sitting pose/animation yet.
+
+For commit `ec1b6d1`, handoff/QA reports:
+
+- `pnpm prisma:generate` passed after a sandbox/network retry outside the sandbox.
+- API, web, desktop-agent, and browser-extension typecheck/lint/build commands passed.
+- `git diff --check` passed with only CRLF normalization warnings.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches.
+- Code review confirmed guarded app/domain activity ingestion, tenant/user-scoped device binding, batch/timestamp/duration/label/domain validation, app/domain summary updates, role-aware reports scope, privacy-minimized hostname storage, compliance copy, and scaffold-only desktop/browser clients.
+- User manual QA passed for local migration, API restart, Employee device registration, app usage ingestion, domain usage ingestion, Employee own reports, hostname-only report output, Owner company aggregate reports, Employee 403 for `scope=company`, Dashboard tracking coverage, Compliance copy/modal boundaries, and Platform Admin privacy boundary.
+- Skipped checks: optional invalid-input hardening for cross-user/cross-tenant device id, bad timestamp, too-long duration, malformed domain; broad regression smoke for `/virtual-office`, Employees, tenant onboarding, invites, and other non-activity flows.

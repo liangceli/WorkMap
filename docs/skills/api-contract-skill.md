@@ -80,8 +80,13 @@ Development overrides:
 - `GET /users`
 - `GET /users/:userId`
 - `GET /devices`
+- `POST /devices/register`
+- `POST /devices/heartbeat`
+- `POST /activity/app-usage`
+- `POST /activity/domain-usage`
 - `GET /reports/usage-summary`
 - `GET /reports/usage-summary?userId=:userId`
+- `GET /reports/usage-summary?scope=company`
 - `GET /virtual-office/map`
 - `GET /virtual-office/navigation`
 - `GET /virtual-office/map/:officeMapId/positions`
@@ -110,6 +115,8 @@ The Dashboard uses this endpoint to distinguish live API readiness from fallback
 
 `GET /reports/usage-summary?userId=:userId` can request a specific user when allowed by backend context.
 
+`GET /reports/usage-summary?scope=company` returns company aggregate app/domain rows only when `canViewTeamReports()` allows it.
+
 Frontend type:
 
 - `userId: string`
@@ -119,11 +126,86 @@ Frontend type:
 Current reporting boundary:
 
 - Dashboard and Reports use this route for API-backed app/domain rows.
-- Department/team aggregate rows are not yet backed by a team aggregate endpoint and must remain labeled as pilot examples.
+- Company aggregate rows are now API-backed for roles allowed to view team reports.
 - Sparse or empty pilot seed data should be presented as sparse data, not as a broken API.
 - Own reports are visible to all roles with `viewOwnReports`.
 - Cross-user reports require `viewEmployeeActivity`; target user must belong to the requester's company.
 - Off-tenant report targets return safe not-found behavior.
+- Company aggregate summaries do not return raw employee event rows.
+- Summary metadata can include registered devices, active devices in 24 hours, and users with activity rows.
+
+## Device Contract
+
+Round 7 added tenant/user-bound device registration and heartbeat.
+
+`POST /devices/register` request body:
+
+- optional `deviceId`
+- optional `os`
+- optional `hostname`
+- optional `agentVersion`
+
+Behavior:
+
+- Guarded by `RequestContextGuard`.
+- Backend stores authenticated `companyId` and `userId`.
+- A supplied `deviceId` is rejected if it already belongs to another user or tenant.
+- Inputs are sanitized/capped.
+
+`POST /devices/heartbeat` request body:
+
+- `deviceId`
+- optional `agentVersion`
+
+Behavior:
+
+- Updates `lastSeenAt` only for the authenticated user's own device.
+- Cross-user or cross-tenant device ids fail safely.
+
+## Activity Ingestion Contract
+
+Round 7 added app/domain usage ingestion.
+
+`POST /activity/app-usage` accepts one event or `{ events: [...] }`.
+
+Event fields:
+
+- `deviceId`
+- `appName`
+- `startedAt`
+- `endedAt` or duration field accepted by backend implementation
+- optional `isIdle`
+
+Stored as:
+
+- `ActivityEventType.APP`
+- `ActivityEventSource.DESKTOP_AGENT`
+
+`POST /activity/domain-usage` accepts one event or `{ events: [...] }`.
+
+Event fields:
+
+- `deviceId`
+- `domain`
+- `browserName`
+- `startedAt`
+- `endedAt` or duration field accepted by backend implementation
+- optional `isIdle`
+
+Stored as:
+
+- `ActivityEventType.BROWSER`
+- `ActivityEventSource.BROWSER_EXTENSION`
+
+Validation:
+
+- Batch size max is 50 events.
+- Device must belong to authenticated user and company.
+- Durations must be positive and at most 12 hours.
+- Timestamps cannot be older than 31 days or more than 5 minutes in the future.
+- App/browser labels are sanitized and capped.
+- Domain input is normalized to hostname only.
+- Full URL paths, query strings, fragments, page body content, form inputs, passwords, screenshots, screen recording, keystrokes, clipboard, camera, microphone, and private message/email content are not accepted as stored tracking data.
 
 ## Users Contract
 

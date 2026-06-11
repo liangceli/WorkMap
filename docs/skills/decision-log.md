@@ -128,6 +128,14 @@ Reason: Future map expansion/replacement needs one source of truth for TMX path,
 
 Trade-off: This keeps Round 6 safe and migration-free, but saved positions still do not store `mapVersion`. Runtime bounds checks and safe-spawn relocation mitigate stale/invalid positions now; strict stale-position invalidation needs future position version metadata and manifest-vs-TMX validation tooling.
 
+## 2026-06-11 - Transparent Activity Ingestion Loop
+
+Decision: Add guarded app/domain activity ingestion, tenant/user-bound devices, summary aggregation, role-scoped reports, and transparent compliance copy while keeping desktop-agent and browser-extension clients as honest scaffolds.
+
+Reason: WorkMap needs an end-to-end activity loop for app usage, browser domain usage, dashboard readiness, reports, and compliance boundaries without crossing into hidden surveillance.
+
+Trade-off: The backend loop and UI reporting are now real enough for pilot validation, but the desktop agent is not production active-window tracking and the browser extension is not packaged/store-ready. Offline queues, retry/backoff, secure pairing/token lifecycle, revocation, CORS/origin hardening, and production distribution remain future work.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

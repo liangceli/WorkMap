@@ -23,6 +23,8 @@ App-specific commands:
 
 - Web: `pnpm --filter @workmap/web dev`, `build`, `lint`, `typecheck`.
 - API: `pnpm --filter @workmap/api dev`, `build`, `lint`, `typecheck`.
+- Desktop agent harness: `pnpm --filter @workmap/desktop-agent build`, `lint`, `typecheck`.
+- Browser extension scaffold: `pnpm --filter @workmap/browser-extension build`, `lint`, `typecheck`.
 
 API local development note:
 
@@ -65,6 +67,9 @@ From `.env.example`:
 - `WORKMAP_COGNITO_COMPANY_SLUG`
 - `WORKMAP_PLATFORM_ADMIN_EMAILS`
 - `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS`
+- `WORKMAP_AGENT_TOKEN`
+- `WORKMAP_AGENT_DEVICE_ID`
+- `WORKMAP_API_BASE_URL`
 - `WORKMAP_APP_URL` is also used by invite-link generation when configured; otherwise the API falls back to `NEXT_PUBLIC_APP_URL` or `http://localhost:3000`.
 
 Pilot local startup convention:
@@ -97,28 +102,36 @@ Platform admin env:
 - `.env.example` keeps these blank. Do not commit real platform admin identities.
 - Restart the API after changing platform admin env values.
 
+Activity tracking harness env:
+
+- Desktop-agent harness reads `WORKMAP_API_BASE_URL`, `WORKMAP_AGENT_TOKEN`, and optional `WORKMAP_AGENT_DEVICE_ID`.
+- Browser extension local storage keys are `workmapApiBaseUrl`, `workmapAuthToken`, `workmapDeviceId`, and `workmapBrowserName`.
+- Do not commit or paste real WorkMap bearer/agent/extension tokens.
+
 ## Local API Verification Loop
 
 1. Ensure local `.env` contains `DATABASE_URL`, `API_PORT="3001"`, `NEXT_PUBLIC_APP_URL="http://localhost:3000"`, `NEXT_PUBLIC_WORKMAP_API_URL="http://localhost:3001"`, and `WORKMAP_JWT_SECRET`.
 2. Run setup from `workmap/`: `pnpm install`, `pnpm prisma:generate`, `pnpm prisma:migrate`, and `pnpm prisma:seed` when the local DB needs initialization.
 3. For STAGE 2 Round 2, ensure migration `20260606000000_stage2_onboarding_invites` has been applied before testing tenant onboarding/invites.
 4. For STAGE 2 Round 5, ensure migration `20260607000000_platform_audit_log` has been applied before testing `/platform-admin`.
-5. Start API from `workmap/`: `pnpm --filter @workmap/api dev`.
-6. Confirm `GET http://localhost:3001/health` returns 200.
-7. Start web from `workmap/`: `pnpm --filter @workmap/web dev`.
-8. Open `http://localhost:3000/login`, sign in with the seeded pilot user, and confirm the AppShell session state is clear after refresh.
-9. For Cognito owner onboarding, sign in with a new verified Cognito user and confirm `/onboarding/company` can create a backend workspace.
-10. For invites, create an Owner invite at `/onboarding/invite`, open `/invite/:token` in a clean/incognito browser, sign in with the invited verified email, and accept into the workspace.
-11. For platform admin, configure a real allowlisted Cognito email/sub locally without committing it, restart API, sign in with that Cognito identity, and confirm `/platform-admin` loads without tenant onboarding.
-12. Open `http://localhost:3000/dashboard` and confirm API health, auth context, remote presence, compliance, and reports readiness sections show live/fallback states clearly.
-13. Open `http://localhost:3000/reports` and confirm API-backed current-user usage rows or sparse-data explanation, with aggregate/example rows clearly labeled as pilot examples.
-14. Open `http://localhost:3000/compliance`, confirm policy loading and acknowledgement behavior.
-15. Open `http://localhost:3000/virtual-office` and confirm development auth and virtual-office read requests target backend port 3001.
-16. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
-17. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
-18. For realtime movement QA, open two authenticated browsers in the same company/map and confirm `/virtual-office/realtime` connects, movement is smooth in both directions, and polling still reconciles after refresh.
-19. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
-20. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
+5. For STAGE 2 Round 7, ensure migration `20260609000000_stage2_activity_source` has been applied before testing activity ingestion.
+6. Start API from `workmap/`: `pnpm --filter @workmap/api dev`.
+7. Confirm `GET http://localhost:3001/health` returns 200.
+8. Start web from `workmap/`: `pnpm --filter @workmap/web dev`.
+9. Open `http://localhost:3000/login`, sign in with the seeded pilot user, and confirm the AppShell session state is clear after refresh.
+10. For Cognito owner onboarding, sign in with a new verified Cognito user and confirm `/onboarding/company` can create a backend workspace.
+11. For invites, create an Owner invite at `/onboarding/invite`, open `/invite/:token` in a clean/incognito browser, sign in with the invited verified email, and accept into the workspace.
+12. For platform admin, configure a real allowlisted Cognito email/sub locally without committing it, restart API, sign in with that Cognito identity, and confirm `/platform-admin` loads without tenant onboarding.
+13. For activity tracking, register a device, ingest one app usage event, ingest one domain usage event, and confirm `/reports`, `/dashboard`, and `/compliance` reflect the new tracking loop and privacy boundaries.
+14. Open `http://localhost:3000/dashboard` and confirm API health, auth context, remote presence, compliance, reports readiness, and tracking coverage sections show live/fallback states clearly.
+15. Open `http://localhost:3000/reports` and confirm API-backed own/company usage rows or sparse-data explanation, with RBAC-appropriate scope.
+16. Open `http://localhost:3000/compliance`, confirm policy loading, acknowledgement behavior, collected data, and non-collected data copy.
+17. Open `http://localhost:3000/virtual-office` and confirm development auth and virtual-office read requests target backend port 3001.
+18. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
+19. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
+20. For realtime movement QA, open two authenticated browsers in the same company/map and confirm `/virtual-office/realtime` connects, movement is smooth in both directions, and polling still reconciles after refresh.
+21. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
+22. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
 
 Detailed release smoke steps live in `docs/ai-handoff/pilot-release-checklist.md`.
 
@@ -161,7 +174,15 @@ Supabase:
 - Run Prisma generate/migrate/seed against the intended database.
 - Include migration `20260606000000_stage2_onboarding_invites` before Round 2 deployed smoke.
 - Include migration `20260607000000_platform_audit_log` before Round 5 platform-admin deployed smoke.
+- Include migration `20260609000000_stage2_activity_source` before Round 7 activity tracking deployed smoke.
 - No Supabase RLS or multi-tenant schema work is included in STAGE 2.
+
+Desktop agent / browser extension:
+
+- Round 7 desktop-agent is a Node/TypeScript harness, not production active-window tracking.
+- Round 7 browser extension is a local Manifest V3 scaffold, not packaged/store-ready production tracking.
+- Deployed browser extension testing requires explicit CORS/origin review and secure pairing/token setup before pointing the extension at a deployed API.
+- Add offline queueing, retry/backoff, token revocation, packaging, permissions review, and distribution workflow before production rollout.
 
 Cognito:
 
@@ -186,5 +207,5 @@ The web root `.env` loader is for local monorepo ergonomics. Vercel/Render produ
 
 - Redis is listed in env example but no confirmed runtime usage was found during intake.
 - The accepted realtime gateway is in-memory and does not currently use Redis/pub-sub.
-- Desktop agent, browser extension, and worker are currently placeholder scaffolds.
+- Desktop agent and browser extension are now local scaffolds/harnesses for activity ingestion, but not production-ready tracking clients.
 - External Vercel/Render/Cognito deployed smoke remains pending for the accepted STAGE 2 baseline.

@@ -67,6 +67,8 @@ Pilot readiness API wrappers:
 - `lib/api/realtimeApi.ts` derives virtual-office realtime WebSocket URLs from the existing API base URL, converting `http` to `ws` and `https` to `wss`.
 - `lib/api/platformApi.ts` wraps the independent `/platform/*` APIs.
 - `lib/api/platformAuth.ts` uses Cognito-only platform auth and `/platform/me`; it intentionally does not call tenant `/auth/me`.
+- `lib/api/activityApi.ts` wraps app/domain activity ingestion.
+- `lib/api/devicesApi.ts` wraps device list/register/heartbeat.
 
 For `/virtual-office`, `components/office/useVirtualOfficeData.ts` now attempts virtual-office API loading and falls back to mock data. It asks `lib/api/apiAuth.ts` for API auth options, preferring mapped Cognito session, then stored pilot Bearer session, then development dev-token fallback, and passes any token to the map/navigation/positions calls. It validates unknown `zoneData`, `anchor`, `bounds`, player coordinates, statuses, and directions before using API data.
 
@@ -134,8 +136,19 @@ Dashboard and reports readiness:
 - `components/dashboard/ManagerOverviewPanel.tsx` is now a pilot readiness surface for API health, auth context, virtual-office presence, compliance policy, and reports usage summary.
 - Dashboard should keep live API status, fallback state, sparse data, and pilot example/sample labels visually distinct.
 - `components/reports/ReportSummaryPanel.tsx` loads authenticated `/reports/usage-summary` data for current-user app/domain rows.
-- Reports should explain sparse pilot data when API rows are empty and keep department/team rows labeled as pilot examples until a backend aggregate endpoint exists.
+- Reports request a conservative scope based on the resolved backend role: employees use own summaries, OWNER/MANAGER/TEAM_LEAD/HR_ADMIN can request company aggregate summaries, and IT_ADMIN is not automatically given company app/domain summaries by the frontend.
+- Reports should explain sparse pilot data when API rows are empty.
+- Dashboard and Reports can show tracking coverage metadata such as registered devices, active devices in 24 hours, and users with activity rows.
 - `AppUsageTable.tsx` and `WebsiteUsageTable.tsx` support optional titles so API-backed rows and example rows can be labeled clearly.
+
+Activity tracking frontend surfaces:
+
+- `apiAuth.ts` carries resolved backend role in API auth results so reports can choose a conservative scope.
+- `developmentApiAuth.ts` stores/validates role in the development auth cache.
+- `ReportSummaryPanel.tsx` displays API-backed app/domain rows and device coverage metadata.
+- `ManagerOverviewPanel.tsx` shows tracking coverage readiness from backend summary metadata.
+- Compliance policy and acknowledgement modal copy describe app name/duration, browser domain/duration, device heartbeat, timestamps, and explicit non-collected data.
+- Frontend surfaces should not imply screenshots, screen recording, keystrokes, clipboard, camera/microphone, private messages/emails, full URLs, page content, form inputs, or passwords are collected.
 
 Current-user position persistence:
 

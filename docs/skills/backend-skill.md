@@ -141,6 +141,48 @@ Platform audit:
 - Global platform actions have no `targetCompanyId`; tenant-targeted reads include `targetCompanyId`.
 - The table intentionally has no foreign key to `Company`, so historical rows can survive tenant deletion.
 
+## Activity Tracking Ingestion
+
+Commit `ec1b6d1` added the first safe app/domain activity ingestion loop.
+
+Device endpoints:
+
+- `POST /devices/register`
+- `POST /devices/heartbeat`
+- Both use `RequestContextGuard`.
+- The backend writes/validates authenticated `companyId` and `userId`; client tenant/user/role fields are not trusted.
+- Registration accepts optional `deviceId`, `os`, `hostname`, and `agentVersion`.
+- A supplied `deviceId` is rejected if it already belongs to another tenant/user.
+- Heartbeat updates `lastSeenAt` only for the authenticated user's own device.
+
+Activity endpoints:
+
+- `POST /activity/app-usage`
+- `POST /activity/domain-usage`
+- Both use `RequestContextGuard`.
+- Request bodies can be a single event or `{ events: [...] }`.
+- Batch size is capped at 50 events.
+- Device id must be bound to the authenticated user and company.
+- App usage persists `ActivityEventType.APP` with source `DESKTOP_AGENT`.
+- Domain usage persists `ActivityEventType.BROWSER` with source `BROWSER_EXTENSION`.
+- Events increment `AppUsageSummary` and `WebsiteUsageSummary`.
+
+Validation and privacy:
+
+- Durations must be positive and at most 12 hours.
+- Timestamps cannot be older than 31 days or more than 5 minutes in the future.
+- App and browser labels are sanitized and capped.
+- Domain input is normalized to hostname only.
+- Full URL paths, query strings, fragments, page content, form input, passwords, screenshots, keystrokes, clipboard, camera, microphone, and private messages/emails are not stored.
+
+Reports:
+
+- `GET /reports/usage-summary` supports default/own, explicit user, and `scope=company` behavior.
+- Explicit user report lookup remains same-tenant checked.
+- `scope=company` requires `canViewTeamReports()`.
+- Company summaries aggregate by app/domain and do not return raw employee activity rows.
+- Response metadata includes device coverage: registered devices, active devices in the last 24 hours, and users with activity rows.
+
 ## RBAC / Tenant Isolation
 
 Commit `815df2c` added the central Round 3 capability model in `packages/auth`.
@@ -259,4 +301,4 @@ Commit `14fb706` added `POST /auth/pilot-login`.
 - No shared pub/sub adapter for multi-instance realtime broadcast was confirmed.
 - No persisted platform identity/admin lifecycle or platform admin console was confirmed; Round 5 uses backend env allowlists.
 - No complete production account lifecycle, global identity/membership table, multi-company membership, MFA, password reset, or real email delivery implementation was confirmed.
-- No background activity ingestion controller route was confirmed during intake, despite activity-related schema/module presence.
+- No production desktop active-window collector, browser extension packaging/store distribution, secure pairing UX, offline queue, or retry/backoff was confirmed.

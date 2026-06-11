@@ -42,6 +42,8 @@ Pilot auth and compliance UX:
 - Missing or unclear session states should point users back to `/login` instead of exposing the full role navigation by default.
 - Compliance surfaces should explain what WorkMap shows and what it does not monitor.
 - Privacy copy should explicitly exclude screen recording, keystroke logging, hidden camera/mic, private message/email content, passwords/form inputs, and invisible employee spying.
+- After Round 7, privacy copy may explicitly include active desktop app name/duration, browser domain/duration, timestamps for summaries, and device heartbeat.
+- Browser usage UI should say domain/hostname, not full URL, page content, query string, form input, or private message content.
 - Backend-off compliance fallback should remain transparent and should not pretend acknowledgement was recorded.
 
 Dashboard/reports pilot UX:

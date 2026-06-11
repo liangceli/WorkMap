@@ -1,9 +1,20 @@
 # Current Status
 
-Last updated: 2026-06-09.
+Last updated: 2026-06-11.
 
 ## Latest Accepted Work
 
+- Commit `ec1b6d1` (`feat: add activity tracking ingestion loop`) completed STAGE 2 Round 7: desktop-agent/browser-extension activity ingestion loop with reports, dashboard, and compliance transparency.
+- Prisma now has `ActivityEventSource` plus `ActivityEvent.source`, backed by migration `20260609000000_stage2_activity_source`; existing browser rows are backfilled as `BROWSER_EXTENSION`.
+- Backend now exposes guarded `POST /devices/register`, `POST /devices/heartbeat`, `POST /activity/app-usage`, and `POST /activity/domain-usage`.
+- Activity ingestion resolves `companyId`/`userId` from `RequestContextGuard`, does not trust client tenant/user/role fields, validates device ownership, caps batches at 50 events, validates timestamp/duration bounds, sanitizes app/browser/domain labels, and updates `ActivityEvent`, `AppUsageSummary`, and `WebsiteUsageSummary`.
+- Browser/domain tracking stores hostnames only. Full URL paths, queries, fragments, page content, form inputs, passwords, screenshots, screen recording, keystrokes, clipboard, camera, microphone, and private message/email content remain explicitly out of scope.
+- Reports now support own/user/company usage summary scopes with RBAC. Company summaries aggregate by app/domain and do not return raw employee event rows.
+- Dashboard and Reports now show API-backed app/domain/device coverage metadata where available, with conservative frontend scope selection by backend role.
+- Compliance policy and acknowledgement copy now documents app name/duration, browser domain/duration, timestamps, device heartbeat, and explicit non-collected data.
+- `apps/desktop-agent` is now a no-dependency Node/TypeScript harness for device registration, heartbeat, and one sample app usage event; it is not production active-window tracking.
+- `apps/browser-extension` is now a Manifest V3 scaffold that tracks focused active-tab hostname duration and posts domain batches when configured; it is not packaged/store-ready production tracking.
+- QA reports machine verification and required manual QA passed for migration, device registration, app/domain ingestion, employee own reports, owner aggregate reports, employee 403 for `scope=company`, dashboard coverage, compliance copy, and Platform Admin privacy boundary.
 - Commit `4e09788` (`feat: add safe virtual office map manifest architecture`) completed STAGE 2 Round 6: safe, data-driven virtual-office map expansion architecture.
 - Shared types now include `WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST`, manifest types, bounds helpers, and runtime validation for TMX path, map/canvas dimensions, spawn points, collision layers, render layers, rooms, and navigation destinations.
 - `OfficeMap.mapData` is now the manifest storage layer for new owner workspaces; no Prisma schema migration was added.
@@ -66,7 +77,7 @@ Last updated: 2026-06-09.
 - `docs/ai-handoff/pilot-release-checklist.md` now captures install, Prisma generate/migrate/seed, startup, health/page checks, and 5-user virtual-office regression checks.
 - AppShell now gives clearer missing-session behavior, derives role from the stored pilot session when available, limits fallback navigation before session setup, and links back to `/login`.
 - `/dashboard` now acts as a pilot readiness surface by loading API health, auth context, virtual-office presence, compliance policy, and reports usage summary with explicit fallback/error states.
-- `/reports` now loads authenticated `/reports/usage-summary`, displays current-user app/domain rows when present, explains sparse pilot data, and keeps department rows labeled as pilot examples until a team aggregate API exists.
+- `/reports` now loads authenticated `/reports/usage-summary`, displays own/user/company app/domain summaries when allowed, explains sparse pilot data, and keeps any non-API example rows explicitly labeled.
 - Compliance was rechecked during this pass and kept on the existing backend policy/acknowledgement path and privacy boundary copy.
 - `/virtual-office` implementation files were intentionally left unchanged; clean-restart QA confirmed no 500 after stale dev processes were cleared.
 - Commit `14fb706` (`feat: add pilot auth and compliance boundary`) implemented the Pilot Auth + Privacy/Compliance Boundary MVP.
@@ -121,8 +132,8 @@ Last updated: 2026-06-09.
 - `/invite/[token]` lets invited employees sign in with Cognito, accept a matching invite, and continue through required onboarding steps.
 - `/employees` can render same-tenant backend users from `GET /users` and falls back to labeled examples only when API auth/data is unavailable.
 - `/virtual-office` renders a canvas-based `OfficeMap` using the active validated map manifest, currently pointing at `/maps/workmap2.tmx`, with office tilesets, layered avatar assets, local movement, collision detection, click/double-click navigation, chair interaction, realtime movement, polling fallback, and remote office data that can come from validated read APIs or mock fallback.
-- `/dashboard` can now show pilot readiness across API health, auth/session, remote presence, compliance policy, and reports usage.
-- `/reports` can now show authenticated current-user app/domain usage summaries from the API, with sparse-data and pilot-example labels where backend aggregate data is not available.
+- `/dashboard` can now show pilot readiness across API health, auth/session, remote presence, compliance policy, reports usage, and tracking coverage metadata.
+- `/reports` can now show authenticated own/user/company app/domain usage summaries from the API, with device coverage metadata and RBAC-scoped aggregate behavior.
 - Backend exposes guarded endpoints for auth, tenant onboarding, invitations, users, companies, devices, reports, virtual office, integrations, and compliance.
 - Backend request context can now resolve Cognito users from verified Cognito JWTs before falling back to WorkMap pilot/dev JWTs.
 - Backend RBAC capabilities now constrain sensitive company data/actions beyond frontend navigation visibility.
@@ -133,6 +144,10 @@ Last updated: 2026-06-09.
 ## Known Issues / Risks
 
 - STAGE 2 remains a minimal bridge. It does not implement global identity/account tables, `CompanyMembership`/`TenantMembership`, or multi-company membership per identity.
+- Desktop-agent is a harness/scaffold, not production active-window tracking. No native active-window dependency, offline durable queue, retry/backoff, packaging, or pairing UX was added.
+- Browser extension is a local Manifest V3 scaffold. Permissions review, packaging, store distribution, CORS/origin hardening, pairing UX, offline queueing, and deployed extension testing remain future work.
+- New activity migration `20260609000000_stage2_activity_source` must be applied before activity ingestion works against a database.
+- Optional invalid-input hardening manual checks were skipped for cross-user/cross-tenant device id, bad timestamp, too-long duration, and malformed domain.
 - Platform Admin is independent from tenant users, but bootstrap still uses env allowlists rather than a persisted platform identity lifecycle/admin console.
 - The `PlatformAuditLog` migration must be applied before `/platform/*` audit writes work against a database.
 - Platform audit rows do not foreign-key to `Company`; historical rows for deleted tenants may show `targetCompany: null`.
@@ -162,7 +177,7 @@ Last updated: 2026-06-09.
 - If a Cognito session exists but backend mapping fails, frontend API auth returns unavailable and does not silently fall back to pilot auth until Cognito session is cleared.
 - Cognito Hosted UI sign-in requires verified email and an existing WorkMap user record with matching email; unmapped, unverified, or ambiguous users are rejected.
 - Dashboard can show a mixed state of live API checks and pilot example/sample sections; labels must remain explicit.
-- Reports are currently current-user usage summaries only. Team/department aggregate reporting remains a future backend contract.
+- Reports now support RBAC-scoped company aggregate app/domain summaries, but raw employee-level activity rows and richer team/department drill-down remain out of scope.
 - Compliance acknowledgement readback is still not returned by `GET /compliance/policy`; frontend readability relies on a browser marker after successful acknowledgement.
 - AppShell improves session clarity but is not full production route protection.
 - A stale running Next dev process produced a false `/virtual-office` 500 during automated smoke; clean restart of API/frontend resolved it and should be part of future release smoke.
@@ -190,6 +205,10 @@ Last updated: 2026-06-09.
 ## Recommended Next Tasks
 
 - Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.
+- Apply `20260609000000_stage2_activity_source` in deployed databases before deployed activity tracking tests.
+- Build production-grade desktop active-window collection, secure device pairing/token lifecycle, offline queueing, retry/backoff, and revocation before treating the desktop agent as production tracking.
+- Harden browser extension CORS/origin, permissions, pairing UX, packaging, and store distribution before production extension rollout.
+- Add automated tests for device binding, activity ingestion validation, domain minimization, `scope=company` RBAC, and summary aggregation.
 - Add map-version metadata to saved virtual-office positions or a companion version field before strict map replacement/stale-position invalidation.
 - Add automated manifest-vs-TMX validation so future map art/layer changes cannot silently break collision, render order, spawn, rooms, or navigation.
 - Keep future map editor/admin work constrained to writing validated manifests into `OfficeMap.mapData`.

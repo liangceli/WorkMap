@@ -9,7 +9,7 @@ Source of truth: `workmap/prisma/schema.prisma`.
 - `User`: company user with role, status, avatar, job title, optional department, optional unique `cognitoSub`, optional backend avatar/profile reference in `avatarId`, device/activity/report/position relations.
 - `Invitation`: company-scoped invite with invited email, role, SHA-256 token hash, status, inviter, expiration, and acceptance timestamp.
 - `Device`: employee device with OS, hostname, agent version, last seen.
-- `ActivityEvent`: raw app/browser/idle/lock/unlock/heartbeat events.
+- `ActivityEvent`: raw app/browser/idle/lock/unlock/heartbeat events, now with explicit source.
 - `AppUsageSummary`, `WebsiteUsageSummary`: daily summarized usage records.
 - `OfficeMap`: company map metadata, dimensions, tile size, JSON map data, default flag. As of Round 6, valid `mapData` is used as the virtual-office map manifest storage layer.
 - `OfficeRoom`: room/zone metadata, `zoneData`, optional `autoStatus`.
@@ -30,6 +30,11 @@ Invitation statuses:
 - `EXPIRED`
 - `REVOKED`
 
+Activity event sources:
+
+- `DESKTOP_AGENT`
+- `BROWSER_EXTENSION`
+
 ## Seed Data
 
 `prisma/seed.ts` creates demo company data, users, departments, office map/rooms, virtual positions, compliance policy, acknowledgements, device rows, app/website summaries, integrations, and audit log.
@@ -38,6 +43,9 @@ Invitation statuses:
 
 - Office map database `mapData` now stores validated virtual-office map manifests for new owner workspaces. Legacy or invalid `mapData` falls back to the shared default manifest at runtime.
 - Virtual office positions now support current-user latest-position restore/save through API-backed local development flows.
+- Round 7 migration `20260609000000_stage2_activity_source` adds `ActivityEventSource`, `ActivityEvent.source`, and an index by `[companyId, source, startedAt]`.
+- Existing browser activity rows are backfilled as `BROWSER_EXTENSION`; default source is `DESKTOP_AGENT`.
+- Activity ingestion increments `AppUsageSummary` and `WebsiteUsageSummary`; reports read from summary tables rather than raw event rows for normal dashboard/report surfaces.
 - `VirtualOfficePosition` does not store map version. Strict stale-position invalidation after future map replacement remains a data-model gap.
 - `User.cognitoSub` is the current minimal Cognito identity bridge. A future global account/identity model plus `CompanyMembership` or `TenantMembership` is still recommended for multi-company membership.
 - `User.avatarId` currently stores compact WorkMap layered avatar references such as `layered:v2:<encoded config>` for authenticated profile completion. A future profile/avatar table can replace this if richer profile data is needed.
