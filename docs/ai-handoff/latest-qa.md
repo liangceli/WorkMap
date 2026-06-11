@@ -2,7 +2,7 @@
 
 ## 1. Overall Conclusion
 
-QA review result: STAGE 2 Round 7 activity tracking loop passes code review and machine verification.
+QA review result: STAGE 2 Round 8 alpha production readiness passes code review and machine verification.
 
 This pass reviewed:
 
@@ -10,104 +10,94 @@ This pass reviewed:
 - current `git status --short`
 - current `git diff --stat`
 - current implementation diff
-- activity ingestion endpoints and service validation
-- device registration/heartbeat binding
-- reports aggregation and RBAC behavior
-- dashboard/reports/compliance frontend changes
-- desktop-agent harness
-- browser-extension domain tracking scaffold
-- Prisma schema and migration `20260609000000_stage2_activity_source`
+- API CORS allowlist hardening
+- WebSocket origin allowlist hardening
+- `/health` and `/health/readiness`
+- alpha deployment documentation
+- `.env.example` secret posture
+- desktop-agent/browser-extension alpha harness build health
 
 No blocking issue requiring Codex Chat 2 was found.
 
-Manual QA is still required before final commit because the new migration and activity ingestion loop were not exercised against a live local database/API in this QA chat.
+Important readiness distinction:
+
+- Code/docs are ready to proceed toward controlled alpha deployment preparation.
+- Deployed alpha readiness is not yet proven until Vercel, Render, Supabase, and Cognito are manually configured and the deployed smoke checklist passes.
 
 ## 2. Workspace Notes
 
 Reviewed tracked files include:
 
 - `docs/ai-handoff/latest-implementation.md`
+- `docs/skills/current-status.md`
+- `docs/skills/deployment-skill.md`
 - `workmap/.env.example`
-- `workmap/prisma/schema.prisma`
-- `workmap/apps/api/src/modules/activity/activity.module.ts`
-- `workmap/apps/api/src/modules/devices/devices.controller.ts`
-- `workmap/apps/api/src/modules/devices/devices.service.ts`
-- `workmap/apps/api/src/modules/reports/reports.controller.ts`
-- `workmap/apps/api/src/modules/reports/reports.service.ts`
-- `workmap/apps/desktop-agent/src/index.ts`
-- `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx`
-- `workmap/apps/web/components/compliance/PolicyAcknowledgementModal.tsx`
-- `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx`
-- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
-- `workmap/apps/web/lib/api/apiAuth.ts`
-- `workmap/apps/web/lib/api/apiTypes.ts`
-- `workmap/apps/web/lib/api/developmentApiAuth.ts`
-- `workmap/apps/web/lib/api/reportsApi.ts`
+- `workmap/apps/api/src/main.ts`
+- `workmap/apps/api/src/modules/health/health.controller.ts`
+- `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts`
 
 Reviewed untracked implementation files include:
 
-- `workmap/apps/api/src/modules/activity/activity.controller.ts`
-- `workmap/apps/api/src/modules/activity/activity.service.ts`
-- `workmap/apps/browser-extension/manifest.json`
-- `workmap/apps/browser-extension/src/background.ts`
-- `workmap/apps/web/lib/api/activityApi.ts`
-- `workmap/apps/web/lib/api/devicesApi.ts`
-- `workmap/prisma/migrations/20260609000000_stage2_activity_source/`
+- `docs/ai-handoff/alpha-production-readiness.md`
+- `workmap/apps/api/src/config/allowed-origins.ts`
 
 Workspace notes:
 
 - `docs/references/` remains unrelated untracked workspace content. Do not stage it unless explicitly intended.
-- `.env` was not read. `prisma generate` printed that env vars were loaded, but no values were output.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by verification and restored.
-- Desktop/browser extension build outputs are generated artifacts and did not appear in `git status`.
+- `.env` was not read.
+- `pnpm prisma:generate` printed that env vars were loaded, but no values were output.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by Web build and restored.
+- Desktop/browser extension build outputs did not appear in `git status`.
 
 ## 3. Diff Review
 
 Result: passed.
 
-Backend/device/activity:
+HTTP CORS:
 
-- `/activity/app-usage` and `/activity/domain-usage` use `RequestContextGuard`.
-- `companyId`, `tenantId`, `userId`, and `role` are not trusted from client payloads.
-- Device binding is checked against authenticated `companyId` and `userId` before ingestion.
-- Device registration rejects reuse of a supplied device id if it belongs to another user or tenant.
-- Heartbeat updates are limited to the authenticated user's own device.
-- Activity batch size is capped at 50.
-- Timestamps, duration bounds, app names, browser names, domain labels, and idle/active flags are validated.
-- App usage is persisted as `ActivityEventType.APP` with source `DESKTOP_AGENT`.
-- Domain usage is persisted as `ActivityEventType.BROWSER` with source `BROWSER_EXTENSION`.
-- App/domain summary tables are incremented during ingestion.
+- `workmap/apps/api/src/config/allowed-origins.ts` centralizes allowed origin parsing.
+- Preferred env is `WORKMAP_ALLOWED_ORIGINS`.
+- `WORKMAP_ALLOWED_ORIGIN` remains a backward-compatible fallback.
+- `NEXT_PUBLIC_APP_URL` is only a final backend fallback.
+- Localhost origins are auto-added only outside production.
+- In production, configured browser origins are required; otherwise browser origins are rejected.
+- Missing `Origin` remains allowed for non-browser/server-to-server style requests such as health checks.
 
-Privacy and data minimization:
+WebSocket origin checks:
 
-- Browser extension scaffold reads the active tab URL only to derive hostname, then submits/stores domain only.
-- Backend normalizes domain input to hostname and does not persist URL paths, queries, fragments, page content, messages, form input, passwords, screenshots, keystrokes, camera, microphone, or clipboard data.
-- Compliance UI and modal copy explicitly describe collected app/domain/device heartbeat data and non-collected sensitive data.
-- `.env.example` contains blank harness placeholders only; no real tokens/secrets were added.
+- `virtual-office-realtime.gateway.ts` now uses the shared `isAllowedOrigin` helper.
+- Browser WebSocket origins must match the same production allowlist as HTTP CORS.
+- Existing token, room, position, and polling/reconciliation logic was not rewritten.
 
-Reports/RBAC:
+Health/readiness:
 
-- Employee/default report path returns own usage summary.
-- `scope=company` is guarded by `canViewTeamReports`.
-- Company summaries aggregate by app/domain and do not return raw employee activity rows.
-- Explicit user report lookup remains same-tenant checked.
-- Dashboard and Reports choose conservative frontend scopes based on resolved backend role.
-- IT_ADMIN is not automatically given company app/domain summaries by the frontend.
-- Platform Admin implementation was not modified; platform surfaces still do not expose employee-level app/domain rows by default.
+- `GET /health` remains a lightweight liveness endpoint.
+- `GET /health/readiness` runs a Prisma `SELECT 1`.
+- Readiness returns safe status/check fields only.
+- DB failure returns `503 ServiceUnavailableException`.
+- No connection string, database host, token, or secret value is returned.
+- `PrismaService` injection is valid because `PrismaModule` is imported by `AppModule` and marked global.
 
-Harness/scaffold scope:
+Deployment docs:
 
-- Desktop-agent is a Node/TypeScript sample harness, not native active-window tracking.
-- Browser extension is a Manifest V3 scaffold, not packaged/store-ready production tracking.
-- No screenshots, screen recording, keystrokes, clipboard logging, webcam/microphone monitoring, private message/email reading, billing, deployment troubleshooting, map expansion, or virtual-office rewrite was added.
+- `docs/ai-handoff/alpha-production-readiness.md` covers Vercel, Render, Supabase, Cognito, migration order, WSS, activity hardening, alpha smoke, and release blockers.
+- `docs/skills/deployment-skill.md` now points to the alpha readiness guide and includes `/health/readiness`, `WORKMAP_ALLOWED_ORIGINS`, and migration-order guidance.
+- `docs/skills/current-status.md` accurately marks external setup and deployed smoke as Manual Action Required.
+
+Scope control:
+
+- No billing, map expansion, production desktop tracker, browser extension store packaging, durable queueing, multi-instance realtime, or product redesign was added.
+- Round 8 did not add a Prisma migration.
 
 ## 4. Security / Secret Review
 
 Result: passed.
 
 - No real secret was found in reviewed implementation files.
+- `.env.example` uses placeholders, localhost values, blank harness variables, and sample/local-only values.
 - No AWS, Cognito, Supabase, Render, Vercel, WorkMap agent token, or browser extension auth token was hardcoded.
-- `.env` was not read.
+- `WORKMAP_PLATFORM_ADMIN_EMAILS` and `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` remain blank in `.env.example`.
+- Production CORS documentation says to use exact origins and not `*`.
 - Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches.
 
 ## 5. Verification Results
@@ -115,102 +105,110 @@ Result: passed.
 Commands run from `workmap/`:
 
 ```powershell
-pnpm prisma:generate
 pnpm --filter @workmap/api typecheck
 pnpm --filter @workmap/web typecheck
-pnpm --filter @workmap/desktop-agent typecheck
-pnpm --filter @workmap/browser-extension typecheck
 pnpm --filter @workmap/api lint
 pnpm --filter @workmap/web lint
-pnpm --filter @workmap/desktop-agent lint
-pnpm --filter @workmap/browser-extension lint
 pnpm --filter @workmap/api build
 pnpm --filter @workmap/web build
+pnpm --filter @workmap/desktop-agent typecheck
+pnpm --filter @workmap/browser-extension typecheck
+pnpm --filter @workmap/desktop-agent lint
+pnpm --filter @workmap/browser-extension lint
 pnpm --filter @workmap/desktop-agent build
 pnpm --filter @workmap/browser-extension build
+pnpm prisma:generate
 git diff --check
 ```
 
 Results:
 
-- `pnpm prisma:generate` initially failed inside sandbox because engine download/check hit `ECONNREFUSED 127.0.0.1:9`; rerun outside sandbox passed.
 - API typecheck passed.
 - Web typecheck passed.
-- Desktop-agent typecheck passed.
-- Browser-extension typecheck passed.
 - API lint passed.
 - Web lint passed.
-- Desktop-agent lint passed.
-- Browser-extension lint passed.
 - API build passed.
 - Web build passed.
-- Desktop-agent build initially failed inside sandbox with Windows `EPERM` while writing `dist/index.js`; rerun outside sandbox passed.
+- Desktop-agent typecheck passed.
+- Browser-extension typecheck passed.
+- Desktop-agent lint passed.
+- Browser-extension lint passed.
+- Desktop-agent build initially failed inside the sandbox with Windows `EPERM` writing `dist/index.js`; rerun outside the sandbox passed.
 - Browser-extension build passed.
+- `pnpm prisma:generate` initially failed inside the sandbox because Prisma binary checksum access was blocked/redirected to `127.0.0.1:9`; rerun outside the sandbox passed.
 - `git diff --check` passed with CRLF normalization warnings only.
 - Web build still prints the existing Next.js ESLint plugin warning.
 
 Not run:
 
-- New migration was not applied to a live local database in this QA chat.
-- Activity endpoints were not manually exercised against a live API/database in this QA chat.
-- Browser extension was not loaded into Chrome for manual QA in this chat.
-- Desktop-agent harness was not run with a real bearer token in this QA chat.
-- No deployed Render/Vercel smoke was run.
+- No real deployed Vercel/Render/Supabase/Cognito smoke.
+- No live deployed `/health` or `/health/readiness` smoke.
+- No live deployed Cognito owner/invite/employee/platform-admin flow.
+- No live deployed WSS smoke.
+- No live invalid-input activity hardening requests in this QA chat.
 
 ## 6. Manual Action Required
 
-Before manual QA:
+Before claiming deployed alpha readiness:
 
-1. Apply `workmap/prisma/migrations/20260609000000_stage2_activity_source/` to the local database using the repo's normal Prisma migration flow.
-2. Restart the API after migration.
-3. Use a real authenticated local WorkMap bearer token for harness testing.
-4. Do not paste real tokens into chat or commit them.
+1. Configure Supabase Postgres and set `DATABASE_URL` securely in Render.
+2. Apply Prisma migrations in the documented order:
+   `20260529043117_v1`,
+   `20260606000000_stage2_onboarding_invites`,
+   `20260607000000_platform_audit_log`,
+   `20260609000000_stage2_activity_source`.
+3. Configure AWS Cognito Hosted UI, PKCE app client, callback URL, logout URL, and scopes.
+4. Configure Vercel public env values.
+5. Configure Render backend env values.
+6. Set `WORKMAP_ALLOWED_ORIGINS` to exact Vercel origin(s).
+7. Set `WORKMAP_APP_URL` to the deployed frontend URL.
+8. Configure platform admin allowlist env values in backend platform settings only.
+9. Verify deployed `GET /health`.
+10. Verify deployed `GET /health/readiness`.
+11. Run the full alpha smoke checklist in `docs/ai-handoff/alpha-production-readiness.md`.
+12. Run a final secret scan before commit/deploy.
 
-Before deployed testing:
+Do not guess external platform values and do not paste real tokens into chat.
 
-1. Apply the new migration to the deployed database.
-2. Configure harness/token setup through secure local env or platform secret storage.
-3. Review and configure CORS/origin policy before browser extension testing against deployed API.
+## 7. Manual QA Guidance
 
-## 7. Manual QA Results
+Use `docs/ai-handoff/alpha-production-readiness.md` as the source of truth.
 
-Manual browser/API QA was completed by the user for the required Round 7 activity tracking loop scope.
+Minimum deployed alpha smoke:
 
-Passed manual checks:
-
-1. Local Prisma migration `20260609000000_stage2_activity_source` was applied successfully.
-2. API was restarted after migration.
-3. Employee Cognito session loaded and exposed a usable local bearer token without pasting the token into chat.
-4. Employee registered a device through `POST /devices/register`.
-5. Employee submitted one app usage event through `POST /activity/app-usage`; API returned accepted `DESKTOP_AGENT` / `APP`.
-6. Employee submitted one domain usage event through `POST /activity/domain-usage`; API returned accepted `BROWSER_EXTENSION` / `BROWSER`.
-7. Employee `/reports` showed current-user API summary with `Visual Studio Code`, `github.com`, active time, app row count, and device coverage.
-8. Employee `/reports` showed hostname only; the submitted URL path, query string, and fragment were not displayed.
-9. Owner `/reports` showed company aggregate app/domain summary without raw employee event rows.
-10. Employee direct request to `/reports/usage-summary?scope=company` returned 403 Forbidden with `Company reports are not visible to this role.`
-11. Dashboard tracking coverage showed device/activity coverage after submitted events.
-12. Employee `/compliance` showed correct collected and not-collected boundaries for app name/duration, browser domain/duration, device heartbeat, full URL paths/query strings, form inputs, passwords, screenshots, keystrokes, clipboard, camera/microphone, and private message/email content.
-13. Compliance acknowledgement modal showed matching collected and not-collected boundaries.
-14. Platform Admin showed tenant metadata, health summary, and platform audit only; it did not expose employee-level app/domain details, `Visual Studio Code`, `github.com`, full URL details, or private content.
-
-Skipped manual checks:
-
-- Optional invalid-input hardening checks were skipped: cross-user/cross-tenant device id, bad timestamp, too-long duration, and malformed domain.
-- Broad regression smoke was skipped by user request: `/virtual-office`, Employees, tenant onboarding, invites, and other non-activity flows were not rechecked in this manual pass.
+1. API `/health` returns ok.
+2. API `/health/readiness` returns ready.
+3. Owner signs in through Cognito.
+4. Owner creates workspace.
+5. Owner creates invite.
+6. Employee signs in through Cognito and accepts invite.
+7. Employee completes compliance/avatar/device setup as required.
+8. Owner and Employee both open `/virtual-office`.
+9. Realtime movement works both directions.
+10. Polling fallback reconciles after refresh or socket disruption.
+11. Employee registers a device and submits sample app/domain usage.
+12. Employee sees own reports.
+13. Owner sees allowed company aggregate reports.
+14. Employee is blocked from company aggregate reports.
+15. Platform Admin sees tenant metadata/health/audit only.
+16. Compliance page/modal accurately explain collected and non-collected data.
+17. Dashboard, Reports, Employees, Settings, Invites, and Integrations load.
+18. Cross-tenant and invalid activity requests fail safely.
 
 ## 8. Residual Risks / Notes
 
+- Alpha deployment remains blocked on external service configuration and deployed smoke.
 - Desktop-agent is still a harness/scaffold, not production active-window tracking.
-- Browser extension is a local Manifest V3 scaffold; pairing UX, packaging, permissions review, CORS/origin setup, offline queueing, and store distribution remain future work.
-- No durable offline queue or retry/backoff was added for either harness.
-- Reports aggregate from summary tables and do not include a background aggregation worker.
-- Domain normalization accepts full URLs and strips to hostname; paths/query/fragment are not persisted. Manual QA should verify stored/report output, not just response status.
-- Company aggregate report rows intentionally avoid raw employee-level details.
+- Browser extension is a local Manifest V3 scaffold, not packaged/store-ready.
+- No durable offline queue, retry/backoff, token revocation flow, or native installer was added.
+- Realtime gateway is still in-memory and single-instance.
+- Missing-origin WebSocket/server requests are allowed by the shared origin helper; browser-origin requests are still checked. Keep WSS enabled and avoid logging query-token URLs.
+- Production `WORKMAP_ALLOWED_ORIGINS` must be configured exactly or browser HTTP/WSS access will fail.
 - `docs/references/` remains unrelated untracked content and should not be staged.
 
 ## 9. Final Recommendation
 
-- QA review: passes code review, machine verification, and required manual QA.
+- QA review: passed for Round 8 code/docs.
 - Return to Codex Chat 2: not required.
-- Can proceed to human manual testing: required Round 7 manual QA completed; optional hardening/regression checks were skipped.
-- Suggested commit: yes.
+- Can proceed to human/manual testing: yes, specifically deployed alpha smoke and external platform setup.
+- Suggested commit: yes for the Round 8 readiness code/docs after reviewing the QA notes; do not claim deployed alpha readiness until Manual Action Required items pass.

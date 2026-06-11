@@ -14,6 +14,7 @@ import { isVirtualOfficePointInBounds } from "@workmap/shared-types";
 import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
+import { isAllowedOrigin } from "../../config/allowed-origins.js";
 import { RequestContextResolverService } from "../auth/request-context-resolver.service.js";
 import { parseSavePositionBody } from "./save-position.dto.js";
 import { VirtualOfficeService } from "./virtual-office.service.js";
@@ -516,24 +517,6 @@ function rejectUpgrade(socket: Socket, status: "400 Bad Request" | "401 Unauthor
 function readRequestUrl(request: IncomingMessage) {
   const host = singleHeader(request.headers.host) ?? "localhost";
   return new URL(request.url ?? "/", `http://${host}`);
-}
-
-function isAllowedOrigin(origin: string | undefined) {
-  if (!origin) {
-    return true;
-  }
-
-  const configuredOrigin = process.env.WORKMAP_ALLOWED_ORIGIN ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const allowedOrigins = configuredOrigin
-    .split(",")
-    .map((item) => item.trim().replace(/\/+$/, ""))
-    .filter(Boolean);
-
-  if (process.env.NODE_ENV !== "production") {
-    allowedOrigins.push("http://localhost:3000", "http://127.0.0.1:3000");
-  }
-
-  return allowedOrigins.includes(origin.replace(/\/+$/, ""));
 }
 
 function createRoomKey(companyId: string, officeMapId: string) {

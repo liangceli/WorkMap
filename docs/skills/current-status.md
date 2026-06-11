@@ -4,6 +4,11 @@ Last updated: 2026-06-11.
 
 ## Latest Accepted Work
 
+- STAGE 2 Round 8 alpha production readiness is in progress in the current implementation diff.
+- `docs/ai-handoff/alpha-production-readiness.md` now captures Vercel/Render/Supabase/Cognito env setup, migration order, WSS expectations, activity hardening checklist, full alpha smoke checklist, and release blocker statuses.
+- API CORS is being hardened around explicit origin allowlists through `WORKMAP_ALLOWED_ORIGINS` / `WORKMAP_ALLOWED_ORIGIN`, shared with WebSocket origin checks.
+- API now has `/health/readiness` for database connectivity readiness without exposing secrets, while `/health` remains a lightweight liveness endpoint.
+- External Vercel/Render/Supabase/Cognito configuration and deployed alpha smoke remain Manual Action Required; no real secrets should be committed or pasted into chat.
 - Commit `ec1b6d1` (`feat: add activity tracking ingestion loop`) completed STAGE 2 Round 7: desktop-agent/browser-extension activity ingestion loop with reports, dashboard, and compliance transparency.
 - Prisma now has `ActivityEventSource` plus `ActivityEvent.source`, backed by migration `20260609000000_stage2_activity_source`; existing browser rows are backfilled as `BROWSER_EXTENSION`.
 - Backend now exposes guarded `POST /devices/register`, `POST /devices/heartbeat`, `POST /activity/app-usage`, and `POST /activity/domain-usage`.

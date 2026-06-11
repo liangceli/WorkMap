@@ -57,6 +57,8 @@ From `.env.example`:
 - `NEXT_PUBLIC_COGNITO_LOGOUT_URI`
 - `NEXT_PUBLIC_COGNITO_SCOPE`
 - `API_PORT`
+- `WORKMAP_APP_URL`
+- `WORKMAP_ALLOWED_ORIGINS`
 - `WORKMAP_ALLOWED_ORIGIN`
 - `WORKMAP_JWT_SECRET`
 - `WORKMAP_PILOT_PASSWORD_HASH`
@@ -70,7 +72,9 @@ From `.env.example`:
 - `WORKMAP_AGENT_TOKEN`
 - `WORKMAP_AGENT_DEVICE_ID`
 - `WORKMAP_API_BASE_URL`
-- `WORKMAP_APP_URL` is also used by invite-link generation when configured; otherwise the API falls back to `NEXT_PUBLIC_APP_URL` or `http://localhost:3000`.
+- `WORKMAP_APP_URL` is used by invite-link generation when configured; otherwise the API falls back to `NEXT_PUBLIC_APP_URL` or `http://localhost:3000`.
+- `WORKMAP_ALLOWED_ORIGINS` is the preferred comma-separated production CORS/WebSocket origin allowlist. Do not use `*`.
+- `WORKMAP_ALLOWED_ORIGIN` remains a backward-compatible single-origin fallback.
 
 Pilot local startup convention:
 
@@ -78,6 +82,8 @@ Pilot local startup convention:
 - `NEXT_PUBLIC_WORKMAP_API_URL="http://localhost:3001"`
 - `API_PORT="3001"`
 - `WORKMAP_ALLOWED_ORIGIN="http://localhost:3000"`
+- `WORKMAP_ALLOWED_ORIGINS="http://localhost:3000"`
+- `WORKMAP_APP_URL="http://localhost:3000"`
 - `NEXT_PUBLIC_COGNITO_REDIRECT_URI="http://localhost:3000/login/callback"`
 - `NEXT_PUBLIC_COGNITO_LOGOUT_URI="http://localhost:3000/login"`
 
@@ -117,27 +123,28 @@ Activity tracking harness env:
 5. For STAGE 2 Round 7, ensure migration `20260609000000_stage2_activity_source` has been applied before testing activity ingestion.
 6. Start API from `workmap/`: `pnpm --filter @workmap/api dev`.
 7. Confirm `GET http://localhost:3001/health` returns 200.
-8. Start web from `workmap/`: `pnpm --filter @workmap/web dev`.
-9. Open `http://localhost:3000/login`, sign in with the seeded pilot user, and confirm the AppShell session state is clear after refresh.
-10. For Cognito owner onboarding, sign in with a new verified Cognito user and confirm `/onboarding/company` can create a backend workspace.
-11. For invites, create an Owner invite at `/onboarding/invite`, open `/invite/:token` in a clean/incognito browser, sign in with the invited verified email, and accept into the workspace.
-12. For platform admin, configure a real allowlisted Cognito email/sub locally without committing it, restart API, sign in with that Cognito identity, and confirm `/platform-admin` loads without tenant onboarding.
-13. For activity tracking, register a device, ingest one app usage event, ingest one domain usage event, and confirm `/reports`, `/dashboard`, and `/compliance` reflect the new tracking loop and privacy boundaries.
-14. Open `http://localhost:3000/dashboard` and confirm API health, auth context, remote presence, compliance, reports readiness, and tracking coverage sections show live/fallback states clearly.
-15. Open `http://localhost:3000/reports` and confirm API-backed own/company usage rows or sparse-data explanation, with RBAC-appropriate scope.
-16. Open `http://localhost:3000/compliance`, confirm policy loading, acknowledgement behavior, collected data, and non-collected data copy.
-17. Open `http://localhost:3000/virtual-office` and confirm development auth and virtual-office read requests target backend port 3001.
-18. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
-19. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
-20. For realtime movement QA, open two authenticated browsers in the same company/map and confirm `/virtual-office/realtime` connects, movement is smooth in both directions, and polling still reconciles after refresh.
-21. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
-22. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
+8. Confirm `GET http://localhost:3001/health/readiness` returns 200 with `database: ok` after migrations and DB connectivity are ready.
+9. Start web from `workmap/`: `pnpm --filter @workmap/web dev`.
+10. Open `http://localhost:3000/login`, sign in with the seeded pilot user, and confirm the AppShell session state is clear after refresh.
+11. For Cognito owner onboarding, sign in with a new verified Cognito user and confirm `/onboarding/company` can create a backend workspace.
+12. For invites, create an Owner invite at `/onboarding/invite`, open `/invite/:token` in a clean/incognito browser, sign in with the invited verified email, and accept into the workspace.
+13. For platform admin, configure a real allowlisted Cognito email/sub locally without committing it, restart API, sign in with that Cognito identity, and confirm `/platform-admin` loads without tenant onboarding.
+14. For activity tracking, register a device, ingest one app usage event, ingest one domain usage event, and confirm `/reports`, `/dashboard`, and `/compliance` reflect the new tracking loop and privacy boundaries.
+15. Open `http://localhost:3000/dashboard` and confirm API health, auth context, remote presence, compliance, reports readiness, and tracking coverage sections show live/fallback states clearly.
+16. Open `http://localhost:3000/reports` and confirm API-backed own/company usage rows or sparse-data explanation, with RBAC-appropriate scope.
+17. Open `http://localhost:3000/compliance`, confirm policy loading, acknowledgement behavior, collected data, and non-collected data copy.
+18. Open `http://localhost:3000/virtual-office` and confirm development auth and virtual-office read requests target backend port 3001.
+19. For position persistence QA, confirm `PUT /virtual-office/map/:officeMapId/positions/me` targets backend port 3001 and uses Bearer authorization.
+20. For polling presence QA, confirm `GET /virtual-office/map/:officeMapId/positions` repeats about every 4 seconds while visible and about every 15 seconds while hidden.
+21. For realtime movement QA, open two authenticated browsers in the same company/map and confirm `/virtual-office/realtime` connects, movement is smooth in both directions, and polling still reconciles after refresh.
+22. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
+23. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
 
 Detailed release smoke steps live in `docs/ai-handoff/pilot-release-checklist.md`.
 
 ## STAGE 2 Deployment Readiness
 
-Read `docs/ai-handoff/stage2-deployment-readiness.md` before external deployment work.
+Read `docs/ai-handoff/alpha-production-readiness.md` before external deployment work.
 
 Target platform direction:
 
@@ -164,7 +171,9 @@ Render backend:
 - Required server env includes `DATABASE_URL`, `WORKMAP_ALLOWED_ORIGIN`, `WORKMAP_JWT_SECRET`, `WORKMAP_PILOT_PASSWORD_HASH`, and `WORKMAP_COGNITO_*`.
 - For `/platform-admin`, set `WORKMAP_PLATFORM_ADMIN_EMAILS` and/or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` in Render environment settings only.
 - Set `WORKMAP_APP_URL` to the deployed Vercel app URL so generated invite links are not localhost links.
-- `WORKMAP_ALLOWED_ORIGIN` must match the Vercel frontend origin.
+- `WORKMAP_ALLOWED_ORIGINS` must match the Vercel frontend origin(s). `WORKMAP_ALLOWED_ORIGIN` is a single-origin fallback.
+- Production API CORS rejects browser origins when no allowed origins are configured.
+- Readiness check path is `/health/readiness` and verifies DB connectivity without exposing secrets.
 - `/virtual-office/realtime` uses WebSocket upgrade on the same API origin. Ensure the platform/proxy supports WebSocket upgrades.
 - Single-instance API deployment is acceptable for the current in-memory realtime gateway. Multi-instance deployment needs shared pub/sub first.
 
@@ -175,6 +184,7 @@ Supabase:
 - Include migration `20260606000000_stage2_onboarding_invites` before Round 2 deployed smoke.
 - Include migration `20260607000000_platform_audit_log` before Round 5 platform-admin deployed smoke.
 - Include migration `20260609000000_stage2_activity_source` before Round 7 activity tracking deployed smoke.
+- Alpha Round 8 does not add a migration, but it documents the required migration order in `docs/ai-handoff/alpha-production-readiness.md`.
 - No Supabase RLS or multi-tenant schema work is included in STAGE 2.
 
 Desktop agent / browser extension:
