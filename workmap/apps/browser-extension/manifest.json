@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "WorkMap Domain Tracking Harness",
+  "version": "0.1.0",
+  "description": "Transparent WorkMap domain-duration tracking scaffold. Stores domains only, not page content or full URLs.",
+  "permissions": ["storage", "tabs"],
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  }
+}

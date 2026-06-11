@@ -11,16 +11,22 @@ const visibleItems = [
   "Presence in the virtual office",
   "Avatar location and room/area",
   "Workspace status and freshness",
+  "Active desktop app name and usage duration",
+  "Browser domain name and active duration",
+  "Device registration and heartbeat status",
   "Last-seen timestamp",
   "Policy acknowledgement timestamp",
 ];
 
 const notVisibleItems = [
   "Screen recording",
+  "Screenshots",
   "Keystroke logging",
+  "Clipboard contents",
   "Hidden webcam or microphone monitoring",
   "Private message or email content",
-  "Passwords or form inputs",
+  "Browser page body content",
+  "Full URL paths, query strings, form inputs, or passwords",
   "Invisible employee spying",
 ];
 
@@ -125,8 +131,8 @@ export function CompliancePolicyPanel() {
       <section style={styles.boundaryPanel}>
         <p style={styles.panelLabel}>Role visibility boundary</p>
         <p style={styles.panelText}>
-          Employees can understand their own presence context. Manager and owner views may show team-level office presence where API
-          guards support it, but this pilot does not claim enterprise permissions, hidden monitoring, or historical tracking trails.
+          Employees can understand their own presence and activity summaries. Owner and manager views may show role-allowed aggregate
+          app/domain summaries for the tenant, while employee-level activity detail remains guarded by backend RBAC and tenant scope.
         </p>
       </section>
 

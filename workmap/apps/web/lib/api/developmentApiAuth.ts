@@ -19,10 +19,11 @@ type StoredDevelopmentAuth = {
   userId: string;
   email: string;
   companySlug: string;
+  role: string;
 };
 
 export type DevelopmentApiAuthResult =
-  | { available: true; options: ApiClientOptions; userId: string; email: string; companySlug: string; source: "cache" | "dev-token" }
+  | { available: true; options: ApiClientOptions; userId: string; email: string; companySlug: string; role: string; source: "cache" | "dev-token" }
   | { available: false; reason: string };
 
 export async function getDevelopmentApiAuthOptions(): Promise<DevelopmentApiAuthResult> {
@@ -44,6 +45,7 @@ export async function getDevelopmentApiAuthOptions(): Promise<DevelopmentApiAuth
       userId: cached.userId,
       email: cached.email,
       companySlug: cached.companySlug,
+      role: cached.role,
       source: "cache",
     };
   }
@@ -64,6 +66,7 @@ export async function getDevelopmentApiAuthOptions(): Promise<DevelopmentApiAuth
     userId: tokenResult.data.user.id,
     email: tokenResult.data.user.email,
     companySlug: tokenResult.data.user.companySlug,
+    role: tokenResult.data.user.role,
   };
   writeStoredDevelopmentAuth(stored);
 
@@ -73,6 +76,7 @@ export async function getDevelopmentApiAuthOptions(): Promise<DevelopmentApiAuth
     userId: stored.userId,
     email: stored.email,
     companySlug: stored.companySlug,
+    role: stored.role,
     source: "dev-token",
   };
 }
@@ -135,7 +139,8 @@ function isStoredDevelopmentAuth(value: unknown): value is StoredDevelopmentAuth
     typeof value.expiresAt === "string" &&
     typeof value.userId === "string" &&
     typeof value.email === "string" &&
-    typeof value.companySlug === "string"
+    typeof value.companySlug === "string" &&
+    typeof value.role === "string"
   );
 }
 
@@ -147,7 +152,8 @@ function isDevelopmentToken(value: unknown): value is WorkMapApiDevelopmentToken
     isObject(value.user) &&
     typeof value.user.id === "string" &&
     typeof value.user.email === "string" &&
-    typeof value.user.companySlug === "string"
+    typeof value.user.companySlug === "string" &&
+    typeof value.user.role === "string"
   );
 }
 

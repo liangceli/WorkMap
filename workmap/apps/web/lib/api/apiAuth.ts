@@ -13,6 +13,7 @@ export type WorkMapApiAuthResult =
       userId: string;
       email: string;
       companySlug: string;
+      role: string;
       source: "cognito-session" | "pilot-session" | "dev-token" | "dev-cache";
     }
   | { available: false; reason: string };
@@ -36,6 +37,7 @@ export async function getWorkMapApiAuthOptions(): Promise<WorkMapApiAuthResult> 
       userId: contextResult.data.userId,
       email: cognitoSession.email ?? "",
       companySlug: "",
+      role: contextResult.data.role,
       source: "cognito-session",
     };
   }
@@ -49,6 +51,7 @@ export async function getWorkMapApiAuthOptions(): Promise<WorkMapApiAuthResult> 
       userId: pilotSession.userId,
       email: pilotSession.email,
       companySlug: pilotSession.companySlug,
+      role: pilotSession.session.user.role,
       source: "pilot-session",
     };
   }
@@ -65,6 +68,7 @@ export async function getWorkMapApiAuthOptions(): Promise<WorkMapApiAuthResult> 
     userId: developmentAuth.userId,
     email: developmentAuth.email,
     companySlug: developmentAuth.companySlug,
+    role: developmentAuth.role,
     source: developmentAuth.source === "cache" ? "dev-cache" : "dev-token",
   };
 }

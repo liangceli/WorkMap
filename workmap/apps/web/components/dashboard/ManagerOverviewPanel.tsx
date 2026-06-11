@@ -82,7 +82,7 @@ export function ManagerOverviewPanel() {
         const [mapResult, policyResult, usageResult] = await Promise.all([
           getVirtualOfficeMap(auth.options),
           getCompliancePolicy(auth.options),
-          getUsageSummary(auth.options),
+          getUsageSummary({ ...auth.options, scope: canRequestCompanySummary(auth.role) ? "company" : "user" }),
         ]);
 
         if (mapResult.ok) {
@@ -183,6 +183,16 @@ export function ManagerOverviewPanel() {
         value: dashboardState.policyVersion ? `Policy ${dashboardState.policyVersion}` : "Check page",
         detail: dashboardState.complianceText,
         tone: dashboardState.policyVersion ? "green" : "amber",
+      },
+      {
+        label: "Tracking coverage",
+        value: dashboardState.usageSummary?.deviceCoverage
+          ? `${dashboardState.usageSummary.deviceCoverage.activeDevices24h}/${dashboardState.usageSummary.deviceCoverage.registeredDevices}`
+          : "No rows",
+        detail: dashboardState.usageSummary?.deviceCoverage
+          ? `${dashboardState.usageSummary.deviceCoverage.usersWithActivity} user(s) have app/domain summary data in the current report scope.`
+          : "Register a device and submit app/domain usage events to populate backend-backed tracking summaries.",
+        tone: dashboardState.usageSummary?.deviceCoverage?.activeDevices24h ? "green" : "slate",
       },
     ],
     [dashboardState, presenceCounts],
@@ -398,6 +408,10 @@ function formatAuthSource(source: string) {
   }
 
   return source;
+}
+
+function canRequestCompanySummary(role: string | undefined) {
+  return role === "OWNER" || role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN";
 }
 
 const styles = {

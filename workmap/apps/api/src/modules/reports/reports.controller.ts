@@ -11,7 +11,11 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Get("usage-summary")
-  getUsageSummary(@CurrentContext() context: RequestContext, @Query("userId", OptionalUuidPipe) userId?: string) {
-    return this.reports.getUsageSummary(context, { userId });
+  getUsageSummary(
+    @CurrentContext() context: RequestContext,
+    @Query("userId", OptionalUuidPipe) userId?: string,
+    @Query("scope") scope?: string,
+  ) {
+    return this.reports.getUsageSummary(context, { userId, scope });
   }
 }

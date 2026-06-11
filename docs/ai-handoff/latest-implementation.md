@@ -2,194 +2,239 @@
 
 ## 1. Original Task Brief
 
-STAGE 2 Round 6: Map Expansion Safe Architecture.
+STAGE 2 Round 7: Desktop Agent + Browser Extension Domain Tracking + Reports/Compliance Full Loop.
 
-Implement a safe, data-driven virtual office map expansion architecture so future map decoration, replacement, or expansion does not break avatar spawn, position restore, collision, pathfinding, room labels, navigation destinations, People panel room context, realtime movement, polling fallback, contact drawer hit testing, or tenant-specific workspace setup.
+Implement the full WorkMap activity tracking loop for app usage and browser domain usage:
 
-Do not build a visual map editor, do not redesign the current map, do not replace TMX art/assets, do not rewrite websocket/realtime movement, and do not troubleshoot Render/Vercel deployment.
+- Desktop Agent tracks active desktop app usage time and sends tenant/user/device-scoped activity events.
+- Browser Extension tracks active browser tab domain usage time and sends tenant/user/device-scoped domain events.
+- Backend validates, stores, and aggregates activity.
+- Reports, Dashboard, and Compliance show transparent, role-aware summaries.
+
+WorkMap must remain a transparent work visibility platform, not secret spyware. Do not implement screenshots, screen recording, keystroke logging, clipboard logging, webcam/microphone monitoring, private message/email reading, full URL/page-content capture, deployment troubleshooting, billing, map expansion, or virtual-office rewrites.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/packages/shared-types/src/index.ts` | Added the default virtual office map manifest, manifest types, bounds helpers, and runtime validator. |
-| `workmap/apps/web/lib/office/virtualOfficeMapAdapter.ts` | New frontend adapter that validates API map/room/navigation/position data and falls back to the default manifest safely. |
-| `workmap/apps/web/lib/office/officeNavigationConfig.ts` | Replaced hardcoded destination constants with destinations derived from the shared default manifest. |
-| `workmap/apps/web/components/office/mockOfficeData.ts` | Replaced hardcoded mock room zones with zones derived from the shared default manifest. |
-| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | Routes API map data through the validated adapter, tracks map manifest/config source, validates rooms/navigation/positions, and preserves fallback behavior. |
-| `workmap/apps/web/components/office/OfficeMap.tsx` | Uses manifest TMX path, canvas size, collision layers, render layer order, and safe spawn; rejects invalid restored positions, relocates blocked/out-of-bounds players to safe spawn, and now aligns the untouched no-saved-position local player to the active manifest spawn after office data loads. |
-| `workmap/apps/web/components/office/OfficeSidePanel.tsx` | Maps both destination ids and backend room UUIDs to readable area names. |
-| `workmap/apps/web/components/office/OfficeCommandPalette.tsx` | Maps both destination ids and backend room UUIDs to readable area names. |
-| `workmap/apps/web/lib/api/apiTypes.ts` | Added optional `roomId` and `description` on navigation destination responses. |
-| `workmap/apps/api/src/modules/tenant-onboarding/tenant-onboarding.service.ts` | Creates default owner workspace map, rooms, and owner spawn from the shared manifest. |
-| `workmap/apps/api/src/modules/virtual-office/virtual-office.service.ts` | Generates navigation from manifest data, validates persisted positions against map bounds, and falls back safely for legacy/invalid mapData. |
-| `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts` | Carries manifest bounds in realtime join context and rejects out-of-bounds realtime movement without changing the websocket protocol. |
+| `workmap/prisma/schema.prisma` | Added `ActivityEventSource` and `ActivityEvent.source` so persisted events explicitly distinguish desktop-agent vs browser-extension source. |
+| `workmap/prisma/migrations/20260609000000_stage2_activity_source/migration.sql` | Adds the source enum/column/index and backfills existing `BROWSER` rows as `BROWSER_EXTENSION`. |
+| `workmap/apps/api/src/modules/activity/activity.controller.ts` | Added authenticated ingestion endpoints for app and domain usage. |
+| `workmap/apps/api/src/modules/activity/activity.service.ts` | Validates device binding, app/domain labels, timestamps, durations, idle flags, and writes events plus usage summaries. |
+| `workmap/apps/api/src/modules/activity/activity.module.ts` | Registers the activity controller/service. |
+| `workmap/apps/api/src/modules/devices/devices.controller.ts` | Added `POST /devices/register` and `POST /devices/heartbeat`. |
+| `workmap/apps/api/src/modules/devices/devices.service.ts` | Added tenant/user-scoped device registration, binding checks, heartbeat update, and input sanitization. |
+| `workmap/apps/api/src/modules/reports/reports.controller.ts` | Added `scope` query support for usage summary. |
+| `workmap/apps/api/src/modules/reports/reports.service.ts` | Added own/user/company aggregate summary behavior with RBAC and device coverage metadata. |
+| `workmap/apps/web/lib/api/apiTypes.ts` | Added activity/device response types and extended usage summary shape. |
+| `workmap/apps/web/lib/api/activityApi.ts` | New frontend API wrapper for app/domain usage ingestion. |
+| `workmap/apps/web/lib/api/devicesApi.ts` | New frontend API wrapper for device list/register/heartbeat. |
+| `workmap/apps/web/lib/api/reportsApi.ts` | Added `scope=user/company` query support. |
+| `workmap/apps/web/lib/api/apiAuth.ts` | Carries resolved role in API auth result so frontend can request conservative report scope. |
+| `workmap/apps/web/lib/api/developmentApiAuth.ts` | Stores/validates role in development auth cache. |
+| `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` | Requests role-aware report scope and shows API-backed app/domain/device coverage summaries. |
+| `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx` | Requests role-aware report scope and shows tracking coverage readiness. |
+| `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx` | Updated transparency copy for app usage, domain usage, device heartbeat, and non-collected data. |
+| `workmap/apps/web/components/compliance/PolicyAcknowledgementModal.tsx` | Updated acknowledgement modal to match app/domain/device tracking boundaries. |
+| `workmap/apps/desktop-agent/src/index.ts` | Replaced placeholder with a no-dependency desktop-agent harness for registering a device, heartbeating, and submitting one sample app usage event. |
+| `workmap/apps/browser-extension/manifest.json` | Added Manifest V3 scaffold for domain-duration tracking. |
+| `workmap/apps/browser-extension/src/background.ts` | Added active-tab hostname duration tracking scaffold; stores domains only and posts batches when configured. |
+| `workmap/.env.example` | Added blank local harness placeholders and browser extension storage key notes. No real secrets were added. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA. |
 
 Pre-existing workspace note:
 
-- `docs/references/SkyOffice/` remains unrelated untracked workspace content and was not modified.
+- `docs/references/` remains unrelated untracked workspace content and was not modified.
 
 ## 3. Implementation Summary
 
-Implemented the Round 6 safe map architecture without Prisma schema changes.
+Implemented the Round 7 safe first activity tracking loop using existing WorkMap architecture.
 
-Core approach:
+Core behavior:
 
-- Use existing `OfficeMap.mapData` JSON as the map manifest storage layer.
-- Add a shared default manifest in `@workmap/shared-types`.
-- Make owner workspace creation write the default manifest into `OfficeMap.mapData`.
-- Make frontend and backend validate manifest/room/navigation/position data before trusting it.
-- Fall back to the shared default manifest when API map config is missing or invalid.
-- Keep the current TMX map art and rendering behavior functionally unchanged.
+- Backend now accepts authenticated app usage events at `POST /activity/app-usage`.
+- Backend now accepts authenticated browser domain usage events at `POST /activity/domain-usage`.
+- Backend now supports `POST /devices/register` and `POST /devices/heartbeat`.
+- Activity writes always resolve `companyId` and `userId` from `RequestContextGuard`.
+- Client-supplied `companyId`, `tenantId`, `userId`, and `role` are not trusted.
+- Device IDs are accepted only as binding keys and must belong to the authenticated user and tenant.
+- Events are persisted in `ActivityEvent` and increment `AppUsageSummary` / `WebsiteUsageSummary`.
+- Reports can return own/user summaries or role-allowed company aggregate summaries.
+- Dashboard and Reports use backend-backed summaries where available.
+- Compliance copy now accurately describes app/domain/device tracking and explicit non-tracking boundaries.
 
-No visual map editor, map art replacement, realtime rewrite, schema migration, or deployment troubleshooting was added.
+No screenshots, screen recording, keystrokes, clipboard, webcam/microphone, private message/email content, full URL paths/queries, page body content, billing, deployment troubleshooting, or virtual-office rewrite was added.
 
-Round 6 QA follow-up:
+## 4. Data Model / Migration Changes
 
-- Fixed the no-saved-position path so `OfficeMap` no longer keeps the module-level default spawn after a valid active `officeData.mapManifest` loads.
-- If the current user has no restored backend position and has not moved locally, the local player is initialized/relocated from the active manifest's safe/default spawn.
-- The existing saved-position restore path remains authoritative.
-- The existing blocked/out-of-bounds relocation path after TMX/collision load remains unchanged.
+Existing models were reused:
 
-## 4. Current Map Architecture Audit
+- `Device`
+- `ActivityEvent`
+- `AppUsageSummary`
+- `WebsiteUsageSummary`
 
-Existing architecture found during audit:
+Minimal schema addition:
 
-- TMX rendering loads `/maps/workmap2.tmx` in `OfficeMap.tsx`.
-- The TMX file is 50 x 30 tiles at 32px each, so current pixel bounds are 1600 x 960.
-- Collision is derived from named TMX layers.
-- Pathfinding uses the parsed TMX tile grid and collision grid.
-- Chair interaction is derived from the `chairs` TMX layer.
-- Contact drawer hit testing uses avatar proximity in pixel coordinates.
-- People panel room labels use `roomId` and destination names.
-- Realtime movement joins by verified company + `officeMapId`.
-- Polling fallback fetches `/virtual-office/map/:officeMapId/positions`.
-- Owner workspace creation previously duplicated map width/height, rooms, and owner spawn in backend code.
-- Frontend fallback rooms/navigation previously duplicated current-map coordinates in separate files.
+- `ActivityEventSource`
+  - `DESKTOP_AGENT`
+  - `BROWSER_EXTENSION`
+- `ActivityEvent.source`
+  - default `DESKTOP_AGENT`
+  - indexed by `[companyId, source, startedAt]`
 
-Hardcoded assumptions reduced this round:
+Migration:
 
-- TMX path is now manifest-driven.
-- Canvas size is now manifest-driven.
-- Collision layer names are now manifest-driven.
-- Render layer order is now manifest-driven.
-- Default and safe fallback spawn are now manifest-driven.
-- Mock/fallback rooms and navigation are now derived from the manifest.
-- Owner workspace default rooms/spawn/mapData are now generated from the manifest.
+- `workmap/prisma/migrations/20260609000000_stage2_activity_source/migration.sql`
 
-Known remaining current-map assumptions:
+Migration notes:
 
-- The manifest still names current TMX collision/render layers.
-- The visual TMX art remains the current map.
-- Chair interaction still relies on the TMX `chairs` layer.
-- Full stale-position version migration is not implemented because `VirtualOfficePosition` has no persisted map version field yet.
+- Run the repo's normal migration flow before manual QA against a database.
+- `pnpm prisma:generate` was run and passed after clearing local Prisma DLL locks.
+- No seed change was made.
 
-## 5. Map Config / Manifest Strategy
+## 5. Backend Ingestion / Device Binding
 
-Added `WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST` with:
+Device endpoints:
 
-- `schemaVersion`
-- `mapKey`
-- `mapVersion`
-- `displayName`
-- `tmxPath`
-- map dimensions and tile size
-- canvas size
-- default spawn
-- safe fallback spawn
-- collision layer names
-- render layer order
-- room definitions
-- navigation destinations
+- `POST /devices/register`
+  - body: optional `deviceId`, `os`, `hostname`, `agentVersion`
+  - backend writes authenticated `companyId` and `userId`
+  - rejects a supplied `deviceId` if it already belongs to another tenant/user
+- `POST /devices/heartbeat`
+  - body: `deviceId`, optional `agentVersion`
+  - updates `lastSeenAt` only for the authenticated user's own device
 
-Validation helper:
+Activity endpoints:
 
-- `validateVirtualOfficeMapManifest()`
-- `isVirtualOfficePointInBounds()`
-- `isVirtualOfficeRectInBounds()`
+- `POST /activity/app-usage`
+  - body: one event or `{ events: [...] }`
+  - fields include `deviceId`, `appName`, `startedAt`, `endedAt` or duration, optional `isIdle`
+  - source persisted as `DESKTOP_AGENT`
+  - event type persisted as `APP`
+- `POST /activity/domain-usage`
+  - body: one event or `{ events: [...] }`
+  - fields include `deviceId`, `domain`, `browserName`, `startedAt`, `endedAt` or duration, optional `isIdle`
+  - source persisted as `BROWSER_EXTENSION`
+  - event type persisted as `BROWSER`
 
-Storage strategy:
+Validation:
 
-- New owner workspaces store the manifest in existing `OfficeMap.mapData`.
-- No Prisma migration was required.
-- Existing/legacy maps without a valid manifest fall back to the shared default manifest at runtime.
+- batch size max 50 events
+- device must be registered to current authenticated user and company
+- duration must be positive and <= 12 hours
+- timestamps cannot be older than 31 days or more than 5 minutes in the future
+- app labels are sanitized and capped
+- domain input is normalized to hostname only
+- full URL paths, query strings, fragments, and page content are not stored
 
-## 6. Room / Zone / Navigation Validation
+## 6. Reports / Dashboard / Compliance
 
-Frontend:
+Reports:
 
-- `virtualOfficeMapAdapter.ts` validates API rooms, navigation destinations, anchors, bounds, and player positions.
-- Rooms with invalid or out-of-bounds `zoneData` are filtered out.
-- Navigation destinations with invalid anchors/bounds are filtered out.
-- Player positions outside map bounds are ignored rather than rendered or restored.
-- If API rooms/navigation are invalid or empty, the UI falls back to default manifest data for that part.
+- `GET /reports/usage-summary`
+  - default/user scope returns current user's own data or an explicitly requested same-tenant user if RBAC allows
+  - `scope=company` returns tenant aggregate app/domain rows only when `canViewTeamReports()` allows it
+  - company scope does not return raw employee activity rows
+  - device coverage metadata is included: registered devices, active devices in 24h, users with activity rows
 
-Backend:
+Frontend behavior:
 
-- `/virtual-office/navigation` is generated from the resolved manifest.
-- Destination `roomId` is included when a manifest destination maps to a backend `OfficeRoom`.
-- People panel and command palette can map backend room UUIDs to readable destination names.
-- `PUT /virtual-office/map/:officeMapId/positions/me` rejects out-of-bounds coordinates with controlled 400.
-- Realtime movement rejects out-of-bounds socket movement with a controlled `office:error` event.
+- Employees request own usage summaries.
+- OWNER / MANAGER / TEAM_LEAD / HR_ADMIN request company aggregate summaries.
+- IT_ADMIN remains conservative and does not automatically get company app/domain summaries from the frontend.
+- Dashboard shows tracking coverage readiness using backend summary metadata.
+- Reports show app names and domains only, with device coverage where available.
 
-## 7. Spawn Safety / Stale Position Behavior
+Compliance:
 
-Spawn behavior:
+- Visible collection now explicitly includes active desktop app name/duration, browser domain/duration, timestamps for summaries, device heartbeat, presence/avatar context, and acknowledgement timestamp.
+- Non-collected list explicitly includes screenshots, screen recording, keystrokes, clipboard, webcam/microphone, private messages/emails, page body content, full URL paths/queries, form inputs, and passwords.
 
-- Owner default workspace spawn now comes from `manifest.defaultSpawn`.
-- Frontend fallback/local spawn now comes from `manifest.safeFallbackSpawn`.
-- When `officeData.mapManifest` is loaded and there is no backend current-user position, an untouched local player is realigned to the active manifest safe spawn instead of staying on the shared default manifest spawn.
-- The active-spawn realignment sets the existing persist guard so the old default spawn is not saved back to the backend during the same render cycle.
-- If an API-restored current-user position is out of manifest bounds, the frontend uses safe spawn instead.
-- After TMX/collision load, if the player is blocked or out-of-bounds, the frontend relocates to the nearest walkable point around safe spawn.
+## 7. Desktop Agent / Browser Extension Status
 
-Stale position behavior:
+Desktop Agent:
 
-- There is no persisted map version on `VirtualOfficePosition` yet.
-- Current mitigation is runtime safety:
-  - out-of-bounds positions are rejected/ignored
-  - blocked restored positions are relocated to safe spawn
-  - realtime out-of-bounds movement is rejected
-- Future strict map-version invalidation should add map version metadata to saved positions or a companion position-version field.
+- Existing `apps/desktop-agent` package existed.
+- No Electron/Tauri/native packaging framework was introduced.
+- No active-window dependency was added.
+- Implemented a no-dependency Node/TypeScript harness:
+  - reads `WORKMAP_API_BASE_URL`
+  - reads `WORKMAP_AGENT_TOKEN`
+  - optionally reads `WORKMAP_AGENT_DEVICE_ID`
+  - registers device
+  - records heartbeat
+  - submits one sample app usage event with `--sample-once`
+- This is honest/testable scaffolding, not a production active-window collector.
 
-## 8. Realtime / Polling Compatibility
+Browser Extension:
 
-- Realtime still joins by verified tenant context + `officeMapId`.
-- Websocket protocol was not changed.
-- Realtime join context now carries the resolved manifest for bounds checks.
-- Movement broadcasts still include the same player state payload shape.
-- Polling still calls `/virtual-office/map/:officeMapId/positions`.
-- Polling positions are validated client-side against the active manifest before rendering.
-- Remote interpolation continues to use incoming pixel coordinates and no longer needs fixed old map dimensions.
+- Existing `apps/browser-extension` package existed.
+- Added a Manifest V3 scaffold.
+- Background script tracks active tab hostname duration while browser window is focused.
+- It stores and posts hostname/domain only, not full URLs or page content.
+- Config is read from `chrome.storage.local`:
+  - `workmapApiBaseUrl`
+  - `workmapAuthToken`
+  - `workmapDeviceId`
+  - `workmapBrowserName`
+- Extension API CORS/origin setup remains a manual/local configuration concern for later hardening.
+
+## 8. Privacy / RBAC / Tenant Isolation Safeguards
+
+- All new backend endpoints use `RequestContextGuard`.
+- Backend resolves tenant/user/role from authenticated request context.
+- `companyId`, `tenantId`, `userId`, and `role` from clients are ignored.
+- Device binding is tenant/user scoped.
+- Cross-tenant device reuse is rejected.
+- Cross-tenant report target lookup returns not found/forbidden through existing same-tenant checks.
+- Employee can see own reports.
+- Owner/manager/team/HR roles can see aggregate tenant summaries where `canViewTeamReports()` allows.
+- Platform Admin endpoints were not changed and still do not expose employee-level app/domain rows by default.
 
 ## 9. Verification Results
 
-Commands run from `workmap/` and rerun after the Round 6 spawn follow-up:
+Commands run from `workmap/`:
 
 ```powershell
+pnpm prisma:generate
 pnpm --filter @workmap/api typecheck
 pnpm --filter @workmap/web typecheck
+pnpm --filter @workmap/desktop-agent typecheck
+pnpm --filter @workmap/browser-extension typecheck
 pnpm --filter @workmap/api lint
 pnpm --filter @workmap/web lint
+pnpm --filter @workmap/desktop-agent lint
+pnpm --filter @workmap/browser-extension lint
 pnpm --filter @workmap/api build
 pnpm --filter @workmap/web build
+pnpm --filter @workmap/desktop-agent build
+pnpm --filter @workmap/browser-extension build
+git diff --check
 ```
 
 Results:
 
+- `pnpm prisma:generate` passed after stopping local WorkMap API/Web node processes that were locking the Prisma Client DLL.
 - API typecheck passed.
 - Web typecheck passed.
+- Desktop-agent typecheck passed.
+- Browser-extension typecheck passed.
 - API lint passed.
 - Web lint passed.
+- Desktop-agent lint passed.
+- Browser-extension lint passed.
 - API build passed.
 - Web build passed.
+- Desktop-agent build passed after rerunning outside the sandbox because the sandbox returned EPERM creating generated `dist/`.
+- Browser-extension build passed.
+- `git diff --check` passed with CRLF normalization warnings only.
+- Secret scan excluding `.env`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` found no high-confidence secret matches.
 - Web build still prints the existing Next.js ESLint plugin warning.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was restored after build verification.
 
 Not run:
 
-- No Prisma migration or `prisma:generate` was needed because schema did not change.
+- The new migration was not applied to a live database in this chat.
 - No browser manual QA was run in this chat.
 - No deployed Render/Vercel smoke was run, per task scope.
 
@@ -200,45 +245,49 @@ Use local ports consistently:
 - API: `http://localhost:3001`
 - Web: `http://localhost:3000`
 
+Before manual QA:
+
+1. Apply the new Prisma migration using the repo's normal local migration flow.
+2. Restart API after migration.
+3. Use an authenticated WorkMap bearer token locally for the desktop-agent/browser-extension harnesses.
+4. Do not paste real tokens into chat.
+
 Manual checks:
 
-1. Start API and web.
-2. Login as Owner.
-3. Open `/virtual-office`.
-4. Confirm current TMX map loads and looks functionally unchanged.
-5. Confirm current user spawns at the configured safe spawn and can move.
-6. With a valid non-default/edited active map manifest and no saved current-user position, confirm the current user spawns at that active manifest's safe/default spawn.
-7. Confirm saved position restore still wins over manifest spawn.
-8. If practical, manually place an invalid/out-of-bounds position in the DB and confirm the UI uses safe spawn instead of crashing.
-9. Confirm rooms and destination labels are readable and no UUIDs appear in People panel or command palette.
-10. Confirm double-click auto-walk still works.
-11. Confirm WASD/arrow movement and collision still work.
-12. Confirm chair `E` interaction still works.
-13. Confirm contact drawer hit testing still works.
-14. Confirm realtime movement still works with another user.
-15. Confirm polling fallback still works when websocket is unavailable.
-16. Create a new owner workspace and confirm default map/rooms/owner spawn are usable.
-17. Confirm tenant A cannot access tenant B officeMap/map APIs.
-18. Confirm Dashboard, Reports, Compliance, Employees, tenant onboarding, invite flow, and Platform Admin still smoke pass.
+1. Login as Employee.
+2. Register a device with `POST /devices/register`.
+3. Submit app usage through `POST /activity/app-usage` or the desktop-agent `--sample-once` harness.
+4. Submit domain usage through `POST /activity/domain-usage` or the extension scaffold.
+5. Confirm Employee `/reports` shows own app/domain summaries.
+6. Login as Owner.
+7. Confirm Owner `/reports` shows company aggregate app/domain summaries without raw employee rows.
+8. Confirm Owner cannot request another tenant's user report.
+9. Confirm non-authorized roles cannot use `scope=company`.
+10. Confirm `/dashboard` tracking coverage updates when device/activity rows exist.
+11. Confirm `/compliance` and acknowledgement modal explain what is collected and not collected.
+12. Confirm Platform Admin does not expose employee-level app/domain details.
+13. Confirm invalid `deviceId`, cross-tenant device IDs, bad timestamps, long durations, full URL paths/queries, and malformed domains fail safely.
+14. Confirm `/virtual-office`, realtime movement, polling fallback, Employees, tenant onboarding, invites, Reports, Dashboard, Compliance, and Platform Admin smoke pass.
 
 ## 11. Risks / Notes
 
-- No schema migration means saved positions still do not store `mapVersion`.
-- Existing legacy `OfficeMap` rows may still have older width/height/mapData, but runtime manifest fallback protects current UI/API behavior.
-- The default manifest still references current TMX layer names and current map art.
-- Future map editor/admin should write validated manifests into `OfficeMap.mapData`.
-- Future strict stale-position handling should persist map version on positions.
-- Future map replacement should add automated manifest-vs-TMX validation in CI or a dev script.
-- No secrets or env values were changed.
-- `docs/references/SkyOffice/` remains unrelated untracked content.
+- Desktop-agent is a harness/scaffold, not production active-window tracking.
+- Browser extension is a Manifest V3 scaffold; packaging, permissions review, pairing UX, CORS/origin setup, and store distribution remain future work.
+- No offline durable queue was added. The harnesses submit directly and should be hardened later.
+- No native OS active-window dependency was added, so real app detection remains future work.
+- Reports use query-time aggregation from summary tables; no background aggregation worker was added.
+- Company aggregate report rows intentionally avoid raw employee-level details.
+- No deployed smoke was run.
+- WorkMap dev API/Web node processes were stopped to unlock Prisma Client generation and were not restarted automatically.
+- `docs/references/` remains unrelated untracked content and should not be staged.
 
 ## 12. Docs Update Suggestions
 
-- `docs/skills/backend-skill.md`: document `OfficeMap.mapData` manifest strategy and virtual-office bounds validation.
-- `docs/skills/frontend-skill.md`: document `virtualOfficeMapAdapter.ts` and manifest-driven map fallback behavior.
-- `docs/skills/api-contract-skill.md`: document optional `roomId` / `description` on navigation destination responses and position 400 behavior.
-- `docs/skills/realtime-presence-skill.md`: document realtime manifest bounds checks and unchanged websocket payload shape.
-- `docs/skills/current-status.md`: record Round 6 map expansion architecture, no schema migration, and remaining stale-position version risk.
+- `docs/skills/backend-skill.md`: document activity ingestion endpoints, device binding, validation bounds, and summary update behavior.
+- `docs/skills/api-contract-skill.md`: document `/devices/register`, `/devices/heartbeat`, `/activity/app-usage`, `/activity/domain-usage`, and `scope=company` reports.
+- `docs/skills/frontend-skill.md`: document role-aware reports scope and tracking coverage UI.
+- `docs/skills/deployment-skill.md`: document future CORS/origin needs for browser extension and secure token/pairing setup.
+- `docs/skills/current-status.md`: record Round 7 backend loop, harness/scaffold limitations, and remaining production tracking hardening.
 
 ## 13. Next Chat Input
 

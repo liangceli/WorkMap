@@ -1,11 +1,14 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { canViewEmployeeActivity, canViewOwnReports, type RequestContext } from "@workmap/auth";
+import { canViewEmployeeActivity, canViewOwnReports, canViewTeamReports, type RequestContext } from "@workmap/auth";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 
 type SummaryQuery = {
   userId?: string;
+  scope?: string;
 };
+
+type ReportScope = "user" | "company";
 
 @Injectable()
 export class ReportsService {
@@ -15,6 +18,12 @@ export class ReportsService {
   ) {}
 
   async getUsageSummary(context: RequestContext, query: SummaryQuery) {
+    const scope = normalizeReportScope(query.scope);
+
+    if (scope === "company") {
+      return this.getCompanyUsageSummary(context);
+    }
+
     const userId = await this.resolveVisibleReportUserId(context, query.userId);
 
     if (query.userId && query.userId !== context.userId && userId === query.userId) {
@@ -29,17 +38,62 @@ export class ReportsService {
       });
     }
 
+    const [summary, deviceCoverage] = await Promise.all([
+      this.getUsageRows({ companyId: context.companyId, userId }),
+      this.getDeviceCoverage(context.companyId, userId),
+    ]);
+
+    return {
+      scope: "user" satisfies ReportScope,
+      userId,
+      ...summary,
+      deviceCoverage,
+    };
+  }
+
+  private async getCompanyUsageSummary(context: RequestContext) {
+    if (!canViewTeamReports(context)) {
+      throw new ForbiddenException("Company reports are not visible to this role.");
+    }
+
+    await this.audit.logSensitiveAction({
+      companyId: context.companyId,
+      actorUserId: context.userId,
+      action: "REPORT_COMPANY_SUMMARY_VIEWED",
+      resourceType: "Company",
+      resourceId: context.companyId,
+      metadata: { source: "api.reports.getUsageSummary", scope: "company" },
+    });
+
+    const [summary, deviceCoverage] = await Promise.all([
+      this.getUsageRows({ companyId: context.companyId }),
+      this.getDeviceCoverage(context.companyId),
+    ]);
+
+    return {
+      scope: "company" satisfies ReportScope,
+      userId: null,
+      ...summary,
+      deviceCoverage,
+    };
+  }
+
+  private async getUsageRows(filter: { companyId: string; userId?: string }) {
+    const where = {
+      companyId: filter.companyId,
+      ...(filter.userId ? { userId: filter.userId } : {}),
+    };
     const [appRows, websiteRows] = await Promise.all([
       this.prisma.appUsageSummary.groupBy({
         by: ["appName", "category", "productivityLabel"],
-        where: { companyId: context.companyId, userId },
+        where,
         _sum: { activeSeconds: true, idleSeconds: true },
         orderBy: { _sum: { activeSeconds: "desc" } },
         take: 10,
       }),
       this.prisma.websiteUsageSummary.groupBy({
         by: ["domain", "category", "productivityLabel"],
-        where: { companyId: context.companyId, userId },
+        where,
         _sum: { activeSeconds: true, idleSeconds: true },
         orderBy: { _sum: { activeSeconds: "desc" } },
         take: 10,
@@ -47,7 +101,6 @@ export class ReportsService {
     ]);
 
     return {
-      userId,
       apps: appRows.map((row) => ({
         appName: row.appName,
         category: row.category,
@@ -62,6 +115,29 @@ export class ReportsService {
         activeSeconds: row._sum.activeSeconds ?? 0,
         idleSeconds: row._sum.idleSeconds ?? 0,
       })),
+    };
+  }
+
+  private async getDeviceCoverage(companyId: string, userId?: string) {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const where = {
+      companyId,
+      ...(userId ? { userId } : {}),
+    };
+
+    const [registeredDevices, activeDevices24h, usersWithActivity] = await Promise.all([
+      this.prisma.device.count({ where }),
+      this.prisma.device.count({ where: { ...where, lastSeenAt: { gte: oneDayAgo } } }),
+      this.prisma.activityEvent.groupBy({
+        by: ["userId"],
+        where,
+      }),
+    ]);
+
+    return {
+      registeredDevices,
+      activeDevices24h,
+      usersWithActivity: usersWithActivity.length,
     };
   }
 
@@ -96,4 +172,8 @@ export class ReportsService {
 
     return target.id;
   }
+}
+
+function normalizeReportScope(scope: string | undefined): ReportScope {
+  return scope === "company" ? "company" : "user";
 }

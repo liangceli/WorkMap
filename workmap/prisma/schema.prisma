@@ -42,6 +42,11 @@ enum ActivityEventType {
   HEARTBEAT
 }
 
+enum ActivityEventSource {
+  DESKTOP_AGENT
+  BROWSER_EXTENSION
+}
+
 enum BrowserName {
   CHROME
   EDGE
@@ -197,6 +202,7 @@ model ActivityEvent {
   companyId       String             @db.Uuid
   userId          String             @db.Uuid
   deviceId        String             @db.Uuid
+  source          ActivityEventSource @default(DESKTOP_AGENT)
   eventType       ActivityEventType
   appName         String?
   browserName     BrowserName?
@@ -214,6 +220,7 @@ model ActivityEvent {
 
   @@index([companyId, userId, startedAt])
   @@index([companyId, deviceId, startedAt])
+  @@index([companyId, source, startedAt])
   @@index([companyId, eventType, startedAt])
 }
 

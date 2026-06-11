@@ -29,8 +29,9 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
         </div>
 
         <p style={styles.bodyText}>
-          WorkMap shows presence, avatar location, workspace status, freshness, and last-seen context so teammates understand
-          the virtual office. It does not show hidden screen, keyboard, camera, microphone, or private-content monitoring.
+          WorkMap shows presence, avatar location, workspace status, app usage duration, browser domain duration, device heartbeat,
+          freshness, and last-seen context so teammates understand work patterns transparently. It does not show hidden screen,
+          keyboard, clipboard, camera, microphone, page-content, or private-message monitoring.
         </p>
 
         <div style={styles.grid}>
@@ -38,6 +39,9 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
             <h3 style={styles.smallTitle}>Collected</h3>
             <ul style={styles.list}>
               <li>Active app name</li>
+              <li>Browser domain name</li>
+              <li>Usage duration and timestamps for summaries</li>
+              <li>Device heartbeat status</li>
               <li>Avatar room or office area</li>
               <li>Workspace status and freshness</li>
               <li>Last-seen timestamp</li>
@@ -49,9 +53,10 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
             <ul style={styles.list}>
               <li>Keystrokes</li>
               <li>Screenshots</li>
+              <li>Clipboard contents</li>
               <li>Camera or microphone</li>
               <li>Message or email content</li>
-              <li>Passwords or form inputs</li>
+              <li>Page body content, full URLs, passwords, or form inputs</li>
             </ul>
           </div>
         </div>

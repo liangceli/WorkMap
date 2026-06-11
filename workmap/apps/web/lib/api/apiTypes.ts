@@ -224,7 +224,8 @@ export type WorkMapApiPolicyAcknowledgement = {
 };
 
 export type WorkMapApiUsageSummary = {
-  userId: string;
+  scope?: "user" | "company";
+  userId: string | null;
   apps: Array<{
     appName: string;
     category: string | null;
@@ -239,6 +240,29 @@ export type WorkMapApiUsageSummary = {
     activeSeconds: number;
     idleSeconds: number;
   }>;
+  deviceCoverage?: {
+    registeredDevices: number;
+    activeDevices24h: number;
+    usersWithActivity: number;
+  };
+};
+
+export type WorkMapApiDevice = {
+  id: string;
+  os: string;
+  hostname: string | null;
+  agentVersion: string | null;
+  lastSeenAt: string | null;
+};
+
+export type WorkMapApiDeviceRegistration = {
+  device: WorkMapApiDevice;
+};
+
+export type WorkMapApiActivityIngestResult = {
+  accepted: number;
+  source: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+  eventType: "APP" | "BROWSER";
 };
 
 export type WorkMapApiPlatformTenantSummary = {

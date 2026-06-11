@@ -64,7 +64,8 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
         return;
       }
 
-      const result = await getUsageSummary(auth.options);
+      const reportScope = canRequestCompanySummary(auth.role) ? "company" : "user";
+      const result = await getUsageSummary({ ...auth.options, scope: reportScope });
 
       if (cancelled) {
         return;
@@ -85,7 +86,10 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
         loading: false,
         authSource: auth.source,
         summary: result.data,
-        statusText: "Reports API loaded the current user's app and domain summary.",
+        statusText:
+          result.data.scope === "company"
+            ? "Reports API loaded a role-allowed tenant app and domain summary."
+            : "Reports API loaded the current user's app and domain summary.",
         error: null,
       });
     }
@@ -108,7 +112,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
           <h2 style={styles.panelTitle}>{reportState.loading ? "Checking reports API" : reportState.statusText}</h2>
           <p style={styles.panelText}>
             WorkMap reports currently expose app names, domains, active seconds, and idle seconds through the existing API. Full URLs,
-            screenshots, keystrokes, message content, camera, and microphone data are not part of this pilot report.
+            screenshots, keystrokes, message content, camera, and microphone data are not part of this report.
           </p>
           {reportState.authSource ? <p style={styles.sessionText}>API context: {formatAuthSource(reportState.authSource)}</p> : null}
         </div>
@@ -130,9 +134,9 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
           <div style={styles.apiHeader}>
             <div>
               <p style={styles.panelLabel}>Available API summary</p>
-              <h2 style={styles.panelTitle}>Current user usage rows</h2>
+              <h2 style={styles.panelTitle}>{reportState.summary.scope === "company" ? "Tenant usage summary" : "Current user usage rows"}</h2>
             </div>
-            <span style={styles.scopePill}>{hasApiRows ? "API data" : "Sparse pilot data"}</span>
+            <span style={styles.scopePill}>{reportState.summary.scope === "company" ? "Company scope" : hasApiRows ? "API data" : "Sparse data"}</span>
           </div>
           {hasApiRows ? (
             <div style={styles.summaryGrid}>
@@ -242,11 +246,27 @@ function buildApiMetrics(summary: WorkMapApiUsageSummary | null): ReportMetric[]
   const idleSeconds = [...summary.apps, ...summary.websites].reduce((sum, row) => sum + row.idleSeconds, 0);
 
   return [
-    { label: "Active time", value: formatDuration(activeSeconds), detail: "Current user rows returned by Reports API." },
+    {
+      label: "Active time",
+      value: formatDuration(activeSeconds),
+      detail: summary.scope === "company" ? "Tenant aggregate rows returned by Reports API." : "Current user rows returned by Reports API.",
+    },
     { label: "Idle time", value: formatDuration(idleSeconds), detail: "Idle seconds from app and domain summary rows." },
     { label: "App rows", value: String(summary.apps.length), detail: "App names only; no screenshots or keystrokes." },
-    { label: "Domain rows", value: String(summary.websites.length), detail: "Domains only; no full URL history in this pilot report." },
+    {
+      label: "Devices active",
+      value: summary.deviceCoverage
+        ? `${summary.deviceCoverage.activeDevices24h} / ${summary.deviceCoverage.registeredDevices}`
+        : String(summary.websites.length),
+      detail: summary.deviceCoverage
+        ? `${summary.deviceCoverage.usersWithActivity} user(s) have activity rows in this scope.`
+        : "Domains only; no full URL history in this report.",
+    },
   ];
+}
+
+function canRequestCompanySummary(role: string | undefined) {
+  return role === "OWNER" || role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN";
 }
 
 function formatDuration(seconds: number) {
