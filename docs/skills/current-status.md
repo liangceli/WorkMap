@@ -4,6 +4,12 @@ Last updated: 2026-06-13.
 
 ## Latest Accepted Work
 
+- Commit `60fc0ca` (`feat: harden role-based alpha journeys`) completed STAGE 3 Round 2: role-based user journey polish and alpha flow hardening.
+- This was a frontend-only role-flow pass for Owner, Employee, and Platform Admin journeys. It did not change backend features, Prisma schema/migrations, auth architecture, realtime protocol, deployment setup, desktop-agent, browser-extension, tracking features, billing, chat, map editor, or virtual-office behavior.
+- Owner dashboard/onboarding/invite flows now explain next steps more clearly: create workspace, finish avatar/profile, review compliance, invite employees, open office, and view reports.
+- Employee dashboard/invite/reports flows now explain own workspace scope, invite acceptance path, compliance/avatar/device setup, and why company-wide reports are unavailable.
+- Platform Admin blocked states now explain that tenant OWNER/EMPLOYEE/IT_ADMIN roles do not grant platform access; platform access remains independent and allowlist-driven.
+- AppShell unauthenticated/no-role state no longer shows tenant workspace navigation before a workspace role is resolved.
 - Commit `333b789` (`style: polish frontend product experience`) completed STAGE 3 Round 1: frontend product design and experience refactor foundation.
 - This was a frontend-only polish pass across AppShell, login, Dashboard, Reports, Compliance, Employees, Virtual Office top chrome, Platform Admin, and shared page header/theme styles.
 - AppShell now has clearer workspace/platform context, grouped navigation labels, active-route styling, role/session pill treatment, and better wrapping behavior.
@@ -216,12 +222,13 @@ Last updated: 2026-06-13.
 - Current user's latest local position can now be restored from and saved to the backend in development/API-backed mode.
 - Realtime WebSocket movement is implemented for remote players, while polling remains the reconciliation/fallback path and latest-position durability still uses HTTP saves.
 - Workflow routing still uses frontend localStorage state, but backend authorization now comes from Cognito, pilot JWT, or development-only auth paths.
-- STAGE 3 Round 1 was code-reviewed and machine-verified, but browser visual/manual QA across login, AppShell, Dashboard, Employees, Reports, Compliance, Platform Admin, and Virtual Office chrome remains recommended before broader pilot use.
+- STAGE 3 Round 2 was code-reviewed and machine-verified, but browser visual/manual QA across Owner, Employee, Platform Admin, invite, reports, AppShell, and Virtual Office chrome remains recommended before broader pilot use.
 - `docs/references/` remains untracked reference material and should not be committed accidentally.
 
 ## Recommended Next Tasks
 
-- Run a short browser visual smoke for STAGE 3 Round 1 at desktop/tablet-ish widths, including `/login`, OWNER/MANAGER/EMPLOYEE AppShell states, Dashboard, Employees filters/table, Reports, Compliance, Platform Admin, and `/virtual-office` map/chrome regressions.
+- Run targeted browser smoke for STAGE 3 Round 2: Owner dashboard next steps, Owner workspace creation guidance, Owner invite management, non-owner invite management, Employee invite acceptance/wrong-account errors, Employee dashboard/report states, tenant-user Platform Admin blocked state, Platform Admin success state, and `/virtual-office` behavior regression.
+- Run the broader STAGE 3 visual smoke at desktop/tablet-ish widths for `/login`, AppShell states, Dashboard, Employees filters/table, Reports, Compliance, Platform Admin, and `/virtual-office` map/chrome.
 - Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.
 - Keep every new deployed database migrated through `20260609000000_stage2_activity_source` before activity tracking tests.
 - Build production-grade desktop active-window collection, secure device pairing/token lifecycle, offline queueing, retry/backoff, and revocation before treating the desktop agent as production tracking.

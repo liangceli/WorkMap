@@ -61,6 +61,19 @@ Commit `333b789` added a frontend-only product experience polish pass.
 - Virtual Office top chrome now frames the map as live team presence without changing rendering, movement, realtime, polling, People panel, contact drawer, chair interaction, or command palette behavior.
 - Platform Admin copy reinforces independent platform-only context and privacy-safe tenant metadata.
 
+Commit `60fc0ca` added role-based alpha journey hardening on top of the Round 1 polish.
+
+- Scope remained frontend-only under `apps/web/**`; no backend, Prisma, auth architecture, realtime protocol, map engine, deployment config, desktop-agent, browser-extension, tracking, billing, chat, or map editor behavior changed.
+- Dashboard now shows Owner-specific next steps such as inviting employees, opening the office, viewing reports, and reviewing compliance.
+- Dashboard can present Employee workspace guidance without Owner-only CTAs.
+- `/onboarding/company` explains the Owner post-create path: avatar/profile setup, compliance review, employee invites, and virtual office entry.
+- `/onboarding/invite` gives Owner-only guidance before invite list/create calls and shows friendlier non-owner/forbidden states.
+- `/invite/[token]` explains the Employee invite path through Cognito sign-in, workspace join, compliance, avatar/profile, device setup, and virtual office.
+- Invite acceptance maps common forbidden/expired/already-used states into friendlier user-facing copy.
+- Reports explain Employee own-report scope and Owner/Manager company aggregate scope without changing the API contract.
+- `/platform-admin` blocked states explain that tenant roles do not grant Platform Admin access; platform access remains Cognito/platform allowlist-driven.
+- AppShell no-role/unauthenticated state does not show tenant workspace navigation before a workspace role is resolved.
+
 ## API Usage
 
 `lib/api/apiClient.ts` supports `GET`, `POST`, and `PATCH` with optional Bearer token and default development base URL `http://localhost:3001`. In production, `NEXT_PUBLIC_WORKMAP_API_URL` must be set or API calls fall back with an error result.
@@ -144,6 +157,7 @@ Backend-backed profile/avatar:
 Role-aware surfaces:
 
 - AppShell hides Dashboard, Reports, Integrations, Settings, and Invites from employee roles where appropriate.
+- AppShell should not show tenant workspace navigation when no workspace role has been resolved.
 - Virtual-office command palette hides Dashboard/Integrations shortcuts from employees.
 - `/employees` loads real same-tenant users from `GET /users` when API auth succeeds and labels mock directory data as fallback only.
 - API-backed employee directory rows do not link real UUID users to the old mock detail route.

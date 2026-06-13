@@ -20,7 +20,7 @@ UI primitives:
 
 ## STAGE 3 Product Experience Direction
 
-Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke.
+Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke. Commit `60fc0ca` extended this into role-based journey hardening.
 
 - Use calm SaaS/workspace language rather than QA/readiness language on primary product surfaces.
 - Keep API-backed, sparse-data, fallback, and example states explicit so polish does not hide missing data.
@@ -32,6 +32,11 @@ Commit `333b789` established the first frontend product polish baseline after al
 - Employees should prioritize scan-friendly filters/table behavior and tolerate narrower desktop/tablet widths.
 - Platform Admin should remain a quiet, independent, platform-only operational surface with privacy-safe tenant metadata only.
 - Virtual Office chrome should frame the map as live team presence without obscuring or changing map movement, People, contact, chair, realtime, or polling behavior.
+- Owner journeys should explain concrete next steps: create workspace, finish avatar/profile, review compliance, invite employees, open the office, and review reports.
+- Employee journeys should explain invite acceptance, compliance/avatar/device setup, virtual-office entry, own-report scope, and why company-wide summaries are not available.
+- Permission-denied or unavailable states should be written in plain language before or alongside technical API failures.
+- Platform Admin blocked states should explain that tenant OWNER/EMPLOYEE/IT_ADMIN roles do not grant platform access.
+- Do not show tenant workspace navigation before a workspace role is resolved; unclear states should guide users back to sign-in or onboarding.
 
 ## Virtual Office UX
 
@@ -71,6 +76,8 @@ Dashboard/reports pilot UX:
 Role/profile UX:
 
 - Employee roles should not see obvious admin/report/settings/dashboard/integration shortcuts in AppShell or the virtual-office command palette.
+- Employee dashboards and reports should avoid Owner-only CTAs and should explain own-scope reporting.
+- Owner invite management should clearly indicate that only workspace Owners can create/manage invitations.
 - `/employees` should clearly distinguish API-backed same-tenant users from mock/example fallback data.
 - New owner and invited employee setup should ask for a human-readable display name before relying on Cognito/email-derived fallback labels.
 - Authenticated users should complete backend-backed avatar/profile setup once; returning users with backend `layered:v2:` avatar references should not be forced to recreate avatars.

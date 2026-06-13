@@ -133,6 +133,23 @@ Use this after frontend product language, AppShell, dashboard, reporting, compli
 - Confirm `/virtual-office` map rendering, movement, realtime/polling, People panel, contact drawer, chair interaction, command palette, and top chrome remain usable.
 - Check 1366px, 1440px, and tablet-ish widths for text/control overlap.
 
+## STAGE 3 Role Journey QA
+
+Use this after Owner, Employee, invite, reports scope, AppShell navigation, onboarding guidance, or Platform Admin permission-state changes.
+
+- Owner `/dashboard`: confirm Owner next steps show Invite employees, Open office, View reports, and Review compliance.
+- Owner `/onboarding/company`: confirm workspace creation guidance explains post-create avatar/profile, compliance, invites, and virtual-office steps.
+- Owner `/onboarding/invite`: confirm invite list/create still works and copy is Owner-specific.
+- Non-owner `/onboarding/invite`: confirm the page shows a friendly Owner-only message and does not present a misleading create path.
+- Employee invite link: confirm the page explains Cognito sign-in, workspace join, compliance, avatar/profile, device setup, and virtual-office path.
+- Employee wrong-account invite acceptance: confirm a 403/forbidden response becomes helpful wrong-email or permission guidance.
+- Employee direct `/dashboard`: confirm it does not show Owner-only CTAs.
+- Employee `/reports`: confirm own-scope explanation is clear and company-wide summaries are described as Owner/Manager-only.
+- Tenant Owner/Employee direct `/platform-admin`: confirm blocked copy explains separate Platform Admin identity and allowlist requirement.
+- Platform Admin login: confirm `/platform-admin` still loads privacy-safe tenant metadata and does not regress into tenant workspace language.
+- AppShell unauthenticated/no-role state: confirm tenant workspace navigation is hidden until a workspace role is resolved.
+- `/virtual-office`: confirm map, movement, realtime/polling, People panel, contact drawer, chair interaction, and command palette are unchanged.
+
 ## STAGE 2 Tenant Onboarding / Invite QA
 
 - Apply migration `20260606000000_stage2_onboarding_invites` before testing.
@@ -334,6 +351,19 @@ Use this repeatable loop after backend/local-startup changes:
 - Add coverage for `useVirtualOfficeData.ts` adapters/fallback behavior when a frontend test harness is introduced.
 
 ## Latest Verification Notes
+
+For commit `60fc0ca`, handoff/QA reports:
+
+- Web typecheck passed.
+- Web lint passed.
+- Web build passed.
+- `git diff --check` passed with CRLF normalization warnings only.
+- Web build still prints the existing warning that the Next.js ESLint plugin is not detected in the current ESLint config.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches for the current scan scope.
+- Diff review confirmed changes were frontend-only under `apps/web/**` plus handoff docs.
+- No backend, Prisma schema/migration, seed, auth architecture, realtime protocol, map engine, movement/collision, chair interaction, contact drawer API, desktop-agent, browser-extension, deployment config, env, billing, chat, or map editor files changed.
+- Browser/manual visual QA was not run during QA and remains recommended because the workspace includes broad visual styling changes plus targeted Round 2 role-flow copy/states.
+- QA focus for manual smoke: Owner dashboard/onboarding/invite journey, Employee dashboard/invite/reports journey, Platform Admin blocked state, AppShell unauthenticated navigation, and `/virtual-office` regression.
 
 For commit `333b789`, handoff/QA reports:
 
