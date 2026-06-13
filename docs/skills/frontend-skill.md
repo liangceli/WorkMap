@@ -44,6 +44,23 @@ Important areas:
 - `/virtual-office`
 - `/platform-admin`
 
+## STAGE 3 Frontend Experience Foundation
+
+Commit `333b789` added a frontend-only product experience polish pass.
+
+- Scope stayed under `apps/web/**`; no backend, Prisma, auth architecture, realtime protocol, map engine, deployment config, desktop-agent, browser-extension, or env behavior changed.
+- `components/layout/AppShell.tsx` now uses `usePathname()` for active-route styling.
+- AppShell navigation has clearer grouped labels, workspace/platform context text, role/session pill styling, and wrapping behavior.
+- Navigation visibility remains UX-only; backend RBAC remains the security boundary.
+- Shared page headers in `lib/theme/workmapTheme.ts` can wrap, and shared title/eyebrow styles no longer use non-zero or negative letter spacing.
+- `/login` and `MockLoginPanel` distinguish deployed alpha Cognito login, pilot backend fallback, and frontend/local fallback more clearly.
+- Dashboard copy reads as a workspace overview for presence, coverage, compliance, and summaries while preserving live API/fallback status.
+- Reports copy emphasizes role-aware own/company summaries, aggregate-only company views, sparse-data states, and labeled example layouts.
+- Compliance keeps explicit collected/not-collected privacy boundaries and improves responsive policy card layout.
+- Employees directory controls/table behavior is more stable on narrower screens through wrapping controls and horizontal table scrolling.
+- Virtual Office top chrome now frames the map as live team presence without changing rendering, movement, realtime, polling, People panel, contact drawer, chair interaction, or command palette behavior.
+- Platform Admin copy reinforces independent platform-only context and privacy-safe tenant metadata.
+
 ## API Usage
 
 `lib/api/apiClient.ts` supports `GET`, `POST`, and `PATCH` with optional Bearer token and default development base URL `http://localhost:3001`. In production, `NEXT_PUBLIC_WORKMAP_API_URL` must be set or API calls fall back with an error result.

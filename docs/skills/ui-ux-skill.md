@@ -18,6 +18,21 @@ UI primitives:
 - `WorkMapPrivacyNotice`
 - `WorkMapStatusDot`
 
+## STAGE 3 Product Experience Direction
+
+Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke.
+
+- Use calm SaaS/workspace language rather than QA/readiness language on primary product surfaces.
+- Keep API-backed, sparse-data, fallback, and example states explicit so polish does not hide missing data.
+- AppShell should show clear workspace or platform context, grouped navigation, active-route state, role/session source, and readable wrapping at narrower widths.
+- Login should position Cognito as deployed alpha sign-in, pilot backend auth as fallback, and frontend-only demo state as clearly non-production.
+- Dashboard should read as a workspace overview for presence, coverage, compliance, and summaries while still exposing live/fallback health.
+- Reports should describe role-aware own/company summaries and aggregate-only company views without implying raw employee monitoring.
+- Compliance should preserve explicit collected/not-collected data boundaries while staying responsive.
+- Employees should prioritize scan-friendly filters/table behavior and tolerate narrower desktop/tablet widths.
+- Platform Admin should remain a quiet, independent, platform-only operational surface with privacy-safe tenant metadata only.
+- Virtual Office chrome should frame the map as live team presence without obscuring or changing map movement, People, contact, chair, realtime, or polling behavior.
+
 ## Virtual Office UX
 
 The virtual office is designed as the primary first-screen experience for `/virtual-office`, not a marketing page. It uses full viewport canvas rendering with overlay chrome: top bar, left rail, side panels, minimap, bottom dock, and command palette.

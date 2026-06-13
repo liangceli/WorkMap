@@ -4,6 +4,12 @@ Last updated: 2026-06-13.
 
 ## Latest Accepted Work
 
+- Commit `333b789` (`style: polish frontend product experience`) completed STAGE 3 Round 1: frontend product design and experience refactor foundation.
+- This was a frontend-only polish pass across AppShell, login, Dashboard, Reports, Compliance, Employees, Virtual Office top chrome, Platform Admin, and shared page header/theme styles.
+- AppShell now has clearer workspace/platform context, grouped navigation labels, active-route styling, role/session pill treatment, and better wrapping behavior.
+- Product copy now moves away from QA/readiness framing toward calmer alpha SaaS language while preserving API/fallback state labels, role-aware reports, and explicit privacy boundaries.
+- Responsive polish landed for shared page headers, login grid, compliance policy cards, employee directory controls/table scrolling, and title/eyebrow letter spacing.
+- No backend files, Prisma schema/migrations, auth architecture, realtime protocol, map engine, movement/collision/chair behavior, contact drawer, desktop-agent, browser-extension, deployment config, or env files changed.
 - STAGE 2 Round 9 external alpha deployment smoke passed manually on 2026-06-13 after Vercel, Render, Supabase, and Cognito were configured. Current release status: Alpha Ready Candidate for a controlled 5-person pilot.
 - `docs/ai-handoff/real-alpha-deployment-smoke.md` captures the real alpha deployment smoke runbook, Manual Action Required checklist, migration sequence, platform setup matrix, activity hardening live checks, and release blocker status.
 - `pnpm smoke:alpha` passed against deployed public Vercel/Render URLs. It reads deployed API/app origins from shell env vars only, checks `/health`, `/health/readiness`, CORS allowlist response, key frontend routes, and prints the derived realtime endpoint. It does not read `.env`, require bearer tokens, or automate authenticated Cognito/invite/activity flows.
@@ -210,10 +216,12 @@ Last updated: 2026-06-13.
 - Current user's latest local position can now be restored from and saved to the backend in development/API-backed mode.
 - Realtime WebSocket movement is implemented for remote players, while polling remains the reconciliation/fallback path and latest-position durability still uses HTTP saves.
 - Workflow routing still uses frontend localStorage state, but backend authorization now comes from Cognito, pilot JWT, or development-only auth paths.
+- STAGE 3 Round 1 was code-reviewed and machine-verified, but browser visual/manual QA across login, AppShell, Dashboard, Employees, Reports, Compliance, Platform Admin, and Virtual Office chrome remains recommended before broader pilot use.
 - `docs/references/` remains untracked reference material and should not be committed accidentally.
 
 ## Recommended Next Tasks
 
+- Run a short browser visual smoke for STAGE 3 Round 1 at desktop/tablet-ish widths, including `/login`, OWNER/MANAGER/EMPLOYEE AppShell states, Dashboard, Employees filters/table, Reports, Compliance, Platform Admin, and `/virtual-office` map/chrome regressions.
 - Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.
 - Keep every new deployed database migrated through `20260609000000_stage2_activity_source` before activity tracking tests.
 - Build production-grade desktop active-window collection, secure device pairing/token lifecycle, offline queueing, retry/backoff, and revocation before treating the desktop agent as production tracking.

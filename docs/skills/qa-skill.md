@@ -117,6 +117,22 @@ Use `docs/ai-handoff/real-alpha-deployment-smoke.md` for Round 9 deployed smoke.
 - After the helper passes, complete authenticated manual smoke for Cognito Owner onboarding, invite creation, Employee invite acceptance/onboarding, two-user realtime movement, People/contact surfaces, Platform Admin privacy, device registration, app/domain sample activity, Employee own reports, Owner company aggregate reports, and Employee company-scope report block.
 - Repeat deployed smoke immediately before pilot start and after any Vercel, Render, Supabase, Cognito, origin allowlist, callback/logout, migration, or deployment change.
 
+## STAGE 3 Frontend Experience Visual QA
+
+Use this after frontend product language, AppShell, dashboard, reporting, compliance, employee directory, platform admin, or virtual-office chrome changes.
+
+- Run web typecheck, lint, and build.
+- Confirm `/login` clearly distinguishes deployed alpha Cognito sign-in, pilot backend fallback, and frontend-only fallback.
+- Confirm OWNER/MANAGER AppShell active nav, grouped labels, workspace context, role/session pill, wrapping behavior, and visibility of Dashboard, Reports, Employees, Compliance, Invites, Integrations, and Settings.
+- Confirm EMPLOYEE AppShell hides manager/admin-only shortcuts while keeping Office, Employees, and Compliance usable.
+- Confirm Dashboard reads as workspace overview while still making API-backed, fallback, and sparse-data states obvious.
+- Confirm Reports language remains role-aware for own summaries versus company aggregate summaries and does not imply raw employee activity rows.
+- Confirm Compliance keeps explicit collected/not-collected privacy boundaries and acknowledgement flow readability.
+- Confirm Employees search/status/department controls and table horizontal scrolling work at desktop and tablet-ish widths.
+- Confirm Platform Admin reads as independent platform context and only exposes privacy-safe tenant metadata.
+- Confirm `/virtual-office` map rendering, movement, realtime/polling, People panel, contact drawer, chair interaction, command palette, and top chrome remain usable.
+- Check 1366px, 1440px, and tablet-ish widths for text/control overlap.
+
 ## STAGE 2 Tenant Onboarding / Invite QA
 
 - Apply migration `20260606000000_stage2_onboarding_invites` before testing.
@@ -318,6 +334,18 @@ Use this repeatable loop after backend/local-startup changes:
 - Add coverage for `useVirtualOfficeData.ts` adapters/fallback behavior when a frontend test harness is introduced.
 
 ## Latest Verification Notes
+
+For commit `333b789`, handoff/QA reports:
+
+- Web typecheck passed.
+- Web lint passed.
+- Web build passed.
+- `git diff --check` passed with CRLF normalization warnings only.
+- Web build still prints the existing warning that the Next.js ESLint plugin is not detected in the current ESLint config.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches for the current diff/repo scan scope.
+- Diff review confirmed changes were frontend-only under `apps/web/**` plus handoff docs.
+- No backend, Prisma schema/migration, auth architecture, realtime protocol, map engine, movement/collision/chair interaction, desktop-agent, browser-extension, deployment config, or env files changed.
+- Browser/manual visual QA was not run during QA and remains recommended before commit/broader pilot use because this round is primarily UI/product-experience work.
 
 For commit `20feb27`, handoff/QA reports:
 

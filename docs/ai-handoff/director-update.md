@@ -2,51 +2,48 @@
 
 ## 1. Completed Task
 
-STAGE 2 Round 9 Real Alpha Deployment & External Smoke was completed and accepted in commit `20feb27` (`chore: add real alpha deployment smoke`).
+STAGE 3 Round 1 Product Design + Frontend Experience Refactor Foundation was completed and accepted in commit `333b789` (`style: polish frontend product experience`).
 
 ## 2. Accepted Changes
 
-- Added non-secret external smoke helper `workmap/scripts/real-alpha-smoke.mjs`.
-- Added `pnpm smoke:alpha` to check deployed public API/frontend smoke from shell env inputs.
-- Added `docs/ai-handoff/real-alpha-deployment-smoke.md` as the Round 9 external deployment smoke runbook.
-- Updated `docs/ai-handoff/alpha-production-readiness.md` to point to the Round 9 smoke helper/runbook.
-- Added blank/public `WORKMAP_SMOKE_*` placeholders to `.env.example`.
-- Stopped ignoring `workmap/pnpm-lock.yaml` and committed the lockfile path for deterministic Vercel installs.
-- No backend controllers/services, frontend product flows, Prisma schema/migrations, auth logic, realtime logic, desktop-agent behavior, or browser-extension behavior changed.
+- Polished AppShell navigation with active-route styling, grouped labels, clearer workspace/platform context, role/session pill styling, and improved wrapping.
+- Updated shared page header/theme behavior so headers can wrap and title/eyebrow styles avoid non-zero or negative letter spacing.
+- Refined Login, Dashboard, Reports, Compliance, Employees, Virtual Office top chrome, and Platform Admin product language.
+- Clarified deployed alpha Cognito sign-in versus pilot/local fallback language.
+- Shifted Dashboard copy from QA/readiness language to workspace overview language while preserving live API/fallback state labels.
+- Clarified Reports own-vs-company summaries, sparse-data state, example-layout labels, and privacy boundary.
+- Improved Compliance and Employees responsive behavior for narrower screens.
+- Reinforced Platform Admin as an independent platform-only privacy-safe operational surface.
 
 ## 3. Verification Summary
 
-- `node --check scripts/real-alpha-smoke.mjs` passed.
-- `pnpm smoke:alpha` without deployed env returned Manual Action Required as expected.
-- API, web, desktop-agent, and browser-extension typecheck/lint/build commands passed.
-- `pnpm prisma:generate` passed after sandbox-blocked Prisma access was rerun outside the sandbox.
+- `pnpm --filter @workmap/web typecheck` passed.
+- `pnpm --filter @workmap/web lint` passed.
+- `pnpm --filter @workmap/web build` passed.
 - `git diff --check` passed with CRLF normalization warnings only.
-- Secret scan found no high-confidence committed secrets.
-- Human-reported deployed smoke passed on 2026-06-13 for Supabase migrations, Render `/health` and `/health/readiness`, Vercel frontend, Cognito callback/logout, approved-origin CORS, two-user WSS/virtual-office, Owner onboarding/invite, Employee invite acceptance/onboarding, Platform Admin privacy, device registration, app/domain sample activity, Employee own report, Owner company aggregate report, and Employee company-scope report block.
+- Diff/repo secret scan scope found no new committed secrets; `.env` was not read.
+- QA review confirmed the diff was frontend-only under `apps/web/**` plus handoff docs.
 
 ## 4. Remaining Risks
 
-- Current status is Alpha Ready Candidate for a controlled 5-person pilot, not full production readiness.
-- Desktop-agent remains a harness/scaffold, not production active-window tracking.
-- Browser extension remains a local MV3 scaffold, not packaged/store-ready production tracking.
-- Realtime gateway remains single-instance/in-memory.
-- No durable offline queue, retry/backoff, token revocation, secure production pairing UX, or multi-instance realtime pub/sub was added.
-- Automated negative hardening remains future work for cross-user/cross-tenant device ids, malformed/future timestamps, overlong durations, malformed domains, URL minimization, batch-size limits, and unapproved-origin CORS.
-- Keep provider secrets, bearer tokens, database URLs, and platform admin identities out of docs/chat and only in secure provider/local secret stores.
+- Browser/manual visual QA was not run during QA and remains recommended because this was primarily UI/product-experience work.
+- AppShell navigation visibility remains UX only; backend RBAC remains the security boundary.
+- Some fallback/example rows remain intentionally for backend-off or sparse-data states and must stay labeled.
+- Virtual Office map/canvas/realtime behavior was not changed, so visual QA should confirm the new top chrome does not obscure controls.
+- This is a foundation polish pass, not a complete visual redesign.
 
 ## 5. Updated Docs
 
 - `docs/skills/current-status.md`
-- `docs/skills/deployment-skill.md`
+- `docs/skills/frontend-skill.md`
+- `docs/skills/ui-ux-skill.md`
 - `docs/skills/qa-skill.md`
 - `docs/skills/project-summary.md`
-- `docs/skills/decision-log.md`
 - `docs/ai-handoff/director-update.md`
 
 ## 6. Recommended Next Tasks
 
-- Re-run `pnpm smoke:alpha` immediately before inviting pilot users.
-- Reconfirm Render, Vercel, Supabase, and Cognito env/callback/origin settings before pilot start.
-- Watch Render logs for WebSocket query-token exposure and avoid retaining full socket query strings.
-- Add automated negative security tests for activity validation, report scope, CORS origin rejection, and tenant isolation.
-- Plan production-grade desktop/browser tracking clients, token lifecycle, offline queueing, retry/backoff, and multi-instance realtime pub/sub before broader rollout.
+- Run browser visual smoke for `/login`, AppShell role states, Dashboard, Employees, Reports, Compliance, Platform Admin, and `/virtual-office`.
+- Check 1366px, 1440px, and tablet-ish widths for text/control overlap.
+- Confirm `/virtual-office` map rendering, movement, realtime/polling, People panel, contact drawer, chair interaction, and command palette remain unchanged.
+- Continue product polish toward a complete alpha visual system after manual visual QA passes.
