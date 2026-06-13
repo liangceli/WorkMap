@@ -166,6 +166,22 @@ Use this after virtual-office chrome, People panel, contact drawer, room card, d
 - Layout: confirm sync/status indicator at 1366px, 1440px, and tablet-ish widths does not overlap top chrome.
 - Smoke unrelated pages: `/dashboard`, `/employees`, `/reports`, `/compliance`, `/onboarding/invite`, and `/platform-admin` still render.
 
+## STAGE 3 Dashboard / Reports / Compliance QA
+
+Use this after Dashboard, Reports, Compliance, activity summary language, sparse/empty states, privacy copy, or alpha limitation copy changes.
+
+- Owner `/dashboard`: confirm it reads as a management overview with setup coverage, next actions, data coverage, sparse-data clarity, and no invasive monitoring claims.
+- Employee `/dashboard`: confirm it focuses on own workspace, own presence, own compliance, and summary availability without Owner-only CTAs or company-management framing.
+- Owner `/reports`: confirm company aggregate scope is explained and no raw employee activity detail or employee scoring is implied.
+- Employee `/reports`: confirm own-scope explanation is clear and company-wide reports remain unavailable.
+- Reports no-data state: confirm empty API rows are described as sparse alpha setup and point toward device/app/domain event setup.
+- Reports fallback/example layout: confirm example rows are visibly labeled as frontend examples, not real tenant data.
+- `/compliance`: confirm the `Transparency policy` title, privacy notice, collected/not-collected lists, and acknowledgement flow still render.
+- `/compliance`: confirm why-data-exists, who-can-see-what, alpha client limitation, and Platform Admin boundary copy are clear.
+- Smoke unrelated pages: `/virtual-office`, `/employees`, `/platform-admin`, `/onboarding/invite`, and `/login` still render.
+- Layout: check 1366px, 1440px, and tablet-ish widths for Dashboard, Reports, and Compliance text/control overlap.
+- Language review: confirm no hidden tracking, total monitoring, employee scoring, screenshots, keystrokes, private messages, full URL capture, webpage content capture, or private content tracking claims were introduced.
+
 ## STAGE 2 Tenant Onboarding / Invite QA
 
 - Apply migration `20260606000000_stage2_onboarding_invites` before testing.
@@ -367,6 +383,19 @@ Use this repeatable loop after backend/local-startup changes:
 - Add coverage for `useVirtualOfficeData.ts` adapters/fallback behavior when a frontend test harness is introduced.
 
 ## Latest Verification Notes
+
+For commit `5d4412a`, handoff/QA reports:
+
+- Web typecheck passed.
+- Web lint passed.
+- Web build passed.
+- `git diff --check` passed with CRLF normalization warnings only.
+- Web build still prints the existing warning that the Next.js ESLint plugin is not detected.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches for the current scan scope.
+- Diff review confirmed changes were scoped to Dashboard, Reports, Compliance, and handoff docs.
+- No backend, Prisma schema/migration, seed, auth architecture, Cognito flow, tenant onboarding, invite flow, RBAC, Platform Admin backend, activity ingestion API, reports API contract, compliance acknowledgement API, deployment config, desktop-agent, browser-extension, virtual office, realtime, map, tracking categories, billing, analytics/BI system, or integrations changed.
+- Browser/manual QA was not run by design; user is deferring STAGE 3 manual testing until a combined manual pass.
+- Manual QA focus: Owner/Employee Dashboard, Owner/Employee Reports, Reports no-data/example labels, Compliance transparency/trust copy, Platform Admin privacy boundary wording, unrelated page smoke, layout overlap, and no scary monitoring language.
 
 For commit `5db7e8d`, handoff/QA reports:
 

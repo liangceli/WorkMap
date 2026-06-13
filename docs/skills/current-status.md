@@ -4,6 +4,11 @@ Last updated: 2026-06-13.
 
 ## Latest Accepted Work
 
+- Commit `5d4412a` (`feat: productize dashboard reports and compliance`) completed STAGE 3 Round 4: Dashboard, Reports, and Compliance productization.
+- Dashboard now reads as an Owner workspace management overview or Employee personal workspace view instead of a QA/readiness panel, while preserving API/fallback/sparse state honesty.
+- Reports now explain Employee own-scope rows, Owner/Manager aggregate company summaries, alpha data availability, sparse/no-data states, and frontend example-layout labels without implying raw employee activity streams.
+- Compliance is now framed as a transparency policy, with trust-building copy for why data exists, who can see what, alpha client limitations, Platform Admin privacy boundary, and the existing collected/not-collected lists.
+- This was frontend-only across Dashboard, Reports, Compliance, and copy/state presentation. No backend, Prisma schema/migrations, auth, RBAC, reports API, compliance acknowledgement API, tracking categories, virtual-office, deployment, desktop-agent, or browser-extension behavior changed.
 - Commit `5db7e8d` (`feat: polish virtual office interaction clarity`) completed STAGE 3 Round 3: virtual-office product experience polish and interaction readiness.
 - `/virtual-office` now has a compact sync/status top-bar indicator that explains demo presence, API/partial API state, realtime connected, reconnecting, and polling fallback using existing frontend state only.
 - People panel, contact drawer, bottom dock, chair prompts, and room context actions now use clearer, more honest copy and toast feedback.
@@ -227,11 +232,14 @@ Last updated: 2026-06-13.
 - Current user's latest local position can now be restored from and saved to the backend in development/API-backed mode.
 - Realtime WebSocket movement is implemented for remote players, while polling remains the reconciliation/fallback path and latest-position durability still uses HTTP saves.
 - Workflow routing still uses frontend localStorage state, but backend authorization now comes from Cognito, pilot JWT, or development-only auth paths.
-- STAGE 3 Round 3 was code-reviewed and machine-verified, but browser/manual QA across `/virtual-office` sync indicator, People/contact actions, chair prompts, room context card, realtime/polling fallback, and map movement remains deferred/recommended before broader pilot use.
+- STAGE 3 Round 4 was code-reviewed and machine-verified, but browser/manual QA for Dashboard, Reports, Compliance, and related unrelated-page smoke remains deferred/recommended before broader pilot use.
 - `docs/references/` remains untracked reference material and should not be committed accidentally.
 
 ## Recommended Next Tasks
 
+- Run STAGE 3 Round 4 manual QA: Owner Dashboard, Employee Dashboard, Owner Reports, Employee Reports, Reports no-data state, Reports example labels, Compliance transparency policy, collected/not-collected lists, acknowledgement flow, alpha limitation copy, and Platform Admin privacy boundary copy.
+- Smoke `/virtual-office`, `/employees`, `/platform-admin`, `/onboarding/invite`, and `/login` after Dashboard/Reports/Compliance productization to confirm unrelated flows still render.
+- Check Dashboard, Reports, and Compliance at 1366px, 1440px, and tablet-ish widths for text/control overlap and overreaching monitoring language.
 - Run STAGE 3 Round 3 virtual-office manual QA: realtime connected state, reconnecting/polling fallback state, backend-off demo state, People panel actions, contact drawer placeholder feedback, chair sit/stand prompts, room context actions, movement/collision/pathfinding, realtime/polling reconciliation, command palette, and fallback/mock mode.
 - Check the new sync/status indicator at 1366px, 1440px, and tablet-ish widths for top-chrome overlap.
 - Run targeted browser smoke for STAGE 3 Round 2: Owner dashboard next steps, Owner workspace creation guidance, Owner invite management, non-owner invite management, Employee invite acceptance/wrong-account errors, Employee dashboard/report states, tenant-user Platform Admin blocked state, Platform Admin success state, and `/virtual-office` behavior regression.

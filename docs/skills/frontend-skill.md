@@ -74,6 +74,20 @@ Commit `60fc0ca` added role-based alpha journey hardening on top of the Round 1 
 - `/platform-admin` blocked states explain that tenant roles do not grant Platform Admin access; platform access remains Cognito/platform allowlist-driven.
 - AppShell no-role/unauthenticated state does not show tenant workspace navigation before a workspace role is resolved.
 
+Commit `5d4412a` productized Dashboard, Reports, and Compliance for controlled alpha.
+
+- Scope stayed frontend-only in Dashboard, Reports, Compliance, and page copy/state presentation.
+- Dashboard now reads as a workspace management overview for Owners and a personal workspace view for Employees, not a QA/readiness panel.
+- Dashboard product labels use calmer terms such as `Workspace API`, `Session`, and `Data coverage` while preserving live/fallback/sparse state honesty.
+- Dashboard setup coverage and next-step guidance should stay role-aware and honest about alpha client limitations.
+- Reports include role/scope explanation cards for Employee view, Owner view, and alpha data availability.
+- Reports should explain own-scope rows versus company aggregate summaries and must not imply raw employee activity streams.
+- Reports no-data states should describe sparse alpha setup and point toward device registration/app-domain event submission, not fake success.
+- Reports example rows must remain visibly labeled as frontend examples, not real tenant data.
+- Compliance page is now framed as `Transparency policy` rather than monitoring-first language.
+- Compliance trust sections should explain why data exists, who can see what, alpha client limitations, and Platform Admin privacy boundary.
+- Existing collected/not-collected lists and acknowledgement flow remain part of the product boundary.
+
 ## API Usage
 
 `lib/api/apiClient.ts` supports `GET`, `POST`, and `PATCH` with optional Bearer token and default development base URL `http://localhost:3001`. In production, `NEXT_PUBLIC_WORKMAP_API_URL` must be set or API calls fall back with an error result.
@@ -166,9 +180,11 @@ Dashboard and reports readiness:
 
 - `components/dashboard/ManagerOverviewPanel.tsx` is now a pilot readiness surface for API health, auth context, virtual-office presence, compliance policy, and reports usage summary.
 - Dashboard should keep live API status, fallback state, sparse data, and pilot example/sample labels visually distinct.
+- Dashboard should present Owner workspace management and Employee personal workspace views with role-appropriate setup coverage and next steps.
 - `components/reports/ReportSummaryPanel.tsx` loads authenticated `/reports/usage-summary` data for current-user app/domain rows.
 - Reports request a conservative scope based on the resolved backend role: employees use own summaries, OWNER/MANAGER/TEAM_LEAD/HR_ADMIN can request company aggregate summaries, and IT_ADMIN is not automatically given company app/domain summaries by the frontend.
 - Reports should explain sparse pilot data when API rows are empty.
+- Reports should keep Employee own-scope, Owner/Manager aggregate-scope, and alpha data availability explanations visible.
 - Dashboard and Reports can show tracking coverage metadata such as registered devices, active devices in 24 hours, and users with activity rows.
 - `AppUsageTable.tsx` and `WebsiteUsageTable.tsx` support optional titles so API-backed rows and example rows can be labeled clearly.
 

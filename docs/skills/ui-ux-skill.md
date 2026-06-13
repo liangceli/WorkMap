@@ -20,7 +20,7 @@ UI primitives:
 
 ## STAGE 3 Product Experience Direction
 
-Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke. Commit `60fc0ca` extended this into role-based journey hardening. Commit `5db7e8d` added virtual-office interaction clarity.
+Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke. Commit `60fc0ca` extended this into role-based journey hardening. Commit `5db7e8d` added virtual-office interaction clarity. Commit `5d4412a` productized Dashboard, Reports, and Compliance.
 
 - Use calm SaaS/workspace language rather than QA/readiness language on primary product surfaces.
 - Keep API-backed, sparse-data, fallback, and example states explicit so polish does not hide missing data.
@@ -41,6 +41,11 @@ Commit `333b789` established the first frontend product polish baseline after al
 - Wave/reaction feedback should be described as local only until a backend/realtime delivery model exists.
 - Teams, Outlook, and 3CX actions should be explicit placeholders until configured; do not imply external launchers or contact integrations work.
 - Realtime, reconnecting, polling fallback, partial API, and demo presence states should be visible in plain language when shown in the office chrome.
+- Dashboard should read as workspace management for Owners and a personal workspace view for Employees, while preserving live/fallback/sparse state labels.
+- Reports should explain Employee own-scope rows, Owner/Manager company aggregate summaries, and alpha data availability without implying raw employee activity streams.
+- Empty report rows should be described as sparse alpha setup and should point to device/activity event setup, not product failure or fake success.
+- Compliance should use transparency/trust language and explain why data exists, who can see what, alpha client limitations, and Platform Admin privacy boundaries.
+- Avoid scary or overreaching monitoring language such as hidden tracking, total monitoring, employee scoring, screenshots, keystrokes, private messages, full URL capture, webpage content capture, or private content tracking.
 
 ## Virtual Office UX
 
@@ -74,8 +79,10 @@ Pilot auth and compliance UX:
 Dashboard/reports pilot UX:
 
 - Dashboard readiness cards should clearly separate API health, auth/session, remote presence, compliance, and reports status.
+- Productized Dashboard labels may use calmer terms such as `Workspace API`, `Session`, and `Data coverage` as long as state remains honest.
 - Reports surfaces should label API-backed rows separately from pilot example/sample rows.
 - Empty current-user usage summaries should read as sparse pilot data, not as product failure.
+- Example team-summary rows should be visibly identified as frontend examples, not real tenant metrics.
 - Do not imply full monitoring, screenshots, keystrokes, camera/mic, private message capture, export history, or full URL tracking unless those features are actually implemented and accepted.
 
 Role/profile UX:
