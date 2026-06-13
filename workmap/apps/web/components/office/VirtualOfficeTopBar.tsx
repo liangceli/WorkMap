@@ -19,8 +19,8 @@ export function VirtualOfficeTopBar({ status, currentArea = "Office", onSearch }
           WM
         </div>
         <div style={styles.titleWrap}>
-          <span style={styles.title}>WorkMap Office</span>
-          <span style={styles.caption}>Current workspace</span>
+          <span style={styles.title}>Virtual Office</span>
+          <span style={styles.caption}>Live team presence</span>
         </div>
         <span style={styles.chevron}><OfficeIcon name="chevronDown" size={18} /></span>
       </header>

@@ -125,6 +125,7 @@ export const wmStyles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: wm.spacing[2],
+    flexWrap: "wrap" as const,
   },
   panelHeader: {
     display: "flex",
@@ -138,7 +139,7 @@ export const wmStyles = {
     fontSize: "12px",
     fontWeight: 700,
     lineHeight: 1.2,
-    letterSpacing: "0.01em",
+    letterSpacing: 0,
     textTransform: "uppercase" as const,
   },
   pageTitle: {
@@ -147,7 +148,7 @@ export const wmStyles = {
     fontSize: "32px",
     lineHeight: 1.25,
     fontWeight: 700,
-    letterSpacing: "-0.02em",
+    letterSpacing: 0,
   },
   pageSubtitle: {
     margin: 0,

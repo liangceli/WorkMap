@@ -76,7 +76,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
           loading: false,
           authSource: auth.source,
           summary: null,
-          statusText: "Reports API could not be loaded. Pilot example rows are shown for QA only.",
+          statusText: "Reports API could not be loaded. Example rows are shown as a clearly labeled fallback.",
           error: result.error,
         });
         return;
@@ -88,7 +88,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
         summary: result.data,
         statusText:
           result.data.scope === "company"
-            ? "Reports API loaded a role-allowed tenant app and domain summary."
+            ? "Reports API loaded an aggregate workspace app and domain summary."
             : "Reports API loaded the current user's app and domain summary.",
         error: null,
       });
@@ -108,11 +108,11 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
     <div style={styles.stack}>
       <section style={styles.statusPanel}>
         <div>
-          <p style={styles.panelLabel}>Reports boundary</p>
+          <p style={styles.panelLabel}>Role-aware reporting</p>
           <h2 style={styles.panelTitle}>{reportState.loading ? "Checking reports API" : reportState.statusText}</h2>
           <p style={styles.panelText}>
-            WorkMap reports currently expose app names, domains, active seconds, and idle seconds through the existing API. Full URLs,
-            screenshots, keystrokes, message content, camera, and microphone data are not part of this report.
+            WorkMap reports currently expose app names, domains, active seconds, and idle seconds through the existing API. Company
+            summaries are aggregate-only, while employees see their own rows.
           </p>
           {reportState.authSource ? <p style={styles.sessionText}>API context: {formatAuthSource(reportState.authSource)}</p> : null}
         </div>
@@ -155,8 +155,8 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
             </div>
           ) : (
             <p style={styles.emptyText}>
-              The Reports API responded, but this pilot user has no seeded usage summary rows yet. This is acceptable for setup QA; seed or
-              record usage rows before validating report numbers.
+              The Reports API responded, but this account has no usage summary rows yet. This is acceptable during setup; register a
+              device or submit activity events before validating report numbers.
             </p>
           )}
         </section>
@@ -164,10 +164,10 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
 
       <section style={styles.tablePanel}>
         <div style={styles.sampleIntro}>
-          <p style={styles.panelLabel}>Pilot example</p>
-          <h2 style={styles.panelTitle}>Department report layout</h2>
+          <p style={styles.panelLabel}>Example layout</p>
+          <h2 style={styles.panelTitle}>Team summary pattern</h2>
           <p style={styles.panelText}>
-            These rows are frontend examples for layout and privacy review until a team-level aggregate reports API is added.
+            These rows are frontend examples for layout and privacy review until richer team-level aggregate APIs are added.
           </p>
         </div>
         <div style={styles.tableHeader}>

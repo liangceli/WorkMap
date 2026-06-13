@@ -218,7 +218,7 @@ const styles = {
   toolbar: {
     ...wmStyles.card,
     display: "grid",
-    gridTemplateColumns: "minmax(260px, 1fr) 190px 170px auto",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 210px), 1fr))",
     gap: "12px",
     alignItems: "end",
     padding: "16px",
@@ -289,10 +289,12 @@ const styles = {
   tablePanel: {
     ...wmStyles.card,
     overflow: "hidden",
+    overflowX: "auto" as const,
   },
   tableHeader: {
     display: "grid",
     gridTemplateColumns: "minmax(260px, 1.35fr) 210px 230px minmax(260px, 1fr)",
+    minWidth: "920px",
     gap: "14px",
     borderBottom: `1px solid ${wm.colors.borderSubtle}`,
     background: wm.colors.surfaceLow,
@@ -305,6 +307,7 @@ const styles = {
   row: {
     display: "grid",
     gridTemplateColumns: "minmax(260px, 1.35fr) 210px 230px minmax(260px, 1fr)",
+    minWidth: "920px",
     gap: "14px",
     alignItems: "center",
     borderBottom: `1px solid ${wm.colors.borderSubtle}`,

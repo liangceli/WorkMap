@@ -12,8 +12,8 @@ export default function ReportsPage() {
       <section style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="Reports"
-          title="Team summaries"
-          subtitle="Review high-level app, domain, active, and idle summaries without exposing private content."
+          title="Work summaries"
+          subtitle="Review role-appropriate app and domain summaries with a clear privacy boundary."
           actions={
             <>
               <WorkMapButton href="/dashboard">Dashboard</WorkMapButton>
@@ -24,9 +24,9 @@ export default function ReportsPage() {
         />
 
         <WorkMapPrivacyNotice title="Pilot report boundary">
-          Reports use the existing backend usage-summary API when an authenticated pilot session is available. Sparse pilot
-          data is expected; reports still show app names and domains only, never full URLs, messages, screenshots,
-          keystrokes, camera, or microphone data.
+          Reports use the backend usage-summary API when an authenticated session is available. Sparse alpha data is expected;
+          reports show app names, domains, active time, and idle time only, never full URLs, messages, screenshots, keystrokes,
+          camera, or microphone data.
         </WorkMapPrivacyNotice>
 
         <ReportSummaryPanel metrics={reportMetrics} rows={reportRows} />

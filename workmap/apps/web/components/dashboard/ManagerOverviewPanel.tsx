@@ -46,7 +46,7 @@ const initialDashboardState: DashboardState = {
   policyVersion: null,
   complianceText: "Checking policy status...",
   usageSummary: null,
-  statusText: "Checking pilot API readiness...",
+  statusText: "Checking workspace signals...",
   errors: [],
 };
 
@@ -130,8 +130,8 @@ export function ManagerOverviewPanel() {
         complianceText,
         usageSummary,
         statusText: auth.available
-          ? `Using ${formatAuthSource(auth.source)} for pilot dashboard checks.`
-          : "No backend API auth is available yet. Use /login before pilot QA.",
+          ? `Using ${formatAuthSource(auth.source)} for workspace dashboard data.`
+          : "No backend API auth is available yet. Sign in before reviewing workspace data.",
         errors,
       });
     }
@@ -165,8 +165,8 @@ export function ManagerOverviewPanel() {
         label: "API auth",
         value: dashboardState.authSource ? formatAuthSource(dashboardState.authSource) : "Missing",
         detail: dashboardState.authSource
-          ? "Dashboard checks are using an authenticated API context."
-          : "Sign in with pilot auth; development token fallback stays development-only.",
+          ? "Dashboard data is using an authenticated API context."
+          : "Sign in first; development token fallback stays development-only.",
         tone: dashboardState.authSource ? "blue" : "amber",
       },
       {
@@ -175,7 +175,7 @@ export function ManagerOverviewPanel() {
         detail:
           dashboardState.positions.length > 0
             ? "Active / idle / offline teammates from office positions."
-            : "No remote position rows were available; sample people are shown below.",
+            : "No remote position rows were available; clearly labeled examples are shown below.",
         tone: dashboardState.positions.length > 0 ? "green" : "slate",
       },
       {
@@ -191,7 +191,7 @@ export function ManagerOverviewPanel() {
           : "No rows",
         detail: dashboardState.usageSummary?.deviceCoverage
           ? `${dashboardState.usageSummary.deviceCoverage.usersWithActivity} user(s) have app/domain summary data in the current report scope.`
-          : "Register a device and submit app/domain usage events to populate backend-backed tracking summaries.",
+          : "Register a device and submit app/domain usage events to populate backend-backed summaries.",
         tone: dashboardState.usageSummary?.deviceCoverage?.activeDevices24h ? "green" : "slate",
       },
     ],
@@ -202,10 +202,10 @@ export function ManagerOverviewPanel() {
     <div style={styles.stack}>
       <section style={styles.hero}>
         <div>
-          <p style={styles.eyebrow}>Manager dashboard</p>
-          <h1 style={styles.title}>Pilot readiness at a glance</h1>
+          <p style={styles.eyebrow}>Workspace overview</p>
+          <h1 style={styles.title}>Team clarity without private content</h1>
           <p style={styles.subtitle}>
-            Check backend reachability, session context, team presence, compliance status, and sparse usage summaries for the 5-person pilot.
+            See who is available, whether tracking coverage is healthy, and where app/domain summaries are ready for review.
           </p>
         </div>
         <div style={styles.heroActions}>
@@ -224,11 +224,11 @@ export function ManagerOverviewPanel() {
 
       <section style={styles.statusPanel}>
         <div>
-          <p style={styles.panelLabel}>Pilot checks</p>
+          <p style={styles.panelLabel}>Live workspace status</p>
           <h2 style={styles.panelTitle}>{dashboardState.loading ? "Checking setup" : dashboardState.statusText}</h2>
           <p style={styles.panelText}>
-            Dashboard data is limited to API health, office presence, policy status, and existing reports summaries. It does not claim full
-            enterprise monitoring or historical surveillance.
+            This dashboard combines session health, office presence, compliance policy, and aggregate usage summaries. It does not expose
+            screenshots, keystrokes, private messages, full URLs, or hidden monitoring data.
           </p>
         </div>
         {dashboardState.errors.length > 0 ? (
@@ -238,19 +238,19 @@ export function ManagerOverviewPanel() {
             ))}
           </ul>
         ) : (
-          <p style={styles.sessionText}>No dashboard API issues detected in this browser session.</p>
+          <p style={styles.sessionText}>Workspace signals loaded without dashboard API errors.</p>
         )}
       </section>
 
       <div style={styles.contentGrid}>
         <section style={styles.panel}>
           <h2 style={styles.panelTitle}>
-            {dashboardState.positions.length > 0 ? "People from office API" : "Pilot example people"}
+            {dashboardState.positions.length > 0 ? "People in the office" : "Example people"}
           </h2>
           <p style={styles.panelText}>
             {dashboardState.positions.length > 0
-              ? "Remote teammates are loaded from virtual-office positions. The current signed-in user is excluded from this manager snapshot."
-              : "No office position rows were available, so these sample cards keep the pilot page testable."}
+              ? "Remote teammates are loaded from the virtual-office positions API. Your own current-user row is not duplicated here."
+              : "No office position rows were available, so sample people are clearly labeled until real presence appears."}
           </p>
           <div style={styles.employeeGrid}>
             {people.map((employee) => (

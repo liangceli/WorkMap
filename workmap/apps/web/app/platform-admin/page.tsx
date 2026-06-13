@@ -97,11 +97,15 @@ export default function PlatformAdminPage() {
       <section style={styles.header}>
         <div>
           <p style={styles.eyebrow}>Platform Admin</p>
-          <h1 style={styles.title}>Tenant operations boundary</h1>
+          <h1 style={styles.title}>Platform health overview</h1>
           <p style={styles.lede}>
-            Privacy-safe workspace metadata for WorkMap support. Employee activity, browsing details, virtual-office
-            history, and secrets are intentionally excluded from this surface.
+            Independent support access for tenant readiness, setup health, and platform audit summaries. Employee activity details,
+            browsing history, virtual-office movement history, and secrets are intentionally excluded.
           </p>
+        </div>
+        <div style={styles.platformNotice}>
+          <strong>Platform-only context</strong>
+          <span>Tenant OWNER roles do not grant access here.</span>
         </div>
       </section>
 
@@ -118,7 +122,7 @@ export default function PlatformAdminPage() {
         <div style={styles.grid}>
           <section style={styles.panel}>
             <div style={styles.panelHeader}>
-              <h2 style={styles.panelTitle}>Tenants</h2>
+              <h2 style={styles.panelTitle}>Tenant list</h2>
               <span style={styles.countPill}>{state.tenants.length}</span>
             </div>
             <div style={styles.tenantList}>
@@ -144,7 +148,7 @@ export default function PlatformAdminPage() {
 
           <section style={styles.panel}>
             <div style={styles.panelHeader}>
-              <h2 style={styles.panelTitle}>Health</h2>
+              <h2 style={styles.panelTitle}>Tenant readiness</h2>
               <span style={styles.countPill}>safe summary</span>
             </div>
             {state.selectedTenant ? (
@@ -156,7 +160,7 @@ export default function PlatformAdminPage() {
 
           <section style={styles.panel}>
             <div style={styles.panelHeader}>
-              <h2 style={styles.panelTitle}>Platform Audit</h2>
+              <h2 style={styles.panelTitle}>Platform audit</h2>
               <span style={styles.countPill}>{state.audit.length}</span>
             </div>
             <div style={styles.auditList}>
@@ -235,6 +239,11 @@ function formatNullableTime(value: string | null) {
 const styles = {
   header: {
     marginBottom: "16px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "start",
+    gap: "16px",
+    flexWrap: "wrap" as const,
   },
   eyebrow: {
     ...wmStyles.eyebrow,
@@ -252,6 +261,18 @@ const styles = {
     color: wm.colors.textSecondary,
     fontSize: "15px",
     lineHeight: 1.55,
+  },
+  platformNotice: {
+    display: "grid",
+    gap: "5px",
+    minWidth: "240px",
+    border: `1px solid ${wm.colors.complianceBorder}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.complianceBg,
+    color: wm.colors.compliance,
+    padding: "12px",
+    fontSize: "13px",
+    lineHeight: 1.35,
   },
   notice: {
     ...wmStyles.infoNotice,

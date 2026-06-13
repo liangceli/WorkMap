@@ -27,7 +27,7 @@ const notVisibleItems = [
   "Private message or email content",
   "Browser page body content",
   "Full URL paths, query strings, form inputs, or passwords",
-  "Invisible employee spying",
+  "Hidden employee monitoring",
 ];
 
 export function CompliancePolicyPanel() {
@@ -209,7 +209,7 @@ const styles = {
   },
   policyGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
     gap: "14px",
   },
   policyCard: {

@@ -141,11 +141,11 @@ export function MockLoginPanel() {
       <p style={styles.eyebrow}>WorkMap sign-in</p>
       <h1 style={styles.title}>Sign in to WorkMap</h1>
       <p style={styles.subtitle}>
-        Use Cognito when configured for STAGE 2, or keep using pilot auth while production setup is being completed.
+        Use Cognito for deployed alpha testing, or pilot auth for local fallback while the workspace is being configured.
       </p>
 
       <section style={styles.cognitoBox}>
-        <p style={styles.demoTitle}>Cognito baseline</p>
+        <p style={styles.demoTitle}>Cognito workspace login</p>
         {cognitoSession ? (
           <section style={styles.sessionCard}>
             <strong>{cognitoSession.claims.displayName ?? cognitoSession.claims.email ?? "Cognito user"}</strong>
@@ -177,7 +177,7 @@ export function MockLoginPanel() {
           </p>
         )}
         <p style={styles.note}>
-          This path uses Cognito Hosted UI with PKCE and requires backend Cognito JWT verification plus WorkMap user mapping.
+          This path uses Cognito Hosted UI with PKCE and backend-verified WorkMap user or platform mapping.
         </p>
       </section>
 
@@ -250,8 +250,8 @@ export function MockLoginPanel() {
       </section>
 
       <p style={styles.note}>
-        Pilot auth remains available during the transition. Dev-token fallback remains development-only; tenant mapping and full
-        production account lifecycle are still staged work.
+        Pilot auth remains available during the transition. Dev-token fallback remains development-only; full enterprise account lifecycle is
+        still staged work.
       </p>
     </section>
   );

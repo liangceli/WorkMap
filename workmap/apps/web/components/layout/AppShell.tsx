@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { getCurrentCompany } from "../../lib/api/companiesApi";
 import { getCurrentUser } from "../../lib/api/authApi";
@@ -31,23 +32,25 @@ type PlatformSessionSummary = {
 type NavItem = {
   label: string;
   href: string;
+  group: "workspace" | "insight" | "admin" | "platform";
   roles?: WorkMapRole[];
   platformOnly?: boolean;
 };
 
 const navItems: NavItem[] = [
-  { label: "Office", href: "/virtual-office", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
-  { label: "Dashboard", href: "/dashboard", roles: ["MANAGER", "OWNER"] },
-  { label: "Employees", href: "/employees", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
-  { label: "Reports", href: "/reports", roles: ["MANAGER", "OWNER"] },
-  { label: "Compliance", href: "/compliance", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
-  { label: "Invites", href: "/onboarding/invite", roles: ["OWNER"] },
-  { label: "Integrations", href: "/integrations", roles: ["OWNER", "IT_ADMIN"] },
-  { label: "Settings", href: "/settings", roles: ["OWNER", "IT_ADMIN"] },
-  { label: "Platform Admin", href: "/platform-admin", platformOnly: true },
+  { label: "Office", href: "/virtual-office", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
+  { label: "Employees", href: "/employees", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
+  { label: "Dashboard", href: "/dashboard", group: "insight", roles: ["MANAGER", "OWNER"] },
+  { label: "Reports", href: "/reports", group: "insight", roles: ["MANAGER", "OWNER"] },
+  { label: "Compliance", href: "/compliance", group: "insight", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
+  { label: "Invites", href: "/onboarding/invite", group: "admin", roles: ["OWNER"] },
+  { label: "Integrations", href: "/integrations", group: "admin", roles: ["OWNER", "IT_ADMIN"] },
+  { label: "Settings", href: "/settings", group: "admin", roles: ["OWNER", "IT_ADMIN"] },
+  { label: "Platform Admin", href: "/platform-admin", group: "platform", platformOnly: true },
 ];
 
 export function AppShell({ children }: AppShellProps) {
+  const pathname = usePathname();
   const [setupState, setSetupState] = useState<UserSetupState | null>(null);
   const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
   const [pilotSession, setPilotSession] = useState<StoredPilotSession | null>(null);
@@ -145,6 +148,16 @@ export function AppShell({ children }: AppShellProps) {
     ? "Frontend demo fallback"
     : "No session";
 
+  const contextLabel = platformSummary
+    ? "Platform context"
+    : apiSummary?.companyName
+      ? apiSummary.companyName
+      : cognitoSession
+        ? "Workspace mapping pending"
+        : pilotSession
+          ? pilotSession.user.companySlug
+          : "No workspace session";
+
   return (
     <main style={styles.page}>
       <header style={styles.topNav}>
@@ -152,20 +165,29 @@ export function AppShell({ children }: AppShellProps) {
           <span style={styles.logo}>WM</span>
           <span>
             <strong style={styles.brandTitle}>WorkMap</strong>
-            <span style={styles.brandSub}>Demo workflow</span>
+            <span style={styles.brandSub}>{contextLabel}</span>
           </span>
         </a>
 
         <nav style={styles.navLinks} aria-label="WorkMap navigation">
           {visibleItems.map((item) => (
-            <a key={item.href} href={item.href} style={styles.navLink}>
+            <a
+              key={item.href}
+              href={item.href}
+              style={{
+                ...styles.navLink,
+                ...(isActiveNav(pathname, item.href) ? styles.navLinkActive : {}),
+                ...(item.platformOnly ? styles.platformNavLink : {}),
+              }}
+            >
+              <span style={styles.navGroupLabel}>{formatNavGroup(item.group)}</span>
               {item.label}
             </a>
           ))}
         </nav>
 
         <div style={styles.sessionWrap}>
-          <div style={styles.rolePill}>
+          <div style={{ ...styles.rolePill, ...(platformSummary ? styles.platformRolePill : {}) }}>
             <span style={styles.roleDot} />
             {roleLabel}
           </div>
@@ -205,7 +227,7 @@ export function AppShell({ children }: AppShellProps) {
               : `${pilotSession.user.displayName} is using a backend bearer token. Core role boundaries are enforced by the API.`
             : activeRole
               ? "Navigation visibility is for workflow testing only. Sign in on /login for a backend-issued pilot token."
-              : "Sign in before QA so API requests use the intended backend-issued user context."}
+              : "Sign in before using shared workspace data so API requests use the intended backend-issued user context."}
         </span>
         {!cognitoSession && !pilotSession ? (
           <a href="/login" style={styles.noticeLink}>
@@ -223,6 +245,30 @@ function formatRole(role: string) {
   return role.replace(/_/g, " ");
 }
 
+function isActiveNav(pathname: string | null, href: string) {
+  if (!pathname) {
+    return false;
+  }
+
+  return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+}
+
+function formatNavGroup(group: NavItem["group"]) {
+  if (group === "insight") {
+    return "Insights";
+  }
+
+  if (group === "admin") {
+    return "Admin";
+  }
+
+  if (group === "platform") {
+    return "Platform";
+  }
+
+  return "Workspace";
+}
+
 const styles = {
   page: {
     minHeight: "100vh",
@@ -235,7 +281,7 @@ const styles = {
     maxWidth: "1440px",
     margin: "0 auto 16px",
     display: "flex",
-    alignItems: "center",
+    alignItems: "stretch",
     justifyContent: "space-between",
     gap: "16px",
     border: `1px solid ${wm.colors.border}`,
@@ -251,6 +297,7 @@ const styles = {
     color: wm.colors.text,
     textDecoration: "none",
     minWidth: "190px",
+    alignSelf: "center",
   },
   logo: {
     display: "grid",
@@ -278,16 +325,39 @@ const styles = {
     display: "flex",
     justifyContent: "center",
     flex: 1,
-    gap: "6px",
+    gap: "8px",
     flexWrap: "wrap" as const,
   },
   navLink: {
+    display: "grid",
+    gap: "2px",
+    minWidth: "82px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "transparent",
     borderRadius: wm.radius.md,
     color: wm.colors.textSecondary,
-    padding: "8px 10px",
+    padding: "7px 10px",
     textDecoration: "none",
     fontSize: "13px",
-    fontWeight: 650,
+    fontWeight: 800,
+  },
+  navLinkActive: {
+    borderColor: wm.colors.focusBorder,
+    background: wm.colors.focusBg,
+    color: wm.colors.infoText,
+  },
+  platformNavLink: {
+    borderColor: wm.colors.complianceBorder,
+    background: wm.colors.complianceBg,
+    color: wm.colors.compliance,
+  },
+  navGroupLabel: {
+    color: wm.colors.textMuted,
+    fontSize: "10px",
+    fontWeight: 900,
+    textTransform: "uppercase" as const,
+    lineHeight: 1,
   },
   rolePill: {
     display: "inline-flex",
@@ -303,10 +373,18 @@ const styles = {
     minWidth: "120px",
     justifyContent: "center",
   },
+  platformRolePill: {
+    borderColor: wm.colors.complianceBorder,
+    background: wm.colors.complianceBg,
+    color: wm.colors.compliance,
+  },
   sessionWrap: {
     display: "flex",
     alignItems: "center",
     gap: "8px",
+    alignSelf: "center",
+    flexWrap: "wrap" as const,
+    justifyContent: "flex-end",
   },
   logoutButton: {
     border: `1px solid ${wm.colors.border}`,

@@ -7,9 +7,9 @@ export default function LoginPage() {
       <section style={styles.shell}>
         <div style={styles.copy}>
           <p style={styles.eyebrow}>WorkMap</p>
-          <h1 style={styles.title}>Collaboration-first work visibility</h1>
+          <h1 style={styles.title}>Transparent work visibility for hybrid teams</h1>
           <p style={styles.subtitle}>
-            A calm entry point for avatar presence, employee contact actions, and transparent manager summaries.
+            Sign in to a workspace where presence, contact actions, activity summaries, and compliance boundaries stay understandable.
           </p>
           <div style={styles.privacyBox}>
             <strong>Privacy boundary</strong>
@@ -35,7 +35,7 @@ const styles = {
   shell: {
     width: "min(1040px, 100%)",
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 430px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
     gap: "28px",
     alignItems: "center",
   },
@@ -53,10 +53,10 @@ const styles = {
   title: {
     margin: 0,
     color: wm.colors.text,
-    fontSize: "48px",
+    fontSize: "40px",
     lineHeight: 1.2,
     fontWeight: 700,
-    letterSpacing: "-0.02em",
+    letterSpacing: 0,
   },
   subtitle: {
     margin: 0,

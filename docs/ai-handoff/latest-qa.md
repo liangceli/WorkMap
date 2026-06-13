@@ -2,194 +2,150 @@
 
 ## 1. Overall Conclusion
 
-QA review result: STAGE 2 Round 9 deployed alpha smoke updates pass final QA review.
-
-Final Round 9 conclusion:
-
-- WorkMap is an Alpha Ready Candidate for a controlled 5-person pilot.
-- This conclusion is based on code review, machine verification, non-secret smoke helper checks, and human-reported deployed smoke pass on 2026-06-13.
-- This is not full production readiness.
-
-No blocking issue requiring Codex Chat 2 was found.
-
-## 2. Reviewed Inputs
+QA review result: STAGE 3 Round 1 Product Design + Frontend Experience Refactor Foundation passes code review and machine verification.
 
 This pass reviewed:
 
 - `docs/ai-handoff/latest-implementation.md`
-- `docs/ai-handoff/real-alpha-deployment-smoke.md`
 - current `git status --short`
 - current `git diff --stat`
 - current implementation diff
-- `workmap/scripts/real-alpha-smoke.mjs`
-- `workmap/package.json`
-- `workmap/.env.example`
-- `docs/ai-handoff/alpha-production-readiness.md`
-- `docs/skills/deployment-skill.md`
-- `docs/skills/current-status.md`
+- AppShell/navigation changes
+- Login copy and responsive layout changes
+- Dashboard/Reports/Compliance/Employees copy and layout changes
+- Virtual Office top chrome copy
+- Platform Admin product-language and privacy-boundary polish
+- shared WorkMap theme changes
+
+No blocking issue requiring Codex Chat 2 was found.
+
+Important distinction:
+
+- This QA pass verifies code/build and diff-level regression risk.
+- Browser visual/manual QA is still recommended before commit because this round is primarily UI/product-experience work.
+
+## 2. Workspace Notes
+
+Reviewed tracked files include:
+
+- `docs/ai-handoff/latest-implementation.md`
+- `workmap/apps/web/app/login/page.tsx`
+- `workmap/apps/web/app/platform-admin/page.tsx`
+- `workmap/apps/web/app/reports/page.tsx`
+- `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx`
+- `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx`
+- `workmap/apps/web/components/employees/EmployeeDirectory.tsx`
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/components/login/MockLoginPanel.tsx`
+- `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx`
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/lib/theme/workmapTheme.ts`
 
 Workspace notes:
 
 - `.env` was not read.
 - `docs/references/` remains unrelated untracked workspace content. Do not stage it unless explicitly intended.
-- `workmap/pnpm-lock.yaml` exists, is tracked, and `git check-ignore -v workmap/pnpm-lock.yaml` returns no ignore rule.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by Web build and restored.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by verification and restored.
 
 ## 3. Diff Review
 
 Result: passed.
 
-Smoke helper:
+Frontend scope:
 
-- `pnpm smoke:alpha` is wired to `node scripts/real-alpha-smoke.mjs`.
-- Helper reads only process environment variables and does not read `.env`.
-- Helper requires `WORKMAP_SMOKE_API_URL` and `WORKMAP_SMOKE_APP_URL`.
-- Helper optionally accepts `WORKMAP_SMOKE_ORIGIN`.
-- Helper rejects localhost/127.0.0.1/::1 by default unless `WORKMAP_SMOKE_ALLOW_LOCAL=1`.
-- Helper checks API `/health`.
-- Helper checks API `/health/readiness`.
-- Helper checks CORS response for the configured browser Origin.
-- Helper checks frontend `/`, `/login`, `/virtual-office`, and `/platform-admin`.
-- Helper derives `/virtual-office/realtime` as WSS for HTTPS API origins.
-- Helper does not automate or print Cognito credentials, bearer tokens, invite tokens, tenant secrets, activity secrets, or Platform Admin identifiers.
+- Changes are scoped to `apps/web/**` plus the handoff doc.
+- No backend files changed.
+- No Prisma schema, migration, seed, auth architecture, realtime protocol, map engine, movement, collision, chair interaction, desktop-agent, browser-extension, deployment config, or env file changed.
 
-Docs/runbook:
+AppShell/navigation:
 
-- `docs/ai-handoff/real-alpha-deployment-smoke.md` now records status as Alpha Ready Candidate.
-- Deployed smoke pass is recorded as human-reported evidence without real URLs, tokens, or admin identities.
-- Supabase, Render, Vercel, Cognito, CORS/WSS, Platform Admin, activity, reports, and compliance smoke statuses are documented.
-- Remaining future hardening is clearly separated from alpha-blocking status.
-- `docs/skills/current-status.md` now reflects the 2026-06-13 deployed smoke pass.
-- `docs/skills/deployment-skill.md` documents `pnpm smoke:alpha` and `WORKMAP_SMOKE_*` usage.
-- `docs/ai-handoff/alpha-production-readiness.md` links to the Round 9 smoke helper/runbook.
+- `usePathname()` is used only for active-route styling.
+- Navigation item role lists remain consistent with the previous role boundaries.
+- Platform Admin remains `platformOnly`.
+- Active nav styling and platform styling are visual-only and do not replace backend RBAC.
+- Workspace/platform context text is clearer and does not expose secrets.
+- Role/session notices still distinguish Cognito, pilot, frontend fallback, and platform admin contexts.
 
-Scope control:
+Product language:
 
-- No backend controllers/services were changed in this Round 9 smoke diff.
-- No frontend product flows were changed.
-- No Prisma schema or migration was added.
-- No auth/realtime/activity logic was changed.
-- No desktop-agent or browser-extension behavior was changed.
+- Login copy now presents Cognito as deployed alpha login and pilot auth as local fallback.
+- Dashboard copy now reads as workspace overview while retaining API/auth/fallback status reporting.
+- Reports copy clarifies own-vs-company report boundaries and aggregate-only company summaries.
+- Compliance copy preserves explicit collected/not-collected privacy boundaries.
+- Platform Admin copy reinforces independent platform-only context and privacy-safe tenant metadata.
+- Virtual Office top chrome is renamed to live team presence without changing map behavior.
 
-## 4. Deployed Smoke Evidence
+Responsive/layout:
 
-Accepted human-reported deployed smoke pass on 2026-06-13:
+- Shared page headers can wrap.
+- Non-zero/negative letter spacing was removed from shared title/eyebrow styles.
+- Login page grid uses responsive auto-fit sizing.
+- Compliance policy cards auto-fit on narrower widths.
+- Employees toolbar auto-fits controls.
+- Employees table gains horizontal scrolling and a stable minimum width to avoid crushed columns.
 
-- Supabase DB configured and migrated.
-- Prisma deployed migrations applied.
-- Render API deployed.
-- Render `/health` passed.
-- Render `/health/readiness` passed.
-- Vercel frontend deployed.
-- Cognito Hosted UI callback/logout configured for deployed domain.
-- `pnpm smoke:alpha` passed against deployed public URLs.
-- Approved-origin CORS passed.
-- Two-user WSS/virtual-office smoke passed.
-- Owner onboarding passed.
-- Owner invite creation passed.
-- Employee Cognito accept/onboarding passed.
-- People/contact surfaces passed.
-- Platform Admin privacy boundary passed.
-- Tenant OWNER and EMPLOYEE were blocked from Platform Admin.
-- Employee device registration passed.
-- Employee app/domain sample activity submission passed.
-- Employee own report passed.
-- Owner company aggregate report passed.
-- Employee company-scope report block passed.
-
-Deployed smoke items still best treated as future hardening, not current blockers:
-
-- Automated negative tests for cross-user/cross-tenant device ids.
-- Automated malformed/future timestamp checks.
-- Automated overlong duration checks.
-- Automated malformed domain and full URL minimization checks.
-- Automated batch-size limit checks.
-- Automated unapproved-origin CORS negative check.
-
-## 5. Security / Secret Review
+## 4. Security / Secret Review
 
 Result: passed.
 
 - No real secret was found in reviewed implementation files.
-- `.env.example` adds only blank/public `WORKMAP_SMOKE_*` placeholders.
 - No AWS, Cognito, Supabase, Render, Vercel, database, JWT, platform admin, bearer, desktop-agent, or browser-extension secret was hardcoded.
-- Smoke helper does not ask for or print bearer tokens.
-- Smoke helper output examples use placeholders such as `https://<api>.onrender.com` and `https://<app>.vercel.app`.
+- `.env` was not read.
 - Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches.
 
-## 6. Verification Results
+## 5. Verification Results
 
 Commands run from `workmap/`:
 
 ```powershell
-node --check scripts/real-alpha-smoke.mjs
-pnpm smoke:alpha
-pnpm --filter @workmap/api typecheck
 pnpm --filter @workmap/web typecheck
-pnpm --filter @workmap/desktop-agent typecheck
-pnpm --filter @workmap/browser-extension typecheck
-pnpm --filter @workmap/api lint
 pnpm --filter @workmap/web lint
-pnpm --filter @workmap/desktop-agent lint
-pnpm --filter @workmap/browser-extension lint
-pnpm --filter @workmap/api build
 pnpm --filter @workmap/web build
-pnpm --filter @workmap/desktop-agent build
-pnpm --filter @workmap/browser-extension build
-pnpm prisma:generate
 git diff --check
-git check-ignore -v workmap/pnpm-lock.yaml
 ```
 
 Results:
 
-- Smoke helper syntax check passed.
-- `pnpm smoke:alpha` with no current-process deployed env returned Manual Action Required as expected and did not pretend smoke passed.
-- API typecheck passed.
 - Web typecheck passed.
-- Desktop-agent typecheck passed.
-- Browser-extension typecheck passed.
-- API lint passed.
 - Web lint passed.
-- Desktop-agent lint passed.
-- Browser-extension lint passed.
-- API build passed.
-- Web build passed; existing Next.js ESLint plugin warning remains.
-- Browser-extension build passed.
-- Desktop-agent build initially failed inside the sandbox with Windows `EPERM` writing `apps/desktop-agent/dist/index.js`; rerun outside the sandbox passed.
-- `pnpm prisma:generate` initially failed inside the sandbox because Prisma binary checksum access was blocked/redirected to `127.0.0.1:9`; rerun outside the sandbox passed.
+- Web build passed.
 - `git diff --check` passed with CRLF normalization warnings only.
-- `git check-ignore -v workmap/pnpm-lock.yaml` returned no ignore rule, as expected.
+- Web build still prints the existing Next.js ESLint plugin warning.
+- Secret scan returned no matches for the current diff/repo scan scope.
 
-## 7. Manual Action / Operational Follow-Up
+Not run:
 
-Current alpha status:
+- API lint/typecheck/build, because no API files changed.
+- Desktop-agent/browser-extension verification, because no harness files changed.
+- Browser/manual visual QA, because no local/deployed browser session was opened in this QA pass.
 
-- No code-blocking Manual Action Required remains for Round 9.
-- Operational discipline is still required: keep `DATABASE_URL`, JWT/pilot secrets, bearer tokens, platform admin emails/subs, and provider credentials only in provider/local secret stores.
+## 6. Manual QA Recommended
 
-Before inviting the full 5-person pilot:
+Before commit, run a short browser visual smoke:
 
-1. Confirm current deployed Render/Vercel env values still match the latest deployment.
-2. Confirm Cognito callback/logout URLs remain aligned with the deployed Vercel production URL.
-3. Confirm Render `WORKMAP_ALLOWED_ORIGINS` exactly matches the approved Vercel origin(s).
-4. Run `pnpm smoke:alpha` once more immediately before pilot start.
-5. Keep an eye on Render logs for WSS query-token logging and avoid retaining full socket query strings.
+1. `/login`: confirm Cognito vs pilot fallback copy is clear and responsive.
+2. OWNER/MANAGER session: confirm AppShell active nav, grouped labels, workspace context, role pill, Dashboard, Reports, Employees, Compliance, Invites, Integrations, and Settings.
+3. EMPLOYEE session: confirm manager/admin-only nav remains hidden and Office/Employees/Compliance remain usable.
+4. `/dashboard`: confirm API-backed vs example/fallback states remain obvious.
+5. `/employees`: test search/status/department filters and horizontal table behavior at desktop and tablet-ish widths.
+6. `/reports`: confirm own-vs-company report language is role-aware.
+7. `/compliance`: confirm collected/not-collected lists and acknowledgement flow still read correctly.
+8. `/platform-admin`: confirm platform-only context and privacy-safe tenant metadata.
+9. `/virtual-office`: confirm map rendering, movement, realtime/polling, People panel, contact drawer, chair interaction, and command palette are unchanged.
+10. Check 1366px, 1440px, and tablet-ish widths for text/control overlap.
 
-## 8. Residual Risks / Notes
+## 7. Residual Risks / Notes
 
-- Alpha Ready Candidate does not mean full production readiness.
-- Desktop-agent remains a harness/scaffold, not a production active-window app.
-- Browser extension remains a local MV3 scaffold, not store-ready.
-- Realtime gateway remains single-instance/in-memory.
-- No durable offline queue, retry/backoff, token revocation, secure production pairing UX, or multi-instance realtime pub/sub was added.
-- Smoke helper does not enforce HTTPS for non-local remote URLs; deployed alpha smoke must use HTTPS/WSS platform URLs.
-- Broader automated negative security tests remain future hardening.
+- This is a foundation polish pass, not a complete visual redesign.
+- AppShell navigation visibility remains UX only; backend RBAC remains the security boundary.
+- Some example/fallback rows still exist intentionally for backend-off or sparse-data states.
+- Virtual Office canvas/map behavior was not changed, so visual QA should confirm the new top chrome does not obscure gameplay/workspace controls.
+- Browser screenshots across desktop/tablet widths are still recommended because this pass is visual and responsive in nature.
 - `docs/references/` remains unrelated untracked content and should not be staged.
 
-## 9. Final Recommendation
+## 8. Final Recommendation
 
-- QA review: passed for final Round 9 deployed alpha smoke updates.
+- QA review: passed for STAGE 3 Round 1 frontend experience foundation.
 - Return to Codex Chat 2: not required.
-- Can proceed to controlled 5-person alpha pilot: yes.
-- Suggested commit: yes for the Round 9 smoke helper/runbook/final QA docs.
+- Can proceed to human/manual testing: yes, recommended before commit.
+- Suggested commit: yes after the short browser visual smoke passes.
