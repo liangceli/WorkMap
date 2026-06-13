@@ -4,6 +4,11 @@ Last updated: 2026-06-13.
 
 ## Latest Accepted Work
 
+- Commit `5db7e8d` (`feat: polish virtual office interaction clarity`) completed STAGE 3 Round 3: virtual-office product experience polish and interaction readiness.
+- `/virtual-office` now has a compact sync/status top-bar indicator that explains demo presence, API/partial API state, realtime connected, reconnecting, and polling fallback using existing frontend state only.
+- People panel, contact drawer, bottom dock, chair prompts, and room context actions now use clearer, more honest copy and toast feedback.
+- Wave/reaction behavior is local UI feedback only; Teams, Outlook, and 3CX actions remain explicit placeholders until integrations/contact-link wiring exists.
+- No backend files, Prisma schema/migrations, shared API contracts, realtime protocol, auth, deployment config, polling cadence, WebSocket reconnect behavior, map assets/TMX art, movement/collision/pathfinding/chair mechanics, desktop-agent, browser-extension, tracking, chat/history, or production integrations changed.
 - Commit `60fc0ca` (`feat: harden role-based alpha journeys`) completed STAGE 3 Round 2: role-based user journey polish and alpha flow hardening.
 - This was a frontend-only role-flow pass for Owner, Employee, and Platform Admin journeys. It did not change backend features, Prisma schema/migrations, auth architecture, realtime protocol, deployment setup, desktop-agent, browser-extension, tracking features, billing, chat, map editor, or virtual-office behavior.
 - Owner dashboard/onboarding/invite flows now explain next steps more clearly: create workspace, finish avatar/profile, review compliance, invite employees, open office, and view reports.
@@ -222,11 +227,13 @@ Last updated: 2026-06-13.
 - Current user's latest local position can now be restored from and saved to the backend in development/API-backed mode.
 - Realtime WebSocket movement is implemented for remote players, while polling remains the reconciliation/fallback path and latest-position durability still uses HTTP saves.
 - Workflow routing still uses frontend localStorage state, but backend authorization now comes from Cognito, pilot JWT, or development-only auth paths.
-- STAGE 3 Round 2 was code-reviewed and machine-verified, but browser visual/manual QA across Owner, Employee, Platform Admin, invite, reports, AppShell, and Virtual Office chrome remains recommended before broader pilot use.
+- STAGE 3 Round 3 was code-reviewed and machine-verified, but browser/manual QA across `/virtual-office` sync indicator, People/contact actions, chair prompts, room context card, realtime/polling fallback, and map movement remains deferred/recommended before broader pilot use.
 - `docs/references/` remains untracked reference material and should not be committed accidentally.
 
 ## Recommended Next Tasks
 
+- Run STAGE 3 Round 3 virtual-office manual QA: realtime connected state, reconnecting/polling fallback state, backend-off demo state, People panel actions, contact drawer placeholder feedback, chair sit/stand prompts, room context actions, movement/collision/pathfinding, realtime/polling reconciliation, command palette, and fallback/mock mode.
+- Check the new sync/status indicator at 1366px, 1440px, and tablet-ish widths for top-chrome overlap.
 - Run targeted browser smoke for STAGE 3 Round 2: Owner dashboard next steps, Owner workspace creation guidance, Owner invite management, non-owner invite management, Employee invite acceptance/wrong-account errors, Employee dashboard/report states, tenant-user Platform Admin blocked state, Platform Admin success state, and `/virtual-office` behavior regression.
 - Run the broader STAGE 3 visual smoke at desktop/tablet-ish widths for `/login`, AppShell states, Dashboard, Employees filters/table, Reports, Compliance, Platform Admin, and `/virtual-office` map/chrome.
 - Design the long-term global identity/account plus `CompanyMembership` or `TenantMembership` architecture and migration path from `User.cognitoSub`.

@@ -20,7 +20,7 @@ UI primitives:
 
 ## STAGE 3 Product Experience Direction
 
-Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke. Commit `60fc0ca` extended this into role-based journey hardening.
+Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke. Commit `60fc0ca` extended this into role-based journey hardening. Commit `5db7e8d` added virtual-office interaction clarity.
 
 - Use calm SaaS/workspace language rather than QA/readiness language on primary product surfaces.
 - Keep API-backed, sparse-data, fallback, and example states explicit so polish does not hide missing data.
@@ -37,6 +37,10 @@ Commit `333b789` established the first frontend product polish baseline after al
 - Permission-denied or unavailable states should be written in plain language before or alongside technical API failures.
 - Platform Admin blocked states should explain that tenant OWNER/EMPLOYEE/IT_ADMIN roles do not grant platform access.
 - Do not show tenant workspace navigation before a workspace role is resolved; unclear states should guide users back to sign-in or onboarding.
+- Virtual-office collaboration controls must clearly distinguish local feedback from implemented integrations.
+- Wave/reaction feedback should be described as local only until a backend/realtime delivery model exists.
+- Teams, Outlook, and 3CX actions should be explicit placeholders until configured; do not imply external launchers or contact integrations work.
+- Realtime, reconnecting, polling fallback, partial API, and demo presence states should be visible in plain language when shown in the office chrome.
 
 ## Virtual Office UX
 
@@ -50,6 +54,7 @@ People/Presence UX added for the 5-person pilot:
 - Show readable freshness labels and last-seen detail instead of raw timestamps.
 - Show readable room/destination names or `Office area`; never show raw backend UUIDs as user-facing room labels.
 - Show explicit empty/search/fallback states so API-empty, mock fallback, and search-empty cases do not look broken.
+- Show sync/source/realtime/fallback state honestly when office data is partial, demo-only, reconnecting, or polling-backed.
 - Command palette People rows should carry the same presence context as People panel cards.
 - Presence UI should not depend on fixed map coordinates or unfinished TMX decorations.
 

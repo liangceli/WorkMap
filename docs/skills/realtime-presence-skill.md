@@ -87,6 +87,13 @@ Commit `1d2836c` added native WebSocket movement for same-company, same-office-m
 - `WORKMAP_ALLOWED_ORIGIN` remains a backward-compatible single-origin fallback.
 - Missing `Origin` remains allowed for non-browser/server-side callers, but browser alpha smoke should verify the real Vercel origin can connect over WSS.
 
+Commit `5db7e8d` added frontend-only realtime/polling status clarity.
+
+- The virtual-office top bar can show realtime connected, reconnecting, polling fallback, partial API, API-backed, or demo presence states.
+- The status display consumes existing `presenceSource`, realtime connection state, and visible remote teammate count.
+- It does not initiate new requests, change polling cadence, alter WebSocket reconnect behavior, or change realtime event payloads.
+- Manual QA should verify reconnecting/polling-fallback copy when the socket is disrupted while polling remains available.
+
 ## Not Confirmed
 
 - No server-sent events implementation was found.
@@ -94,6 +101,7 @@ Commit `1d2836c` added native WebSocket movement for same-company, same-office-m
 - No historical position trail was added.
 - No persisted map-version invalidation was added for saved positions.
 - Realtime manual QA passed locally for two browsers in one workspace, but deployed WSS smoke is still pending.
+- Round 9 human-reported deployed WSS smoke passed, but future realtime UI changes should still repeat browser WSS/reconnect/fallback checks.
 - Backend-backed `layered:v2:` avatar references can now render real layered avatars for current and remote API users when `User.avatarId` is present.
 - Users without valid backend `avatarId` can still fall back to `WM` marker until they complete avatar/profile setup.
 

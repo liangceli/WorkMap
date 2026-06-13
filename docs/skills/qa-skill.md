@@ -150,6 +150,22 @@ Use this after Owner, Employee, invite, reports scope, AppShell navigation, onbo
 - AppShell unauthenticated/no-role state: confirm tenant workspace navigation is hidden until a workspace role is resolved.
 - `/virtual-office`: confirm map, movement, realtime/polling, People panel, contact drawer, chair interaction, and command palette are unchanged.
 
+## STAGE 3 Virtual Office Interaction QA
+
+Use this after virtual-office chrome, People panel, contact drawer, room card, dock, or local feedback changes.
+
+- `/virtual-office` with API and realtime available: confirm top bar shows realtime connected state and visible teammate count.
+- Break realtime while polling remains available: confirm top bar explains reconnecting or polling fallback and the map remains usable.
+- Backend unavailable/fallback mode: confirm top bar explains demo presence and the map still renders.
+- People panel: confirm filters/search, Details, Wave, Go to, Teams, Outlook, and 3CX actions show honest feedback.
+- Contact drawer: confirm focus/busy/offline/available guidance changes appropriately and placeholder actions do not imply real integrations.
+- Confirm Wave/reaction feedback is local-only and does not imply receiver-side delivery.
+- Chair/desk interaction: confirm `E` to sit and `E` to stand still work with clearer prompts.
+- Room context card: confirm Go to room, View people or Focus cue, and Copy link feedback.
+- Regression: confirm WASD/arrow movement, double-click auto-walk, collision, realtime movement, polling reconciliation, command palette, contact drawer, and fallback/mock mode.
+- Layout: confirm sync/status indicator at 1366px, 1440px, and tablet-ish widths does not overlap top chrome.
+- Smoke unrelated pages: `/dashboard`, `/employees`, `/reports`, `/compliance`, `/onboarding/invite`, and `/platform-admin` still render.
+
 ## STAGE 2 Tenant Onboarding / Invite QA
 
 - Apply migration `20260606000000_stage2_onboarding_invites` before testing.
@@ -351,6 +367,19 @@ Use this repeatable loop after backend/local-startup changes:
 - Add coverage for `useVirtualOfficeData.ts` adapters/fallback behavior when a frontend test harness is introduced.
 
 ## Latest Verification Notes
+
+For commit `5db7e8d`, handoff/QA reports:
+
+- Web typecheck passed.
+- Web lint passed.
+- Web build passed.
+- `git diff --check` passed with CRLF normalization warnings only.
+- Web build still prints the existing warning that the Next.js ESLint plugin is not detected.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches for the current scan scope.
+- Diff review confirmed changes were scoped to `apps/web/components/office/**` plus handoff docs.
+- No backend, Prisma schema/migration, seed, auth architecture, realtime protocol, polling cadence, WebSocket reconnect behavior, map assets, TMX art, movement/collision/pathfinding, chair mechanics, deployment config, desktop-agent, browser-extension, tracking, chat/history, or production integration code changed.
+- Browser/manual QA was not run by design; user is deferring STAGE 3 manual testing until later.
+- Manual QA focus: sync/status indicator, realtime reconnecting/polling fallback clarity, People/contact placeholder actions, chair prompt clarity, room context feedback, map/realtime/polling regression, and top-chrome overlap checks.
 
 For commit `60fc0ca`, handoff/QA reports:
 

@@ -71,6 +71,19 @@ Basic polling presence added in commit `effb188`:
 - Room labels are resolved from destinations or shown as `Office area`; raw UUIDs are not displayed.
 - Polling remote presence no longer visibly reloads/flashes the TMX canvas loop.
 
+Virtual-office interaction clarity added in commit `5db7e8d`:
+
+- `VirtualOfficeTopBar` shows a compact sync/status pill using existing `presenceSource`, realtime connection state, and visible remote teammate count.
+- The sync/status pill explains demo presence, API-connected, partial API, realtime connected, reconnecting, and polling fallback modes without changing data fetching, polling cadence, or WebSocket reconnect behavior.
+- People panel actions are intentionally honest: `Details` opens the existing contact drawer, `Wave` is local feedback only, and Teams/Outlook/3CX actions show not-connected placeholder feedback.
+- Contact drawer guidance changes for focus, busy, offline, and available teammates.
+- Contact drawer external actions use toast feedback and do not create fake email, Teams, Outlook, or 3CX integrations.
+- Bottom dock status/local notes/contact placeholders use honest labels and local feedback.
+- Chair prompts now distinguish `press E to sit` and `press E to stand`.
+- Room context card clarifies occupancy, focus-room cue behavior, and copy-link feedback.
+- No backend/realtime reaction event delivery was added. Wave/reaction remains local UI feedback only.
+- No map art, TMX, movement, collision, pathfinding, chair mechanics, contact drawer API, or realtime protocol behavior changed.
+
 Pilot auth/privacy boundary added in commit `14fb706`:
 
 - `/virtual-office` uses unified API auth and prefers stored pilot Bearer session over development dev-token fallback.
@@ -124,3 +137,4 @@ Known coordinate caveat: backend room coordinates currently do not perfectly mat
 - Do not copy SkyOffice implementation directly.
 - Keep privacy/compliance context visible as WorkMap is a compliant work visibility product, not only a game map.
 - Preserve clear distinction between simulated presence and actual employee monitoring data.
+- Collaboration controls must clearly distinguish implemented local UI feedback from future integrations such as Teams, Outlook, 3CX, or backend-delivered reactions.
