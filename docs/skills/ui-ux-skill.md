@@ -20,7 +20,7 @@ UI primitives:
 
 ## STAGE 3 Product Experience Direction
 
-Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke. Commit `60fc0ca` extended this into role-based journey hardening. Commit `5db7e8d` added virtual-office interaction clarity. Commit `5d4412a` productized Dashboard, Reports, and Compliance.
+Commit `333b789` established the first frontend product polish baseline after alpha deployment smoke. Commit `60fc0ca` extended this into role-based journey hardening. Commit `5db7e8d` added virtual-office interaction clarity. Commit `5d4412a` productized Dashboard, Reports, and Compliance. Commit `9815b7a` added the alpha pilot user/operator readiness pack.
 
 - Use calm SaaS/workspace language rather than QA/readiness language on primary product surfaces.
 - Keep API-backed, sparse-data, fallback, and example states explicit so polish does not hide missing data.
@@ -46,6 +46,8 @@ Commit `333b789` established the first frontend product polish baseline after al
 - Empty report rows should be described as sparse alpha setup and should point to device/activity event setup, not product failure or fake success.
 - Compliance should use transparency/trust language and explain why data exists, who can see what, alpha client limitations, and Platform Admin privacy boundaries.
 - Avoid scary or overreaching monitoring language such as hidden tracking, total monitoring, employee scoring, screenshots, keystrokes, private messages, full URL capture, webpage content capture, or private content tracking.
+- Alpha pilot docs should keep Owner and Employee guidance separate, plain, and action-oriented. They should not sound like production enterprise documentation or hide scaffolded/limited areas.
+- Pilot-facing docs should always pair readiness language with concrete limitations and the before-pilot smoke checklist.
 
 ## Virtual Office UX
 

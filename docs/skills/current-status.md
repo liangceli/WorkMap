@@ -4,6 +4,13 @@ Last updated: 2026-06-13.
 
 ## Latest Accepted Work
 
+- Commit `9815b7a` (`feat: productize dashboard reports and compliance`) completed STAGE 3 Round 5: Alpha Pilot Packaging + User-Facing Readiness Pack.
+- This was docs-only and added `docs/alpha-pilot/` as the operator/user-facing packet for a controlled 5-person alpha pilot.
+- The pack includes Owner and Employee quick-start guides, a privacy/compliance one-pager, known limitations, a before-pilot smoke checklist, pilot feedback template, and bug report template.
+- The pack documents current accepted product reality: Cognito deployed alpha sign-in, Owner workspace creation, Employee invite acceptance, backend-backed display/avatar setup, virtual-office movement/People/contact/chairs/polling/realtime, Dashboard/Reports/Compliance productization, Platform Admin privacy-safe metadata, and public deployed-route smoke helper coverage.
+- It also clearly labels limited/scaffolded areas: desktop-agent, browser-extension, sparse activity data unless harness/scaffold flows run, in-memory single-process realtime, copy/share invite links, placeholder Teams/Outlook/3CX/chat/scheduling/support workflows, read-only allowlist Platform Admin, and future global identity/multi-company membership architecture.
+- No frontend routes, components, APIs, auth, tracking, map, realtime, Prisma schema/migrations, seeds, deployment settings, desktop-agent, or browser-extension behavior changed.
+- The current `docs/ai-handoff/latest-qa.md` available in the repo still describes STAGE 3 Round 4, so Round 5 documentation should be treated as implementation-verified by the handoff/latest commit until a Round 5 QA handoff is written.
 - Commit `5d4412a` (`feat: productize dashboard reports and compliance`) completed STAGE 3 Round 4: Dashboard, Reports, and Compliance productization.
 - Dashboard now reads as an Owner workspace management overview or Employee personal workspace view instead of a QA/readiness panel, while preserving API/fallback/sparse state honesty.
 - Reports now explain Employee own-scope rows, Owner/Manager aggregate company summaries, alpha data availability, sparse/no-data states, and frontend example-layout labels without implying raw employee activity streams.
@@ -233,11 +240,15 @@ Last updated: 2026-06-13.
 - Realtime WebSocket movement is implemented for remote players, while polling remains the reconciliation/fallback path and latest-position durability still uses HTTP saves.
 - Workflow routing still uses frontend localStorage state, but backend authorization now comes from Cognito, pilot JWT, or development-only auth paths.
 - STAGE 3 Round 4 was code-reviewed and machine-verified, but browser/manual QA for Dashboard, Reports, Compliance, and related unrelated-page smoke remains deferred/recommended before broader pilot use.
+- The alpha pilot readiness pack is documentation only; it does not enforce product behavior, replace deployed smoke, or automate Cognito/invite/realtime/activity manual checks.
+- `docs/ai-handoff/latest-qa.md` currently remains a Round 4 QA handoff while HEAD/latest implementation are Round 5. Refresh QA handoff before treating Round 5 as independently QA-accepted.
 - `docs/references/` remains untracked reference material and should not be committed accidentally.
 
 ## Recommended Next Tasks
 
 - Run STAGE 3 Round 4 manual QA: Owner Dashboard, Employee Dashboard, Owner Reports, Employee Reports, Reports no-data state, Reports example labels, Compliance transparency policy, collected/not-collected lists, acknowledgement flow, alpha limitation copy, and Platform Admin privacy boundary copy.
+- Review every `docs/alpha-pilot/*` file before inviting pilot users, then complete `docs/alpha-pilot/before-pilot-smoke-checklist.md` in the deployed environment.
+- Refresh `docs/ai-handoff/latest-qa.md` for STAGE 3 Round 5 so the QA handoff matches the latest implementation and commit.
 - Smoke `/virtual-office`, `/employees`, `/platform-admin`, `/onboarding/invite`, and `/login` after Dashboard/Reports/Compliance productization to confirm unrelated flows still render.
 - Check Dashboard, Reports, and Compliance at 1366px, 1440px, and tablet-ish widths for text/control overlap and overreaching monitoring language.
 - Run STAGE 3 Round 3 virtual-office manual QA: realtime connected state, reconnecting/polling fallback state, backend-off demo state, People panel actions, contact drawer placeholder feedback, chair sit/stand prompts, room context actions, movement/collision/pathfinding, realtime/polling reconciliation, command palette, and fallback/mock mode.

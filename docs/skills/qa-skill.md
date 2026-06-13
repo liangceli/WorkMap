@@ -117,6 +117,19 @@ Use `docs/ai-handoff/real-alpha-deployment-smoke.md` for Round 9 deployed smoke.
 - After the helper passes, complete authenticated manual smoke for Cognito Owner onboarding, invite creation, Employee invite acceptance/onboarding, two-user realtime movement, People/contact surfaces, Platform Admin privacy, device registration, app/domain sample activity, Employee own reports, Owner company aggregate reports, and Employee company-scope report block.
 - Repeat deployed smoke immediately before pilot start and after any Vercel, Render, Supabase, Cognito, origin allowlist, callback/logout, migration, or deployment change.
 
+## STAGE 3 Alpha Pilot Pack QA
+
+Use `docs/alpha-pilot/README.md` and `docs/alpha-pilot/before-pilot-smoke-checklist.md` before inviting the controlled 5-person pilot group.
+
+- Confirm the Owner quick start matches the accepted Owner flow: Cognito sign-in, workspace creation, profile/avatar setup, compliance review, invite creation, virtual-office entry, Dashboard, Reports, and issue reporting.
+- Confirm the Employee quick start matches the accepted Employee flow: invite link, Cognito sign-in/sign-up with the invited verified email, compliance acknowledgement, profile/avatar setup, device setup, virtual-office entry, own-scope reports, and issue reporting.
+- Confirm the privacy/compliance one-pager does not imply screenshots, keystrokes, camera/mic, private message/email content, passwords/form inputs, full URL paths, webpage content, employee scoring, invisible spying, or raw employee activity streams.
+- Confirm known limitations still match product truth for desktop-agent harness, browser-extension scaffold, sparse activity data, in-memory realtime, copy/share invite links, placeholder Teams/Outlook/3CX/chat/scheduling/support workflows, read-only allowlist Platform Admin, and future global identity/multi-company membership.
+- Complete all 30 before-pilot smoke checklist items in the deployed environment before marking the pilot ready.
+- Treat `pnpm smoke:alpha` as public-route/CORS/readiness coverage only; it does not automate Cognito Hosted UI, invite acceptance, two-user realtime, device setup, activity submission, reports data creation, or Platform Admin identity checks.
+- Keep real secrets, bearer tokens, database URLs, Cognito secrets, platform admin identities, customer names, and private pilot feedback out of docs, chat, and commits.
+- If `docs/ai-handoff/latest-qa.md` still points to an older round, call that out in the handoff and do not treat it as Round 5 QA evidence.
+
 ## STAGE 3 Frontend Experience Visual QA
 
 Use this after frontend product language, AppShell, dashboard, reporting, compliance, employee directory, platform admin, or virtual-office chrome changes.
@@ -383,6 +396,15 @@ Use this repeatable loop after backend/local-startup changes:
 - Add coverage for `useVirtualOfficeData.ts` adapters/fallback behavior when a frontend test harness is introduced.
 
 ## Latest Verification Notes
+
+For commit `9815b7a`, implementation handoff reports:
+
+- STAGE 3 Round 5 added a docs-only alpha pilot readiness pack under `docs/alpha-pilot/`.
+- `git diff --check` passed with only LF-to-CRLF warning noise for `docs/ai-handoff/latest-implementation.md`.
+- A secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `tsbuildinfo`, and `docs/references` found no matches.
+- A trailing-whitespace scan over `docs/alpha-pilot/*` and `docs/ai-handoff/latest-implementation.md` passed.
+- Web/API typecheck, lint, build, Prisma, and browser QA were not run because no runtime code changed.
+- The available `docs/ai-handoff/latest-qa.md` still describes STAGE 3 Round 4, so Round 5 needs a matching QA handoff before it is treated as independently QA-accepted.
 
 For commit `5d4412a`, handoff/QA reports:
 

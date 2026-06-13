@@ -147,7 +147,7 @@ Activity tracking harness env:
 22. For People/Presence MVP QA, verify People panel, command palette, and backend-off fallback in the browser at `http://localhost:3000/virtual-office` while API runs on `http://localhost:3001`.
 23. If `/virtual-office` shows an unexpected 500 while build checks pass, clean-restart API and web dev servers before treating it as a product regression.
 
-Detailed release smoke steps live in `docs/ai-handoff/pilot-release-checklist.md`.
+Detailed release smoke steps live in `docs/ai-handoff/pilot-release-checklist.md`. Before inviting a controlled 5-person pilot group, also run the user/operator-facing checklist in `docs/alpha-pilot/before-pilot-smoke-checklist.md`.
 
 ## STAGE 2 Deployment Readiness
 
@@ -223,6 +223,7 @@ External smoke helper:
 - Run `pnpm smoke:alpha` from `workmap/`.
 - The helper checks `/health`, `/health/readiness`, CORS allowlist behavior, key frontend route availability, and derived WSS path. It does not test authenticated Cognito/tenant/invite/activity flows.
 - Round 9 reports `pnpm smoke:alpha` and full authenticated human smoke passed on 2026-06-13, making WorkMap an Alpha Ready Candidate for a controlled 5-person pilot.
+- STAGE 3 Round 5 added `docs/alpha-pilot/before-pilot-smoke-checklist.md` as the final before-invite checklist. Complete it after `pnpm smoke:alpha` because it covers authenticated Owner/Employee Cognito, invite acceptance, two-user realtime, activity/report, and Platform Admin privacy checks that the helper cannot automate.
 
 ## Deployment Caution
 
