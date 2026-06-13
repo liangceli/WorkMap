@@ -36,8 +36,8 @@ export default function CompliancePage() {
       <section style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="Compliance"
-          title="Monitoring policy"
-          subtitle="Make WorkMap visibility explicit, role-based, and easy for employees to understand."
+          title="Transparency policy"
+          subtitle="Make WorkMap activity summaries explicit, role-based, and easy for employees to understand."
           actions={
             <>
               <WorkMapButton href="/settings">Settings</WorkMapButton>
@@ -49,7 +49,7 @@ export default function CompliancePage() {
         <WorkMapPrivacyNotice title={onboardingMode ? "First-time transparency step" : "Pilot transparency boundary"}>
           {onboardingMode
             ? "Review what WorkMap does and does not collect before entering the workspace."
-            : "Review what is visible in WorkMap, what is not monitored, and whether the current pilot session can record acknowledgement through the backend policy API."}
+            : "Review what is visible in WorkMap, what is not collected, and whether the current pilot session can record acknowledgement through the backend policy API."}
         </WorkMapPrivacyNotice>
 
         <CompliancePolicyPanel />

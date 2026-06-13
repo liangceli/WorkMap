@@ -162,13 +162,13 @@ export function ManagerOverviewPanel() {
   const metrics = useMemo<UsageMetric[]>(
     () => [
       {
-        label: "API health",
+        label: "Workspace API",
         value: dashboardState.loading ? "Checking" : dashboardState.healthOk ? "Online" : "Review",
         detail: dashboardState.healthText,
         tone: dashboardState.healthOk ? "green" : "amber",
       },
       {
-        label: "API auth",
+        label: "Session",
         value: dashboardState.authSource ? formatAuthSource(dashboardState.authSource) : "Missing",
         detail: dashboardState.authSource
           ? "Dashboard data is using an authenticated API context."
@@ -191,7 +191,7 @@ export function ManagerOverviewPanel() {
         tone: dashboardState.policyVersion ? "green" : "amber",
       },
       {
-        label: "Tracking coverage",
+        label: "Data coverage",
         value: dashboardState.usageSummary?.deviceCoverage
           ? `${dashboardState.usageSummary.deviceCoverage.activeDevices24h}/${dashboardState.usageSummary.deviceCoverage.registeredDevices}`
           : "No rows",
@@ -226,6 +226,19 @@ export function ManagerOverviewPanel() {
         <p style={styles.panelText}>{journey.guidance}</p>
       </section>
 
+      <section style={styles.setupPanel}>
+        <div>
+          <p style={styles.panelLabel}>Setup coverage</p>
+          <h2 style={styles.panelTitle}>{journey.setupTitle}</h2>
+          <p style={styles.panelText}>{journey.alphaNote}</p>
+        </div>
+        <div style={styles.setupList}>
+          {journey.setupItems.map((item) => (
+            <span key={item} style={styles.setupItem}>{item}</span>
+          ))}
+        </div>
+      </section>
+
       <section style={styles.metricGrid}>
         {metrics.map((metric) => (
           <UsageSummaryCard key={metric.label} metric={metric} />
@@ -237,8 +250,9 @@ export function ManagerOverviewPanel() {
           <p style={styles.panelLabel}>Live workspace status</p>
           <h2 style={styles.panelTitle}>{dashboardState.loading ? "Checking setup" : dashboardState.statusText}</h2>
           <p style={styles.panelText}>
-            This dashboard combines session health, office presence, compliance policy, and aggregate usage summaries. It does not expose
-            screenshots, keystrokes, private messages, full URLs, or hidden monitoring data.
+            This dashboard combines session health, office presence, compliance policy, setup coverage, and role-appropriate usage
+            summaries. It shows availability and aggregate signals only; it does not expose screenshots, keystrokes, private messages,
+            full URLs, webpage content, or hidden monitoring data.
           </p>
         </div>
         {dashboardState.errors.length > 0 ? (
@@ -428,11 +442,15 @@ function getDashboardJourney(role: string | null) {
   if (role === "OWNER") {
     return {
       eyebrow: "Owner workspace",
-      title: "Your workspace is ready to build",
-      subtitle: "Invite teammates, open the office, review compliance, and check aggregate summaries as activity arrives.",
+      title: "Workspace management overview",
+      subtitle: "Track team presence, setup coverage, compliance readiness, and aggregate activity summaries as data becomes available.",
       guidanceLabel: "Owner next steps",
       guidance:
-        "Start with employee invites, then ask the team to complete compliance, avatar, and device setup. Reports will stay sparse until devices submit app/domain summary data.",
+        "Start with employee invites, then ask the team to complete compliance, avatar, and device setup. Reports stay sparse until the desktop-agent harness or browser-extension scaffold submits app/domain summary data.",
+      setupTitle: "Bring the pilot workspace online",
+      alphaNote:
+        "The current alpha proves the ingestion and reporting loop. Production active-window clients, secure pairing, retry/offline queues, and extension packaging are still future work.",
+      setupItems: ["Invite employees", "Complete compliance", "Finish avatar/profile", "Register devices"],
       actions: [
         { label: "Invite employees", href: "/onboarding/invite", primary: true },
         { label: "Open office", href: "/virtual-office" },
@@ -449,7 +467,11 @@ function getDashboardJourney(role: string | null) {
       subtitle: "See your office presence, teammate directory, compliance policy, and your own work summaries when data exists.",
       guidanceLabel: "Employee access",
       guidance:
-        "Company-wide reports, invites, integrations, and settings are owner/admin areas. If you open a restricted route, the backend still enforces the permission boundary.",
+        "Company-wide reports, invites, integrations, and settings are owner/admin areas. Your dashboard focuses on your own presence, compliance status, and personal summary availability.",
+      setupTitle: "Your setup checklist",
+      alphaNote:
+        "Activity summaries appear only after your device or browser scaffold submits events. WorkMap does not show screenshots, keystrokes, private messages, or webpage content.",
+      setupItems: ["Review compliance", "Finish profile/avatar", "Set up device", "Open office"],
       actions: [
         { label: "Open office", href: "/virtual-office", primary: true },
         { label: "People directory", href: "/employees" },
@@ -465,6 +487,10 @@ function getDashboardJourney(role: string | null) {
     guidanceLabel: "Workspace guidance",
     guidance:
       "Use the office and directory for day-to-day presence. Reports and admin actions appear only when the signed-in role can use them.",
+    setupTitle: "Resolve workspace context",
+    alphaNote:
+      "Sign in with a tenant role to see API-backed workspace data. Fallback/example rows remain labeled and should not be treated as real tenant metrics.",
+    setupItems: ["Sign in", "Resolve role", "Load policy", "Load summaries"],
     actions: [
       { label: "Open office", href: "/virtual-office", primary: true },
       { label: "View reports", href: "/reports" },
@@ -524,6 +550,31 @@ const styles = {
     display: "grid",
     gap: "6px",
     padding: "14px 16px",
+  },
+  setupPanel: {
+    ...wmStyles.card,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+    gap: "16px",
+    alignItems: "center",
+    padding: "16px",
+  },
+  setupList: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "8px",
+  },
+  setupItem: {
+    borderWidth: "1px",
+    borderStyle: "solid" as const,
+    borderColor: wm.colors.borderSubtle,
+    borderRadius: "999px",
+    background: wm.colors.surfaceLow,
+    color: wm.colors.textSecondary,
+    padding: "8px 10px",
+    fontSize: "12px",
+    fontWeight: 900,
+    textAlign: "center" as const,
   },
   statusPanel: {
     ...wmStyles.infoNotice,

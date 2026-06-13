@@ -61,7 +61,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
           authSource: null,
           role: null,
           summary: null,
-          statusText: "Sign in with pilot auth to load the backend usage summary.",
+          statusText: "Sign in to load the backend usage summary for your workspace role.",
           error: auth.reason,
         });
         return;
@@ -118,12 +118,27 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
           <h2 style={styles.panelTitle}>{reportState.loading ? "Checking reports API" : reportState.statusText}</h2>
           <p style={styles.panelText}>
             WorkMap reports currently expose app names, domains, active seconds, and idle seconds through the existing API. Company
-            summaries are aggregate-only, while employees see their own rows.
+            summaries are aggregate-only, while employees see their own rows. Reports do not include raw employee activity streams.
           </p>
           {reportState.authSource ? <p style={styles.sessionText}>API context: {formatAuthSource(reportState.authSource)}</p> : null}
           <p style={styles.sessionText}>{scopeGuidance}</p>
         </div>
         {reportState.error ? <p style={styles.errorText}>{reportState.error}</p> : null}
+      </section>
+
+      <section style={styles.boundaryGrid}>
+        <ReportBoundaryCard
+          title="Employee view"
+          text="Employees can review their own app/domain summary rows when data exists. Company-wide reporting remains unavailable to employee roles."
+        />
+        <ReportBoundaryCard
+          title="Owner view"
+          text="Owners and allowed manager roles can request company aggregate summaries. These reports summarize app/domain time and device coverage without raw private content."
+        />
+        <ReportBoundaryCard
+          title="Alpha data availability"
+          text="Device coverage and usage rows appear only after the current harness/scaffold clients submit events. Empty rows mean setup is incomplete or still sparse."
+        />
       </section>
 
       <section style={styles.metricGrid}>
@@ -142,6 +157,11 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
             <div>
               <p style={styles.panelLabel}>Available API summary</p>
               <h2 style={styles.panelTitle}>{reportState.summary.scope === "company" ? "Tenant usage summary" : "Current user usage rows"}</h2>
+              <p style={styles.panelText}>
+                {reportState.summary.scope === "company"
+                  ? "Aggregate company rows help Owners understand data availability without exposing raw employee activity details."
+                  : "Own-scope rows help the signed-in user understand their personal app/domain summary."}
+              </p>
             </div>
             <span style={styles.scopePill}>{reportState.summary.scope === "company" ? "Company scope" : hasApiRows ? "API data" : "Sparse data"}</span>
           </div>
@@ -162,8 +182,8 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
             </div>
           ) : (
             <p style={styles.emptyText}>
-              The Reports API responded, but this account has no usage summary rows yet. This is acceptable during setup; register a
-              device or submit activity events before validating report numbers.
+              The Reports API responded, but this scope has no usage summary rows yet. This is acceptable during alpha setup; register a
+              device and submit app/domain events before validating report numbers.
             </p>
           )}
         </section>
@@ -174,7 +194,8 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
           <p style={styles.panelLabel}>Example layout</p>
           <h2 style={styles.panelTitle}>Team summary pattern</h2>
           <p style={styles.panelText}>
-            These rows are frontend examples for layout and privacy review until richer team-level aggregate APIs are added.
+            These rows are frontend examples for layout and privacy review only. Treat the API panel above as the source of real tenant
+            report data when authenticated rows are available.
           </p>
         </div>
         <div style={styles.tableHeader}>
@@ -210,6 +231,15 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
         })}
       </section>
     </div>
+  );
+}
+
+function ReportBoundaryCard({ title, text }: { title: string; text: string }) {
+  return (
+    <article style={styles.boundaryCard}>
+      <h3 style={styles.boundaryTitle}>{title}</h3>
+      <p style={styles.boundaryText}>{text}</p>
+    </article>
   );
 }
 
@@ -366,6 +396,27 @@ const styles = {
     fontSize: "13px",
     fontWeight: 800,
     maxWidth: "360px",
+  },
+  boundaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
+    gap: "12px",
+  },
+  boundaryCard: {
+    ...wmStyles.card,
+    padding: "14px",
+  },
+  boundaryTitle: {
+    margin: "0 0 8px",
+    color: wm.colors.text,
+    fontSize: "15px",
+    fontWeight: 900,
+  },
+  boundaryText: {
+    margin: 0,
+    color: wm.colors.textSecondary,
+    fontSize: "13px",
+    lineHeight: 1.45,
   },
   metricGrid: {
     display: "grid",

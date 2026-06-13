@@ -128,11 +128,27 @@ export function CompliancePolicyPanel() {
         <PolicyList title="Not monitored" tone="green" items={notVisibleItems} />
       </section>
 
+      <section style={styles.explanationGrid}>
+        <TrustCard
+          title="Why this data exists"
+          text="WorkMap uses presence, app/domain duration summaries, device heartbeat, and acknowledgement timestamps to help a tenant understand workspace setup and transparent activity coverage."
+        />
+        <TrustCard
+          title="Who can see what"
+          text="Employees can review their own summaries and compliance state. Owners and allowed manager roles can review company aggregate summaries, not private content or raw cross-tenant rows."
+        />
+        <TrustCard
+          title="Alpha client limitation"
+          text="The desktop agent is currently a harness and the browser extension is a local MV3 scaffold. Production pairing, token lifecycle, offline queueing, retry/backoff, and packaging remain future work."
+        />
+      </section>
+
       <section style={styles.boundaryPanel}>
         <p style={styles.panelLabel}>Role visibility boundary</p>
         <p style={styles.panelText}>
           Employees can understand their own presence and activity summaries. Owner and manager views may show role-allowed aggregate
           app/domain summaries for the tenant, while employee-level activity detail remains guarded by backend RBAC and tenant scope.
+          Platform Admin views are separate and should remain limited to privacy-safe tenant metadata and health/audit summaries.
         </p>
       </section>
 
@@ -182,6 +198,15 @@ function PolicyList({ title, tone, items }: { title: string; tone: "blue" | "gre
   );
 }
 
+function TrustCard({ title, text }: { title: string; text: string }) {
+  return (
+    <article style={styles.trustCard}>
+      <h2 style={styles.trustTitle}>{title}</h2>
+      <p style={styles.trustText}>{text}</p>
+    </article>
+  );
+}
+
 function acknowledgementKey(auth: Extract<WorkMapApiAuthResult, { available: true }>, policyId: string) {
   return `workmap.policyAcknowledgement.${auth.userId}.${policyId}`;
 }
@@ -211,6 +236,27 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
     gap: "14px",
+  },
+  explanationGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
+    gap: "14px",
+  },
+  trustCard: {
+    ...wmStyles.card,
+    padding: "16px",
+  },
+  trustTitle: {
+    margin: "0 0 8px",
+    color: wm.colors.text,
+    fontSize: "17px",
+    fontWeight: 900,
+  },
+  trustText: {
+    margin: 0,
+    color: wm.colors.textSecondary,
+    fontSize: "13px",
+    lineHeight: 1.5,
   },
   policyCard: {
     ...wmStyles.card,
