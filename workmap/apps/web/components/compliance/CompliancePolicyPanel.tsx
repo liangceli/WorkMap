@@ -250,6 +250,7 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "16px",
+    flexWrap: "wrap" as const,
     padding: "16px",
   },
   panelLabel: {

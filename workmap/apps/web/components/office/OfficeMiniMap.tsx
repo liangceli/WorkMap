@@ -74,7 +74,7 @@ export function OfficeMiniMap({ map, player, tilesets, shifted }: OfficeMiniMapP
   }, [map, player, tilesets]);
 
   return (
-    <aside aria-label="Office mini map" style={{ ...styles.shell, ...(shifted ? styles.shellShifted : {}) }}>
+    <aside className="wm-office-minimap" aria-label="Office mini map" style={{ ...styles.shell, ...(shifted ? styles.shellShifted : {}) }}>
       <div style={styles.header}>
         <span style={styles.title}>Office map</span>
         <span style={styles.legend}>You</span>
@@ -109,7 +109,7 @@ function drawMiniMap(
   const offsetY = (MINI_MAP_HEIGHT - drawnHeight) / 2;
 
   context.clearRect(0, 0, MINI_MAP_WIDTH, MINI_MAP_HEIGHT);
-  context.fillStyle = "#e2e8f0";
+  context.fillStyle = "#e8f1ed";
   context.fillRect(0, 0, MINI_MAP_WIDTH, MINI_MAP_HEIGHT);
   context.save();
   context.translate(offsetX, offsetY);
@@ -140,7 +140,7 @@ function drawMiniMap(
     }
   }
 
-  context.fillStyle = "#22c55e";
+  context.fillStyle = wm.status.available;
   context.strokeStyle = "#ffffff";
   context.lineWidth = 2;
   context.beginPath();
@@ -158,11 +158,11 @@ const styles = {
     zIndex: wm.zIndex.officeChrome,
     width: "260px",
     padding: "12px",
-    border: "1px solid rgba(216, 224, 236, 0.82)",
-    borderRadius: "18px",
-    background: "rgba(22, 35, 90, 0.96)",
-    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.2)",
-    backdropFilter: "blur(20px)",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius["2xl"],
+    background: "rgba(255, 253, 248, 0.9)",
+    boxShadow: wm.shadow.elevated,
+    backdropFilter: "blur(18px)",
   },
   shellShifted: {
     opacity: 0,
@@ -175,7 +175,7 @@ const styles = {
     marginBottom: "8px",
   },
   title: {
-    color: "#ffffff",
+    color: wm.colors.text,
     fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
@@ -184,7 +184,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",
-    color: "rgba(255, 255, 255, 0.78)",
+    color: wm.colors.textMuted,
     fontSize: "12px",
     fontWeight: 800,
   },
@@ -192,8 +192,8 @@ const styles = {
     display: "block",
     width: `${MINI_MAP_WIDTH}px`,
     height: `${MINI_MAP_HEIGHT}px`,
-    border: "1px solid rgba(255, 255, 255, 0.16)",
+    border: `1px solid ${wm.colors.borderSubtle}`,
     borderRadius: "14px",
-    background: "#16235a",
+    background: wm.colors.surfaceLow,
   },
 };

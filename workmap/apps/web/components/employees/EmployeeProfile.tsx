@@ -195,7 +195,7 @@ const styles = {
   },
   profileHeader: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 300px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
     gap: "16px",
     alignItems: "stretch",
   },
@@ -211,10 +211,11 @@ const styles = {
   },
   title: {
     margin: "0 0 6px",
-    color: wm.colors.text,
+    color: wm.colors.textHeading,
+    fontFamily: wm.typography.displayFontFamily,
     fontSize: "32px",
-    lineHeight: 1.1,
-    fontWeight: 700,
+    lineHeight: 1.12,
+    fontWeight: 750,
   },
   subtitle: {
     margin: "0 0 12px",
@@ -267,7 +268,7 @@ const styles = {
     fontWeight: 700,
   },
   segmentButtonActive: {
-    background: wm.colors.primaryContainer,
+    background: wm.colors.secondary,
     color: wm.colors.surface,
   },
   modeText: {
@@ -278,7 +279,7 @@ const styles = {
   },
   contentGrid: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 320px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
     gap: "16px",
     alignItems: "start",
   },
@@ -308,7 +309,7 @@ const styles = {
   },
   contactGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
     gap: "10px",
   },
   primaryAction: {
@@ -321,7 +322,7 @@ const styles = {
   },
   metricGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
     gap: "12px",
     margin: 0,
   },
@@ -345,7 +346,7 @@ const styles = {
   },
   privacyGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
     gap: "14px",
   },
   smallTitle: {

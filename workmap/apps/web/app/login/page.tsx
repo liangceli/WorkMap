@@ -28,7 +28,7 @@ const styles = {
     background: wm.colors.appBackground,
     color: wm.colors.text,
     fontFamily: wm.typography.fontFamily,
-    padding: "24px",
+    padding: "var(--wm-shell-block) var(--wm-shell-inline)",
     display: "grid",
     placeItems: "center",
   },
@@ -52,10 +52,11 @@ const styles = {
   },
   title: {
     margin: 0,
-    color: wm.colors.text,
+    color: wm.colors.textHeading,
+    fontFamily: wm.typography.displayFontFamily,
     fontSize: "40px",
-    lineHeight: 1.2,
-    fontWeight: 700,
+    lineHeight: 1.15,
+    fontWeight: 750,
     letterSpacing: 0,
   },
   subtitle: {

@@ -37,7 +37,12 @@ export default function OwnerInvitePage() {
       setAuth(authResult);
 
       if (!authResult.available) {
-        setStatus(authResult.reason);
+        setStatus(`Sign in as a workspace Owner to create invitations. ${authResult.reason}`);
+        return;
+      }
+
+      if (authResult.role !== "OWNER") {
+        setStatus("Only workspace Owners can create employee invitations. Employees can use the directory and virtual office after joining.");
         return;
       }
 
@@ -48,7 +53,7 @@ export default function OwnerInvitePage() {
       }
 
       if (!result.ok) {
-        setStatus(result.error);
+        setStatus(formatInviteManagementError(result.error));
         return;
       }
 
@@ -69,6 +74,11 @@ export default function OwnerInvitePage() {
       return;
     }
 
+    if (auth.role !== "OWNER") {
+      setStatus("Only workspace Owners can create employee invitations.");
+      return;
+    }
+
     setSubmitting(true);
     setStatus("");
     setInviteLink("");
@@ -77,7 +87,7 @@ export default function OwnerInvitePage() {
     setSubmitting(false);
 
     if (!result.ok) {
-      setStatus(result.error);
+      setStatus(formatInviteManagementError(result.error));
       return;
     }
 
@@ -142,6 +152,16 @@ export default function OwnerInvitePage() {
   );
 }
 
+function formatInviteManagementError(error: string) {
+  const lower = error.toLowerCase();
+
+  if (lower.includes("403") || lower.includes("forbidden")) {
+    return "This account does not have Owner permission to manage invitations.";
+  }
+
+  return error;
+}
+
 const styles = {
   shell: {
     display: "grid",
@@ -172,7 +192,7 @@ const styles = {
     display: "grid",
     gap: "13px",
     padding: "18px",
-    maxWidth: "620px",
+    width: "min(620px, 100%)",
   },
   label: {
     display: "grid",

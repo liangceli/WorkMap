@@ -10,13 +10,13 @@ type WorkMapPageHeaderProps = {
 
 export function WorkMapPageHeader({ eyebrow, title, subtitle, actions }: WorkMapPageHeaderProps) {
   return (
-    <header style={wmStyles.pageHeader}>
+    <header className="wm-page-header" style={wmStyles.pageHeader}>
       <div>
         <p style={wmStyles.eyebrow}>{eyebrow}</p>
         <h1 style={wmStyles.pageTitle}>{title}</h1>
         <p style={wmStyles.pageSubtitle}>{subtitle}</p>
       </div>
-      {actions ? <nav style={styles.actions}>{actions}</nav> : null}
+      {actions ? <nav className="wm-responsive-actions" style={styles.actions}>{actions}</nav> : null}
     </header>
   );
 }

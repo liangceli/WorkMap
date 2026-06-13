@@ -74,7 +74,7 @@ export default function CompanyOnboardingPage() {
       <section style={styles.shell}>
         <p style={styles.eyebrow}>Owner onboarding</p>
         <h1 style={styles.title}>Create your WorkMap workspace</h1>
-        <p style={styles.subtitle}>WorkMap creates a transparent virtual office for your team.</p>
+        <p style={styles.subtitle}>Create the company workspace, confirm your profile, then invite employees into the same tenant.</p>
 
         <section style={styles.card}>
           <label style={styles.label}>
@@ -97,6 +97,10 @@ export default function CompanyOnboardingPage() {
           <section style={styles.note}>
             <strong>Privacy-forward setup</strong>
             <span>Tracking rules are configured before employees join. Your confirmed display name is used in WorkMap directory and office labels.</span>
+          </section>
+          <section style={styles.ownerSteps}>
+            <strong>Owner path</strong>
+            <span>After workspace creation you will finish avatar/profile setup, review compliance, create employee invites, and then open the virtual office.</span>
           </section>
           <button
             type="button"
@@ -121,7 +125,7 @@ const styles = {
     background: wm.colors.appBackground,
     color: wm.colors.text,
     fontFamily: wm.typography.fontFamily,
-    padding: "24px",
+    padding: "var(--wm-shell-block) var(--wm-shell-inline)",
   },
   shell: {
     width: "min(620px, 100%)",
@@ -135,10 +139,12 @@ const styles = {
   },
   title: {
     margin: "0 0 10px",
-    fontSize: "32px",
-    lineHeight: 1.25,
-    fontWeight: 700,
-    letterSpacing: "-0.02em",
+    color: wm.colors.textHeading,
+    fontFamily: wm.typography.displayFontFamily,
+    fontSize: "34px",
+    lineHeight: 1.15,
+    fontWeight: 750,
+    letterSpacing: 0,
   },
   subtitle: {
     margin: "0 0 18px",
@@ -170,6 +176,17 @@ const styles = {
     ...wmStyles.infoNotice,
     padding: "12px",
     fontSize: "14px",
+  },
+  ownerSteps: {
+    display: "grid",
+    gap: "4px",
+    border: `1px solid ${wm.colors.successBorder}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.successBg,
+    color: "#14532d",
+    padding: "12px",
+    fontSize: "14px",
+    lineHeight: 1.45,
   },
   button: {
     ...wmStyles.primaryButton,

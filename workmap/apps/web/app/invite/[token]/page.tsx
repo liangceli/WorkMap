@@ -80,7 +80,7 @@ export default function InviteAcceptancePage() {
     setAccepting(false);
 
     if (!result.ok) {
-      setStatus(result.error);
+      setStatus(formatInviteError(result.error));
       return;
     }
 
@@ -104,6 +104,10 @@ export default function InviteAcceptancePage() {
         <p style={styles.eyebrow}>WorkMap invitation</p>
         <h1 style={styles.title}>Join workspace</h1>
         <p style={styles.text}>{status}</p>
+        <section style={styles.flowNote}>
+          <strong>What happens next</strong>
+          <span>After this invite is accepted, WorkMap will take you through compliance, avatar/profile, and device setup before opening the virtual office.</span>
+        </section>
         {!cognitoAuth ? (
           <button type="button" disabled style={styles.primaryButton}>
             Checking invitation...
@@ -136,6 +140,24 @@ export default function InviteAcceptancePage() {
   );
 }
 
+function formatInviteError(error: string) {
+  const lower = error.toLowerCase();
+
+  if (lower.includes("403") || lower.includes("forbidden")) {
+    return "This Cognito account is not allowed to accept this invitation. Check that you signed in with the invited, verified email address.";
+  }
+
+  if (lower.includes("expired")) {
+    return "This invitation has expired. Ask the workspace owner for a new invite link.";
+  }
+
+  if (lower.includes("accepted")) {
+    return "This invitation has already been accepted. Sign in from /login to continue to your workspace.";
+  }
+
+  return error;
+}
+
 const styles = {
   page: {
     minHeight: "100vh",
@@ -144,7 +166,7 @@ const styles = {
     background: wm.colors.appBackground,
     color: wm.colors.text,
     fontFamily: wm.typography.fontFamily,
-    padding: "24px",
+    padding: "var(--wm-shell-block) var(--wm-shell-inline)",
   },
   card: {
     ...wmStyles.elevatedCard,
@@ -159,15 +181,26 @@ const styles = {
   },
   title: {
     margin: 0,
-    color: wm.colors.text,
-    fontSize: "32px",
-    lineHeight: 1.2,
+    color: wm.colors.textHeading,
+    fontFamily: wm.typography.displayFontFamily,
+    fontSize: "34px",
+    lineHeight: 1.15,
+    fontWeight: 750,
   },
   text: {
     margin: 0,
     color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.5,
+  },
+  flowNote: {
+    display: "grid",
+    gap: "5px",
+    ...wmStyles.infoNotice,
+    padding: "12px",
+    color: wm.colors.infoText,
+    fontSize: "13px",
+    lineHeight: 1.45,
   },
   label: {
     display: "grid",

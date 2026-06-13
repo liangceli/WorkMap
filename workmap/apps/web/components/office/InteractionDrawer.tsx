@@ -45,7 +45,7 @@ export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSched
   };
 
   return (
-    <section aria-label={`Interaction with ${target.displayName}`} style={styles.drawer}>
+    <section className="wm-office-interaction-drawer" aria-label={`Interaction with ${target.displayName}`} style={styles.drawer}>
       <button aria-label="Close interaction drawer" style={styles.closeButton} onClick={onClose} type="button">
         <OfficeIcon name="close" size={18} />
       </button>
@@ -148,9 +148,9 @@ const styles = {
     alignItems: "center",
     minHeight: "150px",
     padding: "22px 58px 22px 24px",
-    background: "rgba(255, 255, 255, 0.84)",
+    background: "rgba(255, 253, 248, 0.9)",
     color: wm.colors.text,
-    backdropFilter: "blur(24px)",
+    backdropFilter: "blur(18px)",
   },
   closeButton: {
     position: "absolute" as const,
@@ -181,8 +181,8 @@ const styles = {
     height: "86px",
     border: `1px solid ${wm.colors.border}`,
     borderRadius: "20px",
-    background: "linear-gradient(180deg, #f8f9ff, #dbe1ff)",
-    color: wm.colors.primaryContainer,
+    background: "linear-gradient(180deg, #fffdf8, #e8f1ed)",
+    color: wm.colors.primary,
     fontSize: "24px",
     fontWeight: 700,
   },
@@ -221,7 +221,7 @@ const styles = {
     padding: "7px 11px",
     borderRadius: "999px",
     background: wm.colors.surfaceContainer,
-    color: wm.colors.primaryContainer,
+    color: wm.colors.primary,
     fontSize: "12px",
     fontWeight: 700,
     textTransform: "capitalize" as const,
@@ -260,17 +260,17 @@ const styles = {
   primaryAction: {
     ...wmStyles.primaryButton,
     minHeight: "48px",
-    borderColor: wm.colors.primaryContainer,
+    borderColor: wm.colors.secondary,
     borderRadius: "14px",
-    background: wm.colors.primaryContainer,
+    background: wm.colors.secondary,
     fontSize: "13px",
-    boxShadow: "0 14px 28px rgba(22, 35, 90, 0.2)",
+    boxShadow: "0 14px 28px rgba(31, 122, 120, 0.18)",
   },
   actionButton: {
     ...wmStyles.secondaryButton,
     minHeight: "48px",
     borderRadius: "14px",
-    background: "rgba(255, 255, 255, 0.86)",
+    background: "rgba(255, 253, 248, 0.86)",
     fontSize: "13px",
   },
   actionButtonDisabled: {

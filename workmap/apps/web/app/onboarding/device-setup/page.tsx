@@ -73,7 +73,7 @@ const styles = {
     background: wm.colors.appBackground,
     color: wm.colors.text,
     fontFamily: wm.typography.fontFamily,
-    padding: "24px",
+    padding: "var(--wm-shell-block) var(--wm-shell-inline)",
   },
   shell: {
     width: "min(960px, 100%)",
@@ -89,10 +89,12 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "32px",
-    lineHeight: 1.25,
-    fontWeight: 700,
-    letterSpacing: "-0.02em",
+    color: wm.colors.textHeading,
+    fontFamily: wm.typography.displayFontFamily,
+    fontSize: "34px",
+    lineHeight: 1.15,
+    fontWeight: 750,
+    letterSpacing: 0,
   },
   subtitle: {
     margin: 0,
@@ -102,7 +104,7 @@ const styles = {
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
     gap: "14px",
   },
   card: {

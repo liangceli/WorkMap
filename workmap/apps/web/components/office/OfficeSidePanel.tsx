@@ -77,7 +77,7 @@ export function OfficeSidePanel({
   };
 
   return (
-    <aside style={styles.panel}>
+    <aside className="wm-office-side-panel" style={styles.panel}>
       <header style={styles.header}>
         <div>
           <h2 style={styles.title}>{panelTitle(activePanel)}</h2>
@@ -381,13 +381,13 @@ const styles = {
     left: "112px",
     bottom: "150px",
     zIndex: 34,
-    width: "360px",
+    width: "368px",
     overflow: "hidden",
     display: "grid",
     gridTemplateRows: "auto minmax(0, 1fr)",
-    background: "rgba(255, 255, 255, 0.78)",
+    background: "rgba(255, 253, 248, 0.9)",
     color: wm.colors.text,
-    backdropFilter: "blur(24px)",
+    backdropFilter: "blur(18px)",
     padding: 0,
   },
   header: {
@@ -407,7 +407,7 @@ const styles = {
     margin: 0,
     color: wm.colors.text,
     fontSize: "20px",
-    fontWeight: 700,
+    fontWeight: 800,
   },
   subtitle: {
     margin: "6px 0 0",
@@ -438,7 +438,7 @@ const styles = {
     alignItems: "center",
     border: `1px solid ${wm.colors.primaryContainer}`,
     borderRadius: "18px",
-    background: "rgba(219, 225, 255, 0.68)",
+    background: "rgba(31, 122, 120, 0.08)",
     padding: "12px",
   },
   summaryGrid: {
@@ -451,7 +451,7 @@ const styles = {
     gap: "2px",
     border: `1px solid ${wm.colors.border}`,
     borderRadius: "14px",
-    background: "rgba(255, 255, 255, 0.76)",
+    background: "rgba(255, 253, 248, 0.76)",
     color: wm.colors.textMuted,
     padding: "10px",
     fontSize: "11px",
@@ -462,7 +462,7 @@ const styles = {
     margin: 0,
     border: `1px solid ${wm.colors.surfaceHigh}`,
     borderRadius: "14px",
-    background: "rgba(248, 249, 255, 0.78)",
+    background: "rgba(244, 248, 244, 0.82)",
     color: wm.colors.textSecondary,
     padding: "11px 12px",
     fontSize: "12px",
@@ -486,7 +486,7 @@ const styles = {
     minHeight: "46px",
     borderRadius: "14px",
     padding: "0 14px",
-    background: "rgba(255, 255, 255, 0.82)",
+    background: "rgba(255, 253, 248, 0.82)",
     fontWeight: 700,
   },
   filterRow: {
@@ -499,7 +499,7 @@ const styles = {
     borderStyle: "solid",
     borderColor: wm.colors.border,
     borderRadius: "999px",
-    background: "rgba(255, 255, 255, 0.72)",
+    background: "rgba(255, 253, 248, 0.72)",
     color: wm.colors.textSecondary,
     padding: "9px 13px",
     cursor: "pointer",
@@ -507,8 +507,8 @@ const styles = {
     fontWeight: 700,
   },
   filterButtonActive: {
-    borderColor: wm.colors.primaryContainer,
-    background: wm.colors.primaryContainer,
+    borderColor: wm.colors.secondary,
+    background: wm.colors.secondary,
     color: wm.colors.surface,
   },
   personList: {
@@ -518,9 +518,9 @@ const styles = {
   personCard: {
     border: `1px solid ${wm.colors.border}`,
     borderRadius: "18px",
-    background: "rgba(255, 255, 255, 0.78)",
+    background: "rgba(255, 253, 248, 0.82)",
     padding: "12px",
-    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.06)",
+    boxShadow: wm.shadow.card,
   },
   personMain: {
     display: "grid",
@@ -542,7 +542,7 @@ const styles = {
     height: "46px",
     borderRadius: "999px",
     background: wm.colors.surfaceContainer,
-    color: wm.colors.primaryContainer,
+    color: wm.colors.primary,
     fontWeight: 700,
   },
   personText: {
@@ -590,7 +590,7 @@ const styles = {
     gap: "6px",
     border: `1px dashed ${wm.colors.border}`,
     borderRadius: "18px",
-    background: "rgba(255, 255, 255, 0.64)",
+    background: "rgba(255, 253, 248, 0.64)",
     color: wm.colors.textMuted,
     padding: "16px",
     fontSize: "13px",
@@ -599,7 +599,7 @@ const styles = {
   smallButton: {
     ...wmStyles.secondaryButton,
     borderRadius: "10px",
-    background: "rgba(255, 255, 255, 0.82)",
+    background: "rgba(255, 253, 248, 0.82)",
     padding: "8px",
     fontSize: "11px",
   },
@@ -607,8 +607,8 @@ const styles = {
     margin: 0,
     border: `1px solid ${wm.colors.surfaceHigh}`,
     borderRadius: "14px",
-    background: "rgba(219, 225, 255, 0.72)",
-    color: wm.colors.primaryContainer,
+    background: "rgba(31, 122, 120, 0.08)",
+    color: wm.colors.primary,
     padding: "12px",
     fontSize: "13px",
     lineHeight: 1.45,
@@ -618,7 +618,7 @@ const styles = {
     minHeight: "220px",
     border: `1px solid ${wm.colors.border}`,
     borderRadius: "16px",
-    background: "rgba(248, 249, 255, 0.78)",
+    background: "rgba(244, 248, 244, 0.82)",
     padding: "10px",
   },
   message: {
@@ -636,9 +636,9 @@ const styles = {
   },
   primaryButton: {
     ...wmStyles.primaryButton,
-    borderColor: wm.colors.primaryContainer,
+    borderColor: wm.colors.secondary,
     borderRadius: "14px",
-    background: wm.colors.primaryContainer,
+    background: wm.colors.secondary,
     padding: "11px 12px",
   },
   secondaryButton: {
@@ -649,7 +649,7 @@ const styles = {
   roomCard: {
     border: `1px solid ${wm.colors.border}`,
     borderRadius: "18px",
-    background: "rgba(255, 255, 255, 0.78)",
+    background: "rgba(255, 253, 248, 0.82)",
     padding: "14px",
   },
   roomBadge: {
@@ -657,8 +657,8 @@ const styles = {
     marginBottom: "10px",
     border: `1px solid ${wm.colors.surfaceHigh}`,
     borderRadius: "999px",
-    background: "rgba(219, 225, 255, 0.74)",
-    color: wm.colors.primaryContainer,
+    background: "rgba(31, 122, 120, 0.1)",
+    color: wm.colors.secondary,
     padding: "4px 10px",
     fontSize: "11px",
     fontWeight: 700,
@@ -685,7 +685,7 @@ const styles = {
   noticeRow: {
     border: `1px solid ${wm.colors.border}`,
     borderRadius: "16px",
-    background: "rgba(255, 255, 255, 0.82)",
+    background: "rgba(255, 253, 248, 0.82)",
     color: wm.colors.text,
     padding: "12px",
     cursor: "pointer",

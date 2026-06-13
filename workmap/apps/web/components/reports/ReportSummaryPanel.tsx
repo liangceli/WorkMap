@@ -15,6 +15,7 @@ type ReportSummaryPanelProps = {
 type ReportState = {
   loading: boolean;
   authSource: string | null;
+  role: string | null;
   summary: WorkMapApiUsageSummary | null;
   statusText: string;
   error: string | null;
@@ -23,6 +24,7 @@ type ReportState = {
 const initialReportState: ReportState = {
   loading: true,
   authSource: null,
+  role: null,
   summary: null,
   statusText: "Checking reports API...",
   error: null,
@@ -35,7 +37,7 @@ const healthLabels: Record<ReportRow["health"], string> = {
 };
 
 const healthStyles: Record<ReportRow["health"], { color: string; background: string; borderColor: string }> = {
-  normal: { color: "#15803d", background: wm.colors.successBg, borderColor: wm.colors.successBorder },
+  normal: { color: wm.colors.success, background: wm.colors.successBg, borderColor: wm.colors.successBorder },
   watch: { color: wm.colors.warning, background: wm.colors.warningBg, borderColor: wm.colors.warningBorder },
   quiet: { color: wm.colors.textSecondary, background: wm.colors.surfaceLow, borderColor: wm.colors.border },
 };
@@ -57,6 +59,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
         setReportState({
           loading: false,
           authSource: null,
+          role: null,
           summary: null,
           statusText: "Sign in with pilot auth to load the backend usage summary.",
           error: auth.reason,
@@ -75,6 +78,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
         setReportState({
           loading: false,
           authSource: auth.source,
+          role: auth.role ?? null,
           summary: null,
           statusText: "Reports API could not be loaded. Example rows are shown as a clearly labeled fallback.",
           error: result.error,
@@ -85,6 +89,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
       setReportState({
         loading: false,
         authSource: auth.source,
+        role: auth.role ?? null,
         summary: result.data,
         statusText:
           result.data.scope === "company"
@@ -103,6 +108,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
 
   const apiMetrics = useMemo(() => buildApiMetrics(reportState.summary), [reportState.summary]);
   const hasApiRows = Boolean(reportState.summary && (reportState.summary.apps.length > 0 || reportState.summary.websites.length > 0));
+  const scopeGuidance = getScopeGuidance(reportState.role, reportState.summary?.scope);
 
   return (
     <div style={styles.stack}>
@@ -115,6 +121,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
             summaries are aggregate-only, while employees see their own rows.
           </p>
           {reportState.authSource ? <p style={styles.sessionText}>API context: {formatAuthSource(reportState.authSource)}</p> : null}
+          <p style={styles.sessionText}>{scopeGuidance}</p>
         </div>
         {reportState.error ? <p style={styles.errorText}>{reportState.error}</p> : null}
       </section>
@@ -269,6 +276,22 @@ function canRequestCompanySummary(role: string | undefined) {
   return role === "OWNER" || role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN";
 }
 
+function getScopeGuidance(role: string | null, scope: WorkMapApiUsageSummary["scope"] | undefined) {
+  if (role === "EMPLOYEE") {
+    return "Employee view: this page uses your own report scope. Company-wide summaries are owner/manager-only.";
+  }
+
+  if (scope === "company") {
+    return "Owner/manager view: company summaries are aggregate-only and do not expose raw activity rows.";
+  }
+
+  if (!role) {
+    return "Sign in to resolve the report scope for your role.";
+  }
+
+  return "This role uses the safest available report scope for the current API contract.";
+}
+
 function formatDuration(seconds: number) {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     return "0m";
@@ -311,6 +334,7 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "start",
     gap: "16px",
+    flexWrap: "wrap" as const,
     padding: "16px",
   },
   panelLabel: {
@@ -450,7 +474,10 @@ const styles = {
   },
   tablePanel: {
     ...wmStyles.card,
-    overflow: "hidden",
+    maxWidth: "100%",
+    minWidth: 0,
+    overflowX: "auto" as const,
+    overflowY: "hidden" as const,
   },
   sampleIntro: {
     padding: "16px",
@@ -458,6 +485,7 @@ const styles = {
   tableHeader: {
     display: "grid",
     gridTemplateColumns: "1.3fr repeat(4, 1fr) 100px",
+    minWidth: "860px",
     gap: "12px",
     borderTop: `1px solid ${wm.colors.borderSubtle}`,
     borderBottom: `1px solid ${wm.colors.borderSubtle}`,
@@ -471,6 +499,7 @@ const styles = {
   row: {
     display: "grid",
     gridTemplateColumns: "1.3fr repeat(4, 1fr) 100px",
+    minWidth: "860px",
     gap: "12px",
     alignItems: "center",
     borderBottom: `1px solid ${wm.colors.borderSubtle}`,

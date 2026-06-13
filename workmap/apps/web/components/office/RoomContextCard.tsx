@@ -17,7 +17,7 @@ export function RoomContextCard({ destination, peopleCount, onGoTo, onViewPeople
   const isMeetingRoom = destination.name.toLowerCase().includes("meeting");
 
   return (
-    <aside style={styles.card} aria-label={`${destination.name} context`}>
+    <aside className="wm-office-room-card" style={styles.card} aria-label={`${destination.name} context`}>
       <button type="button" aria-label="Close room context" onClick={onClose} style={styles.closeButton}>
         <OfficeIcon name="close" size={18} />
       </button>
@@ -74,11 +74,11 @@ const styles = {
     top: "132px",
     right: "92px",
     zIndex: 34,
-    width: "336px",
-    background: "rgba(255, 255, 255, 0.78)",
-    padding: "24px",
+    width: "340px",
+    background: "rgba(255, 253, 248, 0.9)",
+    padding: "22px",
     color: wm.colors.text,
-    backdropFilter: "blur(24px)",
+    backdropFilter: "blur(18px)",
   },
   closeButton: {
     position: "absolute" as const,
@@ -107,7 +107,7 @@ const styles = {
     display: "inline-flex",
     border: `1px solid ${wm.colors.surfaceHigh}`,
     borderRadius: "999px",
-    background: "rgba(219, 225, 255, 0.74)",
+    background: "rgba(31, 122, 120, 0.1)",
     color: wm.colors.secondary,
     padding: "5px 12px",
     fontSize: "11px",
@@ -124,7 +124,7 @@ const styles = {
     marginLeft: "-6px",
     border: `2px solid ${wm.colors.surface}`,
     borderRadius: "999px",
-    background: wm.colors.primaryContainer,
+    background: wm.colors.primary,
   },
   avatarMore: {
     display: "grid",
@@ -135,7 +135,7 @@ const styles = {
     border: `2px solid ${wm.colors.surface}`,
     borderRadius: "999px",
     background: wm.colors.surfaceContainer,
-    color: wm.colors.primaryContainer,
+    color: wm.colors.primary,
     fontSize: "10px",
     fontWeight: 700,
   },
@@ -154,7 +154,7 @@ const styles = {
   },
   meta: {
     margin: "0 0 16px",
-    color: wm.colors.primaryContainer,
+    color: wm.colors.primary,
     fontSize: "13px",
     fontWeight: 700,
   },
@@ -164,16 +164,16 @@ const styles = {
   },
   primaryButton: {
     ...wmStyles.primaryButton,
-    borderColor: wm.colors.primaryContainer,
+    borderColor: wm.colors.secondary,
     borderRadius: "14px",
-    background: wm.colors.primaryContainer,
+    background: wm.colors.secondary,
     padding: "13px",
-    boxShadow: "0 16px 30px rgba(22, 35, 90, 0.22)",
+    boxShadow: "0 14px 28px rgba(31, 122, 120, 0.18)",
   },
   secondaryButton: {
     ...wmStyles.secondaryButton,
     borderRadius: "14px",
-    background: "rgba(255, 255, 255, 0.84)",
+    background: "rgba(255, 253, 248, 0.8)",
     padding: "12px",
   },
 };

@@ -14,7 +14,7 @@ type VirtualOfficeTopBarProps = {
 export function VirtualOfficeTopBar({ status, currentArea = "Office", onSearch }: VirtualOfficeTopBarProps) {
   return (
     <>
-      <header style={styles.workspacePill}>
+      <header className="wm-office-top-brand" style={styles.workspacePill}>
         <div style={styles.logo} aria-hidden="true">
           WM
         </div>
@@ -25,13 +25,13 @@ export function VirtualOfficeTopBar({ status, currentArea = "Office", onSearch }
         <span style={styles.chevron}><OfficeIcon name="chevronDown" size={18} /></span>
       </header>
 
-      <button type="button" onClick={onSearch} style={styles.areaPill} aria-label="Find people, rooms, or actions">
+      <button type="button" className="wm-office-area-pill" onClick={onSearch} style={styles.areaPill} aria-label="Find people, rooms, or actions">
         <span style={styles.areaIcon}><OfficeIcon name="room" size={22} /></span>
         <span>{currentArea}</span>
         <span style={styles.chevron}><OfficeIcon name="chevronDown" size={18} /></span>
       </button>
 
-      <div style={styles.statusPill}>
+      <div className="wm-office-status-pill" style={styles.statusPill}>
         <button type="button" style={styles.searchButton} onClick={onSearch} aria-label="Find people, rooms, or actions">
           <OfficeIcon name="search" size={20} />
           <span>Search</span>
@@ -61,23 +61,24 @@ const styles = {
     gap: "12px",
     minHeight: "76px",
     padding: "12px 18px 12px 12px",
-    border: "1px solid rgba(216, 224, 236, 0.82)",
-    borderRadius: "22px",
-    background: "rgba(255, 255, 255, 0.86)",
-    boxShadow: "0 20px 48px rgba(15, 23, 42, 0.14)",
-    backdropFilter: "blur(24px)",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius["2xl"],
+    background: "rgba(255, 253, 248, 0.9)",
+    boxShadow: wm.shadow.elevated,
+    backdropFilter: "blur(20px)",
   },
   logo: {
     display: "grid",
     placeItems: "center",
     width: "52px",
     height: "52px",
-    borderRadius: "14px",
-    background: wm.colors.primaryContainer,
+    borderRadius: wm.radius.xl,
+    background: wm.colors.primary,
     color: wm.colors.surface,
     fontSize: "13px",
-    fontWeight: 700,
+    fontWeight: 900,
     letterSpacing: 0,
+    boxShadow: "0 12px 28px rgba(16, 35, 63, 0.18)",
   },
   titleWrap: {
     display: "grid",
@@ -87,7 +88,7 @@ const styles = {
   title: {
     color: wm.colors.text,
     fontSize: "16px",
-    fontWeight: 700,
+    fontWeight: 800,
     whiteSpace: "nowrap" as const,
   },
   caption: {
@@ -109,16 +110,16 @@ const styles = {
     alignItems: "center",
     gap: "11px",
     minHeight: "58px",
-    border: "1px solid rgba(216, 224, 236, 0.82)",
-    borderRadius: "20px",
-    background: "rgba(255, 255, 255, 0.86)",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius["2xl"],
+    background: "rgba(255, 253, 248, 0.9)",
     color: wm.colors.text,
     padding: "0 22px",
     cursor: "pointer",
     fontSize: "16px",
     fontWeight: 700,
-    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.14)",
-    backdropFilter: "blur(22px)",
+    boxShadow: wm.shadow.card,
+    backdropFilter: "blur(18px)",
   },
   areaIcon: {
     color: wm.colors.secondary,
@@ -135,12 +136,12 @@ const styles = {
     gap: "12px",
     minHeight: "68px",
     padding: "8px 10px 8px 12px",
-    border: "1px solid rgba(216, 224, 236, 0.82)",
-    borderRadius: "22px",
-    background: "rgba(255, 255, 255, 0.88)",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius["2xl"],
+    background: "rgba(255, 253, 248, 0.9)",
     color: wm.colors.text,
-    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.16)",
-    backdropFilter: "blur(22px)",
+    boxShadow: wm.shadow.elevated,
+    backdropFilter: "blur(18px)",
   },
   searchButton: {
     border: 0,
@@ -149,7 +150,7 @@ const styles = {
     gap: "10px",
     minHeight: "44px",
     borderRadius: "14px",
-    background: "rgba(255, 255, 255, 0.64)",
+    background: "rgba(244, 248, 244, 0.72)",
     color: wm.colors.textSecondary,
     cursor: "pointer",
     padding: "0 14px",
@@ -159,7 +160,7 @@ const styles = {
   statusDivider: {
     width: "1px",
     height: "30px",
-    background: "rgba(148, 163, 184, 0.5)",
+    background: "rgba(115, 128, 149, 0.28)",
   },
   statusText: {
     display: "inline-flex",
@@ -180,7 +181,7 @@ const styles = {
     placeItems: "center",
     width: "48px",
     height: "48px",
-    border: "1px solid rgba(203, 213, 225, 0.9)",
+    border: `1px solid ${wm.colors.borderStrong}`,
     borderRadius: "999px",
     background: wm.colors.surfaceLow,
     color: wm.colors.text,
@@ -196,6 +197,6 @@ const styles = {
     height: "10px",
     borderRadius: "999px",
     border: `2px solid ${wm.colors.surface}`,
-    background: "#22c55e",
+    background: wm.status.available,
   },
 };

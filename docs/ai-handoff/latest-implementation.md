@@ -2,61 +2,73 @@
 
 ## 1. Original Task Brief
 
-STAGE 3 Round 1: Product Design + Frontend Experience Refactor Foundation.
+STAGE 3 Round 2: Role-Based User Journey Polish + Alpha Flow Hardening.
 
-Refactor WorkMap's frontend into a more polished, coherent, real SaaS-style alpha experience after Round 9 deployed smoke passed. Focus on product UX, AppShell/navigation, Dashboard, Virtual Office chrome, Reports, Compliance, Employees, Platform Admin polish, empty/loading/error states, and responsive baseline. Do not change backend architecture, Prisma schema/migrations, auth architecture, realtime protocol, deployment config, desktop agent, browser extension, or map engine behavior.
+Polish WorkMap's role-based journeys without a broad visual redesign. Focus on product flow clarity, role-specific routing/navigation, permission states, onboarding guidance, empty/loading/error states, and alpha usability hardening. Prefer frontend-only changes. Do not change backend features, schema/migrations, auth architecture, realtime protocol, deployment setup, desktop agent, browser extension, tracking features, billing, chat, map editor, or virtual-office rewrite behavior.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/apps/web/components/layout/AppShell.tsx` | Added active-route highlighting, grouped navigation labels, clearer workspace/platform context text, clearer role/session pill styling, and better wrapping behavior. |
-| `workmap/apps/web/lib/theme/workmapTheme.ts` | Let shared page headers wrap and removed non-zero/negative letter spacing from shared title/eyebrow styles. |
-| `workmap/apps/web/app/login/page.tsx` | Reworked login page positioning copy and responsive grid sizing for a calmer product entry screen. |
-| `workmap/apps/web/components/login/MockLoginPanel.tsx` | Clarified Cognito vs pilot fallback language for deployed alpha and local fallback use. |
-| `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx` | Shifted dashboard language from QA/readiness wording to workspace overview language while preserving live API/fallback state reporting. |
-| `workmap/apps/web/app/reports/page.tsx` | Tightened reports page title/copy around role-aware work summaries and privacy boundary. |
-| `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` | Clarified own-vs-company reporting language, sparse-data state, and example-layout labeling. |
-| `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx` | Improved policy grid responsiveness and softened privacy exclusion wording while keeping explicit non-collected items. |
-| `workmap/apps/web/components/employees/EmployeeDirectory.tsx` | Improved toolbar/table responsive behavior so directory controls and rows remain usable on narrower screens. |
-| `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx` | Updated virtual-office top chrome copy to position the map as live team presence, not the entire product. |
-| `workmap/apps/web/app/platform-admin/page.tsx` | Added clearer platform-only context, privacy-safe operational framing, and refined panel titles. |
-| `docs/ai-handoff/latest-implementation.md` | Updated handoff for Diff Review & QA. |
+| `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx` | Added role-aware dashboard journey guidance and role-specific CTAs for Owner, Employee, and default workspace states. |
+| `workmap/apps/web/app/onboarding/company/page.tsx` | Clarified Owner workspace creation flow and next steps after workspace creation. |
+| `workmap/apps/web/app/invite/[token]/page.tsx` | Added employee invite acceptance flow guidance and friendlier invite error mapping for forbidden/expired/already-used invites. |
+| `workmap/apps/web/app/onboarding/invite/page.tsx` | Added frontend Owner-only guidance before invite list/create calls and friendlier non-owner/forbidden states. |
+| `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` | Added report-scope guidance so employees understand own-report scope and owners/managers understand aggregate company scope. |
+| `workmap/apps/web/app/platform-admin/page.tsx` | Added friendlier blocked-state copy for tenant users or unauthenticated users trying to access Platform Admin. |
+| `workmap/apps/web/components/layout/AppShell.tsx` | Tightened unauthenticated navigation so tenant workspace nav is not shown without a resolved workspace role. |
+| `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA. |
 
-Pre-existing workspace note:
+Pre-existing workspace notes:
 
+- Many `apps/web/**` files were already modified before this Round 2 task, apparently from accepted Round 1/style work. This implementation avoided broad formatting and only made targeted flow/copy/state changes.
 - `docs/references/` remains unrelated untracked workspace content and was not modified.
 
-## 3. Implementation Summary
+## 3. Role-Flow Changes
 
-Implemented a scoped frontend-only product design pass:
+Owner journey:
 
-- AppShell now better communicates current workspace/platform context, role/session source, active route, and nav grouping.
-- Dashboard now reads as a workspace overview for presence, coverage, compliance, and summaries while still exposing API/auth/fallback status.
-- Reports copy now emphasizes role-aware aggregate/current-user summaries and the privacy boundary.
-- Compliance keeps the collected/not-collected distinction and becomes more responsive.
-- Employees directory controls and wide table now handle narrower viewports more safely.
-- Platform Admin now reads as a distinct independent platform context with privacy-safe tenant metadata only.
-- Virtual Office top chrome now labels the experience as live team presence without touching map/rendering/realtime behavior.
+- Dashboard now detects `OWNER` and shows Owner-specific next steps: invite employees, open office, view reports, review compliance.
+- Owner workspace creation page now explains that after workspace creation the owner finishes avatar/profile setup, reviews compliance, creates employee invites, and opens the virtual office.
+- Invite management page now explicitly says only workspace Owners can create/manage invitations.
 
-## 4. User-Visible Changes
+Employee journey:
 
-- Navigation is easier to scan and shows active state.
-- Users see clearer workspace/company/platform context in the shell.
-- Login, Dashboard, Reports, Compliance, Employees, Platform Admin, and Virtual Office chrome use calmer product language.
-- Example/fallback data remains labeled so it does not mask missing API data.
-- Narrower screens should have fewer header/control/table collisions.
+- Dashboard direct access by an Employee now reads as an Employee workspace view and does not show Owner-only CTAs.
+- Invite acceptance page now explains the employee path: accept invite, then compliance, avatar/profile, device setup, then virtual office.
+- Invite acceptance errors map common 403/expired/already-accepted states into actionable language.
+- Reports now explain that Employees use own-report scope and company-wide summaries are owner/manager-only.
 
-## 5. Technical Notes
+Platform Admin journey:
 
-- Frontend-only changes under `apps/web/**`.
+- Platform Admin blocked state now explains that tenant Owner/Employee/IT Admin roles do not grant platform access.
+- Platform Admin remains independent and Cognito/platform allowlist-driven; no new platform powers were added.
+
+## 4. Route / Redirect Changes
+
+- No route paths were changed.
+- No callback redirect architecture was changed.
+- No onboarding route order was changed.
+- AppShell unauthenticated nav visibility was tightened so tenant workspace navigation does not appear before a workspace role is resolved.
+
+## 5. Permission / Empty / Error State Changes
+
+- Non-owner invitation access now gets a helpful frontend message before attempting owner-only invite operations.
+- Invite acceptance 403 is explained as likely wrong/unverified invited Cognito email instead of raw technical error.
+- Platform Admin blocked state explains the independent platform identity requirement.
+- Reports scope state explains why employee company-wide summaries are unavailable.
+- Dashboard sparse/fallback state remains labeled and role-aware.
+
+## 6. Intentionally Not Changed
+
 - No backend files changed.
-- No Prisma schema, migrations, seed, auth architecture, realtime protocol, map rendering, movement, collision, chair interaction, contact drawer, desktop agent, browser extension, deployment config, or env files changed.
-- AppShell active state uses `usePathname()` from Next navigation.
-- Platform Admin tenant button longhand border styling remains consistent; no shorthand/non-shorthand border conflict was introduced.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by build and restored.
+- No Prisma schema/migrations/seed changed.
+- No auth architecture, Cognito verification, pilot/dev fallback, platform auth boundary, tenant RBAC, or invite API contract changed.
+- No virtual-office map rendering, movement, collision, chair interaction, contact drawer, realtime, polling, or map assets changed.
+- No deployment, env, desktop-agent, browser-extension, tracking, billing, chat, map editor, or production agent work changed.
+- No fake production data was added.
 
-## 6. Verification Results
+## 7. Verification Results
 
 Commands run from `workmap/`:
 
@@ -69,48 +81,47 @@ secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbu
 diff-only secret scan
 ```
 
-Results:
+Result:
 
-- Web typecheck passed.
+- Web typecheck passed after the flow changes.
 - Web lint passed.
 - Web build passed.
 - `git diff --check` passed with CRLF normalization warnings only.
 - Next build still prints the existing warning that the Next.js ESLint plugin is not detected in the current ESLint config.
 - Repo secret scan found only a pre-existing local placeholder in `docs/qa/workmap-qa-report-2026-05-31.md`; it is not part of this diff.
 - Diff-only secret scan found no matches.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by build and restored.
 
-Not run:
+API verification was not run because no backend/shared API files were changed.
 
-- API lint/typecheck/build, because no API files were changed.
-- Browser/manual visual QA, because this pass did not start local or deployed servers.
+## 8. Manual QA Suggestions
 
-## 7. Manual QA Suggestions
+1. Owner login, then `/dashboard`: confirm Owner next steps show Invite employees, Open office, View reports, Review compliance.
+2. Owner `/onboarding/company`: confirm workspace creation guidance clearly states post-create steps.
+3. Owner `/onboarding/invite`: confirm invite list/create works and copy is Owner-specific.
+4. Employee invite link: confirm invite page explains Cognito sign-in, workspace join, compliance/avatar/device setup, and virtual office path.
+5. Employee wrong-account invite acceptance: confirm 403 becomes a helpful wrong-email/permission message.
+6. Employee direct `/dashboard`: confirm it does not show Owner-only CTAs.
+7. Employee `/reports`: confirm own-scope explanation is clear.
+8. Tenant Owner/Employee direct `/platform-admin`: confirm blocked state explains separate Platform Admin identity.
+9. Platform Admin login: confirm platform page still loads privacy-safe tenant metadata and no tenant workspace language regression.
+10. `/virtual-office`: confirm map, movement, realtime/polling, People panel, contact drawer, chair interaction, and command palette are unchanged.
+11. Visual smoke at 1366px, 1440px, and tablet-ish width for login, dashboard, employees, reports, compliance, platform admin, and virtual office chrome.
 
-1. Open `/login` and confirm Cognito/pilot fallback copy is clear and responsive.
-2. Sign in as OWNER/MANAGER and confirm AppShell active nav, workspace context, role pill, Dashboard, Reports, Employees, Compliance, Invites, Integrations, and Settings visibility.
-3. Sign in as EMPLOYEE and confirm AppShell still hides manager/admin-only shortcuts and keeps Office/Employees/Compliance usable.
-4. Open `/dashboard` with API data and with sparse/fallback data; confirm API-backed vs example states are obvious.
-5. Open `/employees` and test search/status/department filters on desktop and tablet-width browser sizes.
-6. Open `/reports` as OWNER and EMPLOYEE; confirm company vs own report language remains role-aware.
-7. Open `/compliance`; confirm collected/not-collected policy lists, acknowledgement flow, and privacy boundary remain clear.
-8. Open `/platform-admin` as configured Platform Admin and blocked tenant users; confirm platform context and privacy-safe metadata only.
-9. Open `/virtual-office`; confirm map rendering, movement, realtime/polling, People panel, contact drawer, chair interaction, and command palette are unchanged.
-10. Check 1366px, 1440px, and tablet-ish widths for text/control overlap.
+## 9. Remaining Risks
 
-## 8. Risks / Notes
+- Frontend navigation remains advisory UX; backend RBAC remains the security boundary.
+- Existing broader style diffs were present before this task; QA should review the combined current git diff carefully.
+- This round improves flow clarity but does not replace full route guards or global identity/membership architecture.
+- Browser/manual visual QA is still needed because the workspace currently contains ongoing visual styling changes.
 
-- This is a foundation polish pass, not a full visual redesign.
-- AppShell still uses frontend navigation visibility as UX only; backend RBAC remains the security boundary.
-- Some fallback/example rows still exist intentionally for backend-off or sparse-data states and should stay clearly labeled.
-- Virtual Office remains a full-viewport canvas experience with overlay chrome; this pass did not alter canvas sizing, map assets, or movement logic.
-- Further refinement should include real browser screenshots across desktop/tablet and a stricter responsive audit.
+## 10. Docs Update Suggestions
 
-## 9. Docs Update Suggestions
+- `docs/skills/frontend-skill.md`: record Round 2 role-flow guidance for Dashboard, invite acceptance, invite management, Reports scope guidance, Platform Admin blocked state, and unauthenticated nav tightening.
+- `docs/skills/ui-ux-skill.md`: add guidance that Owner/Employee/Platform Admin journeys should explain next steps and unavailable permissions in plain language.
+- `docs/skills/qa-skill.md`: add Round 2 manual checks for Owner dashboard next steps, Employee direct dashboard/report states, invite wrong-account errors, and Platform Admin blocked state.
+- `docs/skills/current-status.md`: after QA acceptance, record STAGE 3 Round 2 role-flow hardening.
 
-- `docs/skills/frontend-skill.md`: record that AppShell now has grouped nav labels and active-route styling.
-- `docs/skills/ui-ux-skill.md`: record the STAGE 3 product language direction: calm SaaS, workspace context, role-aware summaries, explicit privacy boundary.
-- `docs/skills/current-status.md`: after QA acceptance, record STAGE 3 Round 1 frontend experience foundation as accepted.
-
-## 10. Input for Next Chat
+## 11. Input for Next Chat
 
 Review the current implementation using `docs/ai-handoff/latest-implementation.md` and the current git diff. Update `docs/ai-handoff/latest-qa.md`.

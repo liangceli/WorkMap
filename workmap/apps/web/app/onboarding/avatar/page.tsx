@@ -292,7 +292,7 @@ const styles = {
     background: wm.colors.appBackground,
     color: wm.colors.text,
     fontFamily: wm.typography.fontFamily,
-    padding: "32px 24px",
+    padding: "var(--wm-shell-block) var(--wm-shell-inline)",
   },
   shell: {
     maxWidth: "1280px",
@@ -310,10 +310,12 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "32px",
-    lineHeight: 1.25,
-    fontWeight: 700,
-    letterSpacing: "-0.02em",
+    color: wm.colors.textHeading,
+    fontFamily: wm.typography.displayFontFamily,
+    fontSize: "34px",
+    lineHeight: 1.15,
+    fontWeight: 750,
+    letterSpacing: 0,
   },
   subtitle: {
     margin: "10px 0 0",
@@ -322,7 +324,7 @@ const styles = {
   },
   layout: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 360px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
     gap: "18px",
     alignItems: "start",
   },
@@ -385,7 +387,7 @@ const styles = {
   },
   optionGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 140px), 1fr))",
     gap: "10px",
     maxHeight: "260px",
     overflow: "auto",

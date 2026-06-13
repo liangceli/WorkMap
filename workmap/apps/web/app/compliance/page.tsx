@@ -81,10 +81,11 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "16px",
+    flexWrap: "wrap" as const,
     border: `1px solid ${wm.colors.successBorder}`,
     borderRadius: wm.radius.xl,
     background: wm.colors.successBg,
-    color: "#14532d",
+    color: wm.colors.compliance,
     padding: "16px",
   },
   ackTitle: {

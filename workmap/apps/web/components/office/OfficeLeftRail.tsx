@@ -22,7 +22,7 @@ const railItems: Array<{ key: OfficePanelKey; label: string; icon: Parameters<ty
 
 export function OfficeLeftRail({ activePanel, onSelectPanel }: OfficeLeftRailProps) {
   return (
-    <nav style={styles.rail} aria-label="Office tools">
+    <nav className="wm-office-left-rail" style={styles.rail} aria-label="Office tools">
       {railItems.map((item) => (
         <button
           key={item.key}
@@ -30,6 +30,7 @@ export function OfficeLeftRail({ activePanel, onSelectPanel }: OfficeLeftRailPro
           aria-label={item.label}
           title={item.label}
           onClick={() => onSelectPanel(item.key)}
+          className="wm-office-rail-button"
           style={{
             ...styles.button,
             ...(activePanel === item.key ? styles.buttonActive : {}),
@@ -53,32 +54,32 @@ const styles = {
     zIndex: wm.zIndex.officePanel,
     display: "flex",
     flexDirection: "column" as const,
-    gap: "14px",
-    width: "74px",
-    padding: "16px 10px",
-    border: "1px solid rgba(216, 224, 236, 0.8)",
-    borderRadius: "22px",
-    background: "rgba(255, 255, 255, 0.78)",
-    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)",
-    backdropFilter: "blur(22px)",
+    gap: "10px",
+    width: "64px",
+    padding: "12px 8px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius["2xl"],
+    background: "rgba(255, 253, 248, 0.84)",
+    boxShadow: wm.shadow.elevated,
+    backdropFilter: "blur(18px)",
   },
   button: {
     position: "relative" as const,
     display: "grid",
     placeItems: "center",
-    width: "54px",
-    height: "54px",
+    width: "46px",
+    height: "46px",
     border: 0,
-    borderRadius: "16px",
+    borderRadius: wm.radius.lg,
     background: "transparent",
     color: wm.colors.textSecondary,
     cursor: "pointer",
     outline: "none",
   },
   buttonActive: {
-    background: wm.colors.primaryContainer,
+    background: wm.colors.primary,
     color: wm.colors.surface,
-    boxShadow: "0 14px 30px rgba(22, 35, 90, 0.18)",
+    boxShadow: "0 12px 26px rgba(16, 35, 63, 0.18)",
   },
   buttonBottom: {
     marginTop: "auto",
@@ -91,6 +92,6 @@ const styles = {
     height: "10px",
     borderRadius: "999px",
     border: `2.5px solid ${wm.colors.surface}`,
-    background: "#ef4444",
+    background: wm.colors.error,
   },
 };

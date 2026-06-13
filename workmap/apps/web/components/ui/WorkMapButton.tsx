@@ -43,8 +43,10 @@ const baseStyle = {
   alignItems: "center",
   justifyContent: "center",
   minHeight: wm.sizes.buttonHeight,
+  borderRadius: wm.radius.md,
   padding: "10px 14px",
   textAlign: "center" as const,
+  boxShadow: "none",
 };
 
 const toneStyles = {
@@ -53,7 +55,7 @@ const toneStyles = {
   ghost: {
     border: `1px solid ${wm.colors.borderSubtle}`,
     borderRadius: wm.radius.md,
-    background: wm.colors.surfaceLow,
+    background: "rgba(255, 253, 248, 0.66)",
     color: wm.colors.textSecondary,
     textDecoration: "none",
     fontSize: "14px",

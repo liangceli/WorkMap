@@ -114,7 +114,8 @@ export default function PlatformAdminPage() {
       {state.status === "blocked" ? (
         <div style={styles.blocked}>
           <strong>Platform access blocked</strong>
-          <span>{state.message}</span>
+          <span>{formatPlatformBlockedMessage(state.message)}</span>
+          <span>Tenant Owner, Employee, and IT Admin roles stay inside their workspace unless a separate Cognito platform identity is allowlisted.</span>
         </div>
       ) : null}
 
@@ -226,7 +227,7 @@ function Metric({ label, value }: { label: string; value: number }) {
 function ReadinessItem({ label, ready }: { label: string; ready: boolean }) {
   return (
     <div style={styles.readinessItem}>
-      <span style={{ ...styles.readinessDot, background: ready ? "#22c55e" : "#f59e0b" }} />
+      <span style={{ ...styles.readinessDot, background: ready ? wm.status.available : wm.status.idle }} />
       <span>{label}</span>
     </div>
   );
@@ -234,6 +235,20 @@ function ReadinessItem({ label, ready }: { label: string; ready: boolean }) {
 
 function formatNullableTime(value: string | null) {
   return value ? new Date(value).toLocaleString() : "not available";
+}
+
+function formatPlatformBlockedMessage(message: string) {
+  const lower = message.toLowerCase();
+
+  if (lower.includes("403") || lower.includes("forbidden")) {
+    return "This signed-in account is not configured as an independent Platform Admin.";
+  }
+
+  if (lower.includes("401") || lower.includes("auth") || lower.includes("session")) {
+    return "Sign in with the Cognito account configured for Platform Admin access.";
+  }
+
+  return message;
 }
 
 const styles = {
@@ -251,9 +266,11 @@ const styles = {
   },
   title: {
     margin: "4px 0 8px",
-    color: wm.colors.text,
-    fontSize: "32px",
-    lineHeight: 1.1,
+    color: wm.colors.textHeading,
+    fontFamily: wm.typography.displayFontFamily,
+    fontSize: "34px",
+    lineHeight: 1.15,
+    fontWeight: 750,
   },
   lede: {
     maxWidth: "820px",
@@ -281,15 +298,15 @@ const styles = {
   blocked: {
     display: "grid",
     gap: "6px",
-    border: "1px solid #fecaca",
+    border: `1px solid ${wm.colors.error}`,
     borderRadius: wm.radius.lg,
-    background: "#fef2f2",
-    color: "#991b1b",
+    background: wm.colors.errorBg,
+    color: wm.colors.errorText,
     padding: "16px",
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
     gap: "16px",
     alignItems: "start",
   },
@@ -343,7 +360,7 @@ const styles = {
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: wm.colors.primary,
-    background: "#eff6ff",
+    background: wm.colors.focusBg,
   },
   tenantName: {
     fontSize: "14px",

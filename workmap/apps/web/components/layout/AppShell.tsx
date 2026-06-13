@@ -115,9 +115,7 @@ export function AppShell({ children }: AppShellProps) {
     }
 
     if (!activeRole) {
-      return navItems.filter(
-        (item) => ["/virtual-office", "/compliance", "/settings"].includes(item.href) || (item.platformOnly && isPlatformAdmin),
-      );
+      return navItems.filter((item) => item.platformOnly && isPlatformAdmin);
     }
 
     return navItems.filter((item) => (item.platformOnly ? isPlatformAdmin : item.roles?.includes(activeRole)));
@@ -159,9 +157,9 @@ export function AppShell({ children }: AppShellProps) {
           : "No workspace session";
 
   return (
-    <main style={styles.page}>
-      <header style={styles.topNav}>
-        <a href="/" style={styles.brand}>
+    <main className="wm-app-shell" style={styles.page}>
+      <header className="wm-app-top-nav" style={styles.topNav}>
+        <a href="/" className="wm-app-brand" style={styles.brand}>
           <span style={styles.logo}>WM</span>
           <span>
             <strong style={styles.brandTitle}>WorkMap</strong>
@@ -169,10 +167,11 @@ export function AppShell({ children }: AppShellProps) {
           </span>
         </a>
 
-        <nav style={styles.navLinks} aria-label="WorkMap navigation">
+        <nav className="wm-app-nav-links" style={styles.navLinks} aria-label="WorkMap navigation">
           {visibleItems.map((item) => (
             <a
               key={item.href}
+              className="wm-app-nav-link"
               href={item.href}
               style={{
                 ...styles.navLink,
@@ -186,7 +185,7 @@ export function AppShell({ children }: AppShellProps) {
           ))}
         </nav>
 
-        <div style={styles.sessionWrap}>
+        <div className="wm-app-session-wrap" style={styles.sessionWrap}>
           <div style={{ ...styles.rolePill, ...(platformSummary ? styles.platformRolePill : {}) }}>
             <span style={styles.roleDot} />
             {roleLabel}
@@ -212,7 +211,7 @@ export function AppShell({ children }: AppShellProps) {
         </div>
       </header>
 
-      <section style={styles.notice}>
+      <section className="wm-app-notice" style={styles.notice}>
         <strong>{sessionSource}</strong>
         <span>
           {platformSummary
@@ -236,7 +235,7 @@ export function AppShell({ children }: AppShellProps) {
         ) : null}
       </section>
 
-      <section style={styles.content}>{children}</section>
+      <section className="wm-app-content" style={styles.content}>{children}</section>
     </main>
   );
 }
@@ -275,7 +274,7 @@ const styles = {
     background: wm.colors.appBackground,
     color: wm.colors.text,
     fontFamily: wm.typography.fontFamily,
-    padding: "24px",
+    padding: "var(--wm-shell-block) var(--wm-shell-inline)",
   },
   topNav: {
     maxWidth: "1440px",
@@ -286,9 +285,10 @@ const styles = {
     gap: "16px",
     border: `1px solid ${wm.colors.border}`,
     borderRadius: wm.radius.xl,
-    background: wm.colors.surface,
+    background: "rgba(255, 253, 248, 0.88)",
     padding: "12px 16px",
     boxShadow: wm.shadow.card,
+    backdropFilter: "blur(18px)",
   },
   brand: {
     display: "flex",
@@ -309,6 +309,7 @@ const styles = {
     color: "#ffffff",
     fontSize: "11px",
     fontWeight: 900,
+    boxShadow: "0 10px 24px rgba(16, 35, 63, 0.16)",
   },
   brandTitle: {
     display: "block",
@@ -337,15 +338,15 @@ const styles = {
     borderColor: "transparent",
     borderRadius: wm.radius.md,
     color: wm.colors.textSecondary,
-    padding: "7px 10px",
+    padding: "8px 10px",
     textDecoration: "none",
     fontSize: "13px",
     fontWeight: 800,
   },
   navLinkActive: {
-    borderColor: wm.colors.focusBorder,
-    background: wm.colors.focusBg,
-    color: wm.colors.infoText,
+    borderColor: "rgba(31, 122, 120, 0.28)",
+    background: "rgba(31, 122, 120, 0.1)",
+    color: wm.colors.primary,
   },
   platformNavLink: {
     borderColor: wm.colors.complianceBorder,
@@ -365,7 +366,7 @@ const styles = {
     gap: "8px",
     border: `1px solid ${wm.colors.border}`,
     borderRadius: "999px",
-    background: wm.colors.surfaceLow,
+    background: "rgba(244, 248, 244, 0.9)",
     color: wm.colors.textSecondary,
     padding: "8px 10px",
     fontSize: "12px",
@@ -400,7 +401,7 @@ const styles = {
     width: "8px",
     height: "8px",
     borderRadius: "999px",
-    background: "#22c55e",
+    background: wm.status.available,
   },
   notice: {
     maxWidth: "1440px",

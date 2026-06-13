@@ -9,7 +9,7 @@ type WorkMapCardProps = HTMLAttributes<HTMLElement> & {
 
 export function WorkMapCard({ children, elevated = false, as: Element = "section", style, ...props }: WorkMapCardProps) {
   return (
-    <Element {...props} style={{ ...(elevated ? wmStyles.elevatedCard : wmStyles.card), padding: "16px", ...style }}>
+    <Element {...props} style={{ ...(elevated ? wmStyles.elevatedCard : wmStyles.card), padding: "18px", ...style }}>
       {children}
     </Element>
   );

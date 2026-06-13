@@ -1,22 +1,34 @@
 :root {
-  --wm-bg: #f4f7fb;
-  --wm-surface: #ffffff;
-  --wm-surface-low: #eff4ff;
-  --wm-surface-container: #e6eeff;
-  --wm-surface-high: #dce9ff;
-  --wm-text: #0d1c2e;
-  --wm-text-secondary: #454650;
-  --wm-text-muted: #64748b;
-  --wm-primary: #000c43;
-  --wm-primary-container: #16235a;
-  --wm-secondary: #0051d5;
-  --wm-border: #d8e0ec;
-  --wm-border-subtle: #e6ebf2;
+  --wm-bg: #eef4ef;
+  --wm-background: #f6f8f3;
+  --wm-surface: #fffdf8;
+  --wm-surface-low: #f4f8f4;
+  --wm-surface-container: #e8f1ed;
+  --wm-surface-high: #d9e8e2;
+  --wm-text: #292d4c;
+  --wm-text-heading: #292d4c;
+  --wm-text-secondary: #67697f;
+  --wm-text-muted: #85889a;
+  --wm-text-subtle: #9ca0ad;
+  --wm-primary: #292d4c;
+  --wm-primary-container: #34385e;
+  --wm-secondary: #247f7a;
+  --wm-secondary-container: #2e928c;
+  --wm-success: #19a564;
+  --wm-warning: #ad6b14;
+  --wm-focus: #3478f6;
+  --wm-border: #d8e1dc;
+  --wm-border-subtle: #e6ede8;
+  --wm-border-strong: #becbc5;
   --wm-radius-md: 8px;
-  --wm-radius-xl: 16px;
-  --wm-radius-2xl: 24px;
-  --wm-shadow-card: 0 4px 20px rgba(15, 23, 42, 0.05);
-  --wm-shadow-elevated: 0 12px 32px rgba(15, 23, 42, 0.12);
+  --wm-radius-xl: 14px;
+  --wm-radius-2xl: 18px;
+  --wm-shadow-card: 0 1px 2px rgba(16, 32, 51, 0.05), 0 12px 28px rgba(16, 32, 51, 0.06);
+  --wm-shadow-elevated: 0 1px 2px rgba(16, 32, 51, 0.06), 0 22px 54px rgba(16, 32, 51, 0.12);
+  --wm-shell-inline: 24px;
+  --wm-shell-block: 24px;
+  --wm-font-body: "Graphik Web", Graphik, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --wm-font-display: "Graphik Web Semibold", "Graphik Web", Graphik, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color-scheme: light;
 }
 
@@ -28,9 +40,35 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: var(--wm-bg);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.78) 0%, rgba(238, 244, 239, 0.96) 44%, #eef4ef 100%);
   color: var(--wm-text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--wm-font-body);
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--wm-text-heading);
+  font-family: var(--wm-font-display);
+  letter-spacing: 0;
+}
+
+p,
+li,
+dd,
+dt,
+label,
+input,
+select,
+textarea,
+button {
+  letter-spacing: 0;
 }
 
 button,
@@ -40,11 +78,434 @@ textarea {
   font: inherit;
 }
 
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+button:not(:disabled):active,
+a:active {
+  transform: translateY(1px);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 a {
   color: inherit;
 }
 
 :focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.25);
+  outline: 3px solid rgba(31, 122, 120, 0.22);
   outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(31, 122, 120, 0.2);
+}
+
+@media (max-width: 900px) {
+  :root {
+    --wm-shell-inline: 18px;
+    --wm-shell-block: 18px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --wm-shell-inline: 14px;
+    --wm-shell-block: 14px;
+  }
+
+  body {
+    background: #f4f8f4;
+  }
+}
+
+.wm-page-stack {
+  display: grid;
+  gap: 24px;
+}
+
+.wm-responsive-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wm-responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+}
+
+.wm-scroll-panel {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wm-app-shell {
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.76) 0%, rgba(238, 244, 239, 0.95) 42%, #eef4ef 100%) !important;
+}
+
+.wm-app-top-nav,
+.wm-app-notice,
+.wm-app-content {
+  width: min(1440px, 100%);
+  min-width: 0;
+}
+
+.wm-app-nav-link:hover {
+  border-color: rgba(31, 122, 120, 0.24) !important;
+  background: rgba(31, 122, 120, 0.08) !important;
+}
+
+.wm-app-brand:hover {
+  color: var(--wm-primary);
+}
+
+@media (max-width: 720px) {
+  .wm-page-stack {
+    gap: 18px;
+  }
+
+  .wm-responsive-actions,
+  .wm-responsive-actions > * {
+    width: 100%;
+  }
+
+  .wm-responsive-actions > * {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1180px) {
+  .wm-app-top-nav {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: center !important;
+  }
+
+  .wm-app-nav-links {
+    grid-column: 1 / -1 !important;
+    justify-content: flex-start !important;
+    overflow-x: auto !important;
+    padding-bottom: 2px !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: thin;
+  }
+
+  .wm-app-nav-link {
+    min-width: max-content !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .wm-app-top-nav {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+
+  .wm-app-brand,
+  .wm-app-session-wrap {
+    width: 100% !important;
+    justify-content: space-between !important;
+    min-width: 0 !important;
+  }
+
+  .wm-app-nav-links {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    overflow: visible !important;
+    flex-wrap: unset !important;
+    width: 100% !important;
+    padding-bottom: 0 !important;
+  }
+
+  .wm-app-nav-link {
+    min-width: 0 !important;
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .wm-app-session-wrap > * {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  .wm-app-notice {
+    display: grid !important;
+    align-items: start !important;
+    gap: 8px !important;
+  }
+
+  .wm-app-notice a {
+    margin-left: 0 !important;
+  }
+}
+
+.wm-office-rail-button:hover {
+  background: rgba(31, 122, 120, 0.08) !important;
+  color: var(--wm-primary) !important;
+}
+
+@media (max-width: 1180px) {
+  .wm-office-area-pill {
+    left: 260px !important;
+  }
+
+  .wm-office-side-panel {
+    width: 340px !important;
+    left: 96px !important;
+  }
+
+  .wm-office-bottom-dock {
+    max-width: min(760px, calc(100vw - 280px)) !important;
+  }
+
+  .wm-office-room-card {
+    right: 18px !important;
+  }
+}
+
+@media (max-width: 960px) {
+  .wm-office-top-brand {
+    top: 14px !important;
+    left: 14px !important;
+    min-height: 60px !important;
+    padding: 8px 12px 8px 8px !important;
+  }
+
+  .wm-office-area-pill {
+    top: 84px !important;
+    left: 14px !important;
+    min-height: 48px !important;
+    padding: 0 14px !important;
+  }
+
+  .wm-office-status-pill {
+    top: 14px !important;
+    right: 14px !important;
+    min-height: 58px !important;
+  }
+
+  .wm-office-left-rail {
+    top: 146px !important;
+    left: 14px !important;
+    bottom: auto !important;
+    max-height: calc(100vh - 260px) !important;
+    overflow-y: auto !important;
+  }
+
+  .wm-office-side-panel {
+    top: 146px !important;
+    left: 88px !important;
+    bottom: 104px !important;
+    width: min(360px, calc(100vw - 108px)) !important;
+  }
+
+  .wm-office-room-card {
+    top: 146px !important;
+    right: 14px !important;
+    width: min(340px, calc(100vw - 108px)) !important;
+  }
+
+  .wm-office-minimap {
+    display: none !important;
+  }
+
+  .wm-office-bottom-dock {
+    bottom: 16px !important;
+    max-width: calc(100vw - 28px) !important;
+    overflow-x: auto !important;
+  }
+
+  .wm-office-map-controls {
+    right: 14px !important;
+    bottom: 96px !important;
+  }
+
+  .wm-office-toast {
+    top: 84px !important;
+    max-width: calc(100vw - 28px) !important;
+    white-space: normal !important;
+  }
+
+  .wm-office-interaction-drawer {
+    left: 14px !important;
+    right: 14px !important;
+    bottom: 16px !important;
+    grid-template-columns: 1fr !important;
+    max-height: min(78vh, 620px) !important;
+    overflow: auto !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .wm-office-top-brand {
+    right: 14px !important;
+    width: auto !important;
+  }
+
+  .wm-office-top-brand > div:nth-child(2) span:last-child {
+    display: none !important;
+  }
+
+  .wm-office-area-pill {
+    top: 82px !important;
+    right: 14px !important;
+    width: auto !important;
+    justify-content: center !important;
+  }
+
+  .wm-office-status-pill {
+    top: 140px !important;
+    left: 14px !important;
+    right: 14px !important;
+    justify-content: space-between !important;
+  }
+
+  .wm-office-status-pill button:first-child span {
+    display: none !important;
+  }
+
+  .wm-office-left-rail {
+    top: auto !important;
+    left: 14px !important;
+    right: 14px !important;
+    bottom: 132px !important;
+    width: auto !important;
+    height: 62px !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+  }
+
+  .wm-office-side-panel,
+  .wm-office-room-card,
+  .wm-office-interaction-drawer {
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-height: 72vh !important;
+    border-radius: 18px 18px 0 0 !important;
+    overflow: auto !important;
+  }
+
+  .wm-office-side-panel {
+    z-index: 54 !important;
+  }
+
+  .wm-office-bottom-dock {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 16px !important;
+    transform: none !important;
+    max-width: none !important;
+    width: auto !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 8px !important;
+    gap: 6px !important;
+    border-radius: 18px !important;
+    overflow: visible !important;
+  }
+
+  .wm-office-dock-identity {
+    order: 2 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 7px 10px 2px !important;
+    border-top: 1px solid var(--wm-border-subtle) !important;
+  }
+
+  .wm-office-dock-actions {
+    order: 1 !important;
+    display: grid !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: 40px !important;
+    justify-content: start !important;
+    gap: 4px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    padding: 0 2px 3px !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .wm-office-dock-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .wm-office-dock-divider {
+    display: none !important;
+  }
+
+  .wm-office-bottom-dock > div:first-of-type {
+    min-width: 0 !important;
+  }
+
+  .wm-office-dock-actions > button {
+    min-width: 40px !important;
+    min-height: 40px !important;
+  }
+
+  .wm-office-map-controls {
+    right: 12px !important;
+    bottom: 212px !important;
+    width: 50px !important;
+    padding: 6px !important;
+  }
+
+  .wm-office-map-controls button {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  .wm-office-toast {
+    top: 204px !important;
+  }
+
+  .wm-office-command-backdrop {
+    padding: 12px !important;
+    place-items: end stretch !important;
+  }
+
+  .wm-office-command-palette {
+    width: 100% !important;
+    max-height: 82vh !important;
+    border-radius: 18px !important;
+  }
+
+  .wm-office-command-palette button {
+    min-width: 0 !important;
+  }
+
+  .wm-command-result-row {
+    grid-template-columns: 42px minmax(0, 1fr) !important;
+  }
+
+  .wm-command-result-row > span:nth-last-child(-n + 2) {
+    justify-self: start !important;
+  }
 }

@@ -8,7 +8,7 @@ type UsageSummaryCardProps = {
 const toneColors: Record<UsageMetric["tone"], string> = {
   green: wm.colors.success,
   blue: wm.colors.secondary,
-  amber: "#d97706",
+  amber: wm.colors.warning,
   slate: wm.colors.textSecondary,
 };
 

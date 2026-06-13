@@ -84,7 +84,7 @@ const styles = {
   },
   actions: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
+    gridTemplateColumns: "repeat(3, minmax(64px, 1fr))",
     gap: "8px",
   },
   actionButton: {
@@ -92,7 +92,7 @@ const styles = {
     background: wm.colors.surfaceLow,
     borderRadius: wm.radius.md,
     padding: "8px",
-    color: wm.colors.primaryContainer,
+    color: wm.colors.primary,
     cursor: "pointer",
     fontWeight: 700,
   },

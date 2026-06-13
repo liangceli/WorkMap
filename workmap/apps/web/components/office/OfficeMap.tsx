@@ -931,7 +931,7 @@ export function OfficeMap() {
           toast={setToast}
         />
 
-        <div style={styles.canvasPanel}>
+        <div className="wm-office-canvas-panel" style={styles.canvasPanel}>
           {loadError ? <div style={styles.error}>{loadError}</div> : null}
           <canvas
             ref={canvasRef}
@@ -948,7 +948,7 @@ export function OfficeMap() {
           />
         </div>
 
-        <div style={styles.mapControls}>
+        <div className="wm-office-map-controls" style={styles.mapControls}>
           <button type="button" onClick={() => setOfficeZoom(zoomRef.current + 0.1)} style={styles.mapControlButton} aria-label="Zoom in">+</button>
           <button type="button" onClick={() => setOfficeZoom(zoomRef.current - 0.1)} style={styles.mapControlButton} aria-label="Zoom out">-</button>
           <button type="button" onClick={recenterCamera} style={styles.mapControlButton} aria-label="Recenter map">
@@ -1034,7 +1034,7 @@ export function OfficeMap() {
           }}
           onNavigate={(href) => router.push(href)}
         />
-        {toast ? <div style={styles.toast}>{toast}</div> : null}
+        {toast ? <div className="wm-office-toast" style={styles.toast}>{toast}</div> : null}
       </VirtualOfficeShell>
     </main>
   );
@@ -1852,11 +1852,14 @@ function getCamera(
   offset = { x: 0, y: 0 },
   viewport: ViewportSize = { width: DEFAULT_CANVAS_WIDTH, height: DEFAULT_CANVAS_HEIGHT },
 ) {
-  void mapPixels;
+  const rawX = player.x - viewport.width / (2 * zoom) + offset.x;
+  const rawY = player.y - viewport.height / (2 * zoom) + offset.y;
+  const maxX = Math.max(0, mapPixels.width - viewport.width / zoom);
+  const maxY = Math.max(0, mapPixels.height - viewport.height / zoom);
 
   return {
-    x: player.x - viewport.width / (2 * zoom) + offset.x,
-    y: player.y - viewport.height / (2 * zoom) + offset.y,
+    x: clamp(rawX, 0, maxX),
+    y: clamp(rawY, 0, maxY),
   };
 }
 
@@ -1958,10 +1961,10 @@ const styles = {
     gap: "8px",
     width: "62px",
     padding: "8px 6px 12px",
-    border: "1px solid rgba(216, 224, 236, 0.88)",
-    borderRadius: "18px",
-    background: "rgba(255, 255, 255, 0.9)",
-    boxShadow: "0 18px 44px rgba(15, 23, 42, 0.16)",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius["2xl"],
+    background: "rgba(255, 253, 248, 0.9)",
+    boxShadow: wm.shadow.elevated,
     backdropFilter: "blur(18px)",
   },
   mapControlButton: {
@@ -1969,10 +1972,10 @@ const styles = {
     placeItems: "center",
     width: "46px",
     height: "46px",
-    border: "1px solid #d8e0ec",
+    border: `1px solid ${wm.colors.border}`,
     borderRadius: "13px",
-    background: "#ffffff",
-    color: "#16235a",
+    background: wm.colors.surface,
+    color: wm.colors.primary,
     cursor: "pointer",
     fontSize: "16px",
     fontWeight: 900,
@@ -1989,14 +1992,14 @@ const styles = {
     top: "92px",
     zIndex: wm.zIndex.officeModal,
     transform: "translateX(-50%)",
-    border: "1px solid rgba(203, 213, 225, 0.84)",
+    border: `1px solid ${wm.colors.border}`,
     borderRadius: "999px",
-    background: "rgba(15, 23, 42, 0.84)",
-    color: "#ffffff",
+    background: "rgba(255, 253, 248, 0.92)",
+    color: wm.colors.primary,
     padding: "10px 14px",
     fontSize: "13px",
     fontWeight: 800,
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.18)",
+    boxShadow: wm.shadow.elevated,
   },
   canvasPanel: {
     position: "absolute" as const,
@@ -2011,9 +2014,8 @@ const styles = {
   },
   canvas: {
     display: "block",
-    width: "max(100vw, calc(100vh * 1.647))",
-    height: "max(100vh, calc(100vw / 1.647))",
-    flex: "0 0 auto",
+    width: "100%",
+    height: "100%",
     background: wm.colors.background,
     imageRendering: "pixelated" as const,
   },
@@ -2042,10 +2044,10 @@ const styles = {
     right: "24px",
     top: "92px",
     zIndex: 22,
-    color: "#b91c1c",
+    color: wm.colors.errorText,
     padding: "12px",
-    border: "1px solid #fecaca",
+    border: `1px solid ${wm.colors.error}`,
     borderRadius: "12px",
-    background: "#fef2f2",
+    background: wm.colors.errorBg,
   },
 };

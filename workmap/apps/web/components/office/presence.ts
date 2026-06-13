@@ -1,16 +1,17 @@
 import type { UserPresenceStatus } from "@workmap/shared-types";
+import { wm } from "../../lib/theme/workmapTheme";
 
 const PRESENCE_RECENT_MS = 30 * 1000;
 const PRESENCE_STALE_MS = 5 * 60 * 1000;
 
 export const statusColors: Record<UserPresenceStatus, string> = {
-  available: "#22c55e",
-  busy: "#ef4444",
-  focus: "#2563eb",
-  idle: "#eab308",
-  break: "#f97316",
-  offline: "#94a3b8",
-  on_call: "#8b5cf6",
+  available: wm.status.available,
+  busy: wm.status.busy,
+  focus: wm.status.focus,
+  idle: wm.status.idle,
+  break: wm.status.break,
+  offline: wm.status.offline,
+  on_call: wm.status.on_call,
 };
 
 export function labelStatus(status: UserPresenceStatus) {

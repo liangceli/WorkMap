@@ -81,7 +81,7 @@ const styles = {
     zIndex: 30,
     display: "grid",
     placeItems: "center",
-    background: "rgba(15, 23, 42, 0.42)",
+    background: "rgba(16, 32, 51, 0.38)",
     padding: "20px",
   },
   modal: {
@@ -94,6 +94,7 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     gap: "14px",
+    flexWrap: "wrap" as const,
     marginBottom: "12px",
   },
   eyebrow: {
@@ -123,7 +124,7 @@ const styles = {
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
     gap: "12px",
   },
   panel: {
@@ -149,6 +150,7 @@ const styles = {
     display: "flex",
     justifyContent: "flex-end",
     gap: "10px",
+    flexWrap: "wrap" as const,
     marginTop: "16px",
   },
   primaryButton: {

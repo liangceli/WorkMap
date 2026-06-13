@@ -288,6 +288,8 @@ const styles = {
   },
   tablePanel: {
     ...wmStyles.card,
+    maxWidth: "100%",
+    minWidth: 0,
     overflow: "hidden",
     overflowX: "auto" as const,
   },
@@ -346,7 +348,7 @@ const styles = {
   },
   actions: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(4, minmax(64px, 1fr))",
     gap: "8px",
   },
   actionButton: {

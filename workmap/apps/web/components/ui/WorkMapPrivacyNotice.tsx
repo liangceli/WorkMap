@@ -22,6 +22,6 @@ export function WorkMapPrivacyNotice({
 
 const toneStyles = {
   info: { border: `1px solid ${wm.colors.infoBorder}`, background: wm.colors.infoBg, color: wm.colors.infoText },
-  success: { border: `1px solid ${wm.colors.successBorder}`, background: wm.colors.successBg, color: "#14532d" },
-  warning: { border: `1px solid ${wm.colors.warningBorder}`, background: wm.colors.warningBg, color: "#7c2d12" },
+  success: { border: `1px solid ${wm.colors.successBorder}`, background: wm.colors.successBg, color: wm.colors.compliance },
+  warning: { border: `1px solid ${wm.colors.warningBorder}`, background: wm.colors.warningBg, color: wm.colors.warning },
 } as const;

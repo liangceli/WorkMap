@@ -95,8 +95,8 @@ export function OfficeCommandPalette({
   }
 
   return (
-    <div style={styles.backdrop} role="dialog" aria-label="Office search" onMouseDown={onClose}>
-      <section style={styles.palette} onMouseDown={(event) => event.stopPropagation()}>
+    <div className="wm-office-command-backdrop" style={styles.backdrop} role="dialog" aria-label="Office search" onMouseDown={onClose}>
+      <section className="wm-office-command-palette" style={styles.palette} onMouseDown={(event) => event.stopPropagation()}>
         <div style={styles.header}>
           <input
             autoFocus
@@ -118,6 +118,7 @@ export function OfficeCommandPalette({
                 <button
                   key={person.userId}
                   type="button"
+                  className="wm-command-result-row"
                   style={styles.resultRow}
                   onClick={() =>
                     onSelectPerson({
@@ -154,6 +155,7 @@ export function OfficeCommandPalette({
             <button
               key={destination.id}
               type="button"
+              className="wm-command-result-row"
               style={styles.resultRow}
               onClick={() => onSelectDestination(destination)}
             >
@@ -172,6 +174,7 @@ export function OfficeCommandPalette({
             <button
               key={action.id}
               type="button"
+              className="wm-command-result-row"
               style={styles.resultRow}
               onClick={() => {
                 if (action.href) {
@@ -232,7 +235,7 @@ const styles = {
     display: "grid",
     placeItems: "start center",
     paddingTop: "112px",
-    background: "rgba(15, 23, 42, 0.24)",
+    background: "rgba(16, 32, 51, 0.22)",
     backdropFilter: "blur(4px)",
   },
   palette: {
@@ -240,8 +243,8 @@ const styles = {
     width: "min(700px, calc(100vw - 48px))",
     maxHeight: "min(720px, calc(100vh - 128px))",
     overflow: "auto",
-    background: "rgba(255, 255, 255, 0.92)",
-    backdropFilter: "blur(24px)",
+    background: "rgba(255, 253, 248, 0.94)",
+    backdropFilter: "blur(18px)",
     padding: "16px",
   },
   header: {
@@ -289,7 +292,7 @@ const styles = {
     alignItems: "center",
     border: `1px solid ${wm.colors.border}`,
     borderRadius: wm.radius.xl,
-    background: "rgba(255, 255, 255, 0.86)",
+    background: "rgba(255, 253, 248, 0.86)",
     padding: "10px",
     color: wm.colors.text,
     cursor: "pointer",
@@ -302,7 +305,7 @@ const styles = {
     height: "42px",
     borderRadius: "999px",
     background: wm.colors.surfaceContainer,
-    color: wm.colors.primaryContainer,
+    color: wm.colors.primary,
     fontWeight: 900,
   },
   roomAvatar: {
@@ -312,7 +315,7 @@ const styles = {
     height: "42px",
     borderRadius: "14px",
     background: wm.colors.surfaceContainer,
-    color: wm.colors.primaryContainer,
+    color: wm.colors.primary,
     fontWeight: 900,
   },
   resultText: {
@@ -325,7 +328,7 @@ const styles = {
   actionText: {
     borderRadius: "999px",
     background: wm.colors.background,
-    color: wm.colors.primaryContainer,
+    color: wm.colors.primary,
     padding: "6px 9px",
     fontSize: "12px",
     fontWeight: 900,
@@ -359,7 +362,7 @@ const styles = {
   emptyRow: {
     border: `1px dashed ${wm.colors.border}`,
     borderRadius: wm.radius.xl,
-    background: "rgba(255, 255, 255, 0.72)",
+    background: "rgba(255, 253, 248, 0.72)",
     color: wm.colors.textMuted,
     padding: "14px",
     fontSize: "13px",

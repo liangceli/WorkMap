@@ -25,6 +25,7 @@ import {
 type DashboardState = {
   loading: boolean;
   authSource: string | null;
+  role: string | null;
   healthOk: boolean;
   healthText: string;
   positions: WorkMapApiPlayerPosition[];
@@ -39,6 +40,7 @@ type DashboardState = {
 const initialDashboardState: DashboardState = {
   loading: true,
   authSource: null,
+  role: null,
   healthOk: false,
   healthText: "Checking backend health...",
   positions: [],
@@ -71,6 +73,7 @@ export function ManagerOverviewPanel() {
 
       const auth = await getWorkMapApiAuthOptions();
       let authSource: string | null = null;
+      let role: string | null = null;
       let positions: WorkMapApiPlayerPosition[] = [];
       let roomNames: Record<string, string> = {};
       let policyVersion: string | null = null;
@@ -79,6 +82,7 @@ export function ManagerOverviewPanel() {
 
       if (auth.available) {
         authSource = auth.source;
+        role = auth.role ?? null;
         const [mapResult, policyResult, usageResult] = await Promise.all([
           getVirtualOfficeMap(auth.options),
           getCompliancePolicy(auth.options),
@@ -122,6 +126,7 @@ export function ManagerOverviewPanel() {
       setDashboardState({
         loading: false,
         authSource,
+        role,
         healthOk,
         healthText,
         positions,
@@ -145,6 +150,7 @@ export function ManagerOverviewPanel() {
 
   const presenceCounts = useMemo(() => countPresence(dashboardState.positions), [dashboardState.positions]);
   const usageRows = useMemo(() => buildUsageRows(dashboardState.usageSummary), [dashboardState.usageSummary]);
+  const journey = useMemo(() => getDashboardJourney(dashboardState.role), [dashboardState.role]);
   const people = useMemo(
     () =>
       dashboardState.positions.length > 0
@@ -202,18 +208,22 @@ export function ManagerOverviewPanel() {
     <div style={styles.stack}>
       <section style={styles.hero}>
         <div>
-          <p style={styles.eyebrow}>Workspace overview</p>
-          <h1 style={styles.title}>Team clarity without private content</h1>
-          <p style={styles.subtitle}>
-            See who is available, whether tracking coverage is healthy, and where app/domain summaries are ready for review.
-          </p>
+          <p style={styles.eyebrow}>{journey.eyebrow}</p>
+          <h1 style={styles.title}>{journey.title}</h1>
+          <p style={styles.subtitle}>{journey.subtitle}</p>
         </div>
         <div style={styles.heroActions}>
-          <a href="/virtual-office" style={styles.officeLink}>Open office</a>
-          <a href="/reports" style={styles.secondaryLink}>View reports</a>
-          <a href="/compliance" style={styles.secondaryLink}>Review compliance</a>
-          <a href="/settings" style={styles.secondaryLink}>Settings</a>
+          {journey.actions.map((action) => (
+            <a key={action.href} href={action.href} style={action.primary ? styles.officeLink : styles.secondaryLink}>
+              {action.label}
+            </a>
+          ))}
         </div>
+      </section>
+
+      <section style={styles.guidancePanel}>
+        <p style={styles.panelLabel}>{journey.guidanceLabel}</p>
+        <p style={styles.panelText}>{journey.guidance}</p>
       </section>
 
       <section style={styles.metricGrid}>
@@ -414,6 +424,56 @@ function canRequestCompanySummary(role: string | undefined) {
   return role === "OWNER" || role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN";
 }
 
+function getDashboardJourney(role: string | null) {
+  if (role === "OWNER") {
+    return {
+      eyebrow: "Owner workspace",
+      title: "Your workspace is ready to build",
+      subtitle: "Invite teammates, open the office, review compliance, and check aggregate summaries as activity arrives.",
+      guidanceLabel: "Owner next steps",
+      guidance:
+        "Start with employee invites, then ask the team to complete compliance, avatar, and device setup. Reports will stay sparse until devices submit app/domain summary data.",
+      actions: [
+        { label: "Invite employees", href: "/onboarding/invite", primary: true },
+        { label: "Open office", href: "/virtual-office" },
+        { label: "View reports", href: "/reports" },
+        { label: "Review compliance", href: "/compliance" },
+      ],
+    };
+  }
+
+  if (role === "EMPLOYEE") {
+    return {
+      eyebrow: "Employee workspace",
+      title: "Your workspace view",
+      subtitle: "See your office presence, teammate directory, compliance policy, and your own work summaries when data exists.",
+      guidanceLabel: "Employee access",
+      guidance:
+        "Company-wide reports, invites, integrations, and settings are owner/admin areas. If you open a restricted route, the backend still enforces the permission boundary.",
+      actions: [
+        { label: "Open office", href: "/virtual-office", primary: true },
+        { label: "People directory", href: "/employees" },
+        { label: "Review compliance", href: "/compliance" },
+      ],
+    };
+  }
+
+  return {
+    eyebrow: "Workspace overview",
+    title: "Team clarity without private content",
+    subtitle: "See who is available, whether tracking coverage is healthy, and where app/domain summaries are ready for review.",
+    guidanceLabel: "Workspace guidance",
+    guidance:
+      "Use the office and directory for day-to-day presence. Reports and admin actions appear only when the signed-in role can use them.",
+    actions: [
+      { label: "Open office", href: "/virtual-office", primary: true },
+      { label: "View reports", href: "/reports" },
+      { label: "Review compliance", href: "/compliance" },
+      { label: "Settings", href: "/settings" },
+    ],
+  };
+}
+
 const styles = {
   stack: {
     display: "grid",
@@ -424,6 +484,7 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "16px",
+    flexWrap: "wrap" as const,
     ...wmStyles.elevatedCard,
     padding: "20px",
   },
@@ -458,12 +519,19 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "12px",
   },
+  guidancePanel: {
+    ...wmStyles.infoNotice,
+    display: "grid",
+    gap: "6px",
+    padding: "14px 16px",
+  },
   statusPanel: {
     ...wmStyles.infoNotice,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "start",
     gap: "16px",
+    flexWrap: "wrap" as const,
     padding: "16px",
   },
   panelLabel: {

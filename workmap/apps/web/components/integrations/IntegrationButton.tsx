@@ -61,6 +61,7 @@ const styles = {
     justifyContent: "space-between",
     gap: "12px",
     alignItems: "flex-start",
+    flexWrap: "wrap" as const,
   },
   category: {
     ...wmStyles.eyebrow,
