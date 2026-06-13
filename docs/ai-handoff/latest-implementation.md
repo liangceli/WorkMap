@@ -2,166 +2,106 @@
 
 ## 1. Original Task Brief
 
-STAGE 3 Round 4: Dashboard + Reports + Compliance Productization.
+STAGE 3 Round 5: Alpha Pilot Packaging + User-Facing Readiness Pack.
 
-Productize Dashboard, Reports, and Compliance for a controlled alpha product. Improve Dashboard clarity, Reports readability, Compliance trust-building, activity tracking explanation, owner-vs-employee visibility, sparse/empty/loading/error states, privacy-safe product language, and alpha limitation honesty. Prefer frontend-only changes and do not add backend features, schema migrations, auth rewrites, deployment work, tracking categories, production desktop/browser clients, integrations, billing, analytics/BI overhaul, or broad visual redesign.
+Create a docs-first, practical readiness package for a controlled 5-person WorkMap alpha pilot. The package should help Owners, Employees, and operators understand the current product, privacy/compliance boundaries, alpha limitations, smoke requirements, feedback collection, and bug reporting. Do not implement new product capabilities, tracking clients, integrations, schema/backend changes, auth rewrites, deployment troubleshooting, map changes, chat, scheduling, billing, or visual redesign.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx` | Productized Dashboard copy and structure around workspace management, setup coverage, role-specific next steps, data coverage, sparse alpha data, and privacy-safe summary language. |
-| `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` | Added role/scope explanation cards, clearer API summary copy, no-data guidance, and explicit example-layout labeling. |
-| `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx` | Added trust-building sections explaining why data exists, who can see what, alpha client limitations, and Platform Admin privacy boundary. |
-| `workmap/apps/web/app/compliance/page.tsx` | Renamed the page framing from monitoring policy to transparency policy and softened privacy copy. |
+| `docs/alpha-pilot/README.md` | Added the alpha pilot readiness pack index, alpha-ready areas, scaffolded/limited areas, and setup checklist summary. |
+| `docs/alpha-pilot/owner-quick-start.md` | Added Owner-facing guidance for sign-in, workspace creation, invites, virtual office, Dashboard, Reports, Compliance, visible data, and issue reporting. |
+| `docs/alpha-pilot/employee-quick-start.md` | Added Employee-facing guidance for invite acceptance, first-time setup, virtual office, own reports, compliance, owner visibility, and issue reporting. |
+| `docs/alpha-pilot/privacy-compliance-one-pager.md` | Added a concise privacy/compliance handout covering collected data, non-collected data, visibility boundaries, alpha client limitations, and employee notice. |
+| `docs/alpha-pilot/known-limitations.md` | Added alpha limitations for product scope, architecture, deployment/ops, and manual QA. |
+| `docs/alpha-pilot/before-pilot-smoke-checklist.md` | Added a 30-item before-pilot smoke checklist for deployed alpha readiness. |
+| `docs/alpha-pilot/pilot-feedback-template.md` | Added structured Owner/Employee/operator feedback prompts and ratings. |
+| `docs/alpha-pilot/bug-report-template.md` | Added required fields and privacy guidance for bug reports. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA. |
 
 Pre-existing workspace notes:
 
 - `docs/references/` remains unrelated untracked workspace content and was not modified.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by build and restored.
+- No application code, backend code, Prisma schema/migrations, assets, deployment config, or env files were changed.
 
-## 3. Dashboard Changes
+## 3. Implementation Summary
 
-- Dashboard now reads more like a workspace management overview for Owners instead of a readiness/QA panel.
-- Owner guidance now emphasizes:
-  - team presence
-  - setup coverage
-  - compliance readiness
-  - aggregate summaries as data arrives
-  - invite/compliance/avatar/device setup sequence
-- Employee guidance now avoids Owner-only management framing and focuses on:
-  - own presence
-  - own compliance status
-  - own summary availability
-  - restricted company/admin areas
-- Added a setup coverage panel with role-specific checklist items.
-- Added alpha honesty around desktop-agent/browser-extension scaffold data and sparse reports.
-- Renamed metrics from more technical labels like `API health` / `API auth` / `Tracking coverage` to calmer product labels:
-  - `Workspace API`
-  - `Session`
-  - `Data coverage`
-- Dashboard privacy copy now explicitly says it does not expose screenshots, keystrokes, private messages, full URLs, webpage content, or hidden monitoring data.
+- Created a new docs-only alpha pilot readiness package under `docs/alpha-pilot/`.
+- Documented how Owners should create workspaces, invite employees, use the virtual office, read Dashboard/Reports/Compliance, and report issues.
+- Documented how Employees should accept invites, complete onboarding/profile/avatar setup, understand own-scope reports, and understand what Owners can and cannot see.
+- Added privacy/compliance language that explicitly separates collected alpha data from non-collected private data.
+- Added known limitations so the alpha is not presented as a finished production monitoring product.
+- Added a 30-step smoke checklist for deployed alpha readiness.
+- Added reusable feedback and bug-report templates for the pilot group.
+- Chose docs-only in-app guidance for this round because the brief explicitly allowed docs-only guidance and requested not to overbuild UI.
 
-## 4. Reports Changes
+## 4. User-Visible Changes
 
-- Reports now include three role/scope explanation cards:
-  - Employee view
-  - Owner view
-  - Alpha data availability
-- Reports status copy now explains that:
-  - employees get own-scope rows
-  - Owners/allowed manager roles can request company aggregate summaries
-  - company summaries do not expose raw employee activity streams
-  - device/app/domain rows appear only after harness/scaffold clients submit events
-- API summary panel now explains whether it is showing company aggregate rows or current-user rows.
-- Sparse/no-data state now says an API response with no rows is expected during alpha setup and should be resolved by registering devices/submitting app/domain events.
-- Example team-summary rows are more clearly labeled as frontend examples, not real tenant data.
+- No runtime product UI changed.
+- Pilot operators now have a documented packet to share or adapt before inviting alpha users.
+- Owners and Employees have separate quick-start docs written in product-facing language.
+- Pilot participants now have a clear privacy/compliance one-pager, known limitations, feedback template, and bug template.
 
-## 5. Compliance Changes
+## 5. Technical Notes
 
-- Compliance page title changed from `Monitoring policy` to `Transparency policy`.
-- Added trust-building explanation cards:
-  - why this data exists
-  - who can see what
-  - alpha client limitation
-- Compliance now explicitly mentions:
-  - presence
-  - app/domain duration summaries
-  - device heartbeat
-  - acknowledgement timestamps
-  - employee own visibility
-  - owner/manager aggregate visibility
-  - Platform Admin privacy boundary
-- Existing collected / not-collected lists and acknowledgement flow were preserved.
-- Alpha limitation copy makes clear that the desktop agent is still a harness and the browser extension is still a local MV3 scaffold.
+- This was intentionally docs-first. No frontend routes, components, API handlers, auth logic, tracking logic, map behavior, realtime behavior, Prisma schema, migrations, seeds, or deployment settings changed.
+- The docs reflect the current accepted implementation state:
+  - Cognito-first deployed alpha sign-in.
+  - Owner workspace creation and Employee invitation flow.
+  - Backend-backed display name/avatar profile.
+  - Virtual office movement, People panel, contact drawer, chairs, polling, and same-map realtime.
+  - Dashboard/Reports/Compliance productized for alpha.
+  - Desktop-agent and browser-extension remain scaffolds/harnesses.
+  - Platform Admin remains privacy-safe and independent from tenant Owner roles.
+- The smoke checklist intentionally includes both automated deployed checks and authenticated manual checks because `pnpm smoke:alpha` does not automate Cognito, invite acceptance, realtime two-user behavior, or activity submission.
 
-## 6. Role / Access Behavior
+## 6. Verification Results
 
-- No backend RBAC changed.
-- Employee dashboard/report language stays own-scope and avoids Owner-only CTAs or company-management framing.
-- Owner dashboard/report language explains aggregate company summaries without implying raw employee event rows.
-- Platform Admin boundary remains explicitly privacy-safe and separate from tenant Owner/Employee views.
-- AppShell navigation was not changed.
+Commands planned/run for this docs-only round:
 
-## 7. Empty / Loading / Error / Fallback States
+- `git status --short`
+  - Result before edits: only unrelated `?? docs/references/` was present.
+  - Result after edits: `docs/ai-handoff/latest-implementation.md` modified, `docs/alpha-pilot/` added, unrelated `docs/references/` still untracked.
+- `git diff --check`
+  - Result: passed. Git emitted only an LF-to-CRLF working-copy warning for `docs/ai-handoff/latest-implementation.md`; no whitespace errors.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/`
+  - Result: passed with no matches.
+- Trailing whitespace scan over `docs/alpha-pilot` and `docs/ai-handoff/latest-implementation.md`
+  - Result: passed with no matches.
 
-- Dashboard sparse states remain labeled when no remote office rows or usage rows are available.
-- Reports no-data copy now treats empty API rows as sparse alpha setup, not a product failure.
-- Reports example rows are explicitly labeled as frontend examples and not real tenant metrics.
-- Existing API unavailable/error behavior remains intact.
-- No fake API success, fake real metrics, or hidden fallback-to-real-data behavior was added.
+Not run:
 
-## 8. Alpha Limitation Copy
+- Web typecheck/lint/build were not required because no frontend code changed.
+- API typecheck/lint/build were not required because no backend/shared code changed.
+- Prisma commands were not required because no schema, migration, or seed files changed.
 
-Added or clarified that:
+## 7. Manual QA Suggestions
 
-- WorkMap is a controlled alpha candidate.
-- Current activity data demonstrates the ingestion/reporting loop.
-- Desktop-agent is a harness/scaffold, not a production active-window client.
-- Browser extension is a local MV3 scaffold, not packaged production tracking.
-- Production pairing, token lifecycle, offline queueing, retry/backoff, extension packaging, and production clients remain future work.
+- Review every file in `docs/alpha-pilot/` for product accuracy and tone.
+- Confirm the Owner guide does not imply raw employee activity rows, employee scoring, screenshots, keystrokes, private content capture, or full URL tracking.
+- Confirm the Employee guide clearly explains invite acceptance, compliance/avatar/device setup, own-scope reports, and what Owners can see.
+- Confirm the privacy/compliance one-pager matches current Compliance page copy and activity tracking boundaries.
+- Confirm the known limitations do not accidentally claim production readiness for desktop-agent, browser-extension, Teams/Outlook/3CX, chat, scheduling, billing, or Platform Admin support actions.
+- Use the 30-item smoke checklist before the first 5-person pilot starts.
+- Ask Codex Chat 3 / QA to review the docs against the current git diff and latest QA handoff.
 
-## 9. Intentionally Not Changed
+## 8. Risks / Notes
 
-- No backend files changed.
-- No Prisma schema/migrations/seed changed.
-- No auth architecture, Cognito, tenant onboarding, invite flow, RBAC, Platform Admin backend, activity ingestion API, reports API contract, compliance acknowledgement API, deployment config, desktop-agent, browser-extension, tracking categories, virtual office, realtime, map, Teams/3CX, billing, or analytics/BI system changed.
-- No broad visual redesign was introduced.
+- The readiness pack is documentation only; it does not enforce any runtime behavior.
+- If product behavior changes in later rounds, these docs must be updated before reuse.
+- The docs intentionally avoid real URLs, secrets, bearer tokens, database URLs, Cognito secrets, platform admin identities, or customer data.
+- The desktop-agent and browser-extension are described as scaffold/harness clients, not production-ready tracking clients.
+- The alpha remains suitable only for a controlled 5-person pilot after external smoke and manual QA are complete.
+- `docs/references/` remains unrelated untracked content and should not be staged accidentally.
 
-## 10. Verification Results
+## 9. Docs Update Suggestions
 
-Commands run from `workmap/`:
+- After QA accepts Round 5, update `docs/skills/current-status.md` to mention the alpha pilot readiness pack and the latest accepted commit.
+- Consider linking `docs/alpha-pilot/README.md` from a future product/operator README if the repository needs a public pilot entry point.
+- Keep `docs/skills/qa-skill.md` and `docs/skills/deployment-skill.md` aligned if the before-pilot smoke checklist changes.
+- If future UI adds an in-app help/readiness page, link these docs or mirror their content carefully without expanding scope.
 
-```powershell
-pnpm --filter @workmap/web typecheck
-pnpm --filter @workmap/web lint
-pnpm --filter @workmap/web build
-git diff --check
-secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/`
-```
+## 10. Input for Next Chat
 
-Results:
-
-- Web typecheck passed.
-- Web lint passed.
-- Web build passed.
-- `git diff --check` passed with CRLF normalization warnings only.
-- Secret scan over the changed app areas returned no matches.
-- Next build still prints the existing warning that the Next.js ESLint plugin is not detected.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by build and restored.
-
-API verification was not run because no backend/API files were changed.
-
-## 11. Manual QA Suggestions
-
-1. Owner `/dashboard`: confirm it reads as a management overview with setup coverage, next actions, data coverage, sparse-data clarity, and no invasive monitoring claims.
-2. Employee `/dashboard`: confirm it focuses on own workspace/presence/compliance/summary availability and avoids Owner-only CTAs.
-3. Owner `/reports`: confirm company aggregate scope is explained and no raw employee activity detail is implied.
-4. Employee `/reports`: confirm own-scope explanation is clear and company-wide reports remain unavailable.
-5. Reports no-data state: confirm empty API rows are described as sparse alpha setup.
-6. Reports fallback/example layout: confirm example rows are visibly not real tenant data.
-7. `/compliance`: confirm collected/non-collected lists still render and acknowledgement flow still works.
-8. `/compliance`: confirm why-data-exists, who-can-see-what, alpha client limitation, and Platform Admin boundary copy are clear.
-9. Smoke `/virtual-office`, `/employees`, `/platform-admin`, `/onboarding/invite`, and `/login` to confirm unrelated flows still render.
-10. Check 1366px, 1440px, and tablet-ish widths for Dashboard, Reports, and Compliance text/control overlap.
-11. Confirm no scary product language such as hidden tracking, total monitoring, employee scoring, screenshots, keystrokes, or private content tracking was introduced.
-
-## 12. Remaining Risks
-
-- Browser/manual QA was not run in this implementation pass.
-- Dashboard and Reports still depend on existing API auth/session availability and existing usage-summary contracts.
-- The compliance acknowledgement readback remains browser-marker based after successful acknowledgement because the current policy API does not return acknowledgement state in `GET /compliance/policy`.
-- Alpha client limitations remain product/documentation truth; production desktop/browser clients still require future implementation.
-
-## 13. Docs Update Suggestions
-
-- `docs/skills/frontend-skill.md`: record Round 4 Dashboard/Reports/Compliance productization details.
-- `docs/skills/ui-ux-skill.md`: add guidance for activity-summary language, no-data labels, and alpha client limitation honesty.
-- `docs/skills/qa-skill.md`: add Round 4 manual QA checklist for Owner/Employee Dashboard, Reports scope, Compliance trust copy, fallback/example labels, and no scary monitoring language.
-- `docs/skills/current-status.md`: after QA acceptance, record STAGE 3 Round 4 productization.
-- `docs/skills/project-summary.md`: optionally update current product state after QA acceptance.
-
-## 14. Input for Next Chat
-
-Review the current implementation using docs/ai-handoff/latest-implementation.md and the current git diff. Update docs/ai-handoff/latest-qa.md.
+Review the current implementation using `docs/ai-handoff/latest-implementation.md` and the current git diff. Update `docs/ai-handoff/latest-qa.md`.
