@@ -2,7 +2,7 @@
 
 ## 1. Overall Conclusion
 
-QA review result: STAGE 3 Round 2 Role-Based User Journey Polish + Alpha Flow Hardening passes code review and machine verification.
+QA review result: STAGE 3 Round 3 Virtual Office Product Experience Polish + Interaction Readiness passes code review and machine verification.
 
 This pass reviewed:
 
@@ -10,39 +10,39 @@ This pass reviewed:
 - current `git status --short`
 - current `git diff --stat`
 - current implementation diff
-- Owner dashboard/onboarding/invite journey changes
-- Employee dashboard/invite/reports journey changes
-- Platform Admin blocked-state copy
-- AppShell unauthenticated navigation tightening
-- combined current `apps/web/**` style/UI diff already present in the workspace
+- `/virtual-office` top-bar sync/status indicator
+- People panel action copy
+- contact drawer action feedback
+- bottom dock contact/status placeholders
+- chair/desk prompt copy
+- room context card action feedback
 
 No blocking issue requiring Codex Chat 2 was found.
 
 Important distinction:
 
-- This QA pass verifies frontend code/build and diff-level regression risk.
-- Browser/manual QA is still recommended before commit because the current workspace includes broad visual styling changes in addition to targeted Round 2 flow copy.
+- This pass verifies frontend code/build and diff-level regression risk.
+- Browser/manual QA is still recommended later for STAGE 3, especially because this round changes office overlay chrome and interaction feedback.
 
 ## 2. Workspace Notes
 
-Reviewed tracked files include:
+Reviewed tracked task files include:
 
 - `docs/ai-handoff/latest-implementation.md`
-- `workmap/apps/web/app/invite/[token]/page.tsx`
-- `workmap/apps/web/app/onboarding/company/page.tsx`
-- `workmap/apps/web/app/onboarding/invite/page.tsx`
-- `workmap/apps/web/app/platform-admin/page.tsx`
-- `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx`
-- `workmap/apps/web/components/layout/AppShell.tsx`
-- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
-- current broader `apps/web/**` UI/style diff
+- `workmap/apps/web/components/office/FloatingRoomPill.tsx`
+- `workmap/apps/web/components/office/InteractionDrawer.tsx`
+- `workmap/apps/web/components/office/OfficeBottomDock.tsx`
+- `workmap/apps/web/components/office/OfficeMap.tsx`
+- `workmap/apps/web/components/office/OfficeSidePanel.tsx`
+- `workmap/apps/web/components/office/RoomContextCard.tsx`
+- `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx`
 
 Workspace notes:
 
 - `.env` was not read.
-- `docs/references/` remains unrelated untracked workspace content. Do not stage it unless explicitly intended.
 - `workmap/apps/web/tsconfig.tsbuildinfo` was modified by verification and restored.
-- Many `apps/web/**` files are already modified from prior accepted visual/style work; Round 2 targeted role-flow copy/states on top of that combined diff.
+- `artresource.tiled-session` is modified but appears unrelated to the Round 3 implementation. Do not stage it unless explicitly intended.
+- `docs/references/`, `farm.tsx`, and `farm2.tsx` are untracked unrelated workspace files. Do not stage them unless explicitly intended.
 
 ## 3. Diff Review
 
@@ -50,48 +50,45 @@ Result: passed.
 
 Frontend scope:
 
-- Changes remain frontend-only under `apps/web/**` plus the handoff doc.
+- Changes are scoped to `apps/web/components/office/**` plus the handoff doc.
 - No backend files changed.
-- No Prisma schema, migration, seed, auth architecture, realtime protocol, map engine, movement/collision, chair interaction, contact drawer API, desktop-agent, browser-extension, deployment config, env, billing, chat, or map editor files changed.
+- No Prisma schema, migration, seed, auth architecture, realtime protocol, polling cadence, WebSocket reconnect behavior, map assets, TMX art, movement/collision/pathfinding, chair mechanics, deployment config, desktop-agent, browser-extension, tracking, chat/history, or production integration code changed.
 
-Owner journey:
+Office sync/status indicator:
 
-- Dashboard adds Owner-specific next steps: invite employees, open office, view reports, review compliance.
-- Owner workspace creation page explains the post-create path: avatar/profile, compliance, employee invites, virtual office.
-- Invite management page now clearly states that only workspace Owners can create/manage invitations.
-- Non-owner invite management attempts now get friendlier frontend copy before owner-only actions.
+- `VirtualOfficeTopBar` now receives existing `presenceSource`, `realtimeState`, and visible remote teammate count.
+- The sync pill explains demo presence, realtime connected, reconnecting, partial API, or polling fallback.
+- The indicator consumes existing frontend state only and does not initiate new API calls.
+- Realtime/polling behavior remains unchanged.
 
-Employee journey:
+People/contact actions:
 
-- Dashboard can present Employee workspace guidance without Owner-only CTAs.
-- Invite acceptance page explains the employee path after acceptance: compliance, avatar/profile, device setup, virtual office.
-- Invite acceptance maps common 403/forbidden/expired/already-accepted states into clearer user-facing copy.
-- Reports explain Employee own-report scope and that company summaries are Owner/Manager-only.
+- People panel first action is now `Details`, opening the existing contact drawer.
+- `Wave` is clearly local feedback only.
+- Teams, Outlook, and 3CX show explicit placeholder/not-connected messages.
+- Previous fake `mailto:${userId}@workmap.local` style behavior was removed from these action paths.
+- Contact drawer status guidance now better distinguishes focus, busy, offline, and available teammates.
+- Contact drawer external launcher note states Teams/Outlook/3CX are placeholders until configured.
 
-Platform Admin journey:
+Room/chair interactions:
 
-- Blocked state explains Platform Admin is an independent allowlisted identity.
-- Tenant Owner/Employee/IT Admin roles are explicitly described as not granting platform access.
-- Platform Admin page still frames data as tenant readiness/audit metadata, not employee-level activity details.
+- Chair prompt clarifies `Desk nearby - press E to sit` and `Seated at desk - press E to stand`.
+- Room context card uses teammate-aware occupancy copy.
+- Focus room action is renamed to `Focus cue` and clearly not persisted.
+- Copy link action gives toast feedback.
 
-AppShell/navigation:
+Scope honesty:
 
-- Unauthenticated/no-role state no longer shows tenant workspace navigation.
-- Platform Admin nav remains platform-only.
-- Navigation visibility remains advisory UX; backend RBAC remains the security boundary.
-
-Combined UI/style diff:
-
-- Global CSS and theme updates are broad but compile successfully.
-- Office chrome responsive CSS is extensive and should receive manual visual smoke.
-- The implementation intentionally does not change virtual-office map/realtime behavior.
+- Local reactions, quick notes, Teams, Outlook, and 3CX are not represented as working integrations.
+- No external content is read.
+- No fake integration or receiver-side wave delivery was added.
 
 ## 4. Security / Secret Review
 
 Result: passed.
 
 - No real secret was found in reviewed implementation files.
-- No AWS, Cognito, Supabase, Render, Vercel, database, JWT, platform admin, bearer, desktop-agent, or browser-extension secret was hardcoded.
+- No AWS, Cognito, Supabase, Render, Vercel, database, JWT, platform admin, bearer, desktop-agent, browser-extension, Teams, Outlook, or 3CX secret was hardcoded.
 - `.env` was not read.
 - Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches.
 
@@ -119,37 +116,34 @@ Not run:
 
 - API lint/typecheck/build, because no API/backend files changed.
 - Desktop-agent/browser-extension verification, because no harness files changed.
-- Browser/manual visual QA, because no local/deployed browser session was opened in this QA pass.
+- Browser/manual visual QA, because STAGE 3 manual QA is being deferred by user preference.
 
-## 6. Manual QA Recommended
+## 6. Deferred Manual QA
 
-Before commit, run targeted browser smoke:
+When STAGE 3 manual QA resumes, include these checks:
 
-1. Owner login, then `/dashboard`: confirm Owner next steps show Invite employees, Open office, View reports, Review compliance.
-2. Owner `/onboarding/company`: confirm workspace creation guidance clearly states post-create steps.
-3. Owner `/onboarding/invite`: confirm invite list/create works and copy is Owner-specific.
-4. Non-owner `/onboarding/invite`: confirm friendly Owner-only message and no misleading create path.
-5. Employee invite link: confirm invite page explains Cognito sign-in, workspace join, compliance/avatar/device setup, and virtual office path.
-6. Employee wrong-account invite acceptance: confirm 403 becomes helpful wrong-email/permission guidance.
-7. Employee direct `/dashboard`: confirm it does not show Owner-only CTAs.
-8. Employee `/reports`: confirm own-scope explanation is clear.
-9. Tenant Owner/Employee direct `/platform-admin`: confirm blocked state explains separate Platform Admin identity.
-10. Platform Admin login: confirm platform page still loads privacy-safe tenant metadata and no tenant workspace language regression.
-11. `/virtual-office`: confirm map, movement, realtime/polling, People panel, contact drawer, chair interaction, and command palette are unchanged.
-12. Visual smoke at 1366px, 1440px, and tablet-ish width for login, dashboard, employees, reports, compliance, platform admin, and virtual office chrome.
+1. `/virtual-office` with API and realtime available: top bar shows realtime connected and visible teammate count.
+2. Break realtime while polling remains available: top bar explains reconnecting or polling fallback and map remains usable.
+3. Backend unavailable/fallback mode: top bar explains demo presence and map still renders.
+4. People panel: filters/search, Details, Wave, Go to, Teams, Outlook, and 3CX actions show honest feedback.
+5. Contact drawer: guidance changes for focus/busy/offline/available statuses; placeholder actions do not imply real integrations.
+6. Chair/desk interaction: press `E` to sit and stand still works with clearer prompts.
+7. Room context card: Go to room, View people or Focus cue, and Copy link feedback.
+8. Regression: WASD/arrow movement, double-click auto-walk, collision, realtime movement, polling reconciliation, command palette, contact drawer, and fallback/mock mode.
+9. Layout: sync/status indicator at 1366px, 1440px, and tablet-ish widths does not overlap top chrome.
+10. Smoke unrelated pages: `/dashboard`, `/employees`, `/reports`, `/compliance`, `/onboarding/invite`, and `/platform-admin` still render.
 
 ## 7. Residual Risks / Notes
 
-- This round improves frontend role-flow clarity but does not add backend route guards or change global membership architecture.
-- Existing broad visual/style diffs are part of the current workspace and need browser visual QA before commit.
-- AppShell navigation visibility remains UX only; backend RBAC remains the security boundary.
-- Invite error matching is string-based frontend friendliness; backend error codes remain the authoritative contract.
-- Virtual Office behavior was not intentionally changed, but the office chrome/global CSS changes are broad enough to merit manual visual regression checks.
-- `docs/references/` remains unrelated untracked content and should not be staged.
+- Browser/manual QA was not run by design; user is deferring STAGE 3 manual testing until later.
+- New sync/status indicator placement should be visually checked for overlap with existing office top chrome.
+- Wave/reaction remains local feedback only until a backend/realtime event model is designed.
+- Teams/Outlook/3CX remain non-functional placeholders until integration/contact-link wiring is implemented.
+- `artresource.tiled-session`, `docs/references/`, `farm.tsx`, and `farm2.tsx` are unrelated to this QA pass and should not be staged unless explicitly intended.
 
 ## 8. Final Recommendation
 
-- QA review: passed for STAGE 3 Round 2 role-flow hardening.
+- QA review: passed for STAGE 3 Round 3 virtual-office experience polish.
 - Return to Codex Chat 2: not required.
-- Can proceed to human/manual testing: yes, recommended before commit.
-- Suggested commit: yes after targeted browser smoke passes.
+- Can proceed without immediate manual testing: yes, per user preference to defer STAGE 3 manual QA.
+- Suggested commit: yes for the Round 3 office UX changes and QA docs, excluding unrelated workspace files.

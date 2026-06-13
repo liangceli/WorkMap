@@ -914,6 +914,9 @@ export function OfficeMap() {
         <VirtualOfficeTopBar
           status={player.status}
           currentArea={activeRoom?.name ?? "Office"}
+          presenceSource={officeData.source}
+          realtimeState={realtimeConnectionState}
+          remoteCount={officePeople.length}
           onSearch={() => setCommandOpen(true)}
         />
         <OfficeLeftRail activePanel={activePanel} onSelectPanel={openPanel} />
@@ -978,7 +981,7 @@ export function OfficeMap() {
           onOpenChat={() => setActivePanel("chat")}
           onOpenCalendar={() => setActivePanel("calendar")}
           onWave={() => setToast("You waved to nearby teammates.")}
-          onEmoji={() => setToast("Emoji options are frontend-only in this MVP.")}
+          onEmoji={() => setToast("Emoji reactions are local feedback in this MVP.")}
           onToast={setToast}
         />
         {drawerTarget ? (
@@ -1000,6 +1003,7 @@ export function OfficeMap() {
               setToast(`Scheduling with ${drawerTarget.displayName}`);
             }}
             onViewProfile={() => router.push(`/employees/${remoteProfileRouteIds[drawerTarget.userId] ?? drawerTarget.userId}`)}
+            onActionNote={setToast}
           />
         ) : null}
         {selectedDestination ? (
@@ -1009,6 +1013,7 @@ export function OfficeMap() {
             onGoTo={() => goToDestination(selectedDestination)}
             onViewPeople={() => setActivePanel("people")}
             onClose={() => setSelectedDestination(null)}
+            onNotice={setToast}
           />
         ) : null}
         <OfficeCommandPalette

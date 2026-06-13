@@ -2,73 +2,65 @@
 
 ## 1. Original Task Brief
 
-STAGE 3 Round 2: Role-Based User Journey Polish + Alpha Flow Hardening.
+STAGE 3 Round 3: Virtual Office Product Experience Polish + Interaction Readiness.
 
-Polish WorkMap's role-based journeys without a broad visual redesign. Focus on product flow clarity, role-specific routing/navigation, permission states, onboarding guidance, empty/loading/error states, and alpha usability hardening. Prefer frontend-only changes. Do not change backend features, schema/migrations, auth architecture, realtime protocol, deployment setup, desktop agent, browser extension, tracking features, billing, chat, map editor, or virtual-office rewrite behavior.
+Polish `/virtual-office` so it feels like a real team workspace instead of only a moving-avatar demo. Improve page/product structure, People panel clarity, contact drawer usefulness, realtime/polling/reconnect state clarity, current user/room/status context, lightweight wave/reaction feedback if existing frontend paths allow, chair/desk interaction clarity, and external contact action readiness placeholders for Teams/3CX. Do not make a broad visual redesign and do not change backend features, Prisma schema, realtime protocol, TMX art, movement/collision/pathfinding/chair mechanics, deployment setup, desktop agent, browser extension, chat/history, or production integrations.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx` | Added role-aware dashboard journey guidance and role-specific CTAs for Owner, Employee, and default workspace states. |
-| `workmap/apps/web/app/onboarding/company/page.tsx` | Clarified Owner workspace creation flow and next steps after workspace creation. |
-| `workmap/apps/web/app/invite/[token]/page.tsx` | Added employee invite acceptance flow guidance and friendlier invite error mapping for forbidden/expired/already-used invites. |
-| `workmap/apps/web/app/onboarding/invite/page.tsx` | Added frontend Owner-only guidance before invite list/create calls and friendlier non-owner/forbidden states. |
-| `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` | Added report-scope guidance so employees understand own-report scope and owners/managers understand aggregate company scope. |
-| `workmap/apps/web/app/platform-admin/page.tsx` | Added friendlier blocked-state copy for tenant users or unauthenticated users trying to access Platform Admin. |
-| `workmap/apps/web/components/layout/AppShell.tsx` | Tightened unauthenticated navigation so tenant workspace nav is not shown without a resolved workspace role. |
+| `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx` | Added a compact sync/status pill that explains demo presence, API/partial API state, realtime connection, reconnecting, and polling fallback without changing the data path. |
+| `workmap/apps/web/components/office/OfficeMap.tsx` | Passed existing presence source, realtime connection state, and remote count into the top bar; wired existing toast feedback into contact and room context actions. |
+| `workmap/apps/web/components/office/OfficeSidePanel.tsx` | Clarified People actions so Details/Wave/Teams/Outlook/3CX do not imply unavailable external integrations or receiver-side wave delivery. |
+| `workmap/apps/web/components/office/InteractionDrawer.tsx` | Added honest contact action feedback for wave, Teams, Outlook, and 3CX placeholders; improved guidance for focus/busy/offline teammates. |
+| `workmap/apps/web/components/office/OfficeBottomDock.tsx` | Clarified status, local notes, Outlook, and 3CX action labels/toasts. |
+| `workmap/apps/web/components/office/FloatingRoomPill.tsx` | Made desk/chair prompts clearer: press `E` to sit and press `E` to stand. |
+| `workmap/apps/web/components/office/RoomContextCard.tsx` | Clarified room occupancy copy, focus-room cue behavior, and copy-link feedback. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA. |
 
 Pre-existing workspace notes:
 
-- Many `apps/web/**` files were already modified before this Round 2 task, apparently from accepted Round 1/style work. This implementation avoided broad formatting and only made targeted flow/copy/state changes.
-- `docs/references/` remains unrelated untracked workspace content and was not modified.
+- `artresource.tiled-session` was already modified outside this task and was not touched intentionally.
+- `docs/references/` and `farm.tsx` are untracked workspace files and were not modified.
 
-## 3. Role-Flow Changes
+## 3. Implementation Summary
 
-Owner journey:
+- Added a top-bar office sync indicator using already available frontend state:
+  - `presenceSource` from `useVirtualOfficeData()`
+  - `realtimeConnectionState` from `useVirtualOfficeRealtime()`
+  - visible remote teammate count
+- Kept polling and WebSocket behavior unchanged. The new UI only explains the current state.
+- Made People panel actions more accurate:
+  - `Wave` now says it is local feedback only.
+  - Teams, Outlook, and 3CX actions show explicit not-connected placeholder messages.
+  - The first action is now `Details`, opening the existing contact drawer.
+- Made the contact drawer more useful without adding integrations:
+  - Guidance changes based on focus/busy/offline/available status.
+  - External launcher note explains Teams/Outlook/3CX are placeholders until configured.
+  - Contact actions use toast feedback instead of fake mailto links.
+- Clarified lightweight workspace interactions:
+  - Chair prompt explains sit/stand.
+  - Focus-room action is a local cue, not a persisted focus session.
+  - Copy-link action gives user feedback.
 
-- Dashboard now detects `OWNER` and shows Owner-specific next steps: invite employees, open office, view reports, review compliance.
-- Owner workspace creation page now explains that after workspace creation the owner finishes avatar/profile setup, reviews compliance, creates employee invites, and opens the virtual office.
-- Invite management page now explicitly says only workspace Owners can create/manage invitations.
+## 4. User-Visible Changes
 
-Employee journey:
+- `/virtual-office` now shows whether the office is in demo presence, realtime connected, reconnecting, partial API, or polling fallback mode.
+- People panel and contact drawer actions are clearer and less misleading.
+- Users get immediate toast feedback when clicking wave/reaction/contact placeholders.
+- Seat/chair prompts are more understandable.
+- No visual redesign, no map art change, and no movement behavior change was intended.
 
-- Dashboard direct access by an Employee now reads as an Employee workspace view and does not show Owner-only CTAs.
-- Invite acceptance page now explains the employee path: accept invite, then compliance, avatar/profile, device setup, then virtual office.
-- Invite acceptance errors map common 403/expired/already-accepted states into actionable language.
-- Reports now explain that Employees use own-report scope and company-wide summaries are owner/manager-only.
+## 5. Technical Notes
 
-Platform Admin journey:
+- This was frontend-only under `apps/web/components/office/**`.
+- No backend files, Prisma schema/migrations, shared API contracts, realtime protocol, auth, deployment config, desktop-agent, browser-extension, or tracking code changed.
+- The sync indicator consumes existing state only; it does not initiate new API calls, alter polling cadence, or alter WebSocket reconnect behavior.
+- Wave/reaction remains local UI feedback only. There is still no backend or realtime event delivery for reactions.
+- Teams/Outlook/3CX remain explicit placeholders. No content is read from external tools and no fake integration was added.
 
-- Platform Admin blocked state now explains that tenant Owner/Employee/IT Admin roles do not grant platform access.
-- Platform Admin remains independent and Cognito/platform allowlist-driven; no new platform powers were added.
-
-## 4. Route / Redirect Changes
-
-- No route paths were changed.
-- No callback redirect architecture was changed.
-- No onboarding route order was changed.
-- AppShell unauthenticated nav visibility was tightened so tenant workspace navigation does not appear before a workspace role is resolved.
-
-## 5. Permission / Empty / Error State Changes
-
-- Non-owner invitation access now gets a helpful frontend message before attempting owner-only invite operations.
-- Invite acceptance 403 is explained as likely wrong/unverified invited Cognito email instead of raw technical error.
-- Platform Admin blocked state explains the independent platform identity requirement.
-- Reports scope state explains why employee company-wide summaries are unavailable.
-- Dashboard sparse/fallback state remains labeled and role-aware.
-
-## 6. Intentionally Not Changed
-
-- No backend files changed.
-- No Prisma schema/migrations/seed changed.
-- No auth architecture, Cognito verification, pilot/dev fallback, platform auth boundary, tenant RBAC, or invite API contract changed.
-- No virtual-office map rendering, movement, collision, chair interaction, contact drawer, realtime, polling, or map assets changed.
-- No deployment, env, desktop-agent, browser-extension, tracking, billing, chat, map editor, or production agent work changed.
-- No fake production data was added.
-
-## 7. Verification Results
+## 6. Verification Results
 
 Commands run from `workmap/`:
 
@@ -78,50 +70,48 @@ pnpm --filter @workmap/web lint
 pnpm --filter @workmap/web build
 git diff --check
 secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/`
-diff-only secret scan
 ```
 
-Result:
+Results:
 
-- Web typecheck passed after the flow changes.
+- Web typecheck passed.
 - Web lint passed.
 - Web build passed.
 - `git diff --check` passed with CRLF normalization warnings only.
-- Next build still prints the existing warning that the Next.js ESLint plugin is not detected in the current ESLint config.
-- Repo secret scan found only a pre-existing local placeholder in `docs/qa/workmap-qa-report-2026-05-31.md`; it is not part of this diff.
-- Diff-only secret scan found no matches.
+- Secret scan found only existing documentation references to generic Bearer-token wording, not real secrets.
+- Next build still prints the existing warning that the Next.js ESLint plugin is not detected.
 - `workmap/apps/web/tsconfig.tsbuildinfo` was modified by build and restored.
 
-API verification was not run because no backend/shared API files were changed.
+API verification was not run because no backend/API files were changed.
 
-## 8. Manual QA Suggestions
+## 7. Manual QA Suggestions
 
-1. Owner login, then `/dashboard`: confirm Owner next steps show Invite employees, Open office, View reports, Review compliance.
-2. Owner `/onboarding/company`: confirm workspace creation guidance clearly states post-create steps.
-3. Owner `/onboarding/invite`: confirm invite list/create works and copy is Owner-specific.
-4. Employee invite link: confirm invite page explains Cognito sign-in, workspace join, compliance/avatar/device setup, and virtual office path.
-5. Employee wrong-account invite acceptance: confirm 403 becomes a helpful wrong-email/permission message.
-6. Employee direct `/dashboard`: confirm it does not show Owner-only CTAs.
-7. Employee `/reports`: confirm own-scope explanation is clear.
-8. Tenant Owner/Employee direct `/platform-admin`: confirm blocked state explains separate Platform Admin identity.
-9. Platform Admin login: confirm platform page still loads privacy-safe tenant metadata and no tenant workspace language regression.
-10. `/virtual-office`: confirm map, movement, realtime/polling, People panel, contact drawer, chair interaction, and command palette are unchanged.
-11. Visual smoke at 1366px, 1440px, and tablet-ish width for login, dashboard, employees, reports, compliance, platform admin, and virtual office chrome.
+1. Open `/virtual-office` with API and realtime available; confirm the top bar shows realtime connected and the visible teammate count.
+2. Stop or break realtime while polling remains available; confirm the top bar explains reconnecting or polling fallback and the map stays usable.
+3. Open `/virtual-office` with backend unavailable; confirm demo presence/fallback state is clear and map still renders.
+4. Open People panel; test filters/search, Details, Wave, Go to, Teams, Outlook, and 3CX actions.
+5. Click or approach a teammate; confirm contact drawer guidance changes appropriately by status and external actions show placeholder feedback.
+6. Move near a chair and press `E`; confirm sit/stand prompts and existing chair behavior still work.
+7. Open a room context card; test Go to room, View people or Focus cue, and Copy link.
+8. Regression-check WASD/arrow movement, double-click auto-walk, collision, realtime movement, polling reconciliation, command palette, contact drawer, and fallback/mock mode.
+9. Smoke `/dashboard`, `/employees`, `/reports`, `/compliance`, `/onboarding/invite`, and `/platform-admin` to confirm unrelated role flows still render.
 
-## 9. Remaining Risks
+## 8. Risks / Notes
 
-- Frontend navigation remains advisory UX; backend RBAC remains the security boundary.
-- Existing broader style diffs were present before this task; QA should review the combined current git diff carefully.
-- This round improves flow clarity but does not replace full route guards or global identity/membership architecture.
-- Browser/manual visual QA is still needed because the workspace currently contains ongoing visual styling changes.
+- Browser/manual QA was not run in this implementation pass.
+- New sync/status indicator placement should be checked at 1366px, 1440px, and tablet-ish widths for overlap with existing top chrome.
+- Wave/reaction is deliberately local feedback only until a backend/realtime reaction event is designed.
+- Teams/Outlook/3CX launchers are deliberately non-functional placeholders until integrations/contact-link wiring is implemented.
+- Existing untracked or unrelated workspace files were left untouched.
 
-## 10. Docs Update Suggestions
+## 9. Docs Update Suggestions
 
-- `docs/skills/frontend-skill.md`: record Round 2 role-flow guidance for Dashboard, invite acceptance, invite management, Reports scope guidance, Platform Admin blocked state, and unauthenticated nav tightening.
-- `docs/skills/ui-ux-skill.md`: add guidance that Owner/Employee/Platform Admin journeys should explain next steps and unavailable permissions in plain language.
-- `docs/skills/qa-skill.md`: add Round 2 manual checks for Owner dashboard next steps, Employee direct dashboard/report states, invite wrong-account errors, and Platform Admin blocked state.
-- `docs/skills/current-status.md`: after QA acceptance, record STAGE 3 Round 2 role-flow hardening.
+- `docs/skills/virtual-office-skill.md`: record Round 3 virtual-office UX polish, sync indicator, local wave/reaction boundary, and external launcher placeholder boundary.
+- `docs/skills/realtime-presence-skill.md`: add manual QA guidance for reconnecting/polling-fallback UI clarity.
+- `docs/skills/ui-ux-skill.md`: record that virtual-office collaboration controls must clearly distinguish implemented behavior from future integrations.
+- `docs/skills/qa-skill.md`: add Round 3 checks for sync status indicator, People/contact placeholder actions, chair prompt clarity, and map/realtime regression.
+- `docs/skills/current-status.md`: after QA acceptance, record STAGE 3 Round 3 virtual-office experience polish.
 
-## 11. Input for Next Chat
+## 10. Input for Next Chat
 
 Review the current implementation using `docs/ai-handoff/latest-implementation.md` and the current git diff. Update `docs/ai-handoff/latest-qa.md`.

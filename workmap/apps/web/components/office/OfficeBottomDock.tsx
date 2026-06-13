@@ -58,7 +58,7 @@ export function OfficeBottomDock({
       <span className="wm-office-dock-divider" style={styles.divider} />
 
       <div className="wm-office-dock-actions" style={styles.actions}>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("Status changes are local-only in this MVP.")} aria-label="Status">
+        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("Status follows your room, movement, and chair state in this MVP.")} aria-label="Status">
           <OfficeIcon name="status" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Status</span>
         </button>
@@ -74,15 +74,15 @@ export function OfficeBottomDock({
           <OfficeIcon name="search" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Search</span>
         </button>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={onOpenChat} aria-label="Teams">
+        <button type="button" className="office-dock-action" style={styles.action} onClick={onOpenChat} aria-label="Local quick notes">
           <OfficeIcon name="people" size={28} />
-          <span className="office-dock-tooltip" style={styles.tooltip}>Teams</span>
+          <span className="office-dock-tooltip" style={styles.tooltip}>Notes</span>
         </button>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={() => { window.location.href = "mailto:"; }} aria-label="Outlook">
+        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("Outlook launcher is not connected yet.")} aria-label="Outlook">
           <OfficeIcon name="mail" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Outlook</span>
         </button>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("3CX launcher placeholder.")} aria-label="3CX">
+        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("3CX calling is not connected yet.")} aria-label="3CX">
           <OfficeIcon name="phone" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>3CX</span>
         </button>

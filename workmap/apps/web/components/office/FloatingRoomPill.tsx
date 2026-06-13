@@ -11,7 +11,7 @@ type FloatingRoomPillProps = {
 };
 
 export function FloatingRoomPill({ room, seated, chairNearby, elevated }: FloatingRoomPillProps) {
-  const context = seated ? "Seated at desk" : chairNearby ? "Press E to sit" : room?.name ?? "Open Area";
+  const context = seated ? "Seated at desk - press E to stand" : chairNearby ? "Desk nearby - press E to sit" : room?.name ?? "Open Area";
 
   if (!seated && !chairNearby) {
     return null;

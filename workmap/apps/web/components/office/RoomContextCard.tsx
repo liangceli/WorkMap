@@ -10,9 +10,10 @@ type RoomContextCardProps = {
   onGoTo: () => void;
   onViewPeople: () => void;
   onClose: () => void;
+  onNotice?: (message: string) => void;
 };
 
-export function RoomContextCard({ destination, peopleCount, onGoTo, onViewPeople, onClose }: RoomContextCardProps) {
+export function RoomContextCard({ destination, peopleCount, onGoTo, onViewPeople, onClose, onNotice }: RoomContextCardProps) {
   const isFocusRoom = destination.name.toLowerCase().includes("focus");
   const isMeetingRoom = destination.name.toLowerCase().includes("meeting");
 
@@ -31,15 +32,18 @@ export function RoomContextCard({ destination, peopleCount, onGoTo, onViewPeople
       </div>
       <h2 style={styles.title}>{destination.name}</h2>
       <p style={styles.text}>{roomDescription(destination, isFocusRoom, isMeetingRoom)}</p>
-      <p style={styles.meta}>{peopleCount} people here</p>
+      <p style={styles.meta}>{peopleCount} teammate{peopleCount === 1 ? "" : "s"} here</p>
       <div style={styles.actions}>
         <button type="button" onClick={onGoTo} style={styles.primaryButton}>Go to room</button>
         {isFocusRoom ? (
-          <button type="button" onClick={() => undefined} style={styles.secondaryButton}>Start focus session</button>
+          <button type="button" onClick={() => onNotice?.("Focus sessions are not persisted yet. Use the room presence cue for now.")} style={styles.secondaryButton}>Focus cue</button>
         ) : (
           <button type="button" onClick={onViewPeople} style={styles.secondaryButton}>View people</button>
         )}
-        <button type="button" onClick={() => navigator.clipboard?.writeText(window.location.href)} style={styles.secondaryButton}>
+        <button type="button" onClick={() => {
+          navigator.clipboard?.writeText(window.location.href);
+          onNotice?.("Office link copied.");
+        }} style={styles.secondaryButton}>
           Copy link
         </button>
       </div>

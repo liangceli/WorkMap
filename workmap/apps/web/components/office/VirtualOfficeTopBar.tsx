@@ -4,14 +4,27 @@ import type { UserPresenceStatus } from "@workmap/shared-types";
 import { wm } from "../../lib/theme/workmapTheme";
 import { OfficeIcon } from "./OfficeIcons";
 import { labelStatus, statusColors } from "./presence";
+import type { VirtualOfficeRealtimeState } from "./useVirtualOfficeRealtime";
 
 type VirtualOfficeTopBarProps = {
   status: UserPresenceStatus;
   currentArea?: string;
+  presenceSource: "mock" | "api" | "partial-api";
+  realtimeState: VirtualOfficeRealtimeState;
+  remoteCount: number;
   onSearch?: () => void;
 };
 
-export function VirtualOfficeTopBar({ status, currentArea = "Office", onSearch }: VirtualOfficeTopBarProps) {
+export function VirtualOfficeTopBar({
+  status,
+  currentArea = "Office",
+  presenceSource,
+  realtimeState,
+  remoteCount,
+  onSearch,
+}: VirtualOfficeTopBarProps) {
+  const connection = connectionCopy(realtimeState, presenceSource, remoteCount);
+
   return (
     <>
       <header className="wm-office-top-brand" style={styles.workspacePill}>
@@ -31,6 +44,14 @@ export function VirtualOfficeTopBar({ status, currentArea = "Office", onSearch }
         <span style={styles.chevron}><OfficeIcon name="chevronDown" size={18} /></span>
       </button>
 
+      <div className="wm-office-sync-pill" style={styles.syncPill} aria-label="Office sync status">
+        <span style={{ ...styles.syncDot, background: connection.color }} />
+        <span style={styles.syncText}>
+          <strong>{connection.label}</strong>
+          <span>{connection.detail}</span>
+        </span>
+      </div>
+
       <div className="wm-office-status-pill" style={styles.statusPill}>
         <button type="button" style={styles.searchButton} onClick={onSearch} aria-label="Find people, rooms, or actions">
           <OfficeIcon name="search" size={20} />
@@ -48,6 +69,42 @@ export function VirtualOfficeTopBar({ status, currentArea = "Office", onSearch }
       </div>
     </>
   );
+}
+
+function connectionCopy(
+  realtimeState: VirtualOfficeRealtimeState,
+  presenceSource: VirtualOfficeTopBarProps["presenceSource"],
+  remoteCount: number,
+) {
+  if (presenceSource === "mock") {
+    return {
+      label: "Demo presence",
+      detail: "API unavailable; map stays usable",
+      color: wm.status.idle,
+    };
+  }
+
+  if (realtimeState === "connected") {
+    return {
+      label: "Realtime connected",
+      detail: `${remoteCount} teammate${remoteCount === 1 ? "" : "s"} visible`,
+      color: wm.status.available,
+    };
+  }
+
+  if (realtimeState === "connecting" || realtimeState === "reconnecting") {
+    return {
+      label: "Reconnecting",
+      detail: "Polling keeps presence updated",
+      color: wm.status.busy,
+    };
+  }
+
+  return {
+    label: presenceSource === "partial-api" ? "Partial API" : "Polling fallback",
+    detail: "Presence refreshes automatically",
+    color: wm.status.idle,
+  };
 }
 
 const styles = {
@@ -120,6 +177,39 @@ const styles = {
     fontWeight: 700,
     boxShadow: wm.shadow.card,
     backdropFilter: "blur(18px)",
+  },
+  syncPill: {
+    position: "absolute" as const,
+    top: "94px",
+    left: "306px",
+    zIndex: 19,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "10px",
+    maxWidth: "380px",
+    minHeight: "42px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: "999px",
+    background: "rgba(255, 253, 248, 0.86)",
+    color: wm.colors.text,
+    padding: "7px 13px",
+    boxShadow: wm.shadow.card,
+    backdropFilter: "blur(16px)",
+  },
+  syncDot: {
+    flex: "0 0 auto",
+    width: "10px",
+    height: "10px",
+    borderRadius: "999px",
+  },
+  syncText: {
+    display: "grid",
+    gap: "1px",
+    minWidth: 0,
+    fontSize: "11px",
+    lineHeight: 1.2,
+    color: wm.colors.textMuted,
+    fontWeight: 750,
   },
   areaIcon: {
     color: wm.colors.secondary,

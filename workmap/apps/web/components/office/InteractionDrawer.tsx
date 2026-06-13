@@ -12,9 +12,10 @@ type InteractionDrawerProps = {
   onOpenChat?: () => void;
   onSchedule?: () => void;
   onViewProfile?: () => void;
+  onActionNote?: (message: string) => void;
 };
 
-export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSchedule, onViewProfile }: InteractionDrawerProps) {
+export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSchedule, onViewProfile, onActionNote }: InteractionDrawerProps) {
   const firstName = target.displayName.split(" ")[0] ?? target.displayName;
   const guidance = getGuidance(target.status, firstName);
   const callDisabled = target.status === "focus" || target.status === "busy" || target.status === "offline";
@@ -36,8 +37,20 @@ export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSched
       onViewProfile();
       return;
     }
+    if (action === "Wave") {
+      onActionNote?.(`You waved to ${target.displayName}. Local feedback only for this MVP.`);
+      return;
+    }
+    if (action === "Teams") {
+      onActionNote?.("Teams launcher is ready for future integration. No Teams content is read here.");
+      return;
+    }
     if (action === "Outlook") {
-      window.location.href = `mailto:${target.userId}@workmap.local`;
+      onActionNote?.("Outlook contact action is a placeholder until contact links are configured.");
+      return;
+    }
+    if (action === "3CX") {
+      onActionNote?.("3CX calling is not connected yet. Use schedule or message for now.");
       return;
     }
 
@@ -68,6 +81,7 @@ export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSched
         <p style={styles.kicker}>People here</p>
         <h3 style={styles.greeting}>{guidance.title}</h3>
         <p style={styles.subtext}>{guidance.text}</p>
+        <p style={styles.integrationNote}>External launchers are placeholders until Teams, Outlook, or 3CX links are configured.</p>
       </div>
 
       <div style={styles.actions}>
@@ -104,24 +118,24 @@ function getGuidance(status: ContactTarget["status"], firstName: string) {
   if (status === "focus") {
     return {
       title: `${firstName} is focusing`,
-      text: "Send a quiet message or schedule time instead of starting a call.",
+      text: "Use a quiet WorkMap message or schedule time instead of starting a call.",
     };
   }
   if (status === "busy") {
     return {
       title: `${firstName} looks busy`,
-      text: "Outlook or schedule meeting is the best next step.",
+      text: "Schedule a meeting or leave an async note instead of interrupting.",
     };
   }
   if (status === "offline") {
     return {
       title: `${firstName} is offline`,
-      text: "Leave an email or view their profile for contact details.",
+      text: "View their profile or leave an async note for later.",
     };
   }
   return {
     title: `Hi ${firstName}`,
-    text: `${firstName} is available. Send a message or choose another contact option.`,
+    text: `${firstName} is available. Start with a message, wave, or go to their workspace area.`,
   };
 }
 
@@ -251,6 +265,13 @@ const styles = {
     fontSize: "14px",
     lineHeight: 1.5,
     fontWeight: 600,
+  },
+  integrationNote: {
+    margin: "8px 0 0",
+    color: wm.colors.textMuted,
+    fontSize: "12px",
+    lineHeight: 1.4,
+    fontWeight: 750,
   },
   actions: {
     display: "grid",

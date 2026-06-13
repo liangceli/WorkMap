@@ -1,10 +1,10 @@
 {
     "activeFile": "workmap2.tmx",
     "expandedProjectPaths": [
-        ".",
         "workmap/apps/web",
-        "workmap",
-        "workmap/apps"
+        "workmap/apps",
+        ".",
+        "workmap"
     ],
     "fileStates": {
         "1.tsx": {
@@ -21,6 +21,10 @@
             "scaleInEditor": 1
         },
         "farm side.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "farm.tsx": {
             "scaleInDock": 1,
             "scaleInEditor": 1
         },
@@ -79,24 +83,24 @@
             "scaleInDock": 1
         },
         "workmap2.tmx": {
-            "scale": 1.5,
+            "scale": 0.25,
             "selectedLayer": 7,
             "viewCenter": {
-                "x": 1211.6666666666665,
-                "y": 232.33333333333331
+                "x": 2472,
+                "y": 570
             }
         },
         "workmap_office_mvp.tmx": {
             "scale": 0.75,
             "selectedLayer": 3,
             "viewCenter": {
-                "x": 639.3333333333333,
+                "x": 638.6666666666665,
                 "y": 179.33333333333331
             }
         }
     },
-    "last.externalTilesetPath": "C:/Users/lilia/Downloads",
-    "last.imagePath": "C:/Users/lilia/Downloads",
+    "last.externalTilesetPath": "C:/Users/lilia/AppData/Local/Temp",
+    "last.imagePath": "C:/Users/lilia/OneDrive/Desktop/32x32",
     "map.height": 100,
     "map.lastUsedFormat": "tmx",
     "map.width": 100,
@@ -107,17 +111,17 @@
     "project": "artresource.tiled-project",
     "recentFiles": [
         "workmap2.tmx",
+        "workmap_office_mvp.tmx",
+        "tilets.tsx",
+        "farm.tsx",
         "s.tsx",
         "farm side.tsx",
         "shadowlessthings.tsx",
-        "workmap_office_mvp.tmx",
-        "tilets.tsx",
         "walls.tsx",
         "walls32 32.tsx",
         "shadowless.tsx",
         "1_Room_Builder_Officer.tsx",
-        "Modern_Office_Shadowless_32x32.tsx",
-        "1.tsx"
+        "Modern_Office_Shadowless_32x32.tsx"
     ],
     "tileset.lastUsedFilter": "All Files (*)",
     "tileset.lastUsedFormat": "tsx"

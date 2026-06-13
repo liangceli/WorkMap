@@ -160,12 +160,12 @@ export function OfficeSidePanel({
                         </span>
                       </button>
                       <div style={styles.actionGrid}>
-                        <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.smallButton}>Message</button>
-                        <button type="button" onClick={() => toast(`You waved to ${person.displayName}.`)} style={styles.smallButton}>Wave</button>
+                        <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.smallButton}>Details</button>
+                        <button type="button" onClick={() => toast(`You waved to ${person.displayName}. Local feedback only.`)} style={styles.smallButton}>Wave</button>
                         <button type="button" onClick={() => onGoToPerson(person)} style={styles.smallButton}>Go to</button>
-                        <button type="button" onClick={() => toast("Teams launcher placeholder.")} style={styles.smallButton}>Teams</button>
-                        <button type="button" onClick={() => { window.location.href = `mailto:${person.userId}@workmap.local`; }} style={styles.smallButton}>Outlook</button>
-                        <button type="button" onClick={() => toast("3CX launcher placeholder.")} style={styles.smallButton}>3CX</button>
+                        <button type="button" onClick={() => toast("Teams launcher is not connected yet.")} style={styles.smallButton}>Teams</button>
+                        <button type="button" onClick={() => toast("Outlook contact links are not configured yet.")} style={styles.smallButton}>Outlook</button>
+                        <button type="button" onClick={() => toast("3CX calling is not connected yet.")} style={styles.smallButton}>3CX</button>
                       </div>
                     </article>
                   );
@@ -202,7 +202,7 @@ export function OfficeSidePanel({
 
         {activePanel === "chat" ? (
           <section style={styles.stack}>
-            <p style={styles.note}>WorkMap quick messages are frontend-only in this MVP. They do not read Teams or Outlook content.</p>
+            <p style={styles.note}>WorkMap quick messages are frontend-only notes in this MVP. They do not sync to teammates or read Teams or Outlook content.</p>
             <select value={chatTarget} onChange={(event) => setChatTarget(event.target.value)} style={styles.input}>
               <option value="general"># general</option>
               <option value="announcements"># announcements</option>
@@ -217,8 +217,8 @@ export function OfficeSidePanel({
               ))}
             </div>
             <div style={styles.composer}>
-              <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Send quiet message" style={styles.input} />
-              <button type="button" onClick={sendMessage} style={styles.primaryButton}>Send</button>
+              <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Add local note" style={styles.input} />
+              <button type="button" onClick={sendMessage} style={styles.primaryButton}>Add note</button>
             </div>
           </section>
         ) : null}
@@ -239,7 +239,7 @@ export function OfficeSidePanel({
                 <p style={styles.cardText}>{meeting.time} / {meeting.room}</p>
                 <p style={styles.cardText}>{meeting.attendees}</p>
                 <div style={styles.twoActions}>
-                  <button type="button" onClick={() => toast("Teams launcher placeholder.")} style={styles.smallButton}>Open Teams</button>
+                  <button type="button" onClick={() => toast("Teams launcher is not connected yet.")} style={styles.smallButton}>Open Teams</button>
                   <button
                     type="button"
                     onClick={() => {
