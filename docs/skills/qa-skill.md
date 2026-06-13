@@ -105,6 +105,18 @@ Use `docs/ai-handoff/alpha-production-readiness.md` as the source of truth befor
 - Confirm Platform Admin uses only configured backend allowlists and does not expose employee app/domain details or raw activity rows.
 - Run a final secret scan before deploy/commit handoff.
 
+## STAGE 2 Real Alpha Deployment Smoke QA
+
+Use `docs/ai-handoff/real-alpha-deployment-smoke.md` for Round 9 deployed smoke.
+
+- Run `pnpm smoke:alpha` from `workmap/` with `WORKMAP_SMOKE_API_URL`, `WORKMAP_SMOKE_APP_URL`, and usually `WORKMAP_SMOKE_ORIGIN` set in the shell to public deployed origins.
+- Do not store real smoke values in docs unless they are intentionally public and non-sensitive; never paste bearer tokens, database URLs, JWT secrets, platform admin identities, or Cognito secrets into chat.
+- Treat `WORKMAP_SMOKE_*` as public smoke helper inputs only. The helper reads process env and does not read `.env`.
+- Confirm the helper checks deployed `/health`, `/health/readiness`, approved-origin CORS, frontend `/`, `/login`, `/virtual-office`, `/platform-admin`, and the derived WSS endpoint path.
+- Confirm localhost is rejected by default unless `WORKMAP_SMOKE_ALLOW_LOCAL=1` is intentionally set for local testing.
+- After the helper passes, complete authenticated manual smoke for Cognito Owner onboarding, invite creation, Employee invite acceptance/onboarding, two-user realtime movement, People/contact surfaces, Platform Admin privacy, device registration, app/domain sample activity, Employee own reports, Owner company aggregate reports, and Employee company-scope report block.
+- Repeat deployed smoke immediately before pilot start and after any Vercel, Render, Supabase, Cognito, origin allowlist, callback/logout, migration, or deployment change.
+
 ## STAGE 2 Tenant Onboarding / Invite QA
 
 - Apply migration `20260606000000_stage2_onboarding_invites` before testing.
@@ -307,6 +319,19 @@ Use this repeatable loop after backend/local-startup changes:
 
 ## Latest Verification Notes
 
+For commit `20feb27`, handoff/QA reports:
+
+- Smoke helper syntax check passed with `node --check scripts/real-alpha-smoke.mjs`.
+- `pnpm smoke:alpha` without deployed env returned Manual Action Required as expected and did not pretend smoke passed.
+- API, web, desktop-agent, and browser-extension typecheck/lint/build commands passed; desktop build passed after rerun outside the sandbox due to a Windows `dist` permission issue.
+- `pnpm prisma:generate` passed after rerun outside the sandbox when Prisma binary checksum access was blocked/redirected in the sandbox.
+- `git diff --check` passed with CRLF normalization warnings only.
+- `git check-ignore -v workmap/pnpm-lock.yaml` returned no ignore rule, confirming the lockfile can be committed for Vercel installs.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` found no high-confidence secrets.
+- Human-reported deployed smoke passed on 2026-06-13 for Supabase migrations, Render health/readiness, Vercel frontend, Cognito Hosted UI callback/logout, `pnpm smoke:alpha` against deployed public URLs, approved-origin CORS, two-user WSS/virtual-office, Owner onboarding/invite, Employee invite acceptance/onboarding, Platform Admin privacy boundary, device registration, app/domain sample activity, Employee own report, Owner company aggregate report, and Employee company-scope report block.
+- QA conclusion: WorkMap is an Alpha Ready Candidate for a controlled 5-person pilot, not full production readiness.
+- Future hardening: automated negative tests for cross-user/cross-tenant device ids, malformed/future timestamps, overlong durations, malformed domains, URL minimization, batch-size limits, and unapproved-origin CORS.
+
 For commit `8719f5d`, handoff/QA reports:
 
 - API and web typecheck, lint, and build passed.
@@ -317,7 +342,7 @@ For commit `8719f5d`, handoff/QA reports:
 - Code review confirmed shared HTTP CORS/WebSocket origin allowlist behavior, preferred `WORKMAP_ALLOWED_ORIGINS`, production browser-origin rejection when no allowlist is configured, local-only localhost origins, safe missing-origin server-to-server behavior, `/health/readiness` DB readiness without secrets, and alpha deployment documentation.
 - No real deployed Vercel/Render/Supabase/Cognito smoke was run.
 - No live browser alpha smoke or live invalid-input activity hardening requests were run.
-- QA recommendation: code/docs can proceed toward controlled alpha deployment preparation, but deployed alpha readiness remains blocked on external service setup and deployed smoke.
+- QA recommendation at the time: code/docs could proceed toward controlled alpha deployment preparation, while deployed alpha readiness still required external setup and smoke. This was superseded by Round 9 commit `20feb27`, which records human-reported deployed smoke pass.
 
 For commit `abe673c`, the implementation handoff reports these passed from `workmap/`:
 

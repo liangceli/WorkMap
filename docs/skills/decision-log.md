@@ -144,6 +144,14 @@ Reason: Controlled alpha deployment needs explicit browser-origin security for V
 
 Trade-off: Production browser HTTP and WSS traffic now depends on exact external env configuration; a misconfigured or missing allowlist blocks browser origins. Missing `Origin` remains allowed for server-to-server/health-style requests, and deployed alpha readiness still requires manual Vercel, Render, Supabase, Cognito, migration, and smoke verification.
 
+## 2026-06-13 - Non-Secret External Alpha Smoke Helper
+
+Decision: Add `pnpm smoke:alpha` backed by `scripts/real-alpha-smoke.mjs`, commit `workmap/pnpm-lock.yaml` for deterministic Vercel installs, and document deployed alpha smoke evidence without storing real deployment URLs, secrets, tokens, or platform admin identities.
+
+Reason: Round 9 needed a repeatable way to verify public deployed API/frontend readiness across Render, Vercel, CORS, and WSS path derivation while keeping authenticated Cognito, invite, activity, and platform admin checks in manual human smoke where real credentials stay outside chat and docs.
+
+Trade-off: The helper can catch public liveness/readiness/CORS/route regressions, but it intentionally does not automate authenticated flows or negative security hardening. WorkMap can be treated as an Alpha Ready Candidate after the human-reported deployed smoke pass, but full production readiness still requires production tracking clients, durable queues/retries, token lifecycle, multi-instance realtime pub/sub, and broader automated negative tests.
+
 ## Existing Project Decisions Confirmed From Code
 
 - Use `pnpm` + Turborepo monorepo.

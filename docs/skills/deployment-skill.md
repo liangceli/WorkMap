@@ -165,6 +165,7 @@ Vercel frontend:
 - Root directory: `workmap`.
 - Install command: `pnpm install`.
 - Build command: `pnpm --filter @workmap/web build`.
+- `workmap/pnpm-lock.yaml` should be committed so Vercel can install deterministically with the lockfile from GitHub.
 - Required public env includes `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_WORKMAP_API_URL`, and `NEXT_PUBLIC_COGNITO_*`.
 - Cognito callback should point to `https://<vercel-domain>/login/callback`.
 - Cognito logout should point to `https://<vercel-domain>/login`.
@@ -221,6 +222,7 @@ External smoke helper:
 - Set `WORKMAP_SMOKE_ORIGIN` to the browser origin to test; usually the same Vercel origin.
 - Run `pnpm smoke:alpha` from `workmap/`.
 - The helper checks `/health`, `/health/readiness`, CORS allowlist behavior, key frontend route availability, and derived WSS path. It does not test authenticated Cognito/tenant/invite/activity flows.
+- Round 9 reports `pnpm smoke:alpha` and full authenticated human smoke passed on 2026-06-13, making WorkMap an Alpha Ready Candidate for a controlled 5-person pilot.
 
 ## Deployment Caution
 
@@ -233,4 +235,4 @@ The web root `.env` loader is for local monorepo ergonomics. Vercel/Render produ
 - Redis is listed in env example but no confirmed runtime usage was found during intake.
 - The accepted realtime gateway is in-memory and does not currently use Redis/pub-sub.
 - Desktop agent and browser extension are now local scaffolds/harnesses for activity ingestion, but not production-ready tracking clients.
-- External Vercel/Render/Supabase/Cognito deployed smoke remains pending for the accepted STAGE 2 baseline.
+- Round 9 deployed Vercel/Render/Supabase/Cognito alpha smoke passed as human-reported evidence on 2026-06-13, but repeat smoke is still required after provider env, callback/logout, origin, migration, or deployment changes.
