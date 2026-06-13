@@ -18,6 +18,7 @@ Primary commands:
 - `pnpm prisma:generate`
 - `pnpm prisma:migrate`
 - `pnpm prisma:seed`
+- `pnpm smoke:alpha`
 
 App-specific commands:
 
@@ -72,9 +73,15 @@ From `.env.example`:
 - `WORKMAP_AGENT_TOKEN`
 - `WORKMAP_AGENT_DEVICE_ID`
 - `WORKMAP_API_BASE_URL`
+- `WORKMAP_SMOKE_API_URL`
+- `WORKMAP_SMOKE_APP_URL`
+- `WORKMAP_SMOKE_ORIGIN`
+- `WORKMAP_SMOKE_TIMEOUT_MS`
+- `WORKMAP_SMOKE_ALLOW_LOCAL`
 - `WORKMAP_APP_URL` is used by invite-link generation when configured; otherwise the API falls back to `NEXT_PUBLIC_APP_URL` or `http://localhost:3000`.
 - `WORKMAP_ALLOWED_ORIGINS` is the preferred comma-separated production CORS/WebSocket origin allowlist. Do not use `*`.
 - `WORKMAP_ALLOWED_ORIGIN` remains a backward-compatible single-origin fallback.
+- The `WORKMAP_SMOKE_*` values are optional shell-only inputs for `pnpm smoke:alpha`. Use public deployed URLs/settings only; do not store tokens or secrets there.
 
 Pilot local startup convention:
 
@@ -144,7 +151,7 @@ Detailed release smoke steps live in `docs/ai-handoff/pilot-release-checklist.md
 
 ## STAGE 2 Deployment Readiness
 
-Read `docs/ai-handoff/alpha-production-readiness.md` before external deployment work.
+Read `docs/ai-handoff/alpha-production-readiness.md` before external deployment work. For the Round 9 external smoke runbook, read `docs/ai-handoff/real-alpha-deployment-smoke.md`.
 
 Target platform direction:
 
@@ -206,6 +213,14 @@ Realtime WebSocket deployment:
 - `WORKMAP_ALLOWED_ORIGINS` should include the exact deployed frontend origin(s) so HTTP CORS and WebSocket origin checks pass. `WORKMAP_ALLOWED_ORIGIN` remains a single-origin fallback.
 - Browser socket auth sends the Bearer token as query `token`; use WSS and avoid retaining full socket query strings in logs.
 - Run deployed smoke with two authenticated users in one company/map before considering realtime movement production-ready.
+
+External smoke helper:
+
+- Set `WORKMAP_SMOKE_API_URL` to the deployed Render API origin.
+- Set `WORKMAP_SMOKE_APP_URL` to the deployed Vercel app origin.
+- Set `WORKMAP_SMOKE_ORIGIN` to the browser origin to test; usually the same Vercel origin.
+- Run `pnpm smoke:alpha` from `workmap/`.
+- The helper checks `/health`, `/health/readiness`, CORS allowlist behavior, key frontend route availability, and derived WSS path. It does not test authenticated Cognito/tenant/invite/activity flows.
 
 ## Deployment Caution
 

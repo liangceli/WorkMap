@@ -1,8 +1,10 @@
 # Alpha Production Readiness Guide
 
-Status: STAGE 2 Round 8 alpha readiness.
+Status: STAGE 2 Round 9 external alpha deployment preparation.
 
 This guide prepares WorkMap for a controlled 5-person alpha pilot. It is not a claim that the desktop agent or browser extension are fully production-distributed products.
+
+Round 9 adds `docs/ai-handoff/real-alpha-deployment-smoke.md` and the non-secret helper command `pnpm smoke:alpha`. Current external status remains Needs Manual External Setup until Vercel, Render, Supabase, and Cognito are configured and deployed smoke passes.
 
 ## 1. Deployment Targets
 
@@ -143,6 +145,17 @@ Manual test body examples should use local bearer tokens directly in the tester'
 ## 8. Alpha Smoke Checklist
 
 Run after Vercel/Render/Supabase/Cognito env setup:
+
+Optional public smoke helper:
+
+```powershell
+$env:WORKMAP_SMOKE_API_URL="https://<render-api>"
+$env:WORKMAP_SMOKE_APP_URL="https://<vercel-app>"
+$env:WORKMAP_SMOKE_ORIGIN="https://<vercel-app>"
+pnpm smoke:alpha
+```
+
+This helper checks public health/readiness/CORS/page availability only. Authenticated Cognito, invite, activity, reports, and Platform Admin smoke still require manual testing with real users/tokens handled outside chat.
 
 1. `GET <api>/health` returns ok.
 2. `GET <api>/health/readiness` returns ready.

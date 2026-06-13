@@ -1,9 +1,13 @@
 # Current Status
 
-Last updated: 2026-06-11.
+Last updated: 2026-06-13.
 
 ## Latest Accepted Work
 
+- STAGE 2 Round 9 external alpha deployment smoke passed manually on 2026-06-13 after Vercel, Render, Supabase, and Cognito were configured. Current release status: Alpha Ready Candidate for a controlled 5-person pilot.
+- `docs/ai-handoff/real-alpha-deployment-smoke.md` captures the real alpha deployment smoke runbook, Manual Action Required checklist, migration sequence, platform setup matrix, activity hardening live checks, and release blocker status.
+- `pnpm smoke:alpha` passed against deployed public Vercel/Render URLs. It reads deployed API/app origins from shell env vars only, checks `/health`, `/health/readiness`, CORS allowlist response, key frontend routes, and prints the derived realtime endpoint. It does not read `.env`, require bearer tokens, or automate authenticated Cognito/invite/activity flows.
+- Human manual smoke passed for Owner workspace creation, Owner invite, Employee Cognito accept/onboarding, two-user `/virtual-office` realtime, People/contact surfaces, Platform Admin privacy boundary, device registration, app/domain sample activity, Employee own report, Owner company aggregate report, and Employee company-scope report block.
 - Commit `8719f5d` (`chore: harden alpha deployment readiness`) completed STAGE 2 Round 8: alpha production readiness, deployment documentation, CORS/WebSocket origin hardening, and API readiness checks.
 - `docs/ai-handoff/alpha-production-readiness.md` now captures Vercel/Render/Supabase/Cognito env setup, migration order, WSS expectations, activity hardening checklist, full alpha smoke checklist, and release blocker statuses.
 - API CORS now uses explicit origin allowlists through preferred `WORKMAP_ALLOWED_ORIGINS` and fallback `WORKMAP_ALLOWED_ORIGIN`, shared with WebSocket origin checks.

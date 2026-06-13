@@ -2,213 +2,194 @@
 
 ## 1. Overall Conclusion
 
-QA review result: STAGE 2 Round 8 alpha production readiness passes code review and machine verification.
+QA review result: STAGE 2 Round 9 deployed alpha smoke updates pass final QA review.
+
+Final Round 9 conclusion:
+
+- WorkMap is an Alpha Ready Candidate for a controlled 5-person pilot.
+- This conclusion is based on code review, machine verification, non-secret smoke helper checks, and human-reported deployed smoke pass on 2026-06-13.
+- This is not full production readiness.
+
+No blocking issue requiring Codex Chat 2 was found.
+
+## 2. Reviewed Inputs
 
 This pass reviewed:
 
 - `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/real-alpha-deployment-smoke.md`
 - current `git status --short`
 - current `git diff --stat`
 - current implementation diff
-- API CORS allowlist hardening
-- WebSocket origin allowlist hardening
-- `/health` and `/health/readiness`
-- alpha deployment documentation
-- `.env.example` secret posture
-- desktop-agent/browser-extension alpha harness build health
-
-No blocking issue requiring Codex Chat 2 was found.
-
-Important readiness distinction:
-
-- Code/docs are ready to proceed toward controlled alpha deployment preparation.
-- Deployed alpha readiness is not yet proven until Vercel, Render, Supabase, and Cognito are manually configured and the deployed smoke checklist passes.
-
-## 2. Workspace Notes
-
-Reviewed tracked files include:
-
-- `docs/ai-handoff/latest-implementation.md`
-- `docs/skills/current-status.md`
-- `docs/skills/deployment-skill.md`
+- `workmap/scripts/real-alpha-smoke.mjs`
+- `workmap/package.json`
 - `workmap/.env.example`
-- `workmap/apps/api/src/main.ts`
-- `workmap/apps/api/src/modules/health/health.controller.ts`
-- `workmap/apps/api/src/modules/virtual-office/virtual-office-realtime.gateway.ts`
-
-Reviewed untracked implementation files include:
-
 - `docs/ai-handoff/alpha-production-readiness.md`
-- `workmap/apps/api/src/config/allowed-origins.ts`
+- `docs/skills/deployment-skill.md`
+- `docs/skills/current-status.md`
 
 Workspace notes:
 
-- `docs/references/` remains unrelated untracked workspace content. Do not stage it unless explicitly intended.
 - `.env` was not read.
-- `pnpm prisma:generate` printed that env vars were loaded, but no values were output.
+- `docs/references/` remains unrelated untracked workspace content. Do not stage it unless explicitly intended.
+- `workmap/pnpm-lock.yaml` exists, is tracked, and `git check-ignore -v workmap/pnpm-lock.yaml` returns no ignore rule.
 - `workmap/apps/web/tsconfig.tsbuildinfo` was modified by Web build and restored.
-- Desktop/browser extension build outputs did not appear in `git status`.
 
 ## 3. Diff Review
 
 Result: passed.
 
-HTTP CORS:
+Smoke helper:
 
-- `workmap/apps/api/src/config/allowed-origins.ts` centralizes allowed origin parsing.
-- Preferred env is `WORKMAP_ALLOWED_ORIGINS`.
-- `WORKMAP_ALLOWED_ORIGIN` remains a backward-compatible fallback.
-- `NEXT_PUBLIC_APP_URL` is only a final backend fallback.
-- Localhost origins are auto-added only outside production.
-- In production, configured browser origins are required; otherwise browser origins are rejected.
-- Missing `Origin` remains allowed for non-browser/server-to-server style requests such as health checks.
+- `pnpm smoke:alpha` is wired to `node scripts/real-alpha-smoke.mjs`.
+- Helper reads only process environment variables and does not read `.env`.
+- Helper requires `WORKMAP_SMOKE_API_URL` and `WORKMAP_SMOKE_APP_URL`.
+- Helper optionally accepts `WORKMAP_SMOKE_ORIGIN`.
+- Helper rejects localhost/127.0.0.1/::1 by default unless `WORKMAP_SMOKE_ALLOW_LOCAL=1`.
+- Helper checks API `/health`.
+- Helper checks API `/health/readiness`.
+- Helper checks CORS response for the configured browser Origin.
+- Helper checks frontend `/`, `/login`, `/virtual-office`, and `/platform-admin`.
+- Helper derives `/virtual-office/realtime` as WSS for HTTPS API origins.
+- Helper does not automate or print Cognito credentials, bearer tokens, invite tokens, tenant secrets, activity secrets, or Platform Admin identifiers.
 
-WebSocket origin checks:
+Docs/runbook:
 
-- `virtual-office-realtime.gateway.ts` now uses the shared `isAllowedOrigin` helper.
-- Browser WebSocket origins must match the same production allowlist as HTTP CORS.
-- Existing token, room, position, and polling/reconciliation logic was not rewritten.
-
-Health/readiness:
-
-- `GET /health` remains a lightweight liveness endpoint.
-- `GET /health/readiness` runs a Prisma `SELECT 1`.
-- Readiness returns safe status/check fields only.
-- DB failure returns `503 ServiceUnavailableException`.
-- No connection string, database host, token, or secret value is returned.
-- `PrismaService` injection is valid because `PrismaModule` is imported by `AppModule` and marked global.
-
-Deployment docs:
-
-- `docs/ai-handoff/alpha-production-readiness.md` covers Vercel, Render, Supabase, Cognito, migration order, WSS, activity hardening, alpha smoke, and release blockers.
-- `docs/skills/deployment-skill.md` now points to the alpha readiness guide and includes `/health/readiness`, `WORKMAP_ALLOWED_ORIGINS`, and migration-order guidance.
-- `docs/skills/current-status.md` accurately marks external setup and deployed smoke as Manual Action Required.
+- `docs/ai-handoff/real-alpha-deployment-smoke.md` now records status as Alpha Ready Candidate.
+- Deployed smoke pass is recorded as human-reported evidence without real URLs, tokens, or admin identities.
+- Supabase, Render, Vercel, Cognito, CORS/WSS, Platform Admin, activity, reports, and compliance smoke statuses are documented.
+- Remaining future hardening is clearly separated from alpha-blocking status.
+- `docs/skills/current-status.md` now reflects the 2026-06-13 deployed smoke pass.
+- `docs/skills/deployment-skill.md` documents `pnpm smoke:alpha` and `WORKMAP_SMOKE_*` usage.
+- `docs/ai-handoff/alpha-production-readiness.md` links to the Round 9 smoke helper/runbook.
 
 Scope control:
 
-- No billing, map expansion, production desktop tracker, browser extension store packaging, durable queueing, multi-instance realtime, or product redesign was added.
-- Round 8 did not add a Prisma migration.
+- No backend controllers/services were changed in this Round 9 smoke diff.
+- No frontend product flows were changed.
+- No Prisma schema or migration was added.
+- No auth/realtime/activity logic was changed.
+- No desktop-agent or browser-extension behavior was changed.
 
-## 4. Security / Secret Review
+## 4. Deployed Smoke Evidence
+
+Accepted human-reported deployed smoke pass on 2026-06-13:
+
+- Supabase DB configured and migrated.
+- Prisma deployed migrations applied.
+- Render API deployed.
+- Render `/health` passed.
+- Render `/health/readiness` passed.
+- Vercel frontend deployed.
+- Cognito Hosted UI callback/logout configured for deployed domain.
+- `pnpm smoke:alpha` passed against deployed public URLs.
+- Approved-origin CORS passed.
+- Two-user WSS/virtual-office smoke passed.
+- Owner onboarding passed.
+- Owner invite creation passed.
+- Employee Cognito accept/onboarding passed.
+- People/contact surfaces passed.
+- Platform Admin privacy boundary passed.
+- Tenant OWNER and EMPLOYEE were blocked from Platform Admin.
+- Employee device registration passed.
+- Employee app/domain sample activity submission passed.
+- Employee own report passed.
+- Owner company aggregate report passed.
+- Employee company-scope report block passed.
+
+Deployed smoke items still best treated as future hardening, not current blockers:
+
+- Automated negative tests for cross-user/cross-tenant device ids.
+- Automated malformed/future timestamp checks.
+- Automated overlong duration checks.
+- Automated malformed domain and full URL minimization checks.
+- Automated batch-size limit checks.
+- Automated unapproved-origin CORS negative check.
+
+## 5. Security / Secret Review
 
 Result: passed.
 
 - No real secret was found in reviewed implementation files.
-- `.env.example` uses placeholders, localhost values, blank harness variables, and sample/local-only values.
-- No AWS, Cognito, Supabase, Render, Vercel, WorkMap agent token, or browser extension auth token was hardcoded.
-- `WORKMAP_PLATFORM_ADMIN_EMAILS` and `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` remain blank in `.env.example`.
-- Production CORS documentation says to use exact origins and not `*`.
+- `.env.example` adds only blank/public `WORKMAP_SMOKE_*` placeholders.
+- No AWS, Cognito, Supabase, Render, Vercel, database, JWT, platform admin, bearer, desktop-agent, or browser-extension secret was hardcoded.
+- Smoke helper does not ask for or print bearer tokens.
+- Smoke helper output examples use placeholders such as `https://<api>.onrender.com` and `https://<app>.vercel.app`.
 - Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches.
 
-## 5. Verification Results
+## 6. Verification Results
 
 Commands run from `workmap/`:
 
 ```powershell
+node --check scripts/real-alpha-smoke.mjs
+pnpm smoke:alpha
 pnpm --filter @workmap/api typecheck
 pnpm --filter @workmap/web typecheck
-pnpm --filter @workmap/api lint
-pnpm --filter @workmap/web lint
-pnpm --filter @workmap/api build
-pnpm --filter @workmap/web build
 pnpm --filter @workmap/desktop-agent typecheck
 pnpm --filter @workmap/browser-extension typecheck
+pnpm --filter @workmap/api lint
+pnpm --filter @workmap/web lint
 pnpm --filter @workmap/desktop-agent lint
 pnpm --filter @workmap/browser-extension lint
+pnpm --filter @workmap/api build
+pnpm --filter @workmap/web build
 pnpm --filter @workmap/desktop-agent build
 pnpm --filter @workmap/browser-extension build
 pnpm prisma:generate
 git diff --check
+git check-ignore -v workmap/pnpm-lock.yaml
 ```
 
 Results:
 
+- Smoke helper syntax check passed.
+- `pnpm smoke:alpha` with no current-process deployed env returned Manual Action Required as expected and did not pretend smoke passed.
 - API typecheck passed.
 - Web typecheck passed.
-- API lint passed.
-- Web lint passed.
-- API build passed.
-- Web build passed.
 - Desktop-agent typecheck passed.
 - Browser-extension typecheck passed.
+- API lint passed.
+- Web lint passed.
 - Desktop-agent lint passed.
 - Browser-extension lint passed.
-- Desktop-agent build initially failed inside the sandbox with Windows `EPERM` writing `dist/index.js`; rerun outside the sandbox passed.
+- API build passed.
+- Web build passed; existing Next.js ESLint plugin warning remains.
 - Browser-extension build passed.
+- Desktop-agent build initially failed inside the sandbox with Windows `EPERM` writing `apps/desktop-agent/dist/index.js`; rerun outside the sandbox passed.
 - `pnpm prisma:generate` initially failed inside the sandbox because Prisma binary checksum access was blocked/redirected to `127.0.0.1:9`; rerun outside the sandbox passed.
 - `git diff --check` passed with CRLF normalization warnings only.
-- Web build still prints the existing Next.js ESLint plugin warning.
+- `git check-ignore -v workmap/pnpm-lock.yaml` returned no ignore rule, as expected.
 
-Not run:
+## 7. Manual Action / Operational Follow-Up
 
-- No real deployed Vercel/Render/Supabase/Cognito smoke.
-- No live deployed `/health` or `/health/readiness` smoke.
-- No live deployed Cognito owner/invite/employee/platform-admin flow.
-- No live deployed WSS smoke.
-- No live invalid-input activity hardening requests in this QA chat.
+Current alpha status:
 
-## 6. Manual Action Required
+- No code-blocking Manual Action Required remains for Round 9.
+- Operational discipline is still required: keep `DATABASE_URL`, JWT/pilot secrets, bearer tokens, platform admin emails/subs, and provider credentials only in provider/local secret stores.
 
-Before claiming deployed alpha readiness:
+Before inviting the full 5-person pilot:
 
-1. Configure Supabase Postgres and set `DATABASE_URL` securely in Render.
-2. Apply Prisma migrations in the documented order:
-   `20260529043117_v1`,
-   `20260606000000_stage2_onboarding_invites`,
-   `20260607000000_platform_audit_log`,
-   `20260609000000_stage2_activity_source`.
-3. Configure AWS Cognito Hosted UI, PKCE app client, callback URL, logout URL, and scopes.
-4. Configure Vercel public env values.
-5. Configure Render backend env values.
-6. Set `WORKMAP_ALLOWED_ORIGINS` to exact Vercel origin(s).
-7. Set `WORKMAP_APP_URL` to the deployed frontend URL.
-8. Configure platform admin allowlist env values in backend platform settings only.
-9. Verify deployed `GET /health`.
-10. Verify deployed `GET /health/readiness`.
-11. Run the full alpha smoke checklist in `docs/ai-handoff/alpha-production-readiness.md`.
-12. Run a final secret scan before commit/deploy.
-
-Do not guess external platform values and do not paste real tokens into chat.
-
-## 7. Manual QA Guidance
-
-Use `docs/ai-handoff/alpha-production-readiness.md` as the source of truth.
-
-Minimum deployed alpha smoke:
-
-1. API `/health` returns ok.
-2. API `/health/readiness` returns ready.
-3. Owner signs in through Cognito.
-4. Owner creates workspace.
-5. Owner creates invite.
-6. Employee signs in through Cognito and accepts invite.
-7. Employee completes compliance/avatar/device setup as required.
-8. Owner and Employee both open `/virtual-office`.
-9. Realtime movement works both directions.
-10. Polling fallback reconciles after refresh or socket disruption.
-11. Employee registers a device and submits sample app/domain usage.
-12. Employee sees own reports.
-13. Owner sees allowed company aggregate reports.
-14. Employee is blocked from company aggregate reports.
-15. Platform Admin sees tenant metadata/health/audit only.
-16. Compliance page/modal accurately explain collected and non-collected data.
-17. Dashboard, Reports, Employees, Settings, Invites, and Integrations load.
-18. Cross-tenant and invalid activity requests fail safely.
+1. Confirm current deployed Render/Vercel env values still match the latest deployment.
+2. Confirm Cognito callback/logout URLs remain aligned with the deployed Vercel production URL.
+3. Confirm Render `WORKMAP_ALLOWED_ORIGINS` exactly matches the approved Vercel origin(s).
+4. Run `pnpm smoke:alpha` once more immediately before pilot start.
+5. Keep an eye on Render logs for WSS query-token logging and avoid retaining full socket query strings.
 
 ## 8. Residual Risks / Notes
 
-- Alpha deployment remains blocked on external service configuration and deployed smoke.
-- Desktop-agent is still a harness/scaffold, not production active-window tracking.
-- Browser extension is a local Manifest V3 scaffold, not packaged/store-ready.
-- No durable offline queue, retry/backoff, token revocation flow, or native installer was added.
-- Realtime gateway is still in-memory and single-instance.
-- Missing-origin WebSocket/server requests are allowed by the shared origin helper; browser-origin requests are still checked. Keep WSS enabled and avoid logging query-token URLs.
-- Production `WORKMAP_ALLOWED_ORIGINS` must be configured exactly or browser HTTP/WSS access will fail.
+- Alpha Ready Candidate does not mean full production readiness.
+- Desktop-agent remains a harness/scaffold, not a production active-window app.
+- Browser extension remains a local MV3 scaffold, not store-ready.
+- Realtime gateway remains single-instance/in-memory.
+- No durable offline queue, retry/backoff, token revocation, secure production pairing UX, or multi-instance realtime pub/sub was added.
+- Smoke helper does not enforce HTTPS for non-local remote URLs; deployed alpha smoke must use HTTPS/WSS platform URLs.
+- Broader automated negative security tests remain future hardening.
 - `docs/references/` remains unrelated untracked content and should not be staged.
 
 ## 9. Final Recommendation
 
-- QA review: passed for Round 8 code/docs.
+- QA review: passed for final Round 9 deployed alpha smoke updates.
 - Return to Codex Chat 2: not required.
-- Can proceed to human/manual testing: yes, specifically deployed alpha smoke and external platform setup.
-- Suggested commit: yes for the Round 8 readiness code/docs after reviewing the QA notes; do not claim deployed alpha readiness until Manual Action Required items pass.
+- Can proceed to controlled 5-person alpha pilot: yes.
+- Suggested commit: yes for the Round 9 smoke helper/runbook/final QA docs.

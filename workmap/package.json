@@ -11,7 +11,8 @@
     "format": "prettier --write .",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "smoke:alpha": "node scripts/real-alpha-smoke.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
