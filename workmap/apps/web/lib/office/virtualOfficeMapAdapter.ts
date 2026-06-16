@@ -28,6 +28,17 @@ export function resolveVirtualOfficeMapConfig(apiMap?: WorkMapApiOfficeMap): Vir
   const validation = apiMap ? validateVirtualOfficeMapManifest(apiMap.mapData) : null;
 
   if (validation?.ok) {
+    if (isStaleDefaultMapManifest(validation.manifest)) {
+      return {
+        manifest: WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST,
+        source: "default-manifest",
+        warnings: [
+          `API map manifest ${validation.manifest.mapKey}@${validation.manifest.mapVersion} was replaced by current default ${WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.mapVersion}.`,
+          ...validation.warnings,
+        ],
+      };
+    }
+
     return {
       manifest: validation.manifest,
       source: "api-manifest",
@@ -69,7 +80,19 @@ export function readApiNavigationDestinations(
 }
 
 export function isPlayerPositionValidForMap(position: WorkMapApiPlayerPosition | PlayerState, manifest: VirtualOfficeMapManifest) {
-  return isVirtualOfficePointInBounds({ x: position.x, y: position.y }, manifest);
+  const point = { x: position.x, y: position.y };
+
+  if (!isVirtualOfficePointInBounds(point, manifest)) {
+    return false;
+  }
+
+  const walkableBounds = manifest.collision.walkableBounds;
+
+  if (!Array.isArray(walkableBounds) || walkableBounds.length === 0) {
+    return true;
+  }
+
+  return walkableBounds.some((bounds) => isPointInRect(point, bounds));
 }
 
 export function getSpawnPlayerPatch(manifest: VirtualOfficeMapManifest) {
@@ -112,6 +135,17 @@ function toDestinationFromManifest(destination: VirtualOfficeMapManifest["naviga
     bounds: destination.bounds,
     autoStatus: destination.autoStatus,
   };
+}
+
+function isStaleDefaultMapManifest(manifest: VirtualOfficeMapManifest) {
+  return (
+    manifest.mapKey === WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.mapKey &&
+    manifest.mapVersion !== WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.mapVersion
+  );
+}
+
+function isPointInRect(point: { x: number; y: number }, rect: { x: number; y: number; width: number; height: number }) {
+  return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
 }
 
 function toRoomZone(room: WorkMapApiOfficeRoom, manifest: VirtualOfficeMapManifest): OfficeRoomZone | null {

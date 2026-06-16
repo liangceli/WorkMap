@@ -2,105 +2,151 @@
 
 ## 1. Original Task Brief
 
-STAGE 3 Round 5: Alpha Pilot Packaging + User-Facing Readiness Pack.
+Replace the current WorkMap virtual-office map with `C:\Users\lilia\WorkMap\workmap2_big_outdoor.tmx`.
 
-Create a docs-first, practical readiness package for a controlled 5-person WorkMap alpha pilot. The package should help Owners, Employees, and operators understand the current product, privacy/compliance boundaries, alpha limitations, smoke requirements, feedback collection, and bug reporting. Do not implement new product capabilities, tracking clients, integrations, schema/backend changes, auth rewrites, deployment troubleshooting, map changes, chat, scheduling, billing, or visual redesign.
+Requirements from the user:
+
+- Treat `workmap2_big_outdoor.tmx` as the full current map and replace the project's virtual map.
+- Characters only need to move inside the office; the outdoor area does not need to be reachable.
+- The TMX `outside` layer is the roof/overlay and should not normally display because it can cover the office.
+- Test the map integration after replacement.
+
+Follow-up performance request:
+
+- After the big map replacement, player movement felt visibly laggy.
+- Implement the one-step static-map-cache solution so the canvas no longer redraws every static TMX tile on every animation frame.
 
 ## 2. Changed Files
 
 | File | Why it changed |
 |---|---|
-| `docs/alpha-pilot/README.md` | Added the alpha pilot readiness pack index, alpha-ready areas, scaffolded/limited areas, and setup checklist summary. |
-| `docs/alpha-pilot/owner-quick-start.md` | Added Owner-facing guidance for sign-in, workspace creation, invites, virtual office, Dashboard, Reports, Compliance, visible data, and issue reporting. |
-| `docs/alpha-pilot/employee-quick-start.md` | Added Employee-facing guidance for invite acceptance, first-time setup, virtual office, own reports, compliance, owner visibility, and issue reporting. |
-| `docs/alpha-pilot/privacy-compliance-one-pager.md` | Added a concise privacy/compliance handout covering collected data, non-collected data, visibility boundaries, alpha client limitations, and employee notice. |
-| `docs/alpha-pilot/known-limitations.md` | Added alpha limitations for product scope, architecture, deployment/ops, and manual QA. |
-| `docs/alpha-pilot/before-pilot-smoke-checklist.md` | Added a 30-item before-pilot smoke checklist for deployed alpha readiness. |
-| `docs/alpha-pilot/pilot-feedback-template.md` | Added structured Owner/Employee/operator feedback prompts and ratings. |
-| `docs/alpha-pilot/bug-report-template.md` | Added required fields and privacy guidance for bug reports. |
+| `workmap/apps/web/public/maps/workmap2.tmx` | Replaced the old `50 x 30` virtual-office TMX with the new `100 x 80` big outdoor map and normalized tileset source paths to project-local `tilesets/...` paths. |
+| `workmap/apps/web/public/maps/tilesets/modern_exteriors_complete_tileset_32x32.png` | Added the large exterior tileset image required by the new map. |
+| `workmap/apps/web/public/maps/tilesets/modern_exteriors_complete_tileset_32x32.tsx` | Added the matching Tiled tileset metadata for the exterior tileset. |
+| `workmap/apps/web/public/maps/tilesets/city_builder_32x32.png` | Added the city-builder tileset image referenced by the new map. |
+| `workmap/apps/web/public/maps/tilesets/city_builder_32x32.tsx` | Added the matching Tiled tileset metadata for the city-builder tileset. |
+| `workmap/packages/shared-types/src/index.ts` | Updated the default virtual-office map manifest to the new `3200 x 2560` map, shifted spawn/rooms/navigation into the office area, added render layers for the new map, and added optional `collision.walkableBounds` validation. |
+| `workmap/apps/web/components/office/mockOfficeData.ts` | Registered the new map tileset firstGids/images so the canvas renderer can draw the new outdoor/building tiles. |
+| `workmap/apps/web/components/office/OfficeMap.tsx` | Added renderable-layer handling so hidden/non-manifest layers such as `outside` are not drawn, added manifest-driven walkable bounds to block movement outside the office rectangle, and added a static map canvas cache so player movement frames reuse a pre-rendered background instead of redrawing every tile/layer. |
+| `workmap/apps/web/lib/office/virtualOfficeMapAdapter.ts` | Added stale default-manifest detection for existing API-backed workspaces and filtered player positions against `walkableBounds`. |
+| `workmap/apps/web/components/office/useVirtualOfficeData.ts` | When an existing API workspace still returns the old default manifest, the frontend now uses current default rooms/navigation instead of mixing old DB coordinates with the new TMX. |
 | `docs/ai-handoff/latest-implementation.md` | Updated this handoff for Diff Review & QA. |
 
 Pre-existing workspace notes:
 
-- `docs/references/` remains unrelated untracked workspace content and was not modified.
-- No application code, backend code, Prisma schema/migrations, assets, deployment config, or env files were changed.
+- `all sets.tsx`, `artresource.tiled-session`, and root `workmap2_big_outdoor.tmx` were already modified before/while this task started and were not reverted.
+- `docs/references/` remains unrelated untracked content and was not modified.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by Next build and restored.
+- No `.env` content was read or changed.
 
 ## 3. Implementation Summary
 
-- Created a new docs-only alpha pilot readiness package under `docs/alpha-pilot/`.
-- Documented how Owners should create workspaces, invite employees, use the virtual office, read Dashboard/Reports/Compliance, and report issues.
-- Documented how Employees should accept invites, complete onboarding/profile/avatar setup, understand own-scope reports, and understand what Owners can and cannot see.
-- Added privacy/compliance language that explicitly separates collected alpha data from non-collected private data.
-- Added known limitations so the alpha is not presented as a finished production monitoring product.
-- Added a 30-step smoke checklist for deployed alpha readiness.
-- Added reusable feedback and bug-report templates for the pilot group.
-- Chose docs-only in-app guidance for this round because the brief explicitly allowed docs-only guidance and requested not to overbuild UI.
+- Replaced the public virtual-office map at `/maps/workmap2.tmx` with the user's `workmap2_big_outdoor.tmx`.
+- Preserved the existing app-facing path `/maps/workmap2.tmx` so current code and DB manifests that point at that path still load a map file.
+- Added missing tileset assets for the new exterior/city-builder map content.
+- Updated the default map manifest:
+  - new map size: `3200 x 2560`
+  - tile size: `32`
+  - new map version: `2026-06-big-outdoor-v1`
+  - safe/default spawn: `x=960`, `y=1345`, `direction=down`
+  - office walkable area: `x=800`, `y=800`, `width=1600`, `height=960`
+- Shifted existing room and navigation coordinates by the new office placement offset.
+- Kept characters constrained to the office via `collision.walkableBounds`.
+- Kept normal obstacle collision from existing wall/furniture/chair/plant/table layers.
+- Prevented the `outside` layer from rendering by making TMX layers render only when they are visible and listed in manifest `render.layerOrder`.
+- Added compatibility for existing DB-backed office maps that still contain the old default manifest version.
+- Added static map rendering cache:
+  - static TMX layers are drawn once into an offscreen canvas after tileset images load
+  - each animation frame crops the current camera viewport from that cache
+  - dynamic elements such as local player, remote players, chair hints, destination marker, and labels still draw every frame
 
 ## 4. User-Visible Changes
 
-- No runtime product UI changed.
-- Pilot operators now have a documented packet to share or adapt before inviting alpha users.
-- Owners and Employees have separate quick-start docs written in product-facing language.
-- Pilot participants now have a clear privacy/compliance one-pager, known limitations, feedback template, and bug template.
+- `/virtual-office` now uses the larger outdoor office map asset.
+- The office appears within the larger full map, but player movement is constrained to the office area.
+- The `outside` roof layer is not rendered in normal canvas rendering, so it should not cover the office.
+- Player movement on the larger map should be much smoother because the canvas no longer redraws the full static map on every frame.
+- New owner workspaces created after this change should spawn at `x=960`, `y=1345` inside the office.
+- Existing API-backed workspaces with the old default manifest should be coerced to the current default manifest on the frontend to avoid old coordinates being mixed with the new TMX.
 
 ## 5. Technical Notes
 
-- This was intentionally docs-first. No frontend routes, components, API handlers, auth logic, tracking logic, map behavior, realtime behavior, Prisma schema, migrations, seeds, or deployment settings changed.
-- The docs reflect the current accepted implementation state:
-  - Cognito-first deployed alpha sign-in.
-  - Owner workspace creation and Employee invitation flow.
-  - Backend-backed display name/avatar profile.
-  - Virtual office movement, People panel, contact drawer, chairs, polling, and same-map realtime.
-  - Dashboard/Reports/Compliance productized for alpha.
-  - Desktop-agent and browser-extension remain scaffolds/harnesses.
-  - Platform Admin remains privacy-safe and independent from tenant Owner roles.
-- The smoke checklist intentionally includes both automated deployed checks and authenticated manual checks because `pnpm smoke:alpha` does not automate Cognito, invite acceptance, realtime two-user behavior, or activity submission.
+- The renderer still uses `officeTilesets` rather than parsing TSX files at runtime, so new firstGids had to be registered manually.
+- The TMX still contains the hidden `outside` layer (`visible="0"`), but `OfficeMap` now tracks `renderable` per layer and draws only manifest-approved visible layers.
+- `collision.walkableBounds` is optional for backward compatibility. Old custom manifests without it remain valid.
+- `isPlayerPositionValidForMap()` now rejects positions outside `walkableBounds` when the manifest defines a walkable region. This prevents old saved positions outside the new office area from being restored.
+- For existing API maps whose `mapKey` matches the default but whose `mapVersion` is stale, `resolveVirtualOfficeMapConfig()` returns the current default manifest and warning text.
+- When a stale default manifest is detected, API rooms/navigation are not used for rendering; current default rooms/navigation are used instead.
+- Backend tenant onboarding uses the shared default manifest, so new workspaces should receive the new map size/spawn/rooms. No Prisma schema or migration was added.
+- The static map cache is an in-browser `HTMLCanvasElement` sized to the TMX pixel dimensions. For the current `3200 x 2560` map this is acceptable, but very large future maps may need chunked caching.
+- The per-frame drawing path now uses `drawStaticMapBackground()` to copy only the visible camera rectangle from the cached map background before drawing avatars and interaction overlays.
 
 ## 6. Verification Results
 
-Commands planned/run for this docs-only round:
+Commands run from `workmap/` unless noted:
 
-- `git status --short`
-  - Result before edits: only unrelated `?? docs/references/` was present.
-  - Result after edits: `docs/ai-handoff/latest-implementation.md` modified, `docs/alpha-pilot/` added, unrelated `docs/references/` still untracked.
+- `pnpm --filter @workmap/web typecheck`
+  - Passed.
+- `pnpm --filter @workmap/api typecheck`
+  - Passed.
+- `pnpm --filter @workmap/web lint`
+  - Passed.
+- `pnpm --filter @workmap/api lint`
+  - Passed.
+- `pnpm --filter @workmap/web build`
+  - Passed after the map replacement and again after the static-map-cache follow-up. Next emitted the existing ESLint plugin warning only.
+- `pnpm --filter @workmap/api build`
+  - Passed.
+- `pnpm exec tsx -e "...validateVirtualOfficeMapManifest(...)..."`
+  - Passed. Manifest validation returned `ok: true`, no warnings, dimensions `3200 x 2560`, spawn `x=960`, `y=1345`, and walkable bounds `x=800`, `y=800`, `width=1600`, `height=960`.
 - `git diff --check`
-  - Result: passed. Git emitted only an LF-to-CRLF working-copy warning for `docs/ai-handoff/latest-implementation.md`; no whitespace errors.
+  - Passed. Git emitted only LF-to-CRLF working-copy warnings for existing files.
 - Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/`
-  - Result: passed with no matches.
-- Trailing whitespace scan over `docs/alpha-pilot` and `docs/ai-handoff/latest-implementation.md`
-  - Result: passed with no matches.
+  - Passed. No matches found in the changed implementation files or this handoff.
+- Local web dev HTTP smoke on port `3000`
+  - `GET /virtual-office`: 200
+  - `GET /maps/workmap2.tmx`: 200
+  - `GET /maps/tilesets/modern_exteriors_complete_tileset_32x32.png`: 200
+  - `GET /maps/tilesets/city_builder_32x32.png`: 200
+  - The temporary dev server was stopped and port `3000` was released afterward.
 
 Not run:
 
-- Web typecheck/lint/build were not required because no frontend code changed.
-- API typecheck/lint/build were not required because no backend/shared code changed.
-- Prisma commands were not required because no schema, migration, or seed files changed.
+- Full browser canvas screenshot/pixel QA and FPS profiling were not run because no in-app browser tool was exposed in this session and Playwright was not installed/importable locally.
+- API database migration was not run because no schema/migration changed.
 
 ## 7. Manual QA Suggestions
 
-- Review every file in `docs/alpha-pilot/` for product accuracy and tone.
-- Confirm the Owner guide does not imply raw employee activity rows, employee scoring, screenshots, keystrokes, private content capture, or full URL tracking.
-- Confirm the Employee guide clearly explains invite acceptance, compliance/avatar/device setup, own-scope reports, and what Owners can see.
-- Confirm the privacy/compliance one-pager matches current Compliance page copy and activity tracking boundaries.
-- Confirm the known limitations do not accidentally claim production readiness for desktop-agent, browser-extension, Teams/Outlook/3CX, chat, scheduling, billing, or Platform Admin support actions.
-- Use the 30-item smoke checklist before the first 5-person pilot starts.
-- Ask Codex Chat 3 / QA to review the docs against the current git diff and latest QA handoff.
+- Start web/API locally and open `/virtual-office`.
+- Confirm the new big outdoor map renders rather than the old `50 x 30` office map.
+- Confirm the office is visible and not covered by the `outside` layer.
+- Confirm the player spawns around `x=960`, `y=1345` in the office.
+- Confirm WASD/arrow movement works inside the office.
+- Confirm movement feels smooth on the new big map and does not stutter while holding a movement key.
+- Try walking toward the outdoor area and confirm the player cannot leave the office rectangle.
+- Confirm walls, desks, chairs, furniture, plants, and table objects still block movement.
+- Confirm double-click auto-walk stays inside reachable office space.
+- Confirm chair sit/stand with `E` still works.
+- Confirm People panel/contact drawer still render.
+- Confirm an existing workspace with old saved position does not restore the player into the old top-left map area.
+- Confirm a newly created workspace gets the new default map dimensions and owner spawn.
+- Confirm API-backed map/nav/positions plus mock fallback still render.
 
 ## 8. Risks / Notes
 
-- The readiness pack is documentation only; it does not enforce any runtime behavior.
-- If product behavior changes in later rounds, these docs must be updated before reuse.
-- The docs intentionally avoid real URLs, secrets, bearer tokens, database URLs, Cognito secrets, platform admin identities, or customer data.
-- The desktop-agent and browser-extension are described as scaffold/harness clients, not production-ready tracking clients.
-- The alpha remains suitable only for a controlled 5-person pilot after external smoke and manual QA are complete.
-- `docs/references/` remains unrelated untracked content and should not be staged accidentally.
+- Existing database rows still store old `OfficeMap.mapData`; the frontend now handles stale default manifests, but a future DB cleanup/migration may be desirable if all deployed workspaces should persist the new manifest server-side.
+- The new TMX has duplicate `firstgid=121424` tilesets (`city_builder` and `complete_tileset`). The renderer maps this range to the complete tileset because that is the last equivalent source in the normalized TMX and matches Tiled's "highest/last firstgid" behavior for this ambiguous case.
+- The new exterior tileset image is large, about 10 MB. This increases repository/static asset size.
+- The `outside` layer remains in the TMX for Tiled editing but is intentionally not drawn by the runtime renderer.
+- Full visual QA is still needed to confirm every outdoor/new tileset tile appears exactly as intended.
+- Static map caching should remove the main per-frame tile redraw bottleneck, but QA should still manually check movement smoothness on the target browser/hardware.
+- Root Tiled working files remain dirty and should be reviewed separately before commit.
 
 ## 9. Docs Update Suggestions
 
-- After QA accepts Round 5, update `docs/skills/current-status.md` to mention the alpha pilot readiness pack and the latest accepted commit.
-- Consider linking `docs/alpha-pilot/README.md` from a future product/operator README if the repository needs a public pilot entry point.
-- Keep `docs/skills/qa-skill.md` and `docs/skills/deployment-skill.md` aligned if the before-pilot smoke checklist changes.
-- If future UI adds an in-app help/readiness page, link these docs or mirror their content carefully without expanding scope.
+- Update `docs/skills/virtual-office-skill.md` after QA accepts this change to record the new default map size, spawn, and walkable bounds.
+- Update `docs/skills/current-status.md` after QA accepts this change to mention the big outdoor virtual-office map replacement.
+- Add future map validation tooling that checks TMX dimensions, expected layers, hidden roof/outside layer behavior, firstGid ambiguity, and manifest walkable bounds.
 
 ## 10. Input for Next Chat
 

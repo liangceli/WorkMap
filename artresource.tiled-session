@@ -1,9 +1,9 @@
 {
     "activeFile": "workmap2_big_outdoor.tmx",
     "expandedProjectPaths": [
+        "workmap/apps",
         ".",
         "workmap/apps/web/public",
-        "workmap/apps",
         "workmap/apps/web",
         "workmap"
     ],
@@ -24,7 +24,7 @@
         },
         "all sets.tsx": {
             "dynamicWrapping": false,
-            "scaleInDock": 2,
+            "scaleInDock": 0.75,
             "scaleInEditor": 1
         },
         "city_builder.tsx": {
@@ -106,7 +106,7 @@
         },
         "workmap/apps/web/public/maps/tilesets/shadowless.tsx": {
             "dynamicWrapping": false,
-            "scaleInDock": 1
+            "scaleInDock": 0.5
         },
         "workmap/apps/web/public/maps/tilesets/walls32_32.tsx": {
             "dynamicWrapping": false,
@@ -121,11 +121,11 @@
             }
         },
         "workmap2_big_outdoor.tmx": {
-            "scale": 0.5,
-            "selectedLayer": 23,
+            "scale": 0.33,
+            "selectedLayer": 0,
             "viewCenter": {
-                "x": 1601,
-                "y": 1285
+                "x": 1575.7575757575758,
+                "y": 819.6969696969697
             }
         },
         "workmap_office_mvp.tmx": {
@@ -144,17 +144,15 @@
     "map.width": 100,
     "mapScene.enableWorlds": true,
     "openFiles": [
-        "farm side.tsx",
         "all sets.tsx",
-        "city_builder.tsx",
         "workmap2_big_outdoor.tmx"
     ],
     "project": "artresource.tiled-project",
     "recentFiles": [
         "all sets.tsx",
+        "workmap2_big_outdoor.tmx",
         "farm side.tsx",
         "city_builder.tsx",
-        "workmap2_big_outdoor.tmx",
         "workmap_office_mvp.tmx",
         "workmap2.tmx",
         "farm2.tsx",

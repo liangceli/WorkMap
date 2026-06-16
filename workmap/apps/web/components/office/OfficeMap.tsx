@@ -51,6 +51,7 @@ type TileLayer = {
   width: number;
   height: number;
   tiles: number[];
+  renderable: boolean;
 };
 
 type ParsedMap = {
@@ -80,6 +81,12 @@ type ViewportSize = {
   width: number;
   height: number;
   dpr?: number;
+};
+
+type StaticMapCache = {
+  canvas: HTMLCanvasElement;
+  width: number;
+  height: number;
 };
 
 type PositionSnapshot = {
@@ -544,7 +551,7 @@ export function OfficeMap() {
     let previousTime = performance.now();
     const images = new Map<string, HTMLImageElement>();
     let loadedAvatars: LoadedAvatarMap = {};
-    const collision = buildCollisionGrid(map, collisionLayerNames);
+    const collision = buildCollisionGrid(map, collisionLayerNames, mapManifest.collision.walkableBounds);
     latestCollisionRef.current = collision;
     latestMapRef.current = map;
     if (!isPlayerUsableOnMap(playerRef.current, map, collision, mapManifest)) {
@@ -610,6 +617,8 @@ export function OfficeMap() {
         return;
       }
 
+      const staticMap = createStaticMapCache(map, images);
+
       const loop = (time: number) => {
         const deltaSeconds = Math.min((time - previousTime) / 1000, 0.04);
         previousTime = time;
@@ -658,6 +667,7 @@ export function OfficeMap() {
           canvasRef.current,
           map,
           images,
+          staticMap,
           nextPlayer,
           mapPixels,
           room,
@@ -1048,6 +1058,7 @@ export function OfficeMap() {
 function parseTmx(xml: string, layerOrder: string[]): ParsedMap {
   const document = new DOMParser().parseFromString(xml, "application/xml");
   const mapElement = document.querySelector("map");
+  const renderLayerNames = new Set(layerOrder);
 
   if (!mapElement) {
     throw new Error("TMX map element not found.");
@@ -1055,11 +1066,14 @@ function parseTmx(xml: string, layerOrder: string[]): ParsedMap {
 
   const layers = Array.from(document.querySelectorAll("layer")).map((layer) => {
     const data = layer.querySelector("data")?.textContent ?? "";
+    const name = layer.getAttribute("name") ?? "Layer";
+    const visible = layer.getAttribute("visible") !== "0";
 
     return {
-      name: layer.getAttribute("name") ?? "Layer",
+      name,
       width: Number(layer.getAttribute("width") ?? "0"),
       height: Number(layer.getAttribute("height") ?? "0"),
+      renderable: visible && renderLayerNames.has(name),
       tiles: data
         .split(",")
         .map((value) => Number(value.trim()))
@@ -1085,6 +1099,7 @@ function drawScene(
   canvas: HTMLCanvasElement | null,
   map: ParsedMap,
   images: Map<string, HTMLImageElement>,
+  staticMap: StaticMapCache | null,
   player: PlayerState,
   mapPixels: { width: number; height: number },
   activeRoom?: OfficeRoomZone,
@@ -1115,16 +1130,30 @@ function drawScene(
   context.clearRect(0, 0, viewport.width, viewport.height);
   context.fillStyle = "#eef2f7";
   context.fillRect(0, 0, viewport.width, viewport.height);
-  context.save();
   context.imageSmoothingEnabled = false;
+
   const snappedCameraX = Math.round(camera.x * zoom * viewport.dpr) / (zoom * viewport.dpr);
   const snappedCameraY = Math.round(camera.y * zoom * viewport.dpr) / (zoom * viewport.dpr);
+
+  if (staticMap) {
+    drawStaticMapBackground(context, staticMap, snappedCameraX, snappedCameraY, viewport, zoom);
+  } else {
+    context.save();
+    context.scale(zoom, zoom);
+    context.translate(-snappedCameraX, -snappedCameraY);
+    for (const layer of map.layers) {
+      if (!layer.renderable) {
+        continue;
+      }
+
+      drawLayer(context, layer, map, images);
+    }
+    context.restore();
+  }
+
+  context.save();
   context.scale(zoom, zoom);
   context.translate(-snappedCameraX, -snappedCameraY);
-
-  for (const layer of map.layers) {
-    drawLayer(context, layer, map, images);
-  }
 
   if (nearestChair) {
     drawChairHint(context, nearestChair, "Press E");
@@ -1154,6 +1183,66 @@ function drawScene(
 
   drawPlayer(context, player, "You", false, true, Boolean(seatedChair), avatars?.[player.userId], localOverRemote);
   context.restore();
+}
+
+function createStaticMapCache(map: ParsedMap, images: Map<string, HTMLImageElement>): StaticMapCache | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = map.width * map.tileWidth;
+  canvas.height = map.height * map.tileHeight;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return null;
+  }
+
+  context.imageSmoothingEnabled = false;
+  context.fillStyle = "#eef2f7";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (const layer of map.layers) {
+    if (!layer.renderable) {
+      continue;
+    }
+
+    drawLayer(context, layer, map, images);
+  }
+
+  return { canvas, width: canvas.width, height: canvas.height };
+}
+
+function drawStaticMapBackground(
+  context: CanvasRenderingContext2D,
+  staticMap: StaticMapCache,
+  cameraX: number,
+  cameraY: number,
+  viewport: Required<ViewportSize>,
+  zoom: number,
+) {
+  const sourceX = Math.max(0, Math.min(staticMap.width, cameraX));
+  const sourceY = Math.max(0, Math.min(staticMap.height, cameraY));
+  const sourceWidth = Math.max(0, Math.min(viewport.width / zoom, staticMap.width - sourceX));
+  const sourceHeight = Math.max(0, Math.min(viewport.height / zoom, staticMap.height - sourceY));
+
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    return;
+  }
+
+  context.drawImage(
+    staticMap.canvas,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    sourceWidth * zoom,
+    sourceHeight * zoom,
+  );
 }
 
 function drawLayer(
@@ -1538,8 +1627,23 @@ function hasMovementInput(keys: Set<string>) {
   );
 }
 
-function buildCollisionGrid(map: ParsedMap, collisionLayerNames: Set<string>) {
-  const collision = Array.from({ length: map.width * map.height }, () => false);
+function buildCollisionGrid(
+  map: ParsedMap,
+  collisionLayerNames: Set<string>,
+  walkableBounds?: VirtualOfficeMapManifest["collision"]["walkableBounds"],
+) {
+  const hasWalkableBounds = Array.isArray(walkableBounds) && walkableBounds.length > 0;
+  const collision = Array.from({ length: map.width * map.height }, (_, index) => {
+    if (!hasWalkableBounds) {
+      return false;
+    }
+
+    const tileX = index % map.width;
+    const tileY = Math.floor(index / map.width);
+    const centerX = tileX * map.tileWidth + map.tileWidth / 2;
+    const centerY = tileY * map.tileHeight + map.tileHeight / 2;
+    return !walkableBounds.some((bounds) => isPointInRect(centerX, centerY, bounds));
+  });
 
   for (const layer of map.layers) {
     if (!collisionLayerNames.has(layer.name)) {
@@ -1554,6 +1658,10 @@ function buildCollisionGrid(map: ParsedMap, collisionLayerNames: Set<string>) {
   }
 
   return collision;
+}
+
+function isPointInRect(x: number, y: number, rect: { x: number; y: number; width: number; height: number }) {
+  return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 }
 
 function isBlocked(x: number, y: number, map: ParsedMap, collision: boolean[]) {

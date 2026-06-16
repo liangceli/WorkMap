@@ -73,6 +73,7 @@ export type VirtualOfficeMapManifest = {
   collision: {
     source: "tmx-layer-names";
     layerNames: string[];
+    walkableBounds?: VirtualOfficeRect[];
   };
   render: {
     layerOrder: string[];
@@ -102,12 +103,12 @@ const validDestinationTypes = new Set<VirtualOfficeDestinationType>([
 export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
   schemaVersion: 1,
   mapKey: "workmap-default-office",
-  mapVersion: "2026-06-map-v1",
-  displayName: "WorkMap Default Office",
+  mapVersion: "2026-06-big-outdoor-v1",
+  displayName: "WorkMap Big Outdoor Office",
   tmxPath: "/maps/workmap2.tmx",
   dimensions: {
-    width: 1600,
-    height: 960,
+    width: 3200,
+    height: 2560,
     tileSize: 32,
   },
   canvas: {
@@ -115,23 +116,34 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
     height: 680,
   },
   defaultSpawn: {
-    x: 160,
-    y: 545,
+    x: 960,
+    y: 1345,
     direction: "down",
     roomKey: "open-office",
   },
   safeFallbackSpawn: {
-    x: 160,
-    y: 545,
+    x: 960,
+    y: 1345,
     direction: "down",
     roomKey: "open-office",
   },
   collision: {
     source: "tmx-layer-names",
     layerNames: ["WallsPaper", "corner", "Walls", "Tools", "furniture", "chairs", "plants", "some ons on table"],
+    walkableBounds: [{ x: 800, y: 800, width: 1600, height: 960 }],
   },
   render: {
     layerOrder: [
+      "Outdoor_Ground",
+      "shadows",
+      "tree-ex",
+      "trees-middle",
+      "trees-back",
+      "trees-front",
+      "Outdoor_Water",
+      "right-up-corner-buildings",
+      "items-on-ground",
+      "right-bottom-section-buildings",
       "Floor",
       "Carpet",
       "plants",
@@ -143,6 +155,9 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       "Shadows",
       "chairs",
       "some ons on table",
+      "Office_Roof",
+      "left-up-corner-buildings",
+      "fetchs",
     ],
   },
   rooms: [
@@ -151,42 +166,42 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       name: "Open Office",
       type: "OPEN_OFFICE",
       autoStatus: "available",
-      bounds: { x: 32, y: 64, width: 736, height: 512 },
+      bounds: { x: 832, y: 864, width: 736, height: 512 },
     },
     {
       key: "engineering-zone",
       name: "Engineering Zone",
       type: "DEPARTMENT_ZONE",
       autoStatus: "available",
-      bounds: { x: 32, y: 640, width: 736, height: 288 },
+      bounds: { x: 832, y: 1440, width: 736, height: 288 },
     },
     {
       key: "focus-room",
       name: "Focus Room",
       type: "FOCUS",
       autoStatus: "focus",
-      bounds: { x: 864, y: 64, width: 224, height: 384 },
+      bounds: { x: 1664, y: 864, width: 224, height: 384 },
     },
     {
       key: "meeting-room",
       name: "Main Meeting Room",
       type: "MEETING",
       autoStatus: "busy",
-      bounds: { x: 1120, y: 64, width: 416, height: 384 },
+      bounds: { x: 1920, y: 864, width: 416, height: 384 },
     },
     {
       key: "sales-zone",
       name: "Sales Zone",
       type: "DEPARTMENT_ZONE",
       autoStatus: "available",
-      bounds: { x: 864, y: 640, width: 416, height: 288 },
+      bounds: { x: 1664, y: 1440, width: 416, height: 288 },
     },
     {
       key: "break-room",
       name: "Break Room",
       type: "BREAK",
       autoStatus: "break",
-      bounds: { x: 1344, y: 768, width: 192, height: 160 },
+      bounds: { x: 2144, y: 1568, width: 192, height: 160 },
     },
   ],
   navigation: [
@@ -196,8 +211,8 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       name: "Open Office",
       type: "desk_area",
       description: "Shared desk area for everyday presence and quick collaboration.",
-      anchor: { x: 500, y: 500 },
-      bounds: { x: 32, y: 64, width: 736, height: 512 },
+      anchor: { x: 1300, y: 1300 },
+      bounds: { x: 832, y: 864, width: 736, height: 512 },
       autoStatus: "available",
     },
     {
@@ -206,8 +221,8 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       name: "Engineering Zone",
       type: "department",
       description: "Engineering desks and focused project work.",
-      anchor: { x: 250, y: 760 },
-      bounds: { x: 32, y: 640, width: 736, height: 288 },
+      anchor: { x: 1050, y: 1560 },
+      bounds: { x: 832, y: 1440, width: 736, height: 288 },
       autoStatus: "available",
     },
     {
@@ -216,8 +231,8 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       name: "Focus Room",
       type: "room",
       description: "Quiet area for focus work.",
-      anchor: { x: 930, y: 210 },
-      bounds: { x: 864, y: 64, width: 224, height: 384 },
+      anchor: { x: 1730, y: 1010 },
+      bounds: { x: 1664, y: 864, width: 224, height: 384 },
       autoStatus: "focus",
     },
     {
@@ -226,8 +241,8 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       name: "Main Meeting Room",
       type: "room",
       description: "Collaborative meeting area with presentation space.",
-      anchor: { x: 1235, y: 360 },
-      bounds: { x: 1120, y: 64, width: 416, height: 384 },
+      anchor: { x: 2035, y: 1160 },
+      bounds: { x: 1920, y: 864, width: 416, height: 384 },
       autoStatus: "busy",
     },
     {
@@ -236,8 +251,8 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       name: "Sales Zone",
       type: "department",
       description: "Sales team workspace and customer follow-up area.",
-      anchor: { x: 1010, y: 770 },
-      bounds: { x: 864, y: 640, width: 416, height: 288 },
+      anchor: { x: 1810, y: 1570 },
+      bounds: { x: 1664, y: 1440, width: 416, height: 288 },
       autoStatus: "available",
     },
     {
@@ -246,8 +261,8 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       name: "Break Room",
       type: "common_area",
       description: "Informal break area for short pauses.",
-      anchor: { x: 1410, y: 835 },
-      bounds: { x: 1344, y: 768, width: 192, height: 160 },
+      anchor: { x: 2210, y: 1635 },
+      bounds: { x: 2144, y: 1568, width: 192, height: 160 },
       autoStatus: "break",
     },
     {
@@ -255,8 +270,8 @@ export const WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST = {
       name: "IT Support",
       type: "support",
       description: "Support area for setup, devices, and integrations.",
-      anchor: { x: 1250, y: 790 },
-      bounds: { x: 1120, y: 640, width: 416, height: 288 },
+      anchor: { x: 2050, y: 1590 },
+      bounds: { x: 1920, y: 1440, width: 416, height: 288 },
       autoStatus: "available",
     },
   ],
@@ -305,6 +320,17 @@ export function validateVirtualOfficeMapManifest(value: unknown): VirtualOfficeM
   const bounds = dimensions && isPositiveNumber(dimensions.width) && isPositiveNumber(dimensions.height)
     ? { width: dimensions.width, height: dimensions.height }
     : null;
+
+  if (collision?.walkableBounds !== undefined) {
+    if (!Array.isArray(collision.walkableBounds) || collision.walkableBounds.length === 0) {
+      errors.push("Map manifest collision.walkableBounds must be a non-empty array when provided.");
+    } else {
+      for (const [index, rect] of collision.walkableBounds.entries()) {
+        validateRect(`Map manifest collision.walkableBounds ${index}`, rect, bounds, errors);
+      }
+    }
+  }
+
   validateSpawn("defaultSpawn", value.defaultSpawn, bounds, errors);
   validateSpawn("safeFallbackSpawn", value.safeFallbackSpawn, bounds, errors);
 

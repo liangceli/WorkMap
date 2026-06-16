@@ -62,6 +62,46 @@ export const remotePlayers: RemoteOfficePlayer[] = [
 
 export const officeTilesets: OfficeTileset[] = [
   {
+    firstGid: 121424,
+    columns: 32,
+    imagePath: "/maps/tilesets/complete_tileset_32x32.png",
+  },
+  {
+    firstGid: 30960,
+    columns: 176,
+    imagePath: "/maps/tilesets/modern_exteriors_complete_tileset_32x32.png",
+  },
+  {
+    firstGid: 19248,
+    columns: 32,
+    imagePath: "/maps/tilesets/complete_tileset_32x32.png",
+  },
+  {
+    firstGid: 17190,
+    columns: 49,
+    imagePath: "/maps/tilesets/middle_lower_ground_patch_32x32.png",
+  },
+  {
+    firstGid: 17174,
+    columns: 4,
+    imagePath: "/maps/tilesets/clean_dirt_path_32x32.png",
+  },
+  {
+    firstGid: 16323,
+    columns: 37,
+    imagePath: "/maps/tilesets/reference_barn_market_exact_32x32.png",
+  },
+  {
+    firstGid: 15777,
+    columns: 26,
+    imagePath: "/maps/tilesets/reference_cottage_exact_32x32.png",
+  },
+  {
+    firstGid: 4065,
+    columns: 32,
+    imagePath: "/maps/tilesets/complete_tileset_32x32.png",
+  },
+  {
     firstGid: 3217,
     columns: 16,
     imagePath: "/modern-office/Modern_Office_Shadowless_32x32.png",
