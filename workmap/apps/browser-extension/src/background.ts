@@ -1,3 +1,5 @@
+import { createDomainUsageEvent, readDomainFromUrl, type DomainSession } from "./domainTracking";
+
 type ChromeTab = {
   id?: number;
   url?: string;
@@ -31,11 +33,6 @@ type ChromeApi = {
 
 declare const chrome: ChromeApi;
 
-type DomainSession = {
-  domain: string;
-  startedAt: number;
-};
-
 type ExtensionConfig = {
   apiBaseUrl: string;
   token: string;
@@ -43,7 +40,6 @@ type ExtensionConfig = {
   browserName: string;
 };
 
-const MIN_SESSION_MS = 5000;
 const FLUSH_INTERVAL_MS = 60000;
 const EXTENSION_VERSION = "browser-extension-mv3/0.1.0";
 const STORAGE_KEYS = ["workmapApiBaseUrl", "workmapAuthToken", "workmapDeviceId", "workmapBrowserName"];
@@ -93,7 +89,7 @@ async function switchToTab(tabId: number) {
   }
 
   chrome.tabs.get(tabId, (tab) => {
-    const domain = readDomain(tab.url);
+    const domain = readDomainFromUrl(tab.url);
 
     if (!domain) {
       currentSession = null;
@@ -114,7 +110,6 @@ async function flushCurrentSession(continueSession = false) {
 
   const session = currentSession;
   const endedAtMs = Date.now();
-  const durationMs = endedAtMs - session.startedAt;
 
   if (continueSession) {
     currentSession = {
@@ -125,25 +120,19 @@ async function flushCurrentSession(continueSession = false) {
     currentSession = null;
   }
 
-  if (durationMs < MIN_SESSION_MS) {
-    return;
-  }
-
   const config = await readConfig();
   if (!config) {
     return;
   }
 
   const deviceId = await ensureDevice(config);
+  const event = createDomainUsageEvent(session, endedAtMs, deviceId, config.browserName);
 
-  await postJson(config, "/activity/domain-usage", {
-    deviceId,
-    domain: session.domain,
-    browserName: config.browserName,
-    startedAt: new Date(session.startedAt).toISOString(),
-    endedAt: new Date(endedAtMs).toISOString(),
-    isIdle: false,
-  });
+  if (!event) {
+    return;
+  }
+
+  await postJson(config, "/activity/domain-usage", event);
 }
 
 async function ensureDevice(config: ExtensionConfig) {
@@ -158,18 +147,6 @@ async function ensureDevice(config: ExtensionConfig) {
 
   await writeStorage({ workmapDeviceId: registration.device.id });
   return registration.device.id;
-}
-
-function readDomain(url: string | undefined) {
-  if (!url || !url.startsWith("http")) {
-    return null;
-  }
-
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
 }
 
 async function readConfig(): Promise<ExtensionConfig | null> {

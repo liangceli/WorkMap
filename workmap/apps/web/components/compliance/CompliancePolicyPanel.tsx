@@ -11,23 +11,22 @@ const visibleItems = [
   "Presence in the virtual office",
   "Avatar location and room/area",
   "Workspace status and freshness",
-  "Active desktop app name and usage duration",
-  "Browser domain name and active duration",
+  "Desktop app name and usage duration",
+  "Browser domain name and usage duration",
   "Device registration and heartbeat status",
   "Last-seen timestamp",
   "Policy acknowledgement timestamp",
 ];
 
 const notVisibleItems = [
-  "Screen recording",
-  "Screenshots",
-  "Keystroke logging",
-  "Clipboard contents",
-  "Hidden webcam or microphone monitoring",
-  "Private message or email content",
-  "Browser page body content",
-  "Full URL paths, query strings, form inputs, or passwords",
-  "Hidden employee monitoring",
+  "Screenshots are not collected",
+  "Screen recordings are not collected",
+  "Keystrokes are not collected",
+  "Clipboard contents are not collected",
+  "Webcam or microphone data is not collected",
+  "Private message or email body content is not collected",
+  "Webpage body, form inputs, and passwords are not collected",
+  "Full URL paths, query strings, and fragments are not collected",
 ];
 
 export function CompliancePolicyPanel() {
