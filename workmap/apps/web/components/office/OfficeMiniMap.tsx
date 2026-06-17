@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PlayerState } from "@workmap/shared-types";
 import { wm } from "../../lib/theme/workmapTheme";
 import type { OfficeTileset } from "./mockOfficeData";
@@ -30,9 +30,18 @@ type OfficeMiniMapProps = {
 const MINI_MAP_WIDTH = 238;
 const MINI_MAP_HEIGHT = 158;
 
+type MiniMapStaticCache = {
+  canvas: HTMLCanvasElement;
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+};
+
 export function OfficeMiniMap({ map, player, tilesets, shifted }: OfficeMiniMapProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imagesRef = useRef(new Map<string, HTMLImageElement>());
+  const staticCacheRef = useRef<MiniMapStaticCache | null>(null);
+  const [staticCacheVersion, setStaticCacheVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,19 +68,22 @@ export function OfficeMiniMap({ map, player, tilesets, shifted }: OfficeMiniMapP
           }),
       ),
     ).then(() => {
-      if (!cancelled) {
-        drawMiniMap(canvasRef.current, map, player, tilesets, imagesRef.current);
+      if (cancelled) {
+        return;
       }
+
+      staticCacheRef.current = createMiniMapStaticCache(map, tilesets, imagesRef.current);
+      setStaticCacheVersion((current) => current + 1);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [map, player, tilesets]);
+  }, [map, tilesets]);
 
   useEffect(() => {
-    drawMiniMap(canvasRef.current, map, player, tilesets, imagesRef.current);
-  }, [map, player, tilesets]);
+    drawMiniMap(canvasRef.current, player, staticCacheRef.current);
+  }, [player, staticCacheVersion]);
 
   return (
     <aside className="wm-office-minimap" aria-label="Office mini map" style={{ ...styles.shell, ...(shifted ? styles.shellShifted : {}) }}>
@@ -84,20 +96,22 @@ export function OfficeMiniMap({ map, player, tilesets, shifted }: OfficeMiniMapP
   );
 }
 
-function drawMiniMap(
-  canvas: HTMLCanvasElement | null,
+function createMiniMapStaticCache(
   map: MiniMapData,
-  player: PlayerState,
   tilesets: OfficeTileset[],
   images: Map<string, HTMLImageElement>,
-) {
-  if (!canvas) {
-    return;
+): MiniMapStaticCache | null {
+  if (typeof document === "undefined") {
+    return null;
   }
 
+  const canvas = document.createElement("canvas");
+  canvas.width = MINI_MAP_WIDTH;
+  canvas.height = MINI_MAP_HEIGHT;
   const context = canvas.getContext("2d");
+
   if (!context) {
-    return;
+    return null;
   }
 
   const mapPixelWidth = map.width * map.tileWidth;
@@ -108,7 +122,6 @@ function drawMiniMap(
   const offsetX = (MINI_MAP_WIDTH - drawnWidth) / 2;
   const offsetY = (MINI_MAP_HEIGHT - drawnHeight) / 2;
 
-  context.clearRect(0, 0, MINI_MAP_WIDTH, MINI_MAP_HEIGHT);
   context.fillStyle = "#e8f1ed";
   context.fillRect(0, 0, MINI_MAP_WIDTH, MINI_MAP_HEIGHT);
   context.save();
@@ -140,14 +153,30 @@ function drawMiniMap(
     }
   }
 
+  context.restore();
+
+  return { canvas, offsetX, offsetY, scale };
+}
+
+function drawMiniMap(canvas: HTMLCanvasElement | null, player: PlayerState, staticCache: MiniMapStaticCache | null) {
+  if (!canvas || !staticCache) {
+    return;
+  }
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return;
+  }
+
+  context.clearRect(0, 0, MINI_MAP_WIDTH, MINI_MAP_HEIGHT);
+  context.drawImage(staticCache.canvas, 0, 0);
   context.fillStyle = wm.status.available;
   context.strokeStyle = "#ffffff";
   context.lineWidth = 2;
   context.beginPath();
-  context.arc(player.x * scale, player.y * scale, 4, 0, Math.PI * 2);
+  context.arc(staticCache.offsetX + player.x * staticCache.scale, staticCache.offsetY + player.y * staticCache.scale, 4, 0, Math.PI * 2);
   context.fill();
   context.stroke();
-  context.restore();
 }
 
 const styles = {

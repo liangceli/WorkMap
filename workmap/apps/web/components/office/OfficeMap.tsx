@@ -104,6 +104,12 @@ type InterpolatedRemotePlayer = RemoteOfficePlayer & {
   lastRealtimeAt: number;
 };
 
+type OfficeUiStateSnapshot = PositionSnapshot & {
+  activeRoomId?: string;
+  nearbyTargetId?: string;
+  nearestChairId?: string;
+};
+
 const MAP_DEV_POLL_MS = 1500;
 const DEFAULT_CANVAS_WIDTH = WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.canvas.width;
 const DEFAULT_CANVAS_HEIGHT = WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.canvas.height;
@@ -116,6 +122,7 @@ const PROXIMITY_DISTANCE = 80;
 const CHAIR_INTERACTION_DISTANCE = 46;
 const POSITION_SAVE_THROTTLE_MS = 2500;
 const POSITION_SAVE_MIN_DISTANCE = 8;
+const UI_STATE_SYNC_INTERVAL_MS = 120;
 const REALTIME_REMOTE_INTERPOLATION_RATE = 10;
 const REALTIME_REMOTE_SNAP_DISTANCE = 260;
 const REALTIME_REMOTE_STALE_MS = 20000;
@@ -144,6 +151,7 @@ export function OfficeMap() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const keysRef = useRef(new Set<string>());
   const nearestChairRef = useRef<ChairSpot | null>(null);
+  const nearbyTargetRef = useRef<ContactTarget | null>(null);
   const seatedChairRef = useRef<ChairSpot | null>(null);
   const preSitPositionRef = useRef<{ x: number; y: number; direction: PlayerDirection } | null>(null);
   const mapXmlRef = useRef<string | null>(null);
@@ -167,6 +175,8 @@ export function OfficeMap() {
   const restorePersistGuardRef = useRef<PositionSnapshot | null>(null);
   const lastPersistAttemptAtRef = useRef(0);
   const pendingPersistTimeoutRef = useRef<number | null>(null);
+  const lastUiStateSyncAtRef = useRef(0);
+  const uiStateSnapshotRef = useRef<OfficeUiStateSnapshot | null>(null);
   const playerRef = useRef<PlayerState>({
     userId: "local-user",
     displayName: "You",
@@ -207,6 +217,56 @@ export function OfficeMap() {
     [map],
   );
   const remoteAvatarConfigSignature = useMemo(() => createRemoteAvatarConfigSignature(officePeople), [officePeople]);
+
+  const syncOfficeUiState = useCallback(
+    (
+      time: number,
+      nextPlayer: PlayerState,
+      room: OfficeRoomZone | undefined,
+      nearby: ContactTarget | null,
+      chair: ChairSpot | null,
+    ) => {
+      const previousSnapshot = uiStateSnapshotRef.current;
+      const nextSnapshot: OfficeUiStateSnapshot = {
+        ...toPositionSnapshot(nextPlayer),
+        activeRoomId: room?.id,
+        nearbyTargetId: nearby?.userId,
+        nearestChairId: chair?.id,
+      };
+
+      if (previousSnapshot && isSameOfficeUiStateSnapshot(previousSnapshot, nextSnapshot)) {
+        return;
+      }
+
+      const roomChanged = previousSnapshot?.activeRoomId !== nextSnapshot.activeRoomId;
+      const nearbyChanged = previousSnapshot?.nearbyTargetId !== nextSnapshot.nearbyTargetId;
+      const chairChanged = previousSnapshot?.nearestChairId !== nextSnapshot.nearestChairId;
+      const movementStateChanged =
+        previousSnapshot?.isMoving !== nextSnapshot.isMoving ||
+        previousSnapshot?.direction !== nextSnapshot.direction ||
+        previousSnapshot?.status !== nextSnapshot.status;
+      const elapsed = time - lastUiStateSyncAtRef.current;
+
+      if (
+        previousSnapshot &&
+        elapsed < UI_STATE_SYNC_INTERVAL_MS &&
+        !roomChanged &&
+        !nearbyChanged &&
+        !chairChanged &&
+        !movementStateChanged
+      ) {
+        return;
+      }
+
+      uiStateSnapshotRef.current = nextSnapshot;
+      lastUiStateSyncAtRef.current = time;
+      setPlayer(nextPlayer);
+      setActiveRoom(room);
+      setNearbyTarget(nearby);
+      setNearestChair(chair);
+    },
+    [],
+  );
 
   const handleRealtimeRemoteState = useCallback(
     (state: VirtualOfficeRealtimePlayerState) => {
@@ -447,9 +507,10 @@ export function OfficeMap() {
         return;
       }
 
-      if (event.key.toLowerCase() === "e" && nearbyTarget) {
+      const currentNearbyTarget = nearbyTargetRef.current;
+      if (event.key.toLowerCase() === "e" && currentNearbyTarget) {
         setDismissedContactTargetId(null);
-        setContactTarget(nearbyTarget);
+        setContactTarget(currentNearbyTarget);
       }
     };
     const up = (event: KeyboardEvent) => keysRef.current.delete(event.key.toLowerCase());
@@ -656,12 +717,10 @@ export function OfficeMap() {
         nextPlayer.status = seatedChairRef.current ? "busy" : room?.status ?? "available";
         nextPlayer.updatedAt = new Date().toISOString();
         playerRef.current = nextPlayer;
+        nearbyTargetRef.current = nearest;
         nearestChairRef.current = chair;
 
-        setPlayer(nextPlayer);
-        setActiveRoom(room);
-        setNearbyTarget(nearest);
-        setNearestChair(chair);
+        syncOfficeUiState(time, nextPlayer, room, nearest, chair);
         sendRealtimeMovementRef.current(toPositionSnapshot(nextPlayer));
         drawScene(
           canvasRef.current,
@@ -692,7 +751,7 @@ export function OfficeMap() {
       cancelled = true;
       cancelAnimationFrame(animationFrame);
     };
-  }, [collisionLayerNames, map, mapManifest, mapPixels, officeRooms, realtimeAvatarSignature, remoteAvatarConfigSignature, selectedAvatar]);
+  }, [collisionLayerNames, map, mapManifest, mapPixels, officeRooms, realtimeAvatarSignature, remoteAvatarConfigSignature, selectedAvatar, syncOfficeUiState]);
 
   const standUpFromChair = useCallback(() => {
     const fallback = seatedChairRef.current
@@ -1451,7 +1510,7 @@ function drawAvatarSprite(
       targetHeight,
     );
   }
-  context.imageSmoothingEnabled = true;
+  context.imageSmoothingEnabled = false;
 }
 
 function drawDirectionCue(context: CanvasRenderingContext2D, x: number, y: number, direction: PlayerDirection) {
@@ -1796,6 +1855,15 @@ function isSamePositionSnapshot(previous: PositionSnapshot, next: PositionSnapsh
     previous.isMoving === next.isMoving &&
     previous.status === next.status &&
     previous.roomId === next.roomId
+  );
+}
+
+function isSameOfficeUiStateSnapshot(previous: OfficeUiStateSnapshot, next: OfficeUiStateSnapshot) {
+  return (
+    isSamePositionSnapshot(previous, next) &&
+    previous.activeRoomId === next.activeRoomId &&
+    previous.nearbyTargetId === next.nearbyTargetId &&
+    previous.nearestChairId === next.nearestChairId
   );
 }
 

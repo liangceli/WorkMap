@@ -1,140 +1,121 @@
 # Latest QA Handoff
 
-## 1. Overall Conclusion
+## 1. Reviewed Implementation
 
-QA review result: STAGE 3 Round 4 Dashboard + Reports + Compliance Productization passes code review and machine verification.
+Reviewed the `/virtual-office` movement performance round.
 
-This pass reviewed:
+Files reviewed/changed in this round:
 
+- `workmap/apps/web/components/office/OfficeMap.tsx`
+- `workmap/apps/web/components/office/OfficeMiniMap.tsx`
 - `docs/ai-handoff/latest-implementation.md`
-- current `git status --short`
-- current `git diff --stat`
-- current implementation diff
-- Dashboard productization copy and sparse alpha states
-- Reports scope/readability/no-data explanations
-- Compliance transparency/trust copy
-- Owner vs Employee visibility language
-- Platform Admin privacy boundary wording
+- `docs/ai-handoff/latest-qa.md`
 
-No blocking issue requiring Codex Chat 2 was found.
+Pre-existing uncommitted workflow initialization files remain in the worktree and were not part of this review:
 
-Important distinction:
+- `AGENTS.md`
+- `.gitignore`
 
-- This pass verifies frontend code/build and diff-level regression risk.
-- Browser/manual QA is intentionally deferred by user preference until STAGE 3 is ready for a combined manual pass.
+Required context files were read before implementation:
 
-## 2. Workspace Notes
-
-Reviewed tracked task files include:
-
+- `AGENTS.md`
+- `docs/ai-handoff/director-update.md`
 - `docs/ai-handoff/latest-implementation.md`
-- `workmap/apps/web/app/compliance/page.tsx`
-- `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx`
-- `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx`
-- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `docs/ai-handoff/latest-qa.md`
+- `docs/skills/current-status.md`
+- `docs/skills/project-summary.md`
+- `docs/skills/frontend-skill.md`
+- `docs/skills/api-contract-skill.md`
+- `docs/skills/qa-skill.md`
+- `docs/skills/deployment-skill.md`
+- `docs/skills/virtual-office-skill.md`
+- `docs/skills/realtime-presence-skill.md`
 
-Workspace notes:
-
-- `.env` was not read.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by `next build` and restored.
-- `docs/references/` remains untracked unrelated workspace content. Do not stage it unless explicitly intended.
-
-## 3. Diff Review
+## 2. Diff Review Summary
 
 Result: passed.
 
-Frontend scope:
+The implementation is scoped to frontend virtual-office rendering performance:
 
-- Changes are scoped to Dashboard, Reports, Compliance, and the implementation handoff.
-- No backend files changed.
-- No Prisma schema, migrations, seeds, auth architecture, Cognito flow, tenant onboarding, invite flow, RBAC, Platform Admin backend, activity ingestion API, reports API contract, compliance acknowledgement API, deployment config, desktop-agent, browser-extension, virtual office, realtime, map, tracking categories, billing, analytics/BI system, or integrations changed.
+- `OfficeMap.tsx` stops pushing high-frequency animation-frame movement into React state every frame.
+- `OfficeMap.tsx` keeps immediate interaction refs for chair/contact proximity.
+- `OfficeMap.tsx` preserves non-smoothed pixel rendering after avatar drawing.
+- `OfficeMiniMap.tsx` caches static minimap tiles and only repaints the player marker on movement updates.
 
-Dashboard:
+No backend, schema, auth, tenant isolation, RBAC, Platform Admin, deployment, or integration code changed.
 
-- Technical readiness labels such as `API health`, `API auth`, and `Tracking coverage` were softened into product-facing labels: `Workspace API`, `Session`, and `Data coverage`.
-- Owner copy now frames the page as a workspace management overview, with clear next steps for invites, compliance, avatar/profile, and device setup.
-- Employee copy now avoids Owner-only management framing and focuses on own presence, own compliance state, and personal summary availability.
-- New setup coverage section is role-aware and honest about alpha limitations.
-- Dashboard privacy copy explicitly excludes screenshots, keystrokes, private messages, full URLs, webpage content, and hidden monitoring data.
+## 3. Findings Ordered By Severity
 
-Reports:
+Blocking:
 
-- Added clear Employee view, Owner view, and Alpha data availability explanation cards.
-- Reports now distinguish own-scope rows from company aggregate summaries.
-- Owner/company language does not imply raw employee activity streams.
-- Sparse/no-data copy correctly frames empty API rows as alpha setup/data-availability state, not a fake success.
-- Example rows are explicitly labeled as frontend examples, not real tenant metrics.
+- None identified.
 
-Compliance:
+Non-blocking:
 
-- Page title changed from `Monitoring policy` to `Transparency policy`, which better matches the privacy-forward product posture.
-- Added trust-building cards for why data exists, who can see what, and current alpha client limitations.
-- Platform Admin boundary is stated as separate and limited to privacy-safe tenant metadata/health/audit summaries.
-- Existing collected/not-collected list and acknowledgement flow were preserved.
+- Existing local API/map data still emits a manifest fallback warning because the DB manifest is stale/invalid. The frontend falls back to the default manifest and this round did not change that behavior.
+- Browser QA was automated through local Chrome/Playwright, not a visible human manual pass.
+- `OfficeMiniMap` still performs one full static tile draw when the map/tilesets load. Movement is now smooth, but first-load cost could be revisited if users report slow entry.
 
-## 4. Security / Secret Review
+## 4. Test / Verification Status
 
-Result: passed.
+Commands run from `C:\Users\liangceli\WorkMap\workmap`:
 
-- No real secret was found in reviewed implementation files.
-- No AWS, Cognito, Supabase, Render, Vercel, database, JWT, platform admin, bearer, desktop-agent, browser-extension, Teams, Outlook, or 3CX secret was hardcoded.
-- `.env` was not read.
-- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/` returned no matches.
+- `pnpm.cmd --filter @workmap/web typecheck`
+  - Passed.
+- `pnpm.cmd --filter @workmap/web lint`
+  - Passed.
+- `pnpm.cmd --filter @workmap/web build`
+  - Passed.
+  - Existing warning: Next.js ESLint plugin was not detected in ESLint config.
 
-## 5. Verification Results
+Commands run from repo root `C:\Users\liangceli\WorkMap`:
 
-Commands run from `workmap/` or repository root:
+- `git diff --check`
+  - Passed.
+  - Git printed LF-to-CRLF working-copy warnings for changed files.
+- High-confidence secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, `docs/references`, `.git`, `.codex_previews`, and logs
+  - Passed with no matches.
 
-```powershell
-pnpm --filter @workmap/web typecheck
-pnpm --filter @workmap/web lint
-pnpm --filter @workmap/web build
-git diff --check
-secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, and `docs/references/`
-```
+Automated browser/performance verification:
 
-Results:
+- Baseline movement before the full fix was about 3 to 4 fps in local Chrome/Playwright.
+- Canvas profiling found the main repeated bottleneck in `OfficeMiniMap`, not the main static map canvas:
+  - Before minimap caching: about 375k tile-image `drawImage` calls during 5 seconds of movement.
+  - After minimap caching: about 1.2k image `drawImage` calls during the same style of movement profile.
+- Clean movement sample after the fix while holding `D` for 5 seconds:
+  - 301 frames
+  - 60.1 fps
+  - average frame: 16.63 ms
+  - p95 frame: 16.8 ms
+  - p99 frame: 16.8 ms
+  - max frame: 17.0 ms
+  - frames over 25 ms: 0
+  - frames over 50 ms: 0
+- Main canvas remained crisp:
+  - backing size `1440x900`
+  - CSS size `1440x900`
+  - `imageRendering: pixelated`
+- Canvas checksum changed after holding `D`, confirming movement rendered.
 
-- Web typecheck passed.
-- Web lint passed.
-- Web build passed.
-- `git diff --check` passed with CRLF normalization warnings only.
-- Secret scan returned no matches for the current scan scope.
-- Web build still prints the existing Next.js ESLint plugin warning.
+## 5. Manual QA Status
 
-Not run:
+Human manual QA was not run.
 
-- API lint/typecheck/build, because no API/backend files changed.
-- Desktop-agent/browser-extension verification, because no harness files changed.
-- Browser/manual visual QA, because STAGE 3 manual QA is being deferred by user preference.
+Automated browser QA was run with local Chrome/Playwright:
 
-## 6. Deferred Manual QA
+- `/virtual-office` rendered successfully after using the existing onboarding flow to save a local test avatar.
+- Holding `D` moved the scene.
+- Main canvas stayed pixelated/non-blurry.
+- Movement sampling reached stable 60 fps in the test viewport.
 
-When STAGE 3 manual QA resumes, include these checks:
+## 6. Risks
 
-1. Owner `/dashboard`: confirm it reads as a management overview with setup coverage, next actions, data coverage, sparse-data clarity, and no invasive monitoring claims.
-2. Employee `/dashboard`: confirm it focuses on own workspace/presence/compliance/summary availability and avoids Owner-only CTAs or company-management framing.
-3. Owner `/reports`: confirm company aggregate scope is explained and no raw employee activity detail is implied.
-4. Employee `/reports`: confirm own-scope explanation is clear and company-wide reports remain unavailable.
-5. Reports no-data state: confirm empty API rows are described as sparse alpha setup.
-6. Reports fallback/example layout: confirm example rows are visibly not real tenant data.
-7. `/compliance`: confirm the page title, privacy notice, collected/not-collected lists, and acknowledgement flow still render.
-8. `/compliance`: confirm why-data-exists, who-can-see-what, alpha client limitation, and Platform Admin boundary copy are clear.
-9. Smoke unrelated pages: `/virtual-office`, `/employees`, `/platform-admin`, `/onboarding/invite`, and `/login` still render.
-10. Layout: 1366px, 1440px, and tablet-ish widths do not show text/control overlap on Dashboard, Reports, or Compliance.
-11. Language review: confirm no scary or overreaching product claims such as hidden tracking, total monitoring, employee scoring, screenshots, keystrokes, private messages, full URL capture, or private content tracking were introduced.
+- Actual user-perceived smoothness should still be confirmed in the visible browser on the user's machine.
+- If future pilot testing adds many simultaneous realtime users, remote avatar rendering/interpolation should be profiled separately.
+- The stale API map manifest fallback should be cleaned up in a separate backend/data hygiene round if it keeps confusing local QA logs.
 
-## 7. Residual Risks / Notes
+## 7. Recommendation
 
-- Browser/manual QA was not run by design; user is deferring STAGE 3 manual testing until later.
-- Dashboard and Reports remain dependent on existing API auth/session availability and existing usage-summary contracts.
-- Compliance acknowledgement readback still depends on existing browser/API behavior; no backend acknowledgement contract changed in this round.
-- Alpha client limitations remain product/documentation truth; production desktop/browser clients still require future implementation.
-- `docs/references/` is unrelated to this QA pass and should not be staged unless explicitly intended.
+Recommendation: passed for this performance round.
 
-## 8. Final Recommendation
-
-- QA review: passed for STAGE 3 Round 4 Dashboard/Reports/Compliance productization.
-- Return to Codex Chat 2: not required.
-- Can proceed without immediate manual testing: yes, per user preference to defer STAGE 3 manual QA.
-- Suggested commit: yes for the Round 4 productization changes and QA docs, excluding unrelated workspace files.
+The next round can proceed after the user confirms the visible browser movement feels smooth enough for Alpha.
