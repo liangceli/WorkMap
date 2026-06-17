@@ -2,73 +2,67 @@
 
 ## 1. Reviewed Implementation
 
-Reviewed the `/virtual-office` movement performance round.
+Reviewed the local backend startup error diagnosis for:
 
-Files reviewed/changed in this round:
+```text
+Error: listen EADDRINUSE: address already in use :::3001
+```
 
-- `workmap/apps/web/components/office/OfficeMap.tsx`
-- `workmap/apps/web/components/office/OfficeMiniMap.tsx`
+Files updated in this round:
+
 - `docs/ai-handoff/latest-implementation.md`
 - `docs/ai-handoff/latest-qa.md`
 
-Pre-existing uncommitted workflow initialization files remain in the worktree and were not part of this review:
-
-- `AGENTS.md`
-- `.gitignore`
-
-Required context files were read before implementation:
-
-- `AGENTS.md`
-- `docs/ai-handoff/director-update.md`
-- `docs/ai-handoff/latest-implementation.md`
-- `docs/ai-handoff/latest-qa.md`
-- `docs/skills/current-status.md`
-- `docs/skills/project-summary.md`
-- `docs/skills/frontend-skill.md`
-- `docs/skills/api-contract-skill.md`
-- `docs/skills/qa-skill.md`
-- `docs/skills/deployment-skill.md`
-- `docs/skills/virtual-office-skill.md`
-- `docs/skills/realtime-presence-skill.md`
+No application source code changed.
 
 ## 2. Diff Review Summary
 
-Result: passed.
+Result: passed for the environment diagnosis scope.
 
-The implementation is scoped to frontend virtual-office rendering performance:
+The diagnosis found an already-running WorkMap API process:
 
-- `OfficeMap.tsx` stops pushing high-frequency animation-frame movement into React state every frame.
-- `OfficeMap.tsx` keeps immediate interaction refs for chair/contact proximity.
-- `OfficeMap.tsx` preserves non-smoothed pixel rendering after avatar drawing.
-- `OfficeMiniMap.tsx` caches static minimap tiles and only repaints the player marker on movement updates.
+- Port: `3001`
+- PID: `13704`
+- Process: `node`
+- Command line: `node dist/apps/api/src/main.js`
 
-No backend, schema, auth, tenant isolation, RBAC, Platform Admin, deployment, or integration code changed.
+The API is not blocked by build or database failure. A second API startup failed because the first API process was already bound to the same port.
+
+No backend, frontend, Prisma schema, migrations, seed data, auth, RBAC, tenant isolation, Platform Admin, deployment, realtime, desktop-agent, browser-extension, or integration code changed.
 
 ## 3. Findings Ordered By Severity
 
 Blocking:
 
-- None identified.
+- None for the currently running local API. `localhost:3001` is already serving the WorkMap API.
 
 Non-blocking:
 
-- Existing local API/map data still emits a manifest fallback warning because the DB manifest is stale/invalid. The frontend falls back to the default manifest and this round did not change that behavior.
-- Browser QA was automated through local Chrome/Playwright, not a visible human manual pass.
-- `OfficeMiniMap` still performs one full static tile draw when the map/tilesets load. Movement is now smooth, but first-load cost could be revisited if users report slow entry.
+- Starting another API instance while PID `13704` remains alive will keep failing with `EADDRINUSE`.
+- The API dev command is build-then-run, not hot reload. If backend source changes are made later, the old process must be stopped and restarted.
+- The current working tree still contains previous uncommitted virtual-office map-rendering changes. They were intentionally not modified in this round.
 
 ## 4. Test / Verification Status
 
-Commands run from `C:\Users\liangceli\WorkMap\workmap`:
-
-- `pnpm.cmd --filter @workmap/web typecheck`
-  - Passed.
-- `pnpm.cmd --filter @workmap/web lint`
-  - Passed.
-- `pnpm.cmd --filter @workmap/web build`
-  - Passed.
-  - Existing warning: Next.js ESLint plugin was not detected in ESLint config.
-
 Commands run from repo root `C:\Users\liangceli\WorkMap`:
+
+- `git rev-parse --show-toplevel`
+  - Passed.
+- `git status --short`
+  - Passed.
+- `Get-NetTCPConnection -LocalPort 3001`
+  - Initial attempt returned Windows access denied.
+  - Escalated read-only port check passed and showed `3001` in `Listen` state.
+- `(Get-NetTCPConnection -LocalPort 3001).OwningProcess`
+  - Passed; returned PID `13704`.
+- `Get-Process -Id 13704`
+  - Passed; returned process name `node`.
+- `(Get-CimInstance Win32_Process -Filter "ProcessId=13704").CommandLine`
+  - Passed once; returned `node dist/apps/api/src/main.js`.
+- `Invoke-WebRequest -Uri http://localhost:3001/health -UseBasicParsing`
+  - Passed; HTTP `200`, API `status: ok`.
+- `Invoke-WebRequest -Uri http://localhost:3001/health/readiness -UseBasicParsing`
+  - Passed; HTTP `200`, database readiness `ok`.
 
 - `git diff --check`
   - Passed.
@@ -76,46 +70,23 @@ Commands run from repo root `C:\Users\liangceli\WorkMap`:
 - High-confidence secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, `docs/references`, `.git`, `.codex_previews`, and logs
   - Passed with no matches.
 
-Automated browser/performance verification:
-
-- Baseline movement before the full fix was about 3 to 4 fps in local Chrome/Playwright.
-- Canvas profiling found the main repeated bottleneck in `OfficeMiniMap`, not the main static map canvas:
-  - Before minimap caching: about 375k tile-image `drawImage` calls during 5 seconds of movement.
-  - After minimap caching: about 1.2k image `drawImage` calls during the same style of movement profile.
-- Clean movement sample after the fix while holding `D` for 5 seconds:
-  - 301 frames
-  - 60.1 fps
-  - average frame: 16.63 ms
-  - p95 frame: 16.8 ms
-  - p99 frame: 16.8 ms
-  - max frame: 17.0 ms
-  - frames over 25 ms: 0
-  - frames over 50 ms: 0
-- Main canvas remained crisp:
-  - backing size `1440x900`
-  - CSS size `1440x900`
-  - `imageRendering: pixelated`
-- Canvas checksum changed after holding `D`, confirming movement rendered.
-
 ## 5. Manual QA Status
 
-Human manual QA was not run.
+Manual browser QA was not run.
 
-Automated browser QA was run with local Chrome/Playwright:
+Direct local API smoke passed for:
 
-- `/virtual-office` rendered successfully after using the existing onboarding flow to save a local test avatar.
-- Holding `D` moved the scene.
-- Main canvas stayed pixelated/non-blurry.
-- Movement sampling reached stable 60 fps in the test viewport.
+- `/health`
+- `/health/readiness`
 
 ## 6. Risks
 
-- Actual user-perceived smoothness should still be confirmed in the visible browser on the user's machine.
-- If future pilot testing adds many simultaneous realtime users, remote avatar rendering/interpolation should be profiled separately.
-- The stale API map manifest fallback should be cleaned up in a separate backend/data hygiene round if it keeps confusing local QA logs.
+- Stopping PID `13704` may interrupt the currently working local API session, so this round did not terminate it automatically.
+- If the user wants a fresh API process after backend code changes, they need to stop PID `13704` first.
+- If multiple terminals are open, it may be unclear which terminal owns the current API process.
 
 ## 7. Recommendation
 
-Recommendation: passed for this performance round.
+Recommendation: passed for local backend startup diagnosis.
 
-The next round can proceed after the user confirms the visible browser movement feels smooth enough for Alpha.
+The next round can proceed. For immediate local use, keep the current API running and start the web app separately. If a backend restart is required, stop PID `13704` before re-running `pnpm --filter @workmap/api dev`.

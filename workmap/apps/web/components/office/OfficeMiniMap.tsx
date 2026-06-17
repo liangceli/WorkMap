@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PlayerState } from "@workmap/shared-types";
 import { wm } from "../../lib/theme/workmapTheme";
 import type { OfficeTileset } from "./mockOfficeData";
+import { drawTiledTile, getTiledTileGid } from "./tiledTiles";
 
 type MiniMapLayer = {
   name: string;
@@ -131,7 +132,7 @@ function createMiniMapStaticCache(
   for (const layer of map.layers) {
     for (let index = 0; index < layer.tiles.length; index += 1) {
       const rawGid = layer.tiles[index];
-      const gid = rawGid & 0x1fffffff;
+      const { gid, flags } = getTiledTileGid(rawGid);
       if (!gid) {
         continue;
       }
@@ -149,7 +150,19 @@ function createMiniMapStaticCache(
       const targetY = Math.floor(index / layer.width) * map.tileHeight * scale;
       const tileSize = map.tileWidth * scale;
 
-      context.drawImage(image, sourceX, sourceY, map.tileWidth, map.tileHeight, targetX, targetY, tileSize, tileSize);
+      drawTiledTile(
+        context,
+        image,
+        sourceX,
+        sourceY,
+        map.tileWidth,
+        map.tileHeight,
+        targetX,
+        targetY,
+        tileSize,
+        tileSize,
+        flags,
+      );
     }
   }
 

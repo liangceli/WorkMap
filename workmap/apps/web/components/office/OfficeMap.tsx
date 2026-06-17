@@ -41,6 +41,7 @@ import { OfficeSidePanel } from "./OfficeSidePanel";
 import { officeTilesets, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
 import { RoomContextCard } from "./RoomContextCard";
 import { statusColors } from "./presence";
+import { drawTiledTile, getTiledTileGid } from "./tiledTiles";
 import { useVirtualOfficeRealtime } from "./useVirtualOfficeRealtime";
 import { useVirtualOfficeData } from "./useVirtualOfficeData";
 import { VirtualOfficeTopBar } from "./VirtualOfficeTopBar";
@@ -1312,7 +1313,7 @@ function drawLayer(
 ) {
   for (let index = 0; index < layer.tiles.length; index += 1) {
     const rawGid = layer.tiles[index];
-    const gid = rawGid & 0x1fffffff;
+    const { gid, flags } = getTiledTileGid(rawGid);
 
     if (!gid) {
       continue;
@@ -1331,7 +1332,8 @@ function drawLayer(
     const targetX = (index % layer.width) * map.tileWidth;
     const targetY = Math.floor(index / layer.width) * map.tileHeight;
 
-    context.drawImage(
+    drawTiledTile(
+      context,
       image,
       sourceX,
       sourceY,
@@ -1341,6 +1343,7 @@ function drawLayer(
       targetY,
       map.tileWidth,
       map.tileHeight,
+      flags,
     );
   }
 }
@@ -1710,7 +1713,7 @@ function buildCollisionGrid(
     }
 
     layer.tiles.forEach((rawGid, index) => {
-      if ((rawGid & 0x1fffffff) !== 0) {
+      if (getTiledTileGid(rawGid).gid !== 0) {
         collision[index] = true;
       }
     });
@@ -1998,7 +2001,7 @@ function findChairSpots(map: ParsedMap) {
   }
 
   return chairsLayer.tiles.flatMap((rawGid, index) => {
-    if ((rawGid & 0x1fffffff) === 0) {
+    if (getTiledTileGid(rawGid).gid === 0) {
       return [];
     }
 
