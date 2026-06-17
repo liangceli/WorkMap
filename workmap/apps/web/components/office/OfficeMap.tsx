@@ -127,6 +127,8 @@ const UI_STATE_SYNC_INTERVAL_MS = 120;
 const REALTIME_REMOTE_INTERPOLATION_RATE = 10;
 const REALTIME_REMOTE_SNAP_DISTANCE = 260;
 const REALTIME_REMOTE_STALE_MS = 20000;
+const MIN_MANUAL_ZOOM = 0.4;
+const MAX_MANUAL_ZOOM = 2;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {
   "demo-manager": createRandomRemoteAvatarConfig("demo-manager"),
@@ -218,6 +220,21 @@ export function OfficeMap() {
     [map],
   );
   const remoteAvatarConfigSignature = useMemo(() => createRemoteAvatarConfigSignature(officePeople), [officePeople]);
+
+  const enforceMinimumZoom = useCallback(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    const minZoom = getMinimumCoverZoom(mapPixels, getCanvasViewportSize(canvas));
+
+    if (zoomRef.current < minZoom) {
+      zoomRef.current = minZoom;
+      setZoom(minZoom);
+    }
+  }, [mapPixels]);
 
   const syncOfficeUiState = useCallback(
     (
@@ -312,6 +329,15 @@ export function OfficeMap() {
   useEffect(() => {
     selectedRemoteIdRef.current = selectedRemoteId;
   }, [selectedRemoteId]);
+
+  useEffect(() => {
+    enforceMinimumZoom();
+    window.addEventListener("resize", enforceMinimumZoom);
+
+    return () => {
+      window.removeEventListener("resize", enforceMinimumZoom);
+    };
+  }, [enforceMinimumZoom]);
 
   useEffect(() => {
     const backendAvatarConfig = decodeLayeredAvatarId(officeData.currentUserPosition?.avatarId);
@@ -859,7 +885,9 @@ export function OfficeMap() {
   const handleWheel = (event: WheelEvent<HTMLCanvasElement>) => {
     event.preventDefault();
     const previousZoom = zoomRef.current;
-    const nextZoom = clamp(previousZoom + (event.deltaY > 0 ? -0.1 : 0.1), 0.4, 2);
+    const viewport = getCanvasViewportSize(event.currentTarget);
+    const minZoom = getMinimumCoverZoom(mapPixels, viewport);
+    const nextZoom = clamp(previousZoom + (event.deltaY > 0 ? -0.1 : 0.1), minZoom, MAX_MANUAL_ZOOM);
     const before = getWorldPointFromEvent(event, mapPixels);
     zoomRef.current = nextZoom;
     const after = getWorldPointFromEvent(event, mapPixels);
@@ -950,7 +978,9 @@ export function OfficeMap() {
   };
 
   const setOfficeZoom = (nextZoom: number) => {
-    zoomRef.current = clamp(nextZoom, 0.4, 2);
+    const canvas = canvasRef.current;
+    const minZoom = canvas ? getMinimumCoverZoom(mapPixels, getCanvasViewportSize(canvas)) : MIN_MANUAL_ZOOM;
+    zoomRef.current = clamp(nextZoom, minZoom, MAX_MANUAL_ZOOM);
     setZoom(zoomRef.current);
   };
 
@@ -1362,6 +1392,23 @@ function syncCanvasViewport(canvas: HTMLCanvasElement) {
   }
 
   return { width, height, dpr };
+}
+
+function getCanvasViewportSize(canvas: HTMLCanvasElement): ViewportSize {
+  const rect = canvas.getBoundingClientRect();
+
+  return {
+    width: Math.max(1, Math.round(rect.width)),
+    height: Math.max(1, Math.round(rect.height)),
+  };
+}
+
+function getMinimumCoverZoom(
+  mapPixels: { width: number; height: number },
+  viewport: ViewportSize,
+) {
+  const coverZoom = Math.max(viewport.width / mapPixels.width, viewport.height / mapPixels.height);
+  return Math.min(MAX_MANUAL_ZOOM, Math.max(MIN_MANUAL_ZOOM, coverZoom));
 }
 
 function drawPlayer(

@@ -2,105 +2,93 @@
 
 ## 1. Reviewed Implementation
 
-Reviewed the local startup/runtime-error repair round for WorkMap web.
+Reviewed the `/virtual-office` minimum zoom-cover fix.
 
 Files changed in this round:
 
+- `workmap/apps/web/components/office/OfficeMap.tsx`
 - `docs/ai-handoff/latest-implementation.md`
 - `docs/ai-handoff/latest-qa.md`
 
-No WorkMap application source code changed.
-
-Pre-existing uncommitted file preserved from the prior map round:
-
-- `workmap/apps/web/public/maps/workmap2.tmx`
-
 ## 2. Diff Review Summary
 
-Result: passed for the scoped local startup repair.
+Result: passed for the scoped frontend zoom-cover fix.
 
-The repair was operational rather than a source-code change:
+The implementation changes only virtual-office frontend zoom bounds:
 
-- Diagnosed a stale/inconsistent Next `.next` generated output issue.
-- Deleted/regenerated `workmap/apps/web/.next`.
-- Verified the rebuilt server pages no longer require a missing `./257.js` chunk.
-- Confirmed WorkMap web is running on `localhost:3002`, not `3000`.
-- Confirmed API remains available on `localhost:3001`.
+- Existing fixed minimum zoom `0.4` is now represented by `MIN_MANUAL_ZOOM`.
+- `MAX_MANUAL_ZOOM` preserves the previous max zoom of `2`.
+- `getMinimumCoverZoom()` computes the viewport-aware zoom floor needed to cover the current canvas.
+- Mouse wheel and zoom-out button now clamp to the dynamic floor.
+- A resize listener raises the zoom if the viewport grows and the current zoom would expose blank canvas/background.
 
-No auth, RBAC, tenant isolation, backend, schema, realtime, movement, map rendering, TMX logic, package version, lockfile, or env behavior changed.
+No map data, tile art, movement, collision, pathfinding, realtime, polling, backend, auth, RBAC, schema, deployment, package, or env behavior changed.
 
 ## 3. Findings Ordered By Severity
 
 Blocking:
 
-- None identified for startup on `localhost:3002`.
+- None identified.
 
 Non-blocking:
 
-- `3000` is currently used by another local Node/Next process and should not be used for WorkMap in this environment.
-- The startup error was consistent with generated `.next` output mismatch, not a reproducible source-code defect after clean rebuild.
-- Browser QA reached the avatar setup transition state, not the full virtual-office map, because the current browser session lacks completed avatar setup.
-- A first attempted background startup command passed `--` through to Next incorrectly; it exited and was not the final running server state.
+- Full virtual-office interaction regression was not repeated.
+- The cover minimum means large/wide screens cannot zoom out as far as `40%`; this is intentional to satisfy the no-blank-screen requirement.
+- Extremely large displays beyond the map size at `200%` could theoretically still exceed the configured max zoom, but this is outside normal WorkMap desktop use.
 
 ## 4. Test / Verification Status
 
 Commands run from `C:\Users\liangceli\WorkMap\workmap`:
 
-- `pnpm.cmd --filter @workmap/web build`
-  - Passed.
-  - Existing warning: Next.js plugin was not detected in the ESLint configuration.
 - `pnpm.cmd --filter @workmap/web typecheck`
   - Passed.
 - `pnpm.cmd --filter @workmap/web lint`
   - Passed.
-- `node -e "require('./apps/web/.next/server/app/page.js'); console.log('app page ok')"`
-  - Passed after clean rebuild.
-- `node -e "require('./apps/web/.next/server/app/virtual-office/page.js'); console.log('virtual office page ok')"`
-  - Passed after clean rebuild.
-- `Invoke-WebRequest http://localhost:3001/health`
-  - Returned `200`.
-- `Invoke-WebRequest http://localhost:3002/`
-  - Returned `200`.
-- `Invoke-WebRequest http://localhost:3002/login`
-  - Returned `200`.
-- `Invoke-WebRequest http://localhost:3002/virtual-office`
-  - Returned `200`.
+- `pnpm.cmd --filter @workmap/web build`
+  - Passed.
+  - Existing warning: Next.js plugin was not detected in the ESLint configuration.
 
-Commands run from repo root `C:\Users\liangceli\WorkMap`:
+Browser / visual QA:
+
+- Browser plugin opened the local app on `localhost:3002`.
+- Test browser completed the local demo avatar/compliance/device path to reach `/virtual-office`.
+- Headless Chrome verification used a `1912x948` viewport matching the user's wide screenshot scenario.
+- Repeated mouse-wheel zoom-out over the canvas.
+- Final zoom label was `60%`.
+- Right-edge canvas pixel sampling after minimum zoom:
+  - sampled pixels: `38`;
+  - blank/background-like pixels: `0`.
+- This verifies the minimum zoom no longer exposes the right-side blank background for the reported wide viewport.
+- After the build step, the running dev server on `3002` reproduced the known stale `.next` chunk failure. Generated `.next` output was cleared, the WorkMap web server was restarted on `3002`, and the same wide-viewport QA was repeated successfully:
+  - final zoom label: `60%`;
+  - sampled pixels: `38`;
+  - blank/background-like pixels: `0`.
 
 - `git diff --check`
   - Passed.
-  - Git printed LF-to-CRLF working-copy warnings for the handoff docs and the pre-existing TMX diff.
-- High-confidence secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, `docs/references`, `.git`, `.codex_previews`, and logs
+  - Git printed LF-to-CRLF working-copy warnings for the handoff docs and `OfficeMap.tsx`.
+- High-confidence secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, `docs/references`, `.git`, `.codex_previews`, logs, and generated directories
   - Passed with no matches.
-
-Browser plugin verification:
-
-- Opened `http://localhost:3002/virtual-office`.
-- Confirmed page title `WorkMap`.
-- Confirmed no visible Next runtime error.
-- Confirmed no captured browser console errors.
-- Confirmed visible content was the expected avatar setup transition for the current browser session.
 
 ## 5. Manual QA Status
 
-Manual QA was limited to startup/runtime-error verification on `localhost:3002`.
+Manual/browser QA was limited to the zoom-cover issue.
 
 Not run:
 
-- Full login flow.
-- Avatar creation/completion flow.
-- Full `/virtual-office` map rendering after avatar setup.
-- Movement, collision, auto-walk, realtime, polling, People panel, contact drawer, or chair interaction QA.
+- Login/Cognito end-to-end.
+- Two-user realtime movement.
+- Full movement/collision/pathfinding/chair regression.
+- Full responsive QA for unrelated pages.
 
 ## 6. Risks
 
-- If the user starts WorkMap without explicitly setting a non-3000 port, Next may collide with the other project and choose a different port automatically.
-- If `.next` becomes stale again after interrupted builds or mixed dev/build processes, the same missing chunk symptom may recur.
-- Full product behavior was not re-tested because this round only addressed startup/runtime health.
+- Users will now see a higher minimum zoom on wide displays. That is the expected tradeoff for preventing blank background.
+- If the product later needs both full-map overview and no blank space, the map art or surrounding world would need to be extended rather than reducing zoom below the cover threshold.
+- Local Cognito callback/logout config may still assume port `3000`; this round did not alter env or provider settings.
 
 ## 7. Recommendation
 
-Recommendation: passed for the scoped startup repair.
+Recommendation: passed for the scoped minimum-zoom no-blank fix.
 
-The next round can proceed after the user opens WorkMap at `http://localhost:3002`. For future local runs in this environment, keep API on `3001` and web on `3002` unless the user chooses another explicit non-3000 port.
+The next round can proceed after the user refreshes `localhost:3002/virtual-office` and confirms the minimum zoom behavior visually.
