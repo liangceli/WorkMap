@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WorkMap Domain Tracking</title><link rel="stylesheet" href="options.css"></head>
+  <body>
+    <main>
+      <h1>WorkMap Domain Tracking</h1>
+      <p class="privacy">Tracks active website hostname and duration only. It does not collect full URLs, titles, page content, form input, passwords, screenshots, keystrokes, clipboard, camera, microphone, email bodies, or private messages.</p>
+      <div id="status" class="status">Loading status...</div>
+      <form id="pair-form">
+        <label>API URL<input id="api-url" type="url" required></label>
+        <label>Browser<select id="browser-name"><option value="CHROME">Chrome</option><option value="EDGE">Edge</option></select></label>
+        <label>Pairing code<input id="pairing-code" autocomplete="one-time-code" placeholder="ABCD-EFGH" required></label>
+        <button type="submit">Pair extension</button>
+      </form>
+      <p id="message" aria-live="polite"></p>
+    </main>
+    <script type="module" src="dist/options.js"></script>
+  </body>
+</html>

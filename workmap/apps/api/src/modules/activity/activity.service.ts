@@ -20,6 +20,7 @@ type ParsedTiming = {
 
 type ParsedEventBase = ParsedTiming & {
   deviceId: string;
+  clientEventId: string | null;
   isIdle: boolean;
 };
 
@@ -74,6 +75,7 @@ export class ActivityService {
         id: deviceId,
         companyId: context.companyId,
         userId: context.userId,
+        revokedAt: null,
       },
       select: { id: true },
     });
@@ -98,6 +100,7 @@ export class ActivityService {
           companyId: context.companyId,
           userId: context.userId,
           deviceId: event.deviceId,
+          clientEventId: event.clientEventId,
           source: ActivityEventSource.DESKTOP_AGENT,
           eventType: ActivityEventType.APP,
           appName: event.appName,
@@ -156,6 +159,7 @@ export class ActivityService {
           companyId: context.companyId,
           userId: context.userId,
           deviceId: event.deviceId,
+          clientEventId: event.clientEventId,
           source: ActivityEventSource.BROWSER_EXTENSION,
           eventType: ActivityEventType.BROWSER,
           browserName: event.browserName,
@@ -206,15 +210,19 @@ export class ActivityService {
     const existing = await this.prisma.activityEvent.findFirst({
       where: {
         companyId: context.companyId,
-        userId: context.userId,
-        deviceId: event.deviceId,
-        source: ActivityEventSource.DESKTOP_AGENT,
-        eventType: ActivityEventType.APP,
-        appName: event.appName,
-        isIdle: event.isIdle,
-        startedAt: event.startedAt,
-        endedAt: event.endedAt,
-        durationSeconds: event.durationSeconds,
+        ...(event.clientEventId
+          ? { source: ActivityEventSource.DESKTOP_AGENT, clientEventId: event.clientEventId }
+          : {
+              userId: context.userId,
+              deviceId: event.deviceId,
+              source: ActivityEventSource.DESKTOP_AGENT,
+              eventType: ActivityEventType.APP,
+              appName: event.appName,
+              isIdle: event.isIdle,
+              startedAt: event.startedAt,
+              endedAt: event.endedAt,
+              durationSeconds: event.durationSeconds,
+            }),
       },
       select: { id: true },
     });
@@ -226,16 +234,20 @@ export class ActivityService {
     const existing = await this.prisma.activityEvent.findFirst({
       where: {
         companyId: context.companyId,
-        userId: context.userId,
-        deviceId: event.deviceId,
-        source: ActivityEventSource.BROWSER_EXTENSION,
-        eventType: ActivityEventType.BROWSER,
-        browserName: event.browserName,
-        domain: event.domain,
-        isIdle: event.isIdle,
-        startedAt: event.startedAt,
-        endedAt: event.endedAt,
-        durationSeconds: event.durationSeconds,
+        ...(event.clientEventId
+          ? { source: ActivityEventSource.BROWSER_EXTENSION, clientEventId: event.clientEventId }
+          : {
+              userId: context.userId,
+              deviceId: event.deviceId,
+              source: ActivityEventSource.BROWSER_EXTENSION,
+              eventType: ActivityEventType.BROWSER,
+              browserName: event.browserName,
+              domain: event.domain,
+              isIdle: event.isIdle,
+              startedAt: event.startedAt,
+              endedAt: event.endedAt,
+              durationSeconds: event.durationSeconds,
+            }),
       },
       select: { id: true },
     });
@@ -277,9 +289,20 @@ function readDomainUsageEvent(input: Record<string, unknown>): ParsedDomainUsage
 function readCommonEvent(input: Record<string, unknown>): ParsedEventBase {
   return {
     deviceId: readRequiredUuid(input.deviceId, "deviceId"),
+    clientEventId: readOptionalClientEventId(input.clientEventId),
     isIdle: readBoolean(input.isIdle, false) || readBoolean(input.active, true) === false,
     ...readTiming(input),
   };
+}
+
+function readOptionalClientEventId(value: unknown) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw new BadRequestException("clientEventId must be a UUID when provided.");
+  }
+  return value.toLowerCase();
 }
 
 function readTiming(input: Record<string, unknown>): ParsedTiming {

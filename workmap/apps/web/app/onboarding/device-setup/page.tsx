@@ -1,6 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { createDevicePairingCode } from "../../../lib/api/devicesApi";
+import { getWorkMapApiAuthOptions } from "../../../lib/api/apiAuth";
+import type { WorkMapApiPairingCode } from "../../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
@@ -18,6 +22,28 @@ const notCollectedItems = [
 
 export default function DeviceSetupPage() {
   const router = useRouter();
+  const [pairing, setPairing] = useState<WorkMapApiPairingCode | null>(null);
+  const [pairingState, setPairingState] = useState<"idle" | "loading" | "error">("idle");
+  const [pairingMessage, setPairingMessage] = useState("");
+
+  const createPairing = async (clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION") => {
+    setPairingState("loading");
+    setPairingMessage("");
+    const auth = await getWorkMapApiAuthOptions();
+    if (!auth.available) {
+      setPairingState("error");
+      setPairingMessage(auth.reason);
+      return;
+    }
+    const result = await createDevicePairingCode(clientType, auth.options);
+    if (!result.ok) {
+      setPairingState("error");
+      setPairingMessage(result.error);
+      return;
+    }
+    setPairing(result.data);
+    setPairingState("idle");
+  };
 
   const continueToOffice = () => {
     const nextState = updateUserSetupState({ hasCompletedDeviceSetup: true }, "EMPLOYEE");
@@ -42,6 +68,28 @@ export default function DeviceSetupPage() {
         <section style={styles.notice}>
           <strong>Transparent setup</strong>
           <span>Employees should see these boundaries before device metadata collection is enabled.</span>
+        </section>
+
+        <section style={styles.pairingPanel}>
+          <div>
+            <h2 style={styles.cardTitle}>Pair a tracking client</h2>
+            <p style={styles.subtitle}>Generate a one-time code. It expires after 10 minutes and can be exchanged only once.</p>
+          </div>
+          <div style={styles.actions}>
+            <button type="button" onClick={() => void createPairing("DESKTOP_AGENT")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
+              Pair Desktop Agent
+            </button>
+            <button type="button" onClick={() => void createPairing("BROWSER_EXTENSION")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
+              Pair Browser Extension
+            </button>
+          </div>
+          {pairing ? (
+            <div style={styles.codeBox}>
+              <strong style={styles.code}>{pairing.code}</strong>
+              <span>{pairing.clientType === "DESKTOP_AGENT" ? "Desktop Agent" : "Browser Extension"} code expires {new Date(pairing.expiresAt).toLocaleTimeString()}.</span>
+            </div>
+          ) : null}
+          {pairingMessage ? <p style={styles.error}>{pairingMessage}</p> : null}
         </section>
 
         <button type="button" onClick={continueToOffice} style={styles.button}>
@@ -135,5 +183,40 @@ const styles = {
     padding: "12px 16px",
     cursor: "pointer",
     fontWeight: 900,
+  },
+  pairingPanel: {
+    ...wmStyles.card,
+    padding: "16px",
+    display: "grid",
+    gap: "12px",
+  },
+  actions: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "10px",
+  },
+  secondaryButton: {
+    ...wmStyles.secondaryButton,
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontWeight: 800,
+  },
+  codeBox: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    alignItems: "center",
+    gap: "12px",
+    ...wmStyles.infoNotice,
+    padding: "12px 14px",
+  },
+  code: {
+    fontFamily: "monospace",
+    fontSize: "22px",
+    letterSpacing: 0,
+  },
+  error: {
+    margin: 0,
+    color: wm.colors.error,
+    fontSize: "14px",
   },
 };

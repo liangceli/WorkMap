@@ -51,6 +51,7 @@ export class DevicesService {
       hostname: sanitizeOptionalText(body.hostname, MAX_HOSTNAME_LENGTH),
       agentVersion: sanitizeOptionalText(body.agentVersion, MAX_AGENT_VERSION_LENGTH),
       lastSeenAt: new Date(),
+      revokedAt: null,
     };
 
     if (requestedDeviceId) {
@@ -79,6 +80,7 @@ export class DevicesService {
         id: deviceId,
         companyId: context.companyId,
         userId: context.userId,
+        revokedAt: null,
       },
     });
 
@@ -104,6 +106,7 @@ function toDeviceRegistrationResponse(device: {
   hostname: string | null;
   agentVersion: string | null;
   lastSeenAt: Date | null;
+  revokedAt?: Date | null;
 }) {
   return {
     device: {
@@ -112,6 +115,7 @@ function toDeviceRegistrationResponse(device: {
       hostname: device.hostname,
       agentVersion: device.agentVersion,
       lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
+      revokedAt: device.revokedAt?.toISOString() ?? null,
     },
   };
 }

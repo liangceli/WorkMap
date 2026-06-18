@@ -304,6 +304,10 @@ class MockPrisma {
   };
 
   activityEvent = {
+    findFirst: async ({ where, select }: any) => {
+      const event = this.activityEvents.find((item) => matchesWhere(item, where));
+      return event && select?.id ? { id: event.id } : event ?? null;
+    },
     create: async ({ data }: any) => {
       const event = {
         id: nextId("event"),
@@ -459,6 +463,7 @@ type DeviceRow = {
   hostname: string | null;
   agentVersion: string | null;
   lastSeenAt: Date | null;
+  revokedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -517,6 +522,7 @@ function toDeviceRow(input: Partial<DeviceRow> & Pick<DeviceRow, "id" | "company
     hostname: null,
     agentVersion: null,
     lastSeenAt: null,
+    revokedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...input,
@@ -548,6 +554,9 @@ function matchesWhere(row: Record<string, any>, where: Record<string, any> | und
 
   return Object.entries(where).every(([key, expected]) => {
     const actual = row[key];
+    if (expected instanceof Date) {
+      return actual instanceof Date && actual.getTime() === expected.getTime();
+    }
     if (expected && typeof expected === "object" && "gte" in expected) {
       return actual instanceof Date && actual >= expected.gte;
     }

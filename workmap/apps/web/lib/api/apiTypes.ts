@@ -260,10 +260,17 @@ export type WorkMapApiDevice = {
   hostname: string | null;
   agentVersion: string | null;
   lastSeenAt: string | null;
+  revokedAt?: string | null;
 };
 
 export type WorkMapApiDeviceRegistration = {
   device: WorkMapApiDevice;
+};
+
+export type WorkMapApiPairingCode = {
+  code: string;
+  clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+  expiresAt: string;
 };
 
 export type WorkMapApiActivityIngestResult = {

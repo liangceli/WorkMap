@@ -33,6 +33,11 @@ enum DeviceOS {
   UNKNOWN
 }
 
+enum DeviceClientType {
+  DESKTOP_AGENT
+  BROWSER_EXTENSION
+}
+
 enum ActivityEventType {
   APP
   BROWSER
@@ -94,25 +99,27 @@ enum InvitationStatus {
 }
 
 model Company {
-  id              String               @id @default(uuid()) @db.Uuid
-  name            String
-  slug            String               @unique
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  departments     Department[]
-  users           User[]
-  devices         Device[]
-  activityEvents  ActivityEvent[]
-  appSummaries    AppUsageSummary[]
-  websiteSummaries WebsiteUsageSummary[]
-  officeMaps      OfficeMap[]
-  officeRooms     OfficeRoom[]
-  positions       VirtualOfficePosition[]
-  policies        MonitoringPolicy[]
-  acknowledgements PolicyAcknowledgement[]
-  integrations    IntegrationAccount[]
-  auditLogs       AuditLog[]
-  invitations     Invitation[]
+  id                 String                  @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String                  @unique
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  departments        Department[]
+  users              User[]
+  devices            Device[]
+  activityEvents     ActivityEvent[]
+  appSummaries       AppUsageSummary[]
+  websiteSummaries   WebsiteUsageSummary[]
+  officeMaps         OfficeMap[]
+  officeRooms        OfficeRoom[]
+  positions          VirtualOfficePosition[]
+  policies           MonitoringPolicy[]
+  acknowledgements   PolicyAcknowledgement[]
+  integrations       IntegrationAccount[]
+  auditLogs          AuditLog[]
+  invitations        Invitation[]
+  devicePairingCodes DevicePairingCode[]
+  deviceCredentials  DeviceCredential[]
 }
 
 model Department {
@@ -129,30 +136,32 @@ model Department {
 }
 
 model User {
-  id                    String                  @id @default(uuid()) @db.Uuid
-  companyId             String                  @db.Uuid
-  departmentId          String?                 @db.Uuid
-  email                 String
-  cognitoSub            String?                 @unique
-  displayName           String
-  role                  UserRole                @default(EMPLOYEE)
-  status                UserStatus              @default(OFFLINE)
-  avatarId              String?
-  jobTitle              String?
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  company               Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  department            Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  devices               Device[]
-  activityEvents        ActivityEvent[]
-  appSummaries          AppUsageSummary[]
-  websiteSummaries      WebsiteUsageSummary[]
-  position              VirtualOfficePosition?
+  id                     String                  @id @default(uuid()) @db.Uuid
+  companyId              String                  @db.Uuid
+  departmentId           String?                 @db.Uuid
+  email                  String
+  cognitoSub             String?                 @unique
+  displayName            String
+  role                   UserRole                @default(EMPLOYEE)
+  status                 UserStatus              @default(OFFLINE)
+  avatarId               String?
+  jobTitle               String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department             Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  devices                Device[]
+  activityEvents         ActivityEvent[]
+  appSummaries           AppUsageSummary[]
+  websiteSummaries       WebsiteUsageSummary[]
+  position               VirtualOfficePosition?
   policyAcknowledgements PolicyAcknowledgement[]
-  integrationAccounts   IntegrationAccount[]
-  auditLogsAuthored     AuditLog[]              @relation("AuditActor")
-  auditLogsTargeting    AuditLog[]              @relation("AuditTarget")
-  invitationsSent       Invitation[]            @relation("InvitationInvitedBy")
+  integrationAccounts    IntegrationAccount[]
+  auditLogsAuthored      AuditLog[]              @relation("AuditActor")
+  auditLogsTargeting     AuditLog[]              @relation("AuditTarget")
+  invitationsSent        Invitation[]            @relation("InvitationInvitedBy")
+  devicePairingCodes     DevicePairingCode[]
+  deviceCredentials      DeviceCredential[]
 
   @@unique([companyId, email])
   @@index([companyId, departmentId])
@@ -180,44 +189,87 @@ model Invitation {
 }
 
 model Device {
-  id             String          @id @default(uuid()) @db.Uuid
-  companyId      String          @db.Uuid
-  userId         String          @db.Uuid
-  os             DeviceOS        @default(UNKNOWN)
+  id             String              @id @default(uuid()) @db.Uuid
+  companyId      String              @db.Uuid
+  userId         String              @db.Uuid
+  os             DeviceOS            @default(UNKNOWN)
   hostname       String?
   agentVersion   String?
   lastSeenAt     DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revokedAt      DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   activityEvents ActivityEvent[]
+  pairingCodes   DevicePairingCode[]
+  credentials    DeviceCredential[]
 
   @@index([companyId, userId])
   @@index([companyId, lastSeenAt])
 }
 
+model DevicePairingCode {
+  id         String           @id @default(uuid()) @db.Uuid
+  companyId  String           @db.Uuid
+  userId     String           @db.Uuid
+  deviceId   String?          @db.Uuid
+  clientType DeviceClientType
+  codeHash   String           @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime         @default(now())
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device     Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, userId, expiresAt])
+  @@index([deviceId])
+}
+
+model DeviceCredential {
+  id         String           @id @default(uuid()) @db.Uuid
+  companyId  String           @db.Uuid
+  userId     String           @db.Uuid
+  deviceId   String           @db.Uuid
+  clientType DeviceClientType
+  tokenHash  String           @unique
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device     Device           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId])
+  @@index([deviceId, revokedAt])
+}
+
 model ActivityEvent {
-  id              String             @id @default(uuid()) @db.Uuid
-  companyId       String             @db.Uuid
-  userId          String             @db.Uuid
-  deviceId        String             @db.Uuid
+  id              String              @id @default(uuid()) @db.Uuid
+  companyId       String              @db.Uuid
+  userId          String              @db.Uuid
+  deviceId        String              @db.Uuid
+  clientEventId   String?
   source          ActivityEventSource @default(DESKTOP_AGENT)
   eventType       ActivityEventType
   appName         String?
   browserName     BrowserName?
   domain          String?
-  isIdle          Boolean            @default(false)
-  isActiveWindow  Boolean            @default(false)
+  isIdle          Boolean             @default(false)
+  isActiveWindow  Boolean             @default(false)
   startedAt       DateTime
   endedAt         DateTime?
   durationSeconds Int?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  device          Device             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device          Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
+  @@unique([companyId, source, clientEventId])
   @@index([companyId, userId, startedAt])
   @@index([companyId, deviceId, startedAt])
   @@index([companyId, source, startedAt])
@@ -327,78 +379,78 @@ model VirtualOfficePosition {
 }
 
 model MonitoringPolicy {
-  id                      String                  @id @default(uuid()) @db.Uuid
-  companyId               String                  @db.Uuid
-  name                    String
-  collectAppUsage         Boolean                 @default(true)
-  collectWebsiteDomain    Boolean                 @default(true)
-  collectFullUrl          Boolean                 @default(false)
-  collectScreenshots      Boolean                 @default(false)
-  collectKeystrokes       Boolean                 @default(false)
-  workHoursOnly           Boolean                 @default(true)
-  workdayStart            String                  @default("09:00")
-  workdayEnd              String                  @default("17:00")
-  retentionDays           Int                     @default(90)
-  employeeCanViewOwnData  Boolean                 @default(true)
-  policyVersion           String
-  activeFrom              DateTime
-  createdAt               DateTime                @default(now())
-  updatedAt               DateTime                @updatedAt
-  company                 Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  acknowledgements        PolicyAcknowledgement[]
+  id                     String                  @id @default(uuid()) @db.Uuid
+  companyId              String                  @db.Uuid
+  name                   String
+  collectAppUsage        Boolean                 @default(true)
+  collectWebsiteDomain   Boolean                 @default(true)
+  collectFullUrl         Boolean                 @default(false)
+  collectScreenshots     Boolean                 @default(false)
+  collectKeystrokes      Boolean                 @default(false)
+  workHoursOnly          Boolean                 @default(true)
+  workdayStart           String                  @default("09:00")
+  workdayEnd             String                  @default("17:00")
+  retentionDays          Int                     @default(90)
+  employeeCanViewOwnData Boolean                 @default(true)
+  policyVersion          String
+  activeFrom             DateTime
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  acknowledgements       PolicyAcknowledgement[]
 
   @@unique([companyId, policyVersion])
   @@index([companyId, activeFrom])
 }
 
 model PolicyAcknowledgement {
-  id                  String           @id @default(uuid()) @db.Uuid
-  companyId           String           @db.Uuid
-  userId              String           @db.Uuid
-  monitoringPolicyId  String           @db.Uuid
-  acknowledgedAt      DateTime
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  monitoringPolicy    MonitoringPolicy @relation(fields: [monitoringPolicyId], references: [id], onDelete: Cascade)
+  id                 String           @id @default(uuid()) @db.Uuid
+  companyId          String           @db.Uuid
+  userId             String           @db.Uuid
+  monitoringPolicyId String           @db.Uuid
+  acknowledgedAt     DateTime
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  company            Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monitoringPolicy   MonitoringPolicy @relation(fields: [monitoringPolicyId], references: [id], onDelete: Cascade)
 
   @@unique([userId, monitoringPolicyId])
   @@index([companyId, userId])
 }
 
 model IntegrationAccount {
-  id                 String              @id @default(uuid()) @db.Uuid
-  companyId          String              @db.Uuid
-  userId             String?             @db.Uuid
-  provider           IntegrationProvider
-  externalAccountId  String?
-  displayName        String?
-  enabled            Boolean             @default(true)
-  connectedAt        DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user               User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String              @id @default(uuid()) @db.Uuid
+  companyId         String              @db.Uuid
+  userId            String?             @db.Uuid
+  provider          IntegrationProvider
+  externalAccountId String?
+  displayName       String?
+  enabled           Boolean             @default(true)
+  connectedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user              User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([companyId, provider])
   @@index([companyId, userId])
 }
 
 model AuditLog {
-  id            String   @id @default(uuid()) @db.Uuid
-  companyId     String   @db.Uuid
-  actorUserId   String?  @db.Uuid
-  targetUserId  String?  @db.Uuid
-  action        String
-  resourceType  String
-  resourceId    String?
-  metadata      Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  actorUser     User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
-  targetUser    User?    @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @db.Uuid
+  actorUserId  String?  @db.Uuid
+  targetUserId String?  @db.Uuid
+  action       String
+  resourceType String
+  resourceId   String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actorUser    User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  targetUser   User?    @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId, actorUserId, createdAt])
   @@index([companyId, targetUserId, createdAt])

@@ -1,5 +1,5 @@
 import { PrismaClient, UserRole, UserStatus } from "@prisma/client";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import net from "node:net";
 
 const API_BASE_URL = process.env.WORKMAP_STAGE4_SMOKE_API_URL?.replace(/\/+$/, "") ?? "http://localhost:3001";
@@ -23,6 +23,7 @@ try {
   await assertApiHealth();
   const owner = await createDevToken(OWNER_EMAIL, DEMO_COMPANY_SLUG);
   const engineer = await createDevToken(ENGINEER_EMAIL, DEMO_COMPANY_SLUG);
+  await cleanupPreviousDemoSmoke(engineer.user.companyId);
   const otherTenant = await createTemporaryTenant(runId);
   const otherOwner = await createDevToken(otherTenant.email, otherTenant.slug);
 
@@ -79,6 +80,9 @@ try {
   assertEqual(domainAccepted.accepted, 1, "domain event should be accepted once");
   assertEqual(domainDuplicate.accepted, 0, "duplicate domain event should not be counted twice");
 
+  const pairedClients = await runDevicePairingSmoke(engineer, otherOwner);
+  smoke.pairing = pairedClients.summary;
+
   const engineerReport = await getJson("/reports/usage-summary", engineer.accessToken);
   const ownerCompanyReport = await getJson("/reports/usage-summary?scope=company", owner.accessToken);
   const engineerApp = engineerReport.apps.find((row) => row.appName === appName);
@@ -112,6 +116,8 @@ try {
     agentVersion: "stage4-smoke/0.1.0",
   });
   const platformWithTenantToken = await request("GET", "/platform/tenants", owner.accessToken);
+  const reportWithDeviceCredential = await deviceRequest("GET", "/reports/usage-summary", pairedClients.desktop.credential);
+  const crossTenantRevoke = await request("POST", `/devices/${pairedClients.other.device.id}/revoke`, engineer.accessToken);
 
   assertStatus(unauthActivity.status, 401, "unauthenticated activity ingestion should be rejected");
   assertStatus(employeeCompanyReport.status, 403, "employee company report should be rejected");
@@ -122,6 +128,9 @@ try {
   if (platformWithTenantToken.status === 200) {
     throw new Error("tenant bearer token should not access platform tenant list");
   }
+  assertStatus(reportWithDeviceCredential.status, 401, "device credential must not read employee reports");
+  assertStatus(pairedClients.summary.crossClientTypeStatus, 403, "desktop credential must not submit browser-domain events");
+  assertStatus(crossTenantRevoke.status, 403, "employee must not revoke another tenant device");
 
   smoke.permissions = {
     unauthActivityStatus: unauthActivity.status,
@@ -131,6 +140,9 @@ try {
     crossTenantIngestStatus: crossTenantIngest.status,
     crossUserHeartbeatStatus: crossUserHeartbeat.status,
     platformWithTenantTokenStatus: platformWithTenantToken.status,
+    reportWithDeviceCredentialStatus: reportWithDeviceCredential.status,
+    crossClientTypeStatus: pairedClients.summary.crossClientTypeStatus,
+    crossTenantRevokeStatus: crossTenantRevoke.status,
   };
 
   smoke.realtime = await runRealtimeSmoke(owner, engineer, otherOwner);
@@ -139,6 +151,134 @@ try {
 } finally {
   await prisma.company.deleteMany({ where: { slug: { startsWith: "stage4-smoke-" } } });
   await prisma.$disconnect();
+}
+
+async function cleanupPreviousDemoSmoke(companyId) {
+  const appFilter = {
+    companyId,
+    OR: [
+      { appName: { startsWith: "WorkMap Stage4 Smoke App stage4-" } },
+      { appName: { startsWith: "Paired Desktop stage4-" } },
+    ],
+  };
+  await prisma.activityEvent.deleteMany({
+    where: {
+      companyId,
+      OR: [
+        { appName: { startsWith: "WorkMap Stage4 Smoke App stage4-" } },
+        { appName: { startsWith: "Paired Desktop stage4-" } },
+        { domain: { contains: "stage4-" } },
+      ],
+    },
+  });
+  await prisma.appUsageSummary.deleteMany({ where: appFilter });
+  await prisma.websiteUsageSummary.deleteMany({ where: { companyId, domain: { contains: "stage4-" } } });
+  await prisma.device.deleteMany({
+    where: {
+      companyId,
+      OR: [
+        { hostname: { startsWith: "WM-STAGE4-" } },
+        { hostname: { startsWith: "WM-PAIRED-" } },
+      ],
+    },
+  });
+}
+
+async function runDevicePairingSmoke(engineer, otherOwner) {
+  const desktopCode = await postJson("/devices/pairing-codes", engineer.accessToken, { clientType: "DESKTOP_AGENT" });
+  const desktop = await postJson("/device-client/pair", undefined, {
+    code: desktopCode.code,
+    os: "WINDOWS",
+    hostname: `WM-PAIRED-${runId}`,
+    agentVersion: "desktop-agent-windows-alpha/0.2.0",
+  });
+  const reusedCode = await request("POST", "/device-client/pair", undefined, { code: desktopCode.code });
+  assertStatus(reusedCode.status, 401, "pairing code must be one-time");
+
+  const heartbeat = await deviceRequest("POST", "/device-client/heartbeat", desktop.credential, { agentVersion: "desktop-agent-windows-alpha/0.2.0" });
+  assertStatus(heartbeat.status, 201, "paired desktop heartbeat should succeed");
+
+  const endedAt = new Date();
+  const startedAt = new Date(endedAt.getTime() - 60000);
+  const appName = `Paired Desktop ${runId}`;
+  const appEvent = {
+    clientEventId: randomUUID(),
+    deviceId: desktop.device.id,
+    appName,
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    durationSeconds: 60,
+    isIdle: false,
+  };
+  const desktopAccepted = await devicePostJson("/device-client/app-usage", desktop.credential, { events: [appEvent] });
+  const desktopDuplicate = await devicePostJson("/device-client/app-usage", desktop.credential, { events: [appEvent] });
+  assertEqual(desktopAccepted.accepted, 1, "paired desktop event should be accepted");
+  assertEqual(desktopDuplicate.accepted, 0, "paired desktop retry should be idempotent");
+  const crossClientType = await deviceRequest("POST", "/device-client/domain-usage", desktop.credential, {
+    events: [{
+      clientEventId: randomUUID(),
+      deviceId: desktop.device.id,
+      domain: "wrong-client.example.com",
+      browserName: "CHROME",
+      startedAt: startedAt.toISOString(),
+      endedAt: endedAt.toISOString(),
+      durationSeconds: 60,
+      isIdle: false,
+    }],
+  });
+  assertStatus(crossClientType.status, 403, "desktop credential must not submit browser-domain events");
+
+  const extensionCode = await postJson("/devices/pairing-codes", engineer.accessToken, { clientType: "BROWSER_EXTENSION" });
+  const extension = await postJson("/device-client/pair", undefined, {
+    code: extensionCode.code,
+    os: "UNKNOWN",
+    hostname: "Chrome",
+    agentVersion: "browser-extension-mv3/0.2.0",
+  });
+  const domain = `${runId}.paired.example.com`;
+  const domainEvent = {
+    clientEventId: randomUUID(),
+    deviceId: extension.device.id,
+    domain,
+    browserName: "CHROME",
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    durationSeconds: 60,
+    isIdle: false,
+  };
+  const extensionAccepted = await devicePostJson("/device-client/domain-usage", extension.credential, { events: [domainEvent] });
+  const extensionDuplicate = await devicePostJson("/device-client/domain-usage", extension.credential, { events: [domainEvent] });
+  assertEqual(extensionAccepted.accepted, 1, "paired extension event should be accepted");
+  assertEqual(extensionDuplicate.accepted, 0, "paired extension retry should be idempotent");
+
+  const report = await getJson("/reports/usage-summary", engineer.accessToken);
+  assertEqual(report.apps.find((row) => row.appName === appName)?.activeSeconds, 60, "employee report should include paired desktop duration");
+  assertEqual(report.websites.find((row) => row.domain === domain)?.activeSeconds, 60, "employee report should include paired extension duration");
+
+  const otherCode = await postJson("/devices/pairing-codes", otherOwner.accessToken, { clientType: "DESKTOP_AGENT" });
+  const other = await postJson("/device-client/pair", undefined, { code: otherCode.code, os: "WINDOWS", hostname: "OTHER" });
+
+  const revoke = await request("POST", `/devices/${desktop.device.id}/revoke`, engineer.accessToken);
+  assertStatus(revoke.status, 201, "device owner should revoke paired desktop device");
+  const revokedHeartbeat = await deviceRequest("POST", "/device-client/heartbeat", desktop.credential, {});
+  assertStatus(revokedHeartbeat.status, 401, "revoked desktop credential should stop working");
+
+  return {
+    desktop,
+    extension,
+    other,
+    summary: {
+      desktopAccepted: desktopAccepted.accepted,
+      desktopDuplicateAccepted: desktopDuplicate.accepted,
+      extensionAccepted: extensionAccepted.accepted,
+      extensionDuplicateAccepted: extensionDuplicate.accepted,
+      reusedCodeStatus: reusedCode.status,
+      revokedHeartbeatStatus: revokedHeartbeat.status,
+      crossClientTypeStatus: crossClientType.status,
+      employeeAppSeconds: 60,
+      employeeDomainSeconds: 60,
+    },
+  };
 }
 
 async function assertApiHealth() {
@@ -171,6 +311,30 @@ async function getJson(path, token) {
     throw new Error(`${path} returned ${response.status}: ${JSON.stringify(response.body)}`);
   }
   return response.body;
+}
+
+async function devicePostJson(path, credential, body) {
+  const response = await deviceRequest("POST", path, credential, body);
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`${path} returned ${response.status}: ${JSON.stringify(response.body)}`);
+  }
+  return response.body;
+}
+
+async function deviceRequest(method, path, credential, body) {
+  const headers = { Accept: "application/json", Authorization: `Device ${credential}` };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  let parsed = null;
+  if (text) {
+    try { parsed = JSON.parse(text); } catch { parsed = { text }; }
+  }
+  return { status: response.status, body: parsed };
 }
 
 async function request(method, path, token, body) {
