@@ -1,5 +1,17 @@
 # Latest Implementation Handoff
 
+## 0. Online Smoke Update - 2026-06-18
+
+The existing deployed environment was rediscovered and verified using public configuration only:
+
+- Vercel frontend: `https://work-map-teal.vercel.app`
+- Render API: `https://workmap-api.onrender.com`
+- Derived realtime endpoint: `wss://workmap-api.onrender.com/virtual-office/realtime`
+- Deployed frontend JavaScript contains the expected Cognito Hosted UI domain and Vercel login/callback URLs.
+- `pnpm smoke:alpha` passed API liveness, API database readiness, exact Vercel-origin CORS, frontend home, login, virtual-office, and platform-admin route checks.
+
+No deployment settings or secrets were changed. Authenticated manual smoke is still required for Cognito Owner login/workspace creation, Employee invite acceptance, two-user WSS movement, activity/report verification, and Platform Admin privacy checks.
+
 ## 1. Original Task Brief
 
 Task title: STAGE 4 Final Completion: Tracking + Reports + Full QA + Fix + Deploy.

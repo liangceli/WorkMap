@@ -1,5 +1,20 @@
 # Latest QA Handoff
 
+## 0. Online Smoke Update - 2026-06-18
+
+`pnpm smoke:alpha` passed against the existing public deployment:
+
+- API liveness: HTTP 200.
+- API readiness/database connectivity: HTTP 200.
+- API CORS allowlist: returned exact origin `https://work-map-teal.vercel.app`.
+- Frontend home: HTTP 200.
+- Frontend login: HTTP 200.
+- Frontend virtual office: HTTP 200.
+- Frontend platform admin: HTTP 200.
+- Derived realtime endpoint: `wss://workmap-api.onrender.com/virtual-office/realtime`.
+
+Online public-route readiness now passes. Authenticated manual Cognito/Owner/Employee/invite/two-user realtime/activity/report/Platform Admin privacy checks remain outstanding before pilot approval.
+
 ## 1. Reviewed Implementation
 
 Reviewed the merged STAGE 4 tracking/reports/runtime completion work:
