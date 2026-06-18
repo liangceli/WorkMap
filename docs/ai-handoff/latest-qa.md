@@ -1,5 +1,9 @@
 # Latest QA Handoff
 
+## Deferred Final Manual QA - 2026-06-18
+
+The user explicitly deferred the remaining manual checks until all planned functionality is complete. The consolidated checklist is stored in `docs/ai-handoff/deferred-final-manual-qa.md`. Current status: pending by decision, not passed and not failed.
+
 ## 0. Online Smoke Update - 2026-06-18
 
 `pnpm smoke:alpha` passed against the existing public deployment:

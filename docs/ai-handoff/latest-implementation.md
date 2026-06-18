@@ -1,5 +1,9 @@
 # Latest Implementation Handoff
 
+## Deferred Final Manual QA - 2026-06-18
+
+At the user's request, remaining authenticated/manual checks are deferred until all planned functionality is complete and will then be executed together. The durable checklist is stored in `docs/ai-handoff/deferred-final-manual-qa.md`. These checks remain pending and must not be reported as passed before that final QA round.
+
 ## 0. Online Smoke Update - 2026-06-18
 
 The existing deployed environment was rediscovered and verified using public configuration only:
