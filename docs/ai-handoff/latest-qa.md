@@ -2,44 +2,65 @@
 
 ## 1. Reviewed Implementation
 
-Reviewed STAGE 4 final runtime completion work:
+Reviewed the merged STAGE 4 tracking/reports/runtime completion work:
 
 - tracking ingest duplicate handling
+- API tracking/report verification tests
+- desktop-agent harness payload tests
+- browser-extension domain helper tests
+- compliance collected/not-collected copy
 - report aggregation evidence after ingest
 - owner/employee/cross-tenant RBAC and privacy boundaries
+- Platform Admin aggregate-only/privacy boundary
 - Virtual Office same-tenant wave/message/movement regression
-- desktop-agent and browser-extension scaffold buildability
 - local route/browser render smoke
 - deployment smoke readiness path
 
 ## 2. Diff Review Summary
 
-Result: pass for local runtime readiness; online deployment smoke remains externally blocked.
+Result: pass for local runtime readiness and tracking/report verification; online deployment smoke remains externally blocked.
 
-The implementation produces a real runtime fix: duplicate app/domain usage submissions no longer increment activity summaries twice. The added smoke harness verifies the tracking-to-report path and key permission boundaries with real local API calls and raw WebSocket events.
+The implementation produces real runtime and verification improvements:
 
-No Clerk, auth migration, 3CX implementation, schema migration, persisted chat, or hidden monitoring collection was added.
+- Exact duplicate app/domain usage submissions no longer increment activity summaries twice.
+- Package-level tests verify API tracking/report behavior, desktop-agent harness payload production, and browser-extension hostname/domain payload generation.
+- A local `pnpm smoke:stage4` harness verifies tracking-to-report behavior, key permission boundaries, and Virtual Office two-user realtime behavior with real local API calls and raw WebSocket events.
+- Compliance UI copy now explicitly states app/domain duration collection and required non-collected sensitive categories.
+
+No Clerk, auth migration, 3CX implementation, schema migration, persisted chat, hidden monitoring collection, production desktop tracking, or production browser-extension packaging was added.
 
 ## 3. Findings Ordered By Severity
 
 Blocking:
 
 - Online alpha smoke cannot be completed until real deployed Vercel/Render origins and external Cognito/Supabase/Render/Vercel configuration are provided outside chat. `pnpm smoke:alpha` exits with manual env requirements.
+- Interactive Browser QA was not completed because the Browser runtime returned `Browser is not available: iab`.
 
 Medium:
 
-- Browser click-level QA could not be completed by Codex because the in-app Browser was unavailable (`Browser is not available: iab`) and local Playwright/Puppeteer was not installed. HTTP route smoke and Chrome headless screenshot generation were used as fallback.
-- Desktop agent and browser extension are still harness/scaffold-level for this round; builds pass, but no real packaged production tracking install was verified.
+- Browser click-level QA could not be completed by Codex; HTTP route smoke and Chrome headless screenshot generation were used as fallback.
+- Desktop-agent remains a harness, not production active-window tracking.
+- Browser-extension remains a local MV3 scaffold, not production packaged/store-ready tracking.
+- The API test uses in-memory/mock Prisma coverage; deployed DB smoke is still required before a deployed Stage 4 completion claim.
+- Local API/DB smoke added marked Stage 4 verification device/activity rows to the local development database.
 
 Low:
 
 - Next web build still emits the existing "Next.js plugin not detected in ESLint configuration" warning.
 - Virtual Office realtime remains single-process/in-memory and will need shared pub/sub before horizontal scaling.
-- Local Stage 4 smoke leaves marked test activity rows in the demo tenant to provide report evidence; temporary cross-tenant smoke records are removed.
 
 ## 4. Test / Verification Status
 
-From `C:\Users\liangceli\WorkMap\workmap`:
+Automated tests:
+
+- `pnpm --filter @workmap/api test` - passed.
+  - Covers controller guard source checks, device ownership, app/domain ingestion, summary aggregation, Employee own reports, Owner company aggregate reports, Employee company-scope denial, off-tenant target denial, and Platform Admin aggregate-only boundary.
+- `pnpm --filter @workmap/desktop-agent test` - passed.
+  - Covers register, heartbeat, and app usage payload production with mocked API calls.
+- `pnpm --filter @workmap/browser-extension test` - passed.
+  - Covers hostname-only URL parsing, non-web URL ignore behavior, minimum duration gating, and domain usage payload creation.
+
+Typecheck/lint/build:
 
 - `node --check scripts\stage4-runtime-smoke.mjs` - passed.
 - `pnpm.cmd --filter @workmap/shared-types typecheck` - passed.
@@ -55,17 +76,33 @@ From `C:\Users\liangceli\WorkMap\workmap`:
 - `pnpm.cmd --filter @workmap/browser-extension typecheck` - passed.
 - `pnpm.cmd --filter @workmap/browser-extension lint` - passed.
 - `pnpm.cmd --filter @workmap/browser-extension build` - passed.
+
+Runtime/local smoke:
+
 - `pnpm.cmd smoke:stage4` - passed.
 - `pnpm.cmd smoke:alpha` - blocked by missing deployed URL env vars, not by code failure.
+- API `/health` returned 200 on local port `3001`.
+- API `/health/readiness` returned database ready.
+- Web route smoke returned 200 for `/dashboard`, `/reports`, `/compliance`, and `/virtual-office`.
+- `/compliance` HTML contained:
+  - `Desktop app name and usage duration`
+  - `Browser domain name and usage duration`
+  - `Screenshots are not collected`
+  - `Screen recordings are not collected`
+  - `Keystrokes are not collected`
+  - `Clipboard contents are not collected`
+  - `Webcam or microphone data is not collected`
+  - `Private message or email body content is not collected`
+  - `Webpage body, form inputs, and passwords are not collected`
 
-From `C:\Users\liangceli\WorkMap`:
+Repo hygiene:
 
 - `git diff --check` - passed with LF-to-CRLF warnings only.
-- Secret scan - no real secrets found; hits were documentation terms/placeholders.
+- Secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, build outputs, `*.tsbuildinfo`, `docs/references`, and generated/reference folders - no real secrets found; hits were documentation terms/placeholders.
 
 ## 5. Runtime Smoke Status
 
-Passed locally against API `3001` and web `3002`; port `3000` was not used.
+Passed locally against API `3001` and web `3002` where applicable; port `3000` was not used for the final Stage 4 runtime smoke.
 
 Tracking/reporting evidence:
 
@@ -91,15 +128,38 @@ Virtual Office evidence:
 - Owner observed engineer movement state.
 - Cross-tenant target did not receive teammate events; sender got an error.
 
+Product done criteria passed locally:
+
+- App usage event can be produced or simulated through the desktop-agent harness test.
+- Domain usage event can be produced or simulated through the browser-extension scaffold helper test.
+- Backend accepts valid app/domain activity events in service tests and real local HTTP smoke.
+- Backend rejects unauthenticated activity POST in real local HTTP smoke.
+- Backend rejects another user's device id in real local HTTP smoke and cross-tenant-style device use in automated tests.
+- Owner reports show company aggregate app/domain summaries in real local HTTP smoke.
+- Employee reports show own app/domain summaries in real local HTTP smoke.
+- Employee cannot access company-wide report scope.
+- Platform Admin does not expose employee app/domain activity by default in source/service verification.
+- Compliance copy contains required collected/not-collected statements.
+
 ## 6. Manual QA Status
 
 Partially completed with automation fallback.
 
-- API `/health` returned 200.
+- API health/readiness passed.
 - Web routes `/virtual-office`, `/dashboard`, `/reports`, and `/compliance` returned 200.
-- Chrome headless generated nonzero screenshots for the four routes.
-- Full interactive browser click QA was not completed due Browser/Playwright unavailability.
+- Compliance HTML copy assertions passed.
+- Chrome headless generated nonzero screenshots for the four routes in the runtime round.
+- Full interactive browser click QA was not completed because Browser `iab` was unavailable and Playwright/Puppeteer was not installed.
 - Dev servers started during QA were stopped afterward, and temporary `.codex-run` artifacts were cleaned.
+
+Not completed:
+
+- Interactive Browser QA.
+- Deployed Vercel/Render/Supabase/Cognito smoke.
+- Real Cognito Hosted UI login/register/invite acceptance.
+- Store-installed browser-extension QA.
+- Production desktop active-window tracking QA.
+- Full visual two-user virtual-office browser regression.
 
 ## 7. Risks
 
@@ -108,12 +168,15 @@ Partially completed with automation fallback.
 - Employee invite/acceptance flow still needs deployed/manual smoke.
 - Browser UI click behavior should be confirmed by a human before pilot.
 - Production tracking agent/extension packaging remains a future hardening step.
+- Browser-extension helper verifies hostname minimization, but production permissions review, packaging, pairing, token lifecycle, offline queueing, retry/backoff, and deployed CORS/origin hardening remain future work.
+- Desktop-agent harness verifies sample app event submission, but it is not a native active-window tracker.
+- Local API/DB smoke is strong local evidence but does not replace deployed authenticated smoke.
 
 ## 8. Recommendation
 
-Recommendation: proceed to online alpha smoke preparation, not pilot yet.
+Recommendation: proceed to online alpha smoke preparation or human browser QA/fix, not pilot yet.
 
-The local Stage 4 runtime path is strong enough to move forward, but WorkMap should not be presented as deployed alpha-ready until `pnpm smoke:alpha` runs against real Vercel/Render/Cognito/Supabase configuration and browser/manual checks pass.
+The local Stage 4 runtime path and tracking/report verification gate are strong enough to move forward with code work. WorkMap should not be presented as deployed alpha-ready until `pnpm smoke:alpha` runs against real Vercel/Render/Cognito/Supabase configuration and browser/manual checks pass.
 
 Next round can proceed if the task is either:
 

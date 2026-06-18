@@ -6,6 +6,7 @@
     "dev": "tsc --watch --noEmit",
     "build": "tsc",
     "lint": "eslint .",
+    "test": "tsx test/agent-harness.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

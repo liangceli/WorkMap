@@ -29,16 +29,17 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
         </div>
 
         <p style={styles.bodyText}>
-          WorkMap shows presence, avatar location, workspace status, app usage duration, browser domain duration, device heartbeat,
-          freshness, and last-seen context so teammates understand work patterns transparently. It does not show hidden screen,
-          keyboard, clipboard, camera, microphone, page-content, or private-message monitoring.
+          WorkMap may collect presence, avatar location, workspace status, desktop app name and usage duration, browser domain and
+          usage duration, device heartbeat, freshness, and last-seen context so workspace activity summaries stay transparent.
+          It does not collect screenshots, screen recordings, keystrokes, clipboard data, webcam or microphone data, private
+          message/email body content, webpage body content, form inputs, or passwords.
         </p>
 
         <div style={styles.grid}>
           <div style={styles.panel}>
             <h3 style={styles.smallTitle}>Collected</h3>
             <ul style={styles.list}>
-              <li>Active app name</li>
+              <li>Desktop app name</li>
               <li>Browser domain name</li>
               <li>Usage duration and timestamps for summaries</li>
               <li>Device heartbeat status</li>
@@ -51,12 +52,13 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
           <div style={styles.panel}>
             <h3 style={styles.smallTitle}>Not collected</h3>
             <ul style={styles.list}>
+              <li>Screenshots or screen recordings</li>
               <li>Keystrokes</li>
-              <li>Screenshots</li>
               <li>Clipboard contents</li>
-              <li>Camera or microphone</li>
-              <li>Message or email content</li>
-              <li>Page body content, full URLs, passwords, or form inputs</li>
+              <li>Webcam or microphone data</li>
+              <li>Private message or email body content</li>
+              <li>Webpage body content, form inputs, or passwords</li>
+              <li>Full URL paths, query strings, or fragments</li>
             </ul>
           </div>
         </div>
