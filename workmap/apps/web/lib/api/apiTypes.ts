@@ -194,9 +194,16 @@ export type WorkMapApiIntegration = {
 };
 
 export type WorkMapApiContactLinks = {
-  teams?: string;
+  targetUserId?: string;
+  displayName?: string;
+  teamsChatUrl?: string;
+  outlookMailtoUrl?: string;
+  threeCxUrl?: string;
+  teams?: string | { label?: string; href?: string; enabled?: boolean };
   email?: string;
+  outlook?: string | { label?: string; href?: string; enabled?: boolean };
   call3cx?: string;
+  threeCx?: string | { label?: string; href?: string; enabled?: boolean };
   calendar?: string;
 };
 

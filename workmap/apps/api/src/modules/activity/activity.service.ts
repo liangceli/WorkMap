@@ -38,14 +38,15 @@ export class ActivityService {
 
   async ingestAppUsage(context: RequestContext, input: unknown) {
     const events = readEventBatch(input).map(readAppUsageEvent);
+    let accepted = 0;
 
     for (const event of events) {
       await this.assertDeviceBoundToContext(context, event.deviceId);
-      await this.storeAppUsageEvent(context, event);
+      accepted += (await this.storeAppUsageEvent(context, event)) ? 1 : 0;
     }
 
     return {
-      accepted: events.length,
+      accepted,
       source: ActivityEventSource.DESKTOP_AGENT,
       eventType: ActivityEventType.APP,
     };
@@ -53,14 +54,15 @@ export class ActivityService {
 
   async ingestDomainUsage(context: RequestContext, input: unknown) {
     const events = readEventBatch(input).map(readDomainUsageEvent);
+    let accepted = 0;
 
     for (const event of events) {
       await this.assertDeviceBoundToContext(context, event.deviceId);
-      await this.storeDomainUsageEvent(context, event);
+      accepted += (await this.storeDomainUsageEvent(context, event)) ? 1 : 0;
     }
 
     return {
-      accepted: events.length,
+      accepted,
       source: ActivityEventSource.BROWSER_EXTENSION,
       eventType: ActivityEventType.BROWSER,
     };
@@ -82,6 +84,10 @@ export class ActivityService {
   }
 
   private async storeAppUsageEvent(context: RequestContext, event: ParsedAppUsageEvent) {
+    if (await this.hasDuplicateAppUsageEvent(context, event)) {
+      return false;
+    }
+
     const usageDate = toUtcDateOnly(event.startedAt);
     const activeSeconds = event.isIdle ? 0 : event.durationSeconds;
     const idleSeconds = event.isIdle ? event.durationSeconds : 0;
@@ -131,9 +137,15 @@ export class ActivityService {
         data: { lastSeenAt: new Date() },
       }),
     ]);
+
+    return true;
   }
 
   private async storeDomainUsageEvent(context: RequestContext, event: ParsedDomainUsageEvent) {
+    if (await this.hasDuplicateDomainUsageEvent(context, event)) {
+      return false;
+    }
+
     const usageDate = toUtcDateOnly(event.startedAt);
     const activeSeconds = event.isIdle ? 0 : event.durationSeconds;
     const idleSeconds = event.isIdle ? event.durationSeconds : 0;
@@ -186,6 +198,49 @@ export class ActivityService {
         data: { lastSeenAt: new Date() },
       }),
     ]);
+
+    return true;
+  }
+
+  private async hasDuplicateAppUsageEvent(context: RequestContext, event: ParsedAppUsageEvent) {
+    const existing = await this.prisma.activityEvent.findFirst({
+      where: {
+        companyId: context.companyId,
+        userId: context.userId,
+        deviceId: event.deviceId,
+        source: ActivityEventSource.DESKTOP_AGENT,
+        eventType: ActivityEventType.APP,
+        appName: event.appName,
+        isIdle: event.isIdle,
+        startedAt: event.startedAt,
+        endedAt: event.endedAt,
+        durationSeconds: event.durationSeconds,
+      },
+      select: { id: true },
+    });
+
+    return Boolean(existing);
+  }
+
+  private async hasDuplicateDomainUsageEvent(context: RequestContext, event: ParsedDomainUsageEvent) {
+    const existing = await this.prisma.activityEvent.findFirst({
+      where: {
+        companyId: context.companyId,
+        userId: context.userId,
+        deviceId: event.deviceId,
+        source: ActivityEventSource.BROWSER_EXTENSION,
+        eventType: ActivityEventType.BROWSER,
+        browserName: event.browserName,
+        domain: event.domain,
+        isIdle: event.isIdle,
+        startedAt: event.startedAt,
+        endedAt: event.endedAt,
+        durationSeconds: event.durationSeconds,
+      },
+      select: { id: true },
+    });
+
+    return Boolean(existing);
   }
 }
 

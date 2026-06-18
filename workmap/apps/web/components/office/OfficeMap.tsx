@@ -10,6 +10,8 @@ import type {
   UserPresenceStatus,
   VirtualOfficeMapManifest,
   VirtualOfficeRealtimePlayerState,
+  VirtualOfficeRealtimeTeammateEventPayload,
+  VirtualOfficeRealtimeTeammateMessageEventPayload,
 } from "@workmap/shared-types";
 import { WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST } from "@workmap/shared-types";
 import {
@@ -21,7 +23,9 @@ import {
 import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/avatarFrameMaps";
 import { decodeLayeredAvatarId, encodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { getAvatarConfigForOffice, saveLayeredAvatarConfig } from "../../lib/avatar/avatarStorage";
+import { getContactLinks } from "../../lib/api/integrationsApi";
 import { saveCurrentVirtualOfficePosition } from "../../lib/api/virtualOfficeApi";
+import type { WorkMapApiContactLinks } from "../../lib/api/apiTypes";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { findGridPath, type PathBounds, type PathPoint } from "../../lib/office/pathfinding";
 import {
@@ -165,6 +169,8 @@ export function OfficeMap() {
   const realtimeRemotePlayersRef = useRef(new Map<string, InterpolatedRemotePlayer>());
   const realtimeAvatarSignatureRef = useRef("");
   const sendRealtimeMovementRef = useRef<(position: PositionSnapshot) => void>(() => undefined);
+  const sendRealtimeWaveRef = useRef<(targetUserId: string) => boolean>(() => false);
+  const sendRealtimeMessageRef = useRef<(targetUserId: string, message: string) => boolean>(() => false);
   const selectedRemoteIdRef = useRef<string | null>(null);
   const autoPathRef = useRef<PathPoint[]>([]);
   const autoDestinationRef = useRef<PathPoint | null>(null);
@@ -303,11 +309,27 @@ export function OfficeMap() {
     [officeData.currentUserId],
   );
 
-  const { connectionState: realtimeConnectionState, sendMovement: sendRealtimeMovement } = useVirtualOfficeRealtime({
+  const handleRealtimeWave = useCallback((payload: VirtualOfficeRealtimeTeammateEventPayload) => {
+    setToast(`${payload.fromDisplayName} waved to you.`);
+  }, []);
+
+  const handleRealtimeMessage = useCallback((payload: VirtualOfficeRealtimeTeammateMessageEventPayload) => {
+    setToast(`${payload.fromDisplayName}: ${payload.message}`);
+  }, []);
+
+  const {
+    connectionState: realtimeConnectionState,
+    sendMovement: sendRealtimeMovement,
+    sendWave: sendRealtimeWave,
+    sendMessage: sendRealtimeMessage,
+  } = useVirtualOfficeRealtime({
     officeMapId: officeData.officeMapId,
     apiOptions: officeData.apiOptions,
     currentUserId: officeData.currentUserId,
     onRemoteState: handleRealtimeRemoteState,
+    onWave: handleRealtimeWave,
+    onMessage: handleRealtimeMessage,
+    onError: setToast,
   });
 
   useEffect(() => {
@@ -319,6 +341,14 @@ export function OfficeMap() {
   useEffect(() => {
     sendRealtimeMovementRef.current = sendRealtimeMovement;
   }, [sendRealtimeMovement]);
+
+  useEffect(() => {
+    sendRealtimeWaveRef.current = sendRealtimeWave;
+  }, [sendRealtimeWave]);
+
+  useEffect(() => {
+    sendRealtimeMessageRef.current = sendRealtimeMessage;
+  }, [sendRealtimeMessage]);
 
   useEffect(() => {
     officePeopleRef.current = officePeople;
@@ -972,6 +1002,25 @@ export function OfficeMap() {
     setContactTarget(target);
   };
 
+  const waveToRemote = (target: ContactTarget) => {
+    const sent = sendRealtimeWaveRef.current(target.userId);
+    setToast(sent ? `Wave sent to ${target.displayName}.` : "Realtime is not connected. Wave was not delivered.");
+  };
+
+  const sendQuickMessage = (target: ContactTarget, message: string) => {
+    const sent = sendRealtimeMessageRef.current(target.userId, message);
+    setToast(sent ? `Message sent to ${target.displayName}.` : "Realtime is not connected. Message was not delivered.");
+    return sent;
+  };
+
+  const openTeamsLauncher = (target: ContactTarget) => {
+    void openContactLauncher(target, "teams", officeData.apiOptions, setToast);
+  };
+
+  const openEmailLauncher = (target: ContactTarget) => {
+    void openContactLauncher(target, "email", officeData.apiOptions, setToast);
+  };
+
   const recenterCamera = () => {
     cameraOffsetRef.current = { x: 0, y: 0 };
     setZoom(zoomRef.current);
@@ -1029,6 +1078,9 @@ export function OfficeMap() {
           onClose={() => setActivePanel(null)}
           onSelectPerson={handleSelectRemote}
           onGoToPerson={goToRemotePlayer}
+          onWaveToPerson={waveToRemote}
+          onOpenTeams={openTeamsLauncher}
+          onOpenEmail={openEmailLauncher}
           onGoToDestination={goToDestination}
           onOpenPanel={setActivePanel}
           toast={setToast}
@@ -1103,6 +1155,10 @@ export function OfficeMap() {
               setToast(`Scheduling with ${drawerTarget.displayName}`);
             }}
             onViewProfile={() => router.push(`/employees/${remoteProfileRouteIds[drawerTarget.userId] ?? drawerTarget.userId}`)}
+            onWave={() => waveToRemote(drawerTarget)}
+            onSendMessage={(message) => sendQuickMessage(drawerTarget, message)}
+            onOpenTeams={() => openTeamsLauncher(drawerTarget)}
+            onOpenEmail={() => openEmailLauncher(drawerTarget)}
             onActionNote={setToast}
           />
         ) : null}
@@ -1143,6 +1199,60 @@ export function OfficeMap() {
       </VirtualOfficeShell>
     </main>
   );
+}
+
+async function openContactLauncher(
+  target: ContactTarget,
+  provider: "teams" | "email",
+  apiOptions: ReturnType<typeof useVirtualOfficeData>["apiOptions"],
+  showToast: (message: string) => void,
+) {
+  if (!apiOptions) {
+    showToast("Contact links require an authenticated WorkMap API session.");
+    return;
+  }
+
+  const result = await getContactLinks(target.userId, apiOptions);
+
+  if (!result.ok) {
+    showToast(`Could not load contact links for ${target.displayName}.`);
+    return;
+  }
+
+  const href = provider === "teams" ? getTeamsHref(result.data) : getEmailHref(result.data);
+
+  if (!href) {
+    showToast(`${provider === "teams" ? "Teams" : "Email"} link is not configured for ${target.displayName}.`);
+    return;
+  }
+
+  if (provider === "email") {
+    window.location.href = href;
+  } else {
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+
+  showToast(`${provider === "teams" ? "Teams" : "Email"} launcher opened for ${target.displayName}.`);
+}
+
+function getTeamsHref(links: WorkMapApiContactLinks) {
+  return links.teamsChatUrl ?? readContactLinkHref(links.teams);
+}
+
+function getEmailHref(links: WorkMapApiContactLinks) {
+  return links.outlookMailtoUrl ?? links.email ?? readContactLinkHref(links.outlook);
+}
+
+function readContactLinkHref(value: WorkMapApiContactLinks["teams"] | WorkMapApiContactLinks["outlook"]) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value?.enabled === false) {
+    return undefined;
+  }
+
+  return value?.href;
 }
 
 function parseTmx(xml: string, layerOrder: string[]): ParsedMap {

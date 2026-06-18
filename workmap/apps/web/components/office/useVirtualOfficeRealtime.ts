@@ -6,6 +6,8 @@ import type {
   VirtualOfficeRealtimeMovePayload,
   VirtualOfficeRealtimePlayerState,
   VirtualOfficeRealtimeServerEvent,
+  VirtualOfficeRealtimeTeammateEventPayload,
+  VirtualOfficeRealtimeTeammateMessageEventPayload,
 } from "@workmap/shared-types";
 import { getVirtualOfficeRealtimeUrl } from "../../lib/api/realtimeApi";
 import type { ApiClientOptions } from "../../lib/api/apiTypes";
@@ -17,6 +19,9 @@ type UseVirtualOfficeRealtimeInput = {
   apiOptions?: ApiClientOptions;
   currentUserId?: string;
   onRemoteState: (state: VirtualOfficeRealtimePlayerState) => void;
+  onWave?: (payload: VirtualOfficeRealtimeTeammateEventPayload) => void;
+  onMessage?: (payload: VirtualOfficeRealtimeTeammateMessageEventPayload) => void;
+  onError?: (message: string) => void;
 };
 
 const VISIBLE_SEND_INTERVAL_MS = 110;
@@ -28,6 +33,9 @@ export function useVirtualOfficeRealtime({
   apiOptions,
   currentUserId,
   onRemoteState,
+  onWave,
+  onMessage,
+  onError,
 }: UseVirtualOfficeRealtimeInput) {
   const [connectionState, setConnectionState] = useState<VirtualOfficeRealtimeState>("fallback");
   const socketRef = useRef<WebSocket | null>(null);
@@ -35,10 +43,25 @@ export function useVirtualOfficeRealtime({
   const lastSentAtRef = useRef(0);
   const lastSentSnapshotRef = useRef<VirtualOfficeRealtimeMovePayload | null>(null);
   const onRemoteStateRef = useRef(onRemoteState);
+  const onWaveRef = useRef(onWave);
+  const onMessageRef = useRef(onMessage);
+  const onErrorRef = useRef(onError);
 
   useEffect(() => {
     onRemoteStateRef.current = onRemoteState;
   }, [onRemoteState]);
+
+  useEffect(() => {
+    onWaveRef.current = onWave;
+  }, [onWave]);
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   useEffect(() => {
     if (!officeMapId || !apiOptions?.token) {
@@ -93,8 +116,26 @@ export function useVirtualOfficeRealtime({
           return;
         }
 
+        if (message.event === "teammate:wave") {
+          if (message.payload.targetUserId === currentUserId) {
+            onWaveRef.current?.(message.payload);
+          }
+          return;
+        }
+
+        if (message.event === "teammate:message") {
+          if (message.payload.targetUserId === currentUserId) {
+            onMessageRef.current?.(message.payload);
+          }
+          return;
+        }
+
         if (message.event === "office:error" && process.env.NODE_ENV === "development") {
           console.info("virtual-office realtime fallback", message.payload.message);
+        }
+
+        if (message.event === "office:error") {
+          onErrorRef.current?.(message.payload.message);
         }
       });
 
@@ -173,9 +214,34 @@ export function useVirtualOfficeRealtime({
     sendSocketEvent(socket, { event: "player:move", payload: position });
   }, []);
 
+  const sendWave = useCallback((targetUserId: string) => {
+    const socket = socketRef.current;
+
+    if (!joinedRef.current || !socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    sendSocketEvent(socket, { event: "teammate:wave", payload: { targetUserId } });
+    return true;
+  }, []);
+
+  const sendMessage = useCallback((targetUserId: string, message: string) => {
+    const socket = socketRef.current;
+    const normalized = message.replace(/\s+/g, " ").trim();
+
+    if (!normalized || normalized.length > 500 || !joinedRef.current || !socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    sendSocketEvent(socket, { event: "teammate:message", payload: { targetUserId, message: normalized } });
+    return true;
+  }, []);
+
   return {
     connectionState,
     sendMovement,
+    sendWave,
+    sendMessage,
   };
 }
 
@@ -207,6 +273,46 @@ function parseServerEvent(raw: string): VirtualOfficeRealtimeServerEvent | null 
 
     if (value.event === "office:error" && isRecord(value.payload) && typeof value.payload.message === "string") {
       return { event: "office:error", payload: { message: value.payload.message } };
+    }
+
+    if (
+      value.event === "teammate:wave" &&
+      isRecord(value.payload) &&
+      typeof value.payload.fromUserId === "string" &&
+      typeof value.payload.fromDisplayName === "string" &&
+      typeof value.payload.targetUserId === "string" &&
+      typeof value.payload.createdAt === "string"
+    ) {
+      return {
+        event: "teammate:wave",
+        payload: {
+          fromUserId: value.payload.fromUserId,
+          fromDisplayName: value.payload.fromDisplayName,
+          targetUserId: value.payload.targetUserId,
+          createdAt: value.payload.createdAt,
+        },
+      };
+    }
+
+    if (
+      value.event === "teammate:message" &&
+      isRecord(value.payload) &&
+      typeof value.payload.fromUserId === "string" &&
+      typeof value.payload.fromDisplayName === "string" &&
+      typeof value.payload.targetUserId === "string" &&
+      typeof value.payload.message === "string" &&
+      typeof value.payload.createdAt === "string"
+    ) {
+      return {
+        event: "teammate:message",
+        payload: {
+          fromUserId: value.payload.fromUserId,
+          fromDisplayName: value.payload.fromDisplayName,
+          targetUserId: value.payload.targetUserId,
+          message: value.payload.message,
+          createdAt: value.payload.createdAt,
+        },
+      };
     }
 
     return null;

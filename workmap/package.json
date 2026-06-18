@@ -12,7 +12,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
-    "smoke:alpha": "node scripts/real-alpha-smoke.mjs"
+    "smoke:alpha": "node scripts/real-alpha-smoke.mjs",
+    "smoke:stage4": "node scripts/stage4-runtime-smoke.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

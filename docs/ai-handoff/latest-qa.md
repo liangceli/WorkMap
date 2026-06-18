@@ -2,93 +2,120 @@
 
 ## 1. Reviewed Implementation
 
-Reviewed the `/virtual-office` minimum zoom-cover fix.
+Reviewed STAGE 4 final runtime completion work:
 
-Files changed in this round:
-
-- `workmap/apps/web/components/office/OfficeMap.tsx`
-- `docs/ai-handoff/latest-implementation.md`
-- `docs/ai-handoff/latest-qa.md`
+- tracking ingest duplicate handling
+- report aggregation evidence after ingest
+- owner/employee/cross-tenant RBAC and privacy boundaries
+- Virtual Office same-tenant wave/message/movement regression
+- desktop-agent and browser-extension scaffold buildability
+- local route/browser render smoke
+- deployment smoke readiness path
 
 ## 2. Diff Review Summary
 
-Result: passed for the scoped frontend zoom-cover fix.
+Result: pass for local runtime readiness; online deployment smoke remains externally blocked.
 
-The implementation changes only virtual-office frontend zoom bounds:
+The implementation produces a real runtime fix: duplicate app/domain usage submissions no longer increment activity summaries twice. The added smoke harness verifies the tracking-to-report path and key permission boundaries with real local API calls and raw WebSocket events.
 
-- Existing fixed minimum zoom `0.4` is now represented by `MIN_MANUAL_ZOOM`.
-- `MAX_MANUAL_ZOOM` preserves the previous max zoom of `2`.
-- `getMinimumCoverZoom()` computes the viewport-aware zoom floor needed to cover the current canvas.
-- Mouse wheel and zoom-out button now clamp to the dynamic floor.
-- A resize listener raises the zoom if the viewport grows and the current zoom would expose blank canvas/background.
-
-No map data, tile art, movement, collision, pathfinding, realtime, polling, backend, auth, RBAC, schema, deployment, package, or env behavior changed.
+No Clerk, auth migration, 3CX implementation, schema migration, persisted chat, or hidden monitoring collection was added.
 
 ## 3. Findings Ordered By Severity
 
 Blocking:
 
-- None identified.
+- Online alpha smoke cannot be completed until real deployed Vercel/Render origins and external Cognito/Supabase/Render/Vercel configuration are provided outside chat. `pnpm smoke:alpha` exits with manual env requirements.
 
-Non-blocking:
+Medium:
 
-- Full virtual-office interaction regression was not repeated.
-- The cover minimum means large/wide screens cannot zoom out as far as `40%`; this is intentional to satisfy the no-blank-screen requirement.
-- Extremely large displays beyond the map size at `200%` could theoretically still exceed the configured max zoom, but this is outside normal WorkMap desktop use.
+- Browser click-level QA could not be completed by Codex because the in-app Browser was unavailable (`Browser is not available: iab`) and local Playwright/Puppeteer was not installed. HTTP route smoke and Chrome headless screenshot generation were used as fallback.
+- Desktop agent and browser extension are still harness/scaffold-level for this round; builds pass, but no real packaged production tracking install was verified.
+
+Low:
+
+- Next web build still emits the existing "Next.js plugin not detected in ESLint configuration" warning.
+- Virtual Office realtime remains single-process/in-memory and will need shared pub/sub before horizontal scaling.
+- Local Stage 4 smoke leaves marked test activity rows in the demo tenant to provide report evidence; temporary cross-tenant smoke records are removed.
 
 ## 4. Test / Verification Status
 
-Commands run from `C:\Users\liangceli\WorkMap\workmap`:
+From `C:\Users\liangceli\WorkMap\workmap`:
 
-- `pnpm.cmd --filter @workmap/web typecheck`
-  - Passed.
-- `pnpm.cmd --filter @workmap/web lint`
-  - Passed.
-- `pnpm.cmd --filter @workmap/web build`
-  - Passed.
-  - Existing warning: Next.js plugin was not detected in the ESLint configuration.
+- `node --check scripts\stage4-runtime-smoke.mjs` - passed.
+- `pnpm.cmd --filter @workmap/shared-types typecheck` - passed.
+- `pnpm.cmd --filter @workmap/web typecheck` - passed.
+- `pnpm.cmd --filter @workmap/web lint` - passed.
+- `pnpm.cmd --filter @workmap/web build` - passed with existing Next ESLint-plugin warning.
+- `pnpm.cmd --filter @workmap/api typecheck` - passed.
+- `pnpm.cmd --filter @workmap/api lint` - passed.
+- `pnpm.cmd --filter @workmap/api build` - passed.
+- `pnpm.cmd --filter @workmap/desktop-agent typecheck` - passed.
+- `pnpm.cmd --filter @workmap/desktop-agent lint` - passed.
+- `pnpm.cmd --filter @workmap/desktop-agent build` - passed.
+- `pnpm.cmd --filter @workmap/browser-extension typecheck` - passed.
+- `pnpm.cmd --filter @workmap/browser-extension lint` - passed.
+- `pnpm.cmd --filter @workmap/browser-extension build` - passed.
+- `pnpm.cmd smoke:stage4` - passed.
+- `pnpm.cmd smoke:alpha` - blocked by missing deployed URL env vars, not by code failure.
 
-Browser / visual QA:
+From `C:\Users\liangceli\WorkMap`:
 
-- Browser plugin opened the local app on `localhost:3002`.
-- Test browser completed the local demo avatar/compliance/device path to reach `/virtual-office`.
-- Headless Chrome verification used a `1912x948` viewport matching the user's wide screenshot scenario.
-- Repeated mouse-wheel zoom-out over the canvas.
-- Final zoom label was `60%`.
-- Right-edge canvas pixel sampling after minimum zoom:
-  - sampled pixels: `38`;
-  - blank/background-like pixels: `0`.
-- This verifies the minimum zoom no longer exposes the right-side blank background for the reported wide viewport.
-- After the build step, the running dev server on `3002` reproduced the known stale `.next` chunk failure. Generated `.next` output was cleared, the WorkMap web server was restarted on `3002`, and the same wide-viewport QA was repeated successfully:
-  - final zoom label: `60%`;
-  - sampled pixels: `38`;
-  - blank/background-like pixels: `0`.
+- `git diff --check` - passed with LF-to-CRLF warnings only.
+- Secret scan - no real secrets found; hits were documentation terms/placeholders.
 
-- `git diff --check`
-  - Passed.
-  - Git printed LF-to-CRLF working-copy warnings for the handoff docs and `OfficeMap.tsx`.
-- High-confidence secret scan excluding `.env`, `.env.*`, `node_modules`, `.next`, `dist`, `*.tsbuildinfo`, `docs/references`, `.git`, `.codex_previews`, logs, and generated directories
-  - Passed with no matches.
+## 5. Runtime Smoke Status
 
-## 5. Manual QA Status
+Passed locally against API `3001` and web `3002`; port `3000` was not used.
 
-Manual/browser QA was limited to the zoom-cover issue.
+Tracking/reporting evidence:
 
-Not run:
+- App event accepted once; duplicate accepted count `0`.
+- Domain event accepted once; duplicate accepted count `0`.
+- Employee own report showed `120` app seconds and `120` domain seconds for just-ingested rows.
+- Owner company report showed `120` app seconds and `120` domain seconds for the same rows.
 
-- Login/Cognito end-to-end.
-- Two-user realtime movement.
-- Full movement/collision/pathfinding/chair regression.
-- Full responsive QA for unrelated pages.
+Permission evidence:
 
-## 6. Risks
+- Unauthenticated activity request rejected with `401`.
+- Employee company aggregate rejected with `403`.
+- Employee cross-user report rejected with `403`.
+- Cross-tenant report rejected with `404`.
+- Cross-tenant device ingest rejected with `403`.
+- Cross-user heartbeat rejected with `403`.
+- Platform tenant endpoint with normal tenant token rejected with `403`.
 
-- Users will now see a higher minimum zoom on wide displays. That is the expected tradeoff for preventing blank background.
-- If the product later needs both full-map overview and no blank space, the map art or surrounding world would need to be extended rather than reducing zoom below the cover threshold.
-- Local Cognito callback/logout config may still assume port `3000`; this round did not alter env or provider settings.
+Virtual Office evidence:
 
-## 7. Recommendation
+- Two same-tenant users joined the same map.
+- Receiver got `teammate:wave` and `teammate:message`.
+- Owner observed engineer movement state.
+- Cross-tenant target did not receive teammate events; sender got an error.
 
-Recommendation: passed for the scoped minimum-zoom no-blank fix.
+## 6. Manual QA Status
 
-The next round can proceed after the user refreshes `localhost:3002/virtual-office` and confirms the minimum zoom behavior visually.
+Partially completed with automation fallback.
+
+- API `/health` returned 200.
+- Web routes `/virtual-office`, `/dashboard`, `/reports`, and `/compliance` returned 200.
+- Chrome headless generated nonzero screenshots for the four routes.
+- Full interactive browser click QA was not completed due Browser/Playwright unavailability.
+- Dev servers started during QA were stopped afterward, and temporary `.codex-run` artifacts were cleaned.
+
+## 7. Risks
+
+- Online deployment status is unknown until real public URLs and external env are configured.
+- Cognito Hosted UI/register/invite acceptance was not smoke-tested online in this round.
+- Employee invite/acceptance flow still needs deployed/manual smoke.
+- Browser UI click behavior should be confirmed by a human before pilot.
+- Production tracking agent/extension packaging remains a future hardening step.
+
+## 8. Recommendation
+
+Recommendation: proceed to online alpha smoke preparation, not pilot yet.
+
+The local Stage 4 runtime path is strong enough to move forward, but WorkMap should not be presented as deployed alpha-ready until `pnpm smoke:alpha` runs against real Vercel/Render/Cognito/Supabase configuration and browser/manual checks pass.
+
+Next round can proceed if the task is either:
+
+- configure/run online alpha smoke with public deployed origins, or
+- perform human browser QA and fix any UI regressions found.

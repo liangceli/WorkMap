@@ -1,4 +1,9 @@
-const LOCAL_WEB_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"];
+const LOCAL_WEB_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3002",
+  "http://127.0.0.1:3002",
+];
 
 export function getAllowedOrigins() {
   const configured = process.env.WORKMAP_ALLOWED_ORIGINS ?? process.env.WORKMAP_ALLOWED_ORIGIN ?? process.env.NEXT_PUBLIC_APP_URL ?? "";

@@ -18,6 +18,9 @@ type OfficeSidePanelProps = {
   onClose: () => void;
   onSelectPerson: (target: ContactTarget) => void;
   onGoToPerson: (player: RemoteOfficePlayer) => void;
+  onWaveToPerson: (target: ContactTarget) => void;
+  onOpenTeams: (target: ContactTarget) => void;
+  onOpenEmail: (target: ContactTarget) => void;
   onGoToDestination: (destination: OfficeDestination) => void;
   onOpenPanel: (panel: OfficePanelKey) => void;
   toast: (message: string) => void;
@@ -34,6 +37,9 @@ export function OfficeSidePanel({
   onClose,
   onSelectPerson,
   onGoToPerson,
+  onWaveToPerson,
+  onOpenTeams,
+  onOpenEmail,
   onGoToDestination,
   onOpenPanel,
   toast,
@@ -142,9 +148,10 @@ export function OfficeSidePanel({
               {filteredPeople.length > 0 ? (
                 filteredPeople.map((person) => {
                   const freshness = presenceFreshnessLabel(person.updatedAt, person.status);
+                  const contactTarget = toContactTarget(person);
                   return (
                     <article key={person.userId} style={styles.personCard}>
-                      <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.personMain}>
+                      <button type="button" onClick={() => onSelectPerson(contactTarget)} style={styles.personMain}>
                         <span style={styles.avatar}>{person.displayName.slice(0, 1)}</span>
                         <span style={styles.personText}>
                           <strong>{person.displayName}</strong>
@@ -160,12 +167,12 @@ export function OfficeSidePanel({
                         </span>
                       </button>
                       <div style={styles.actionGrid}>
-                        <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.smallButton}>Details</button>
-                        <button type="button" onClick={() => toast(`You waved to ${person.displayName}. Local feedback only.`)} style={styles.smallButton}>Wave</button>
+                        <button type="button" onClick={() => onSelectPerson(contactTarget)} style={styles.smallButton}>Details</button>
+                        <button type="button" onClick={() => onWaveToPerson(contactTarget)} style={styles.smallButton}>Wave</button>
                         <button type="button" onClick={() => onGoToPerson(person)} style={styles.smallButton}>Go to</button>
-                        <button type="button" onClick={() => toast("Teams launcher is not connected yet.")} style={styles.smallButton}>Teams</button>
-                        <button type="button" onClick={() => toast("Outlook contact links are not configured yet.")} style={styles.smallButton}>Outlook</button>
-                        <button type="button" onClick={() => toast("3CX calling is not connected yet.")} style={styles.smallButton}>3CX</button>
+                        <button type="button" onClick={() => onOpenTeams(contactTarget)} style={styles.smallButton}>Teams</button>
+                        <button type="button" onClick={() => onOpenEmail(contactTarget)} style={styles.smallButton}>Email</button>
+                        <button type="button" onClick={() => toast("3CX calling is coming later and is disabled in this alpha.")} style={styles.smallButton}>3CX</button>
                       </div>
                     </article>
                   );

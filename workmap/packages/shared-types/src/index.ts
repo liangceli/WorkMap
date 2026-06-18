@@ -555,6 +555,26 @@ export type VirtualOfficeRealtimePresenceUser = {
   updatedAt: string;
 };
 
+export type VirtualOfficeRealtimeTeammateWavePayload = {
+  targetUserId: string;
+};
+
+export type VirtualOfficeRealtimeTeammateMessagePayload = {
+  targetUserId: string;
+  message: string;
+};
+
+export type VirtualOfficeRealtimeTeammateEventPayload = {
+  fromUserId: string;
+  fromDisplayName: string;
+  targetUserId: string;
+  createdAt: string;
+};
+
+export type VirtualOfficeRealtimeTeammateMessageEventPayload = VirtualOfficeRealtimeTeammateEventPayload & {
+  message: string;
+};
+
 export type VirtualOfficeRealtimeClientEvent =
   | {
       event: "office:join";
@@ -567,6 +587,14 @@ export type VirtualOfficeRealtimeClientEvent =
   | {
       event: "player:move";
       payload: VirtualOfficeRealtimeMovePayload;
+    }
+  | {
+      event: "teammate:wave";
+      payload: VirtualOfficeRealtimeTeammateWavePayload;
+    }
+  | {
+      event: "teammate:message";
+      payload: VirtualOfficeRealtimeTeammateMessagePayload;
     };
 
 export type VirtualOfficeRealtimeServerEvent =
@@ -586,4 +614,12 @@ export type VirtualOfficeRealtimeServerEvent =
       payload: {
         message: string;
       };
+    }
+  | {
+      event: "teammate:wave";
+      payload: VirtualOfficeRealtimeTeammateEventPayload;
+    }
+  | {
+      event: "teammate:message";
+      payload: VirtualOfficeRealtimeTeammateMessageEventPayload;
     };
