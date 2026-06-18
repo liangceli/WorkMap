@@ -20,12 +20,15 @@ test("pairing code is tenant/user bound, short-lived, one-time and credential is
   assert.equal(prisma.pairingCodes[0]?.userId, USER_ID);
   assert(!JSON.stringify(prisma.pairingCodes).includes(pairing.code));
 
-  const exchanged = await service.exchangePairingCode({ code: pairing.code, os: "WINDOWS", hostname: "WM-PC", agentVersion: "alpha" });
+  await assert.rejects(() => service.exchangePairingCode({ code: pairing.code, clientType: "BROWSER_EXTENSION" }), UnauthorizedException);
+  assert.equal((await service.getPairingStatus(context, pairing.id)).status, "pending");
+  const exchanged = await service.exchangePairingCode({ code: pairing.code, clientType: "DESKTOP_AGENT", os: "WINDOWS", hostname: "WM-PC", agentVersion: "alpha" });
   assert.match(exchanged.credential, /^wmdev_/);
   assert.equal(exchanged.clientType, DeviceClientType.DESKTOP_AGENT);
   assert.equal(prisma.devices[0]?.companyId, COMPANY_ID);
   assert.equal(prisma.credentials[0]?.userId, USER_ID);
   assert(!JSON.stringify(prisma.credentials).includes(exchanged.credential));
+  assert.equal((await service.getPairingStatus(context, pairing.id)).status, "paired");
   await assert.rejects(() => service.exchangePairingCode({ code: pairing.code }), UnauthorizedException);
 
   const resolved = await service.resolveDeviceAuthorization(`Device ${exchanged.credential}`);
@@ -43,7 +46,7 @@ test("expired/invalid codes fail and revoked device credential immediately fails
   await assert.rejects(() => service.exchangePairingCode({ code: "AAAA-BBBB" }), UnauthorizedException);
 
   const valid = await service.createPairingCode(context, { clientType: "BROWSER_EXTENSION" });
-  const exchanged = await service.exchangePairingCode({ code: valid.code });
+  const exchanged = await service.exchangePairingCode({ code: valid.code, clientType: "BROWSER_EXTENSION" });
   await service.revokeDevice(context, exchanged.device.id);
   await assert.rejects(() => service.resolveDeviceAuthorization(`Device ${exchanged.credential}`), UnauthorizedException);
 });
@@ -69,6 +72,7 @@ class PairingPrisma {
       this.pairingCodes.push(row); return row;
     },
     findUnique: async ({ where }: any) => this.pairingCodes.find((row) => row.codeHash === where.codeHash) ?? null,
+    findFirst: async ({ where }: any) => this.pairingCodes.find((row) => row.id === where.id && row.companyId === where.companyId && row.userId === where.userId) ?? null,
     updateMany: async ({ where, data }: any) => {
       const row = this.pairingCodes.find((item) => item.id === where.id && item.usedAt === null && item.expiresAt > where.expiresAt.gt);
       if (!row) return { count: 0 };

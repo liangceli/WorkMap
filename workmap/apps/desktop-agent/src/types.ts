@@ -30,7 +30,7 @@ export type QueuedEvent = {
 };
 
 export type AgentStatus = {
-  state: "unpaired" | "connected" | "offline" | "auth_required" | "error";
+  state: "unpaired" | "pairing" | "connected" | "offline" | "auth_required" | "error";
   deviceId?: string;
   lastHeartbeatAt?: string;
   lastUploadAt?: string;

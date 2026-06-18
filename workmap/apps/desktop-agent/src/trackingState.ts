@@ -86,5 +86,6 @@ export function normalizeAppName(value: string) {
     const code = character.charCodeAt(0);
     return code < 32 || code === 127 ? " " : character;
   }).join("").replace(/\s+/g, " ").trim();
-  return normalized ? normalized.slice(0, 120) : null;
+  const withoutExecutableSuffix = normalized.replace(/\.exe$/i, "");
+  return withoutExecutableSuffix ? withoutExecutableSuffix.slice(0, 120) : null;
 }

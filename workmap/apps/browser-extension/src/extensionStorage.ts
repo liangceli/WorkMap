@@ -9,7 +9,7 @@ export type ExtensionConfig = {
 };
 
 export type ExtensionStatus = {
-  state: "unpaired" | "connected" | "offline" | "auth_required" | "error";
+  state: "unpaired" | "pairing" | "connected" | "offline" | "auth_required" | "error";
   lastHeartbeatAt?: string;
   lastUploadAt?: string;
   queuedEvents: number;

@@ -9,6 +9,8 @@ export class DesktopAgentRuntime {
   private readonly adapter: WindowsForegroundAdapter;
   private readonly queue: FileEventQueue;
   private stopped = false;
+  private finalized = false;
+  private runPromise: Promise<void> | null = null;
   private status: AgentStatus;
 
   constructor(
@@ -21,33 +23,51 @@ export class DesktopAgentRuntime {
   }
 
   async run() {
+    if (!this.runPromise) this.runPromise = this.runLoop();
+    await this.runPromise;
+  }
+
+  private async runLoop() {
     await this.queue.load();
     await this.updateStatus();
     const sampleInterval = readPositiveNumber("WORKMAP_AGENT_SAMPLE_INTERVAL_MS", 2_000);
     const heartbeatInterval = readPositiveNumber("WORKMAP_AGENT_HEARTBEAT_INTERVAL_MS", 60_000);
     let nextHeartbeatAt = 0;
 
-    while (!this.stopped) {
-      const now = Date.now();
-      if (now >= nextHeartbeatAt) {
-        await this.heartbeat();
-        nextHeartbeatAt = now + heartbeatInterval;
+    try {
+      while (!this.stopped) {
+        const now = Date.now();
+        if (now >= nextHeartbeatAt) {
+          await this.heartbeat();
+          nextHeartbeatAt = now + heartbeatInterval;
+        }
+        try {
+          const sample = await this.adapter.sample();
+          if (this.stopped) break;
+          for (const event of this.tracking.observe(sample, this.config.deviceId)) await this.queue.enqueue(event);
+          await this.flushQueue();
+        } catch (error) {
+          this.status.state = "error";
+          this.status.error = safeError(error);
+          await this.updateStatus();
+        }
+        if (!this.stopped) await delay(sampleInterval);
       }
-      try {
-        const sample = await this.adapter.sample();
-        for (const event of this.tracking.observe(sample, this.config.deviceId)) await this.queue.enqueue(event);
-        await this.flushQueue();
-      } catch (error) {
-        this.status.state = "error";
-        this.status.error = safeError(error);
-        await this.updateStatus();
-      }
-      await delay(sampleInterval);
+    } finally {
+      await this.finalize();
     }
   }
 
   async shutdown() {
     this.stopped = true;
+    if (this.runPromise) return this.runPromise;
+    await this.queue.load();
+    await this.finalize();
+  }
+
+  private async finalize() {
+    if (this.finalized) return;
+    this.finalized = true;
     for (const event of this.tracking.shutdown(this.config.deviceId, Date.now())) await this.queue.enqueue(event);
     await this.flushQueue();
     await this.updateStatus();

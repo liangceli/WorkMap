@@ -188,6 +188,7 @@ async function runDevicePairingSmoke(engineer, otherOwner) {
   const desktopCode = await postJson("/devices/pairing-codes", engineer.accessToken, { clientType: "DESKTOP_AGENT" });
   const desktop = await postJson("/device-client/pair", undefined, {
     code: desktopCode.code,
+    clientType: "DESKTOP_AGENT",
     os: "WINDOWS",
     hostname: `WM-PAIRED-${runId}`,
     agentVersion: "desktop-agent-windows-alpha/0.2.0",
@@ -231,6 +232,7 @@ async function runDevicePairingSmoke(engineer, otherOwner) {
   const extensionCode = await postJson("/devices/pairing-codes", engineer.accessToken, { clientType: "BROWSER_EXTENSION" });
   const extension = await postJson("/device-client/pair", undefined, {
     code: extensionCode.code,
+    clientType: "BROWSER_EXTENSION",
     os: "UNKNOWN",
     hostname: "Chrome",
     agentVersion: "browser-extension-mv3/0.2.0",
@@ -256,7 +258,7 @@ async function runDevicePairingSmoke(engineer, otherOwner) {
   assertEqual(report.websites.find((row) => row.domain === domain)?.activeSeconds, 60, "employee report should include paired extension duration");
 
   const otherCode = await postJson("/devices/pairing-codes", otherOwner.accessToken, { clientType: "DESKTOP_AGENT" });
-  const other = await postJson("/device-client/pair", undefined, { code: otherCode.code, os: "WINDOWS", hostname: "OTHER" });
+  const other = await postJson("/device-client/pair", undefined, { code: otherCode.code, clientType: "DESKTOP_AGENT", os: "WINDOWS", hostname: "OTHER" });
 
   const revoke = await request("POST", `/devices/${desktop.device.id}/revoke`, engineer.accessToken);
   assertStatus(revoke.status, 201, "device owner should revoke paired desktop device");

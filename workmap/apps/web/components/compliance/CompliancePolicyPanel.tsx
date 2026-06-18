@@ -138,7 +138,7 @@ export function CompliancePolicyPanel() {
         />
         <TrustCard
           title="Alpha client limitation"
-          text="The desktop agent is currently a harness and the browser extension is a local MV3 scaffold. Production pairing, token lifecycle, offline queueing, retry/backoff, and packaging remain future work."
+          text="The Windows Desktop Agent and MV3 Browser Extension use short-lived pairing codes, device-scoped credentials, bounded offline queues, retry backoff, and revocation. Final consolidated manual installation and runtime QA remains pending."
         />
       </section>
 

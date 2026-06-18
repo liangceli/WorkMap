@@ -15,6 +15,10 @@ const CREDENTIAL_PREFIX = "wmdev_";
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CLIENT_TYPES = new Set<string>(Object.values(DeviceClientType));
 const OS_VALUES = new Set<string>(Object.values(DeviceOS));
+const PAIRING_CODE_PEPPER =
+  process.env.WORKMAP_DEVICE_PAIRING_PEPPER?.trim() ||
+  process.env.WORKMAP_JWT_SECRET?.trim() ||
+  randomBytes(32).toString("base64url");
 
 @Injectable()
 export class DevicePairingService {
@@ -28,7 +32,7 @@ export class DevicePairingService {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const rawCode = createReadableCode();
       try {
-        await this.prisma.devicePairingCode.create({
+        const created = await this.prisma.devicePairingCode.create({
           data: {
             companyId: context.companyId,
             userId: context.userId,
@@ -38,7 +42,7 @@ export class DevicePairingService {
           },
         });
 
-        return { code: formatCode(rawCode), clientType, expiresAt: expiresAt.toISOString() };
+        return { id: created.id, code: formatCode(rawCode), clientType, status: "pending" as const, expiresAt: expiresAt.toISOString() };
       } catch (error) {
         if (!isPrismaUniqueError(error) || attempt === 3) {
           throw error;
@@ -58,6 +62,10 @@ export class DevicePairingService {
 
     if (!pairing || pairing.usedAt || pairing.expiresAt <= now) {
       throw new UnauthorizedException("Pairing code is invalid, expired, or already used.");
+    }
+    const requestedClientType = readClientType(body.clientType);
+    if (requestedClientType !== pairing.clientType) {
+      throw new UnauthorizedException("Pairing code is not valid for this client type.");
     }
 
     const credential = `${CREDENTIAL_PREFIX}${randomBytes(32).toString("base64url")}`;
@@ -110,6 +118,22 @@ export class DevicePairingService {
         agentVersion: result.device.agentVersion,
         lastSeenAt: result.device.lastSeenAt?.toISOString() ?? null,
       },
+    };
+  }
+
+  async getPairingStatus(context: RequestContext, pairingId: string) {
+    const pairing = await this.prisma.devicePairingCode.findFirst({
+      where: { id: pairingId, companyId: context.companyId, userId: context.userId },
+      select: { id: true, clientType: true, expiresAt: true, usedAt: true, deviceId: true },
+    });
+    if (!pairing) throw new ForbiddenException("Pairing request is not visible to this user and tenant.");
+    const status = pairing.usedAt ? "paired" : pairing.expiresAt <= new Date() ? "expired" : "pending";
+    return {
+      id: pairing.id,
+      clientType: pairing.clientType,
+      status,
+      expiresAt: pairing.expiresAt.toISOString(),
+      deviceId: status === "paired" ? pairing.deviceId : null,
     };
   }
 
@@ -187,8 +211,7 @@ function hashCredential(value: string) {
 }
 
 function hashPairingCode(value: string) {
-  const pepper = process.env.WORKMAP_DEVICE_PAIRING_PEPPER?.trim() || process.env.WORKMAP_JWT_SECRET?.trim() || "workmap-local-pairing";
-  return createHmac("sha256", pepper).update(normalizeCode(value)).digest("hex");
+  return createHmac("sha256", PAIRING_CODE_PEPPER).update(normalizeCode(value)).digest("hex");
 }
 
 function createReadableCode() {

@@ -30,6 +30,7 @@ async function requestJson<T>(baseUrl: string, path: string, credential: string 
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", ...(credential ? { Authorization: `Device ${credential}` } : {}) },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {
     throw new ExtensionApiError(error instanceof Error ? error.message : "Network request failed.");

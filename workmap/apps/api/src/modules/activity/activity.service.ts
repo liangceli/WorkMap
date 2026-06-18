@@ -94,7 +94,8 @@ export class ActivityService {
     const activeSeconds = event.isIdle ? 0 : event.durationSeconds;
     const idleSeconds = event.isIdle ? event.durationSeconds : 0;
 
-    await this.prisma.$transaction([
+    try {
+      await this.prisma.$transaction([
       this.prisma.activityEvent.create({
         data: {
           companyId: context.companyId,
@@ -139,7 +140,11 @@ export class ActivityService {
         where: { id: event.deviceId },
         data: { lastSeenAt: new Date() },
       }),
-    ]);
+      ]);
+    } catch (error) {
+      if (event.clientEventId && isPrismaUniqueError(error)) return false;
+      throw error;
+    }
 
     return true;
   }
@@ -153,7 +158,8 @@ export class ActivityService {
     const activeSeconds = event.isIdle ? 0 : event.durationSeconds;
     const idleSeconds = event.isIdle ? event.durationSeconds : 0;
 
-    await this.prisma.$transaction([
+    try {
+      await this.prisma.$transaction([
       this.prisma.activityEvent.create({
         data: {
           companyId: context.companyId,
@@ -201,7 +207,11 @@ export class ActivityService {
         where: { id: event.deviceId },
         data: { lastSeenAt: new Date() },
       }),
-    ]);
+      ]);
+    } catch (error) {
+      if (event.clientEventId && isPrismaUniqueError(error)) return false;
+      throw error;
+    }
 
     return true;
   }
@@ -499,4 +509,8 @@ function replaceControlCharacters(value: string) {
     const code = character.charCodeAt(0);
     return code < 32 || code === 127 ? " " : character;
   }).join("");
+}
+
+function isPrismaUniqueError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }

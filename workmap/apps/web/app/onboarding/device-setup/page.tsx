@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { createDevicePairingCode } from "../../../lib/api/devicesApi";
+import { useEffect, useState } from "react";
+import { createDevicePairingCode, getDevicePairingStatus } from "../../../lib/api/devicesApi";
 import { getWorkMapApiAuthOptions } from "../../../lib/api/apiAuth";
-import type { WorkMapApiPairingCode } from "../../../lib/api/apiTypes";
+import type { WorkMapApiPairingCode, WorkMapApiPairingStatus } from "../../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
@@ -23,8 +23,35 @@ const notCollectedItems = [
 export default function DeviceSetupPage() {
   const router = useRouter();
   const [pairing, setPairing] = useState<WorkMapApiPairingCode | null>(null);
+  const [pairingStatus, setPairingStatus] = useState<WorkMapApiPairingStatus["status"] | null>(null);
   const [pairingState, setPairingState] = useState<"idle" | "loading" | "error">("idle");
   const [pairingMessage, setPairingMessage] = useState("");
+
+  useEffect(() => {
+    if (!pairing || pairingStatus !== "pending") return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      if (Date.now() >= Date.parse(pairing.expiresAt)) {
+        if (!cancelled) setPairingStatus("expired");
+        return;
+      }
+      const auth = await getWorkMapApiAuthOptions();
+      if (!auth.available || cancelled) return;
+      const result = await getDevicePairingStatus(pairing.id, auth.options);
+      if (cancelled) return;
+      if (result.ok) {
+        setPairingStatus(result.data.status);
+        if (result.data.status !== "pending") return;
+      }
+      timer = setTimeout(() => void poll(), 2_000);
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [pairing, pairingStatus]);
 
   const createPairing = async (clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION") => {
     setPairingState("loading");
@@ -42,6 +69,7 @@ export default function DeviceSetupPage() {
       return;
     }
     setPairing(result.data);
+    setPairingStatus("pending");
     setPairingState("idle");
   };
 
@@ -56,7 +84,7 @@ export default function DeviceSetupPage() {
         <p style={styles.eyebrow}>Device setup</p>
         <h1 style={styles.title}>Connect WorkMap presence tools</h1>
         <p style={styles.subtitle}>
-          This frontend demo explains what the Desktop Agent and Browser Extension will collect after backend contracts are approved.
+          Review what the paired Desktop Agent and Browser Extension collect before enabling transparent activity summaries.
         </p>
 
         <div style={styles.grid}>
@@ -85,8 +113,14 @@ export default function DeviceSetupPage() {
           </div>
           {pairing ? (
             <div style={styles.codeBox}>
-              <strong style={styles.code}>{pairing.code}</strong>
-              <span>{pairing.clientType === "DESKTOP_AGENT" ? "Desktop Agent" : "Browser Extension"} code expires {new Date(pairing.expiresAt).toLocaleTimeString()}.</span>
+              {pairingStatus === "pending" ? <strong style={styles.code}>{pairing.code}</strong> : null}
+              <span>
+                {pairingStatus === "paired"
+                  ? `${pairing.clientType === "DESKTOP_AGENT" ? "Desktop Agent" : "Browser Extension"} paired successfully.`
+                  : pairingStatus === "expired"
+                    ? "This pairing code expired. Generate a new code to continue."
+                    : `${pairing.clientType === "DESKTOP_AGENT" ? "Desktop Agent" : "Browser Extension"} code expires ${new Date(pairing.expiresAt).toLocaleTimeString()}.`}
+              </span>
             </div>
           ) : null}
           {pairingMessage ? <p style={styles.error}>{pairingMessage}</p> : null}

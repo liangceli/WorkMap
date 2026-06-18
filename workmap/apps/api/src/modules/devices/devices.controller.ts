@@ -33,6 +33,11 @@ export class DevicesController {
     return this.pairing.createPairingCode(context, body);
   }
 
+  @Get("pairing-codes/:pairingId")
+  pairingStatus(@CurrentContext() context: RequestContext, @Param("pairingId", ParseUUIDPipe) pairingId: string) {
+    return this.pairing.getPairingStatus(context, pairingId);
+  }
+
   @Post(":deviceId/revoke")
   revokeDevice(@CurrentContext() context: RequestContext, @Param("deviceId", ParseUUIDPipe) deviceId: string) {
     return this.pairing.revokeDevice(context, deviceId);

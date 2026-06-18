@@ -1,6 +1,6 @@
 import { exchangePairingCode } from "./apiClient.js";
 import { loadAgentConfig, saveAgentConfig } from "./credentialStore.js";
-import { readJson, getAgentDataDirectory } from "./fileStore.js";
+import { readJson, getAgentDataDirectory, writeAgentStatus } from "./fileStore.js";
 import { DesktopAgentRuntime } from "./runtime.js";
 import type { AgentStatus } from "./types.js";
 import { join } from "node:path";
@@ -40,9 +40,16 @@ async function pair() {
   if (!/^https:\/\//i.test(apiBaseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBaseUrl)) {
     throw new Error("API URL must use HTTPS, except localhost development.");
   }
-  const result = await exchangePairingCode(apiBaseUrl, code, AGENT_VERSION);
-  await saveAgentConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, agentVersion: AGENT_VERSION });
-  console.info(`Desktop Agent paired for device ${result.device.id}. Credential stored with Windows DPAPI.`);
+  await writeAgentStatus({ state: "pairing", queuedEvents: 0 });
+  try {
+    const result = await exchangePairingCode(apiBaseUrl, code, AGENT_VERSION);
+    await saveAgentConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, agentVersion: AGENT_VERSION });
+    await writeAgentStatus({ state: "connected", deviceId: result.device.id, queuedEvents: 0 });
+    console.info(`Desktop Agent paired for device ${result.device.id}. Credential stored with Windows DPAPI.`);
+  } catch (error) {
+    await writeAgentStatus({ state: "unpaired", queuedEvents: 0, error: safeError(error) });
+    throw error;
+  }
 }
 
 async function showStatus() {
@@ -58,6 +65,10 @@ function readArgument(name: string) {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message.replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]") : error);
+  console.error(safeError(error));
   process.exitCode = 1;
 });
+
+function safeError(error: unknown) {
+  return error instanceof Error ? error.message.replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]") : "Unknown error";
+}

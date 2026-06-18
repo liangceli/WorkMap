@@ -1,5 +1,5 @@
 import { workMapApiGet, workMapApiPost } from "./apiClient";
-import type { ApiClientOptions, WorkMapApiDevice, WorkMapApiDeviceRegistration, WorkMapApiPairingCode } from "./apiTypes";
+import type { ApiClientOptions, WorkMapApiDevice, WorkMapApiDeviceRegistration, WorkMapApiPairingCode, WorkMapApiPairingStatus } from "./apiTypes";
 
 export type RegisterDeviceInput = {
   deviceId?: string;
@@ -22,6 +22,10 @@ export function recordDeviceHeartbeat(input: { deviceId: string; agentVersion?: 
 
 export function createDevicePairingCode(clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION", options?: ApiClientOptions) {
   return workMapApiPost<WorkMapApiPairingCode>("/devices/pairing-codes", { clientType }, options);
+}
+
+export function getDevicePairingStatus(pairingId: string, options?: ApiClientOptions) {
+  return workMapApiGet<WorkMapApiPairingStatus>(`/devices/pairing-codes/${pairingId}`, options);
 }
 
 export function revokeDevice(deviceId: string, options?: ApiClientOptions) {

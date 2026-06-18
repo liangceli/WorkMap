@@ -12,6 +12,8 @@ public static class WorkMapWindowsActivity {
   [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] private static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+  [DllImport("user32.dll", SetLastError=true)] private static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+  [DllImport("user32.dll")] private static extern bool CloseDesktop(IntPtr desktop);
 
   public static string ProcessName() {
     uint processId;
@@ -26,7 +28,16 @@ public static class WorkMapWindowsActivity {
     var info = new LASTINPUTINFO();
     info.cbSize = (uint)Marshal.SizeOf(info);
     if (!GetLastInputInfo(ref info)) return 0;
-    return (Environment.TickCount64 - info.dwTime) / 1000.0;
+    var elapsed = unchecked((uint)Environment.TickCount - info.dwTime);
+    return elapsed / 1000.0;
+  }
+
+  public static bool IsLocked() {
+    const uint DESKTOP_SWITCHDESKTOP = 0x0100;
+    var desktop = OpenInputDesktop(0, false, DESKTOP_SWITCHDESKTOP);
+    if (desktop == IntPtr.Zero) return true;
+    CloseDesktop(desktop);
+    return false;
   }
 }
 '@
@@ -34,7 +45,7 @@ public static class WorkMapWindowsActivity {
 Add-Type -TypeDefinition $source -ErrorAction Stop
 $processName = [WorkMapWindowsActivity]::ProcessName()
 $idleSeconds = [WorkMapWindowsActivity]::IdleSeconds()
-$locked = $processName -in @('LockApp', 'LogonUI')
+$locked = [WorkMapWindowsActivity]::IsLocked() -or $processName -in @('LockApp', 'LogonUI')
 [ordered]@{
   processName = $processName
   idleSeconds = $idleSeconds

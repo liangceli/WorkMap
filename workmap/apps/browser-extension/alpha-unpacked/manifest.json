@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "description": "Transparent active-domain duration tracking. Stores hostnames only, not page content or full URLs.",
   "permissions": ["storage", "tabs", "idle", "alarms"],
-  "host_permissions": ["https://workmap-api.onrender.com/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
   "background": {
     "service_worker": "dist/background.js",
     "type": "module"

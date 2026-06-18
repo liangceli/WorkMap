@@ -36,6 +36,7 @@ async function requestJson<T>(apiBaseUrl: string, path: string, credential: stri
         ...(credential ? { Authorization: `Device ${credential}` } : {}),
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {
     throw new AgentApiError(error instanceof Error ? error.message : "Network request failed.");

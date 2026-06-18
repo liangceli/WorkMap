@@ -446,10 +446,10 @@ function getDashboardJourney(role: string | null) {
       subtitle: "Track team presence, setup coverage, compliance readiness, and aggregate activity summaries as data becomes available.",
       guidanceLabel: "Owner next steps",
       guidance:
-        "Start with employee invites, then ask the team to complete compliance, avatar, and device setup. Reports stay sparse until the desktop-agent harness or browser-extension scaffold submits app/domain summary data.",
+        "Start with employee invites, then ask the team to complete compliance, avatar, and device setup. Reports stay sparse until a paired Desktop Agent or Browser Extension submits app/domain summary data.",
       setupTitle: "Bring the pilot workspace online",
       alphaNote:
-        "The current alpha proves the ingestion and reporting loop. Production active-window clients, secure pairing, retry/offline queues, and extension packaging are still future work.",
+        "The current alpha includes Windows active-app tracking, MV3 active-domain tracking, secure device pairing, bounded offline queues, retry backoff, revocation, and local Alpha packages.",
       setupItems: ["Invite employees", "Complete compliance", "Finish avatar/profile", "Register devices"],
       actions: [
         { label: "Invite employees", href: "/onboarding/invite", primary: true },
@@ -470,7 +470,7 @@ function getDashboardJourney(role: string | null) {
         "Company-wide reports, invites, integrations, and settings are owner/admin areas. Your dashboard focuses on your own presence, compliance status, and personal summary availability.",
       setupTitle: "Your setup checklist",
       alphaNote:
-        "Activity summaries appear only after your device or browser scaffold submits events. WorkMap does not show screenshots, keystrokes, private messages, or webpage content.",
+        "Activity summaries appear only after your paired Desktop Agent or Browser Extension submits events. WorkMap does not show screenshots, keystrokes, private messages, or webpage content.",
       setupItems: ["Review compliance", "Finish profile/avatar", "Set up device", "Open office"],
       actions: [
         { label: "Open office", href: "/virtual-office", primary: true },

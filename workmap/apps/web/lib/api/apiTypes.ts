@@ -268,9 +268,19 @@ export type WorkMapApiDeviceRegistration = {
 };
 
 export type WorkMapApiPairingCode = {
+  id: string;
   code: string;
   clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+  status: "pending";
   expiresAt: string;
+};
+
+export type WorkMapApiPairingStatus = {
+  id: string;
+  clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+  status: "pending" | "paired" | "expired";
+  expiresAt: string;
+  deviceId: string | null;
 };
 
 export type WorkMapApiActivityIngestResult = {

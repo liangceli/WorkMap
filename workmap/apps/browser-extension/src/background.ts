@@ -20,7 +20,11 @@ type ChromeApi = {
     get(tabId: number, callback: (tab: ChromeTab) => void): void;
     query(query: { active: boolean; lastFocusedWindow: boolean }, callback: (tabs: ChromeTab[]) => void): void;
   };
-  windows: { WINDOW_ID_NONE: number; onFocusChanged: Event<(windowId: number) => void> };
+  windows: {
+    WINDOW_ID_NONE: number;
+    onFocusChanged: Event<(windowId: number) => void>;
+    getLastFocused(callback: (window: { focused?: boolean }) => void): void;
+  };
   idle: { onStateChanged: Event<(state: "active" | "idle" | "locked") => void>; queryState(seconds: number, callback: (state: "active" | "idle" | "locked") => void): void; setDetectionInterval(seconds: number): void };
   alarms: { create(name: string, info: { periodInMinutes: number }): void; onAlarm: Event<(alarm: { name: string }) => void> };
 };
@@ -44,6 +48,7 @@ void schedule(async () => {
   chrome.idle.setDetectionInterval(60);
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: 1 });
   idleState = await queryIdleState();
+  focused = await queryWindowFocus();
   await reconcileActiveTab();
 });
 
@@ -80,6 +85,8 @@ async function updateTracking(domain: string | null, checkpoint = false) {
 }
 
 async function onAlarm() {
+  focused = await queryWindowFocus();
+  idleState = await queryIdleState();
   await reconcileActiveTab();
   await updateTracking((await activeDomain()), true);
   const stored = await readStoredState(["workmapConfig", "workmapQueue", "workmapStatus"]);
@@ -105,16 +112,16 @@ async function flushQueue(config: ExtensionConfig) {
   try {
     await sendDomainUsage(config, ready.map((item) => item.event));
     const remaining = queue.filter((item) => !ids.has(item.event.clientEventId));
-    await writeStoredState({ workmapQueue: remaining, workmapStatus: { state: "connected", queuedEvents: remaining.length, lastUploadAt: new Date().toISOString() } });
+    await writeStoredState({ workmapQueue: remaining, workmapStatus: { ...stored.workmapStatus, state: "connected", queuedEvents: remaining.length, lastUploadAt: new Date().toISOString(), error: undefined } });
   } catch (error) {
     if (error instanceof ExtensionApiError && (error.status === 401 || error.status === 403)) {
-      await writeStoredState({ workmapStatus: { state: "auth_required", queuedEvents: queue.length, error: error.message } });
+      await writeStoredState({ workmapStatus: { ...stored.workmapStatus, state: "auth_required", queuedEvents: queue.length, error: error.message } });
     } else if (error instanceof ExtensionApiError && error.status && error.status < 500) {
       const remaining = queue.filter((item) => !ids.has(item.event.clientEventId));
-      await writeStoredState({ workmapQueue: remaining, workmapStatus: { state: "error", queuedEvents: remaining.length, error: error.message } });
+      await writeStoredState({ workmapQueue: remaining, workmapStatus: { ...stored.workmapStatus, state: "error", queuedEvents: remaining.length, error: error.message } });
     } else {
       const retried = retryDomainEvents(queue, ids);
-      await writeStoredState({ workmapQueue: retried, workmapStatus: { state: "offline", queuedEvents: retried.length, error: safeError(error) } });
+      await writeStoredState({ workmapQueue: retried, workmapStatus: { ...stored.workmapStatus, state: "offline", queuedEvents: retried.length, error: safeError(error) } });
     }
   }
 }
@@ -133,3 +140,4 @@ async function activeDomain() { return readDomainFromUrl((await queryTabs())[0]?
 function getTab(id: number) { return new Promise<ChromeTab>((resolve) => chrome.tabs.get(id, resolve)); }
 function queryTabs() { return new Promise<ChromeTab[]>((resolve) => chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve)); }
 function queryIdleState() { return new Promise<"active" | "idle" | "locked">((resolve) => chrome.idle.queryState(60, resolve)); }
+function queryWindowFocus() { return new Promise<boolean>((resolve) => chrome.windows.getLastFocused((window) => resolve(window.focused === true))); }
