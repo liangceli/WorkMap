@@ -5,8 +5,6 @@ import type {
   UserPresenceStatus,
   VirtualOfficeMapManifest,
   VirtualOfficeRealtimeClientEvent,
-  VirtualOfficeRealtimeDirectMessageEventPayload,
-  VirtualOfficeRealtimeInteractionPayload,
   VirtualOfficeRealtimeMovePayload,
   VirtualOfficeRealtimePlayerState,
   VirtualOfficeRealtimePresenceUser,
@@ -50,8 +48,8 @@ type RealtimeClient = {
 const REALTIME_PATH = "/virtual-office/realtime";
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const MAX_MESSAGE_BYTES = 16 * 1024;
-const MAX_DIRECT_MESSAGE_CHARS = 500;
 const MIN_MOVE_INTERVAL_MS = 50;
+const MAX_TEAMMATE_MESSAGE_LENGTH = 500;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
@@ -201,10 +199,10 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
           this.handleMove(client, message.payload);
           break;
         case "teammate:wave":
-          this.handleWave(client, message.payload.targetUserId);
+          this.handleTeammateWave(client, message.payload.targetUserId);
           break;
         case "teammate:message":
-          this.handleDirectMessage(client, message.payload.targetUserId, message.payload.text);
+          this.handleTeammateMessage(client, message.payload.targetUserId, message.payload.message);
           break;
       }
     } catch (error) {
@@ -284,86 +282,69 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
     this.broadcast(client.roomKey, { event: "player:state", payload: state }, client.id);
   }
 
-  private handleWave(client: RealtimeClient, targetUserId: string) {
-    const delivery = this.createInteractionDelivery(client, targetUserId);
+  private handleTeammateWave(client: RealtimeClient, targetUserId: string) {
+    const targetClients = this.resolveTargetClients(client, targetUserId);
 
-    if (!delivery) {
+    if (targetClients.length === 0) {
+      this.sendError(client, "Teammate is not currently connected to this office.");
       return;
     }
 
-    const payload: VirtualOfficeRealtimeInteractionPayload = { ...delivery.base };
-
-    for (const recipient of delivery.recipients) {
-      sendEvent(recipient, { event: "teammate:wave", payload });
-    }
-  }
-
-  private handleDirectMessage(client: RealtimeClient, targetUserId: string, textInput: string) {
-    const text = normalizeDirectMessageText(textInput);
-
-    if (!text) {
-      this.sendError(client, "Message text is required.");
-      return;
-    }
-
-    const delivery = this.createInteractionDelivery(client, targetUserId);
-
-    if (!delivery) {
-      return;
-    }
-
-    const payload: VirtualOfficeRealtimeDirectMessageEventPayload = {
-      ...delivery.base,
-      text,
+    const payload = {
+      fromUserId: client.context.userId,
+      fromDisplayName: client.profile!.displayName,
+      targetUserId,
+      createdAt: new Date().toISOString(),
     };
 
-    for (const recipient of delivery.recipients) {
-      sendEvent(recipient, { event: "teammate:message", payload });
+    for (const target of targetClients) {
+      sendEvent(target, { event: "teammate:wave", payload });
     }
   }
 
-  private createInteractionDelivery(
-    client: RealtimeClient,
-    targetUserId: string,
-  ): { recipients: RealtimeClient[]; base: VirtualOfficeRealtimeInteractionPayload } | null {
+  private handleTeammateMessage(client: RealtimeClient, targetUserId: string, rawMessage: string) {
+    const message = normalizeRealtimeMessage(rawMessage);
+
+    if (!message) {
+      this.sendError(client, "Message must be between 1 and 500 characters.");
+      return;
+    }
+
+    const targetClients = this.resolveTargetClients(client, targetUserId);
+
+    if (targetClients.length === 0) {
+      this.sendError(client, "Teammate is not currently connected to this office.");
+      return;
+    }
+
+    const payload = {
+      fromUserId: client.context.userId,
+      fromDisplayName: client.profile!.displayName,
+      targetUserId,
+      message,
+      createdAt: new Date().toISOString(),
+    };
+
+    for (const target of targetClients) {
+      sendEvent(target, { event: "teammate:message", payload });
+    }
+  }
+
+  private resolveTargetClients(client: RealtimeClient, targetUserId: string) {
     if (!client.roomKey || !client.officeMapId || !client.profile) {
-      this.sendError(client, "Join an office map before sending teammate interactions.");
-      return null;
+      this.sendError(client, "Join an office map before contacting teammates.");
+      return [];
     }
 
-    if (!UUID_PATTERN.test(targetUserId)) {
-      this.sendError(client, "Teammate id must be a valid UUID.");
-      return null;
+    if (!isNonEmptyString(targetUserId) || targetUserId === client.context.userId) {
+      this.sendError(client, "Contact target is invalid.");
+      return [];
     }
 
-    if (targetUserId === client.context.userId) {
-      this.sendError(client, "Choose another teammate for this action.");
-      return null;
-    }
-
-    const recipients = Array.from(this.rooms.get(client.roomKey) ?? [])
+    return Array.from(this.rooms.get(client.roomKey) ?? [])
       .map((clientId) => this.clients.get(clientId))
       .filter((candidate): candidate is RealtimeClient => Boolean(candidate))
-      .filter((candidate) => candidate.context.userId === targetUserId);
-
-    if (recipients.length === 0) {
-      this.sendError(client, "That teammate is not connected to this office right now.");
-      return null;
-    }
-
-    return {
-      recipients,
-      base: {
-        id: randomUUID(),
-        officeMapId: client.officeMapId,
-        fromUserId: client.context.userId,
-        fromDisplayName: client.profile.displayName,
-        fromAvatarId: client.profile.avatarId,
-        fromRole: client.profile.role,
-        targetUserId,
-        createdAt: new Date().toISOString(),
-      },
-    };
+      .filter((candidate) => candidate.context.userId === targetUserId && candidate.officeMapId === client.officeMapId);
   }
 
   private leaveRoom(client: RealtimeClient) {
@@ -475,11 +456,14 @@ function parseClientEvent(rawMessage: string): VirtualOfficeRealtimeClientEvent 
       value.event === "teammate:message" &&
       isRecord(value.payload) &&
       typeof value.payload.targetUserId === "string" &&
-      typeof value.payload.text === "string"
+      typeof value.payload.message === "string"
     ) {
       return {
         event: "teammate:message",
-        payload: { targetUserId: value.payload.targetUserId, text: value.payload.text },
+        payload: {
+          targetUserId: value.payload.targetUserId,
+          message: value.payload.message,
+        },
       };
     }
 
@@ -487,10 +471,6 @@ function parseClientEvent(rawMessage: string): VirtualOfficeRealtimeClientEvent 
   } catch {
     return null;
   }
-}
-
-function normalizeDirectMessageText(value: string) {
-  return value.trim().replace(/\s+/g, " ").slice(0, MAX_DIRECT_MESSAGE_CHARS).trim();
 }
 
 function sendEvent(client: RealtimeClient, event: VirtualOfficeRealtimeServerEvent) {
@@ -649,4 +629,18 @@ function singleHeader(value: string | string[] | undefined) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function normalizeRealtimeMessage(value: string) {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+
+  if (trimmed.length === 0 || trimmed.length > MAX_TEAMMATE_MESSAGE_LENGTH) {
+    return null;
+  }
+
+  return trimmed;
 }

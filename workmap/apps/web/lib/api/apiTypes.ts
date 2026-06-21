@@ -193,25 +193,17 @@ export type WorkMapApiIntegration = {
   config?: unknown;
 };
 
-export type WorkMapApiContactLinkAction = {
-  label: string;
-  href: string | null;
-  enabled: boolean;
-  reason?: string;
-};
-
 export type WorkMapApiContactLinks = {
   targetUserId?: string;
   displayName?: string;
-  emailAvailable?: boolean;
-  teamsChatUrl?: string | null;
-  outlookMailtoUrl?: string | null;
-  threeCxUrl?: string | null;
-  teams?: string | WorkMapApiContactLinkAction;
-  outlook?: string | WorkMapApiContactLinkAction;
-  threeCx?: WorkMapApiContactLinkAction;
+  teamsChatUrl?: string;
+  outlookMailtoUrl?: string;
+  threeCxUrl?: string;
+  teams?: string | { label?: string; href?: string; enabled?: boolean };
   email?: string;
+  outlook?: string | { label?: string; href?: string; enabled?: boolean };
   call3cx?: string;
+  threeCx?: string | { label?: string; href?: string; enabled?: boolean };
   calendar?: string;
 };
 
@@ -268,10 +260,27 @@ export type WorkMapApiDevice = {
   hostname: string | null;
   agentVersion: string | null;
   lastSeenAt: string | null;
+  revokedAt?: string | null;
 };
 
 export type WorkMapApiDeviceRegistration = {
   device: WorkMapApiDevice;
+};
+
+export type WorkMapApiPairingCode = {
+  id: string;
+  code: string;
+  clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+  status: "pending";
+  expiresAt: string;
+};
+
+export type WorkMapApiPairingStatus = {
+  id: string;
+  clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+  status: "pending" | "paired" | "expired";
+  expiresAt: string;
+  deviceId: string | null;
 };
 
 export type WorkMapApiActivityIngestResult = {

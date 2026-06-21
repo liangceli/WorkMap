@@ -7,7 +7,7 @@
     "build": "nest build",
     "start": "node dist/apps/api/src/main.js",
     "lint": "eslint .",
-    "test": "tsx test/tracking-reports-verification.test.ts",
+    "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

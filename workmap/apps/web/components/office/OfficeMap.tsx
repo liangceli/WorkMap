@@ -8,10 +8,10 @@ import type {
   PlayerDirection,
   PlayerState,
   UserPresenceStatus,
-  VirtualOfficeRealtimeDirectMessageEventPayload,
-  VirtualOfficeRealtimeInteractionPayload,
   VirtualOfficeMapManifest,
   VirtualOfficeRealtimePlayerState,
+  VirtualOfficeRealtimeTeammateEventPayload,
+  VirtualOfficeRealtimeTeammateMessageEventPayload,
 } from "@workmap/shared-types";
 import { WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST } from "@workmap/shared-types";
 import {
@@ -24,8 +24,8 @@ import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/ava
 import { decodeLayeredAvatarId, encodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { getAvatarConfigForOffice, saveLayeredAvatarConfig } from "../../lib/avatar/avatarStorage";
 import { getContactLinks } from "../../lib/api/integrationsApi";
-import type { WorkMapApiContactLinks } from "../../lib/api/apiTypes";
 import { saveCurrentVirtualOfficePosition } from "../../lib/api/virtualOfficeApi";
+import type { WorkMapApiContactLinks } from "../../lib/api/apiTypes";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { findGridPath, type PathBounds, type PathPoint } from "../../lib/office/pathfinding";
 import {
@@ -41,7 +41,7 @@ import { OfficeCommandPalette } from "./OfficeCommandPalette";
 import { OfficeIcon } from "./OfficeIcons";
 import { OfficeLeftRail, type OfficePanelKey } from "./OfficeLeftRail";
 import { OfficeMiniMap } from "./OfficeMiniMap";
-import { OfficeSidePanel, type OfficeDirectMessage, type OfficeNotice } from "./OfficeSidePanel";
+import { OfficeSidePanel } from "./OfficeSidePanel";
 import { officeTilesets, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
 import { RoomContextCard } from "./RoomContextCard";
 import { statusColors } from "./presence";
@@ -169,6 +169,8 @@ export function OfficeMap() {
   const realtimeRemotePlayersRef = useRef(new Map<string, InterpolatedRemotePlayer>());
   const realtimeAvatarSignatureRef = useRef("");
   const sendRealtimeMovementRef = useRef<(position: PositionSnapshot) => void>(() => undefined);
+  const sendRealtimeWaveRef = useRef<(targetUserId: string) => boolean>(() => false);
+  const sendRealtimeMessageRef = useRef<(targetUserId: string, message: string) => boolean>(() => false);
   const selectedRemoteIdRef = useRef<string | null>(null);
   const autoPathRef = useRef<PathPoint[]>([]);
   const autoDestinationRef = useRef<PathPoint | null>(null);
@@ -211,9 +213,6 @@ export function OfficeMap() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [selectedDestination, setSelectedDestination] = useState<OfficeDestination | null>(null);
   const [selectedRemoteId, setSelectedRemoteId] = useState<string | null>(null);
-  const [selectedChatUserId, setSelectedChatUserId] = useState<string | null>(null);
-  const [directMessages, setDirectMessages] = useState<OfficeDirectMessage[]>([]);
-  const [officeNotices, setOfficeNotices] = useState<OfficeNotice[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [draggingMap, setDraggingMap] = useState(false);
@@ -310,60 +309,26 @@ export function OfficeMap() {
     [officeData.currentUserId],
   );
 
-  const addOfficeNotice = useCallback((text: string) => {
-    setOfficeNotices((current) => [
-      {
-        id: createClientEventId("notice"),
-        text,
-        createdAt: new Date().toISOString(),
-      },
-      ...current,
-    ].slice(0, 20));
+  const handleRealtimeWave = useCallback((payload: VirtualOfficeRealtimeTeammateEventPayload) => {
+    setToast(`${payload.fromDisplayName} waved to you.`);
   }, []);
 
-  const handleRealtimeWave = useCallback(
-    (payload: VirtualOfficeRealtimeInteractionPayload) => {
-      if (officeData.currentUserId && payload.targetUserId !== officeData.currentUserId) {
-        return;
-      }
+  const handleRealtimeMessage = useCallback((payload: VirtualOfficeRealtimeTeammateMessageEventPayload) => {
+    setToast(`${payload.fromDisplayName}: ${payload.message}`);
+  }, []);
 
-      const text = `${payload.fromDisplayName} waved at you.`;
-      addOfficeNotice(text);
-      setToast(text);
-    },
-    [addOfficeNotice, officeData.currentUserId],
-  );
-
-  const handleRealtimeDirectMessage = useCallback(
-    (payload: VirtualOfficeRealtimeDirectMessageEventPayload) => {
-      if (officeData.currentUserId && payload.targetUserId !== officeData.currentUserId) {
-        return;
-      }
-
-      setDirectMessages((current) => [
-        ...current,
-        {
-          id: payload.id,
-          peerUserId: payload.fromUserId,
-          peerDisplayName: payload.fromDisplayName,
-          direction: "received",
-          text: payload.text,
-          createdAt: payload.createdAt,
-        },
-      ]);
-      addOfficeNotice(`${payload.fromDisplayName}: ${payload.text}`);
-      setToast(`Message from ${payload.fromDisplayName}`);
-    },
-    [addOfficeNotice, officeData.currentUserId],
-  );
-
-  const { connectionState: realtimeConnectionState, sendMovement: sendRealtimeMovement, sendWave: sendRealtimeWave, sendDirectMessage: sendRealtimeDirectMessage } = useVirtualOfficeRealtime({
+  const {
+    connectionState: realtimeConnectionState,
+    sendMovement: sendRealtimeMovement,
+    sendWave: sendRealtimeWave,
+    sendMessage: sendRealtimeMessage,
+  } = useVirtualOfficeRealtime({
     officeMapId: officeData.officeMapId,
     apiOptions: officeData.apiOptions,
     currentUserId: officeData.currentUserId,
     onRemoteState: handleRealtimeRemoteState,
     onWave: handleRealtimeWave,
-    onDirectMessage: handleRealtimeDirectMessage,
+    onMessage: handleRealtimeMessage,
     onError: setToast,
   });
 
@@ -376,6 +341,14 @@ export function OfficeMap() {
   useEffect(() => {
     sendRealtimeMovementRef.current = sendRealtimeMovement;
   }, [sendRealtimeMovement]);
+
+  useEffect(() => {
+    sendRealtimeWaveRef.current = sendRealtimeWave;
+  }, [sendRealtimeWave]);
+
+  useEffect(() => {
+    sendRealtimeMessageRef.current = sendRealtimeMessage;
+  }, [sendRealtimeMessage]);
 
   useEffect(() => {
     officePeopleRef.current = officePeople;
@@ -1029,6 +1002,25 @@ export function OfficeMap() {
     setContactTarget(target);
   };
 
+  const waveToRemote = (target: ContactTarget) => {
+    const sent = sendRealtimeWaveRef.current(target.userId);
+    setToast(sent ? `Wave sent to ${target.displayName}.` : "Realtime is not connected. Wave was not delivered.");
+  };
+
+  const sendQuickMessage = (target: ContactTarget, message: string) => {
+    const sent = sendRealtimeMessageRef.current(target.userId, message);
+    setToast(sent ? `Message sent to ${target.displayName}.` : "Realtime is not connected. Message was not delivered.");
+    return sent;
+  };
+
+  const openTeamsLauncher = (target: ContactTarget) => {
+    void openContactLauncher(target, "teams", officeData.apiOptions, setToast);
+  };
+
+  const openEmailLauncher = (target: ContactTarget) => {
+    void openContactLauncher(target, "email", officeData.apiOptions, setToast);
+  };
+
   const recenterCamera = () => {
     cameraOffsetRef.current = { x: 0, y: 0 };
     setZoom(zoomRef.current);
@@ -1048,107 +1040,6 @@ export function OfficeMap() {
     }
     setActivePanel((current) => (current === panel ? null : panel));
   };
-
-  const startDirectChat = useCallback((target: ContactTarget) => {
-    setSelectedChatUserId(target.userId);
-    setActivePanel("chat");
-    setToast(`Message ${target.displayName}`);
-  }, []);
-
-  const waveToTarget = useCallback(
-    (target: ContactTarget) => {
-      if (!UUID_PATTERN.test(target.userId)) {
-        setToast("Wave delivery needs an API-backed teammate. Demo teammates cannot receive realtime waves.");
-        return;
-      }
-
-      if (realtimeConnectionState !== "connected") {
-        setToast("Realtime is not connected; wave was not delivered. Polling fallback is still active.");
-        return;
-      }
-
-      if (!sendRealtimeWave(target.userId)) {
-        setToast("Realtime is not ready; wave was not delivered.");
-        return;
-      }
-
-      addOfficeNotice(`You waved to ${target.displayName}.`);
-      setToast(`Wave sent to ${target.displayName}.`);
-    },
-    [addOfficeNotice, realtimeConnectionState, sendRealtimeWave],
-  );
-
-  const sendDirectMessageToTarget = useCallback(
-    (targetUserId: string, text: string) => {
-      const target =
-        renderedOfficePeopleRef.current.find((candidate) => candidate.userId === targetUserId) ??
-        officePeopleRef.current.find((candidate) => candidate.userId === targetUserId);
-
-      if (!target) {
-        setToast("Choose a visible teammate before sending a message.");
-        return false;
-      }
-
-      if (!UUID_PATTERN.test(targetUserId)) {
-        setToast("Realtime messages need an API-backed teammate. Demo teammates cannot receive them.");
-        return false;
-      }
-
-      if (realtimeConnectionState !== "connected") {
-        setToast("Realtime is not connected; message was not delivered. Polling fallback is still active.");
-        return false;
-      }
-
-      if (!sendRealtimeDirectMessage(targetUserId, text)) {
-        setToast("Realtime is not ready; message was not delivered.");
-        return false;
-      }
-
-      setDirectMessages((current) => [
-        ...current,
-        {
-          id: createClientEventId("message"),
-          peerUserId: targetUserId,
-          peerDisplayName: target.displayName,
-          direction: "sent",
-          text: text.trim().slice(0, 500),
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-      setToast(`Message sent to ${target.displayName}.`);
-      return true;
-    },
-    [realtimeConnectionState, sendRealtimeDirectMessage],
-  );
-
-  const openContactLauncher = useCallback(
-    async (target: ContactTarget, launcher: "teams" | "outlook") => {
-      const label = launcher === "teams" ? "Teams" : "Outlook";
-
-      if (!officeData.apiOptions?.token || !UUID_PATTERN.test(target.userId)) {
-        setToast(`${label} needs a backend teammate email. Open an API-backed teammate from People.`);
-        return;
-      }
-
-      const result = await getContactLinks(target.userId, officeData.apiOptions);
-
-      if (!result.ok) {
-        setToast(`${label} contact link is unavailable for ${target.displayName}.`);
-        return;
-      }
-
-      const href = getContactLauncherHref(result.data, launcher);
-
-      if (!href) {
-        setToast(`${label} is unavailable because ${target.displayName} has no email contact link.`);
-        return;
-      }
-
-      launchContactHref(href, launcher);
-      setToast(`Opening ${label} for ${target.displayName}.`);
-    },
-    [officeData.apiOptions],
-  );
 
   const peopleInDestination = (destination: OfficeDestination) =>
     officePeople.filter((remote) => destination.bounds && remote.x >= destination.bounds.x && remote.x <= destination.bounds.x + destination.bounds.width && remote.y >= destination.bounds.y && remote.y <= destination.bounds.y + destination.bounds.height).length;
@@ -1184,20 +1075,14 @@ export function OfficeMap() {
           currentUser={player}
           presenceSource={officeData.source}
           destinations={officeNavigation}
-          messages={directMessages}
-          notices={officeNotices}
-          selectedChatUserId={selectedChatUserId}
           onClose={() => setActivePanel(null)}
           onSelectPerson={handleSelectRemote}
           onGoToPerson={goToRemotePlayer}
+          onWaveToPerson={waveToRemote}
+          onOpenTeams={openTeamsLauncher}
+          onOpenEmail={openEmailLauncher}
           onGoToDestination={goToDestination}
           onOpenPanel={setActivePanel}
-          onStartChat={startDirectChat}
-          onWaveToPerson={waveToTarget}
-          onOpenTeams={(target) => void openContactLauncher(target, "teams")}
-          onOpenOutlook={(target) => void openContactLauncher(target, "outlook")}
-          onSelectChatTarget={setSelectedChatUserId}
-          onSendDirectMessage={sendDirectMessageToTarget}
           toast={setToast}
         />
 
@@ -1247,14 +1132,7 @@ export function OfficeMap() {
           onSearch={() => setCommandOpen(true)}
           onOpenChat={() => setActivePanel("chat")}
           onOpenCalendar={() => setActivePanel("calendar")}
-          onWave={() => {
-            const target = contactTarget ?? nearbyTarget;
-            if (target) {
-              waveToTarget(target);
-              return;
-            }
-            setToast("Move near a teammate or open People to send a wave.");
-          }}
+          onWave={() => setToast("You waved to nearby teammates.")}
           onEmoji={() => setToast("Emoji reactions are local feedback in this MVP.")}
           onToast={setToast}
         />
@@ -1269,16 +1147,18 @@ export function OfficeMap() {
               if (remote) goToRemotePlayer(remote);
             }}
             onOpenChat={() => {
-              startDirectChat(drawerTarget);
+              setActivePanel("chat");
+              setToast(`Opening quick message with ${drawerTarget.displayName}`);
             }}
-            onWave={() => waveToTarget(drawerTarget)}
-            onOpenTeams={() => void openContactLauncher(drawerTarget, "teams")}
-            onOpenOutlook={() => void openContactLauncher(drawerTarget, "outlook")}
             onSchedule={() => {
               setActivePanel("calendar");
               setToast(`Scheduling with ${drawerTarget.displayName}`);
             }}
             onViewProfile={() => router.push(`/employees/${remoteProfileRouteIds[drawerTarget.userId] ?? drawerTarget.userId}`)}
+            onWave={() => waveToRemote(drawerTarget)}
+            onSendMessage={(message) => sendQuickMessage(drawerTarget, message)}
+            onOpenTeams={() => openTeamsLauncher(drawerTarget)}
+            onOpenEmail={() => openEmailLauncher(drawerTarget)}
             onActionNote={setToast}
           />
         ) : null}
@@ -1319,6 +1199,60 @@ export function OfficeMap() {
       </VirtualOfficeShell>
     </main>
   );
+}
+
+async function openContactLauncher(
+  target: ContactTarget,
+  provider: "teams" | "email",
+  apiOptions: ReturnType<typeof useVirtualOfficeData>["apiOptions"],
+  showToast: (message: string) => void,
+) {
+  if (!apiOptions) {
+    showToast("Contact links require an authenticated WorkMap API session.");
+    return;
+  }
+
+  const result = await getContactLinks(target.userId, apiOptions);
+
+  if (!result.ok) {
+    showToast(`Could not load contact links for ${target.displayName}.`);
+    return;
+  }
+
+  const href = provider === "teams" ? getTeamsHref(result.data) : getEmailHref(result.data);
+
+  if (!href) {
+    showToast(`${provider === "teams" ? "Teams" : "Email"} link is not configured for ${target.displayName}.`);
+    return;
+  }
+
+  if (provider === "email") {
+    window.location.href = href;
+  } else {
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+
+  showToast(`${provider === "teams" ? "Teams" : "Email"} launcher opened for ${target.displayName}.`);
+}
+
+function getTeamsHref(links: WorkMapApiContactLinks) {
+  return links.teamsChatUrl ?? readContactLinkHref(links.teams);
+}
+
+function getEmailHref(links: WorkMapApiContactLinks) {
+  return links.outlookMailtoUrl ?? links.email ?? readContactLinkHref(links.outlook);
+}
+
+function readContactLinkHref(value: WorkMapApiContactLinks["teams"] | WorkMapApiContactLinks["outlook"]) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value?.enabled === false) {
+    return undefined;
+  }
+
+  return value?.href;
 }
 
 function parseTmx(xml: string, layerOrder: string[]): ParsedMap {
@@ -2333,39 +2267,6 @@ function createSeededRandom(seed: string) {
     value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function getContactLauncherHref(links: WorkMapApiContactLinks, launcher: "teams" | "outlook") {
-  if (launcher === "teams") {
-    return readContactActionHref(links.teams) ?? links.teamsChatUrl ?? null;
-  }
-
-  return readContactActionHref(links.outlook) ?? links.outlookMailtoUrl ?? links.email ?? null;
-}
-
-function readContactActionHref(action: WorkMapApiContactLinks["teams"] | WorkMapApiContactLinks["outlook"]) {
-  if (!action) {
-    return null;
-  }
-
-  if (typeof action === "string") {
-    return action;
-  }
-
-  return action.enabled && action.href ? action.href : null;
-}
-
-function launchContactHref(href: string, launcher: "teams" | "outlook") {
-  if (launcher === "outlook" || href.startsWith("mailto:")) {
-    window.location.href = href;
-    return;
-  }
-
-  window.open(href, "_blank", "noopener,noreferrer");
-}
-
-function createClientEventId(prefix: string) {
-  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
 
 const styles = {

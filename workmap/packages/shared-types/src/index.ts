@@ -537,15 +537,6 @@ export type VirtualOfficeRealtimeMovePayload = {
   roomId?: string;
 };
 
-export type VirtualOfficeRealtimeWavePayload = {
-  targetUserId: string;
-};
-
-export type VirtualOfficeRealtimeDirectMessagePayload = {
-  targetUserId: string;
-  text: string;
-};
-
 export type VirtualOfficeRealtimePlayerState = VirtualOfficeRealtimeMovePayload & {
   userId: string;
   displayName: string;
@@ -564,19 +555,24 @@ export type VirtualOfficeRealtimePresenceUser = {
   updatedAt: string;
 };
 
-export type VirtualOfficeRealtimeInteractionPayload = {
-  id: string;
-  officeMapId: string;
+export type VirtualOfficeRealtimeTeammateWavePayload = {
+  targetUserId: string;
+};
+
+export type VirtualOfficeRealtimeTeammateMessagePayload = {
+  targetUserId: string;
+  message: string;
+};
+
+export type VirtualOfficeRealtimeTeammateEventPayload = {
   fromUserId: string;
   fromDisplayName: string;
-  fromAvatarId: string;
-  fromRole: string;
   targetUserId: string;
   createdAt: string;
 };
 
-export type VirtualOfficeRealtimeDirectMessageEventPayload = VirtualOfficeRealtimeInteractionPayload & {
-  text: string;
+export type VirtualOfficeRealtimeTeammateMessageEventPayload = VirtualOfficeRealtimeTeammateEventPayload & {
+  message: string;
 };
 
 export type VirtualOfficeRealtimeClientEvent =
@@ -594,11 +590,11 @@ export type VirtualOfficeRealtimeClientEvent =
     }
   | {
       event: "teammate:wave";
-      payload: VirtualOfficeRealtimeWavePayload;
+      payload: VirtualOfficeRealtimeTeammateWavePayload;
     }
   | {
       event: "teammate:message";
-      payload: VirtualOfficeRealtimeDirectMessagePayload;
+      payload: VirtualOfficeRealtimeTeammateMessagePayload;
     };
 
 export type VirtualOfficeRealtimeServerEvent =
@@ -614,16 +610,16 @@ export type VirtualOfficeRealtimeServerEvent =
       };
     }
   | {
-      event: "teammate:wave";
-      payload: VirtualOfficeRealtimeInteractionPayload;
-    }
-  | {
-      event: "teammate:message";
-      payload: VirtualOfficeRealtimeDirectMessageEventPayload;
-    }
-  | {
       event: "office:error";
       payload: {
         message: string;
       };
+    }
+  | {
+      event: "teammate:wave";
+      payload: VirtualOfficeRealtimeTeammateEventPayload;
+    }
+  | {
+      event: "teammate:message";
+      payload: VirtualOfficeRealtimeTeammateMessageEventPayload;
     };

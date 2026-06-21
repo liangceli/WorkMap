@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "tsc --watch --noEmit",
-    "build": "tsc",
+    "build": "tsc && node scripts/build-alpha.mjs",
     "lint": "eslint .",
-    "test": "tsx test/domain-tracking.test.ts",
+    "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

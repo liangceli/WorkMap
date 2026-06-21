@@ -1,9 +1,17 @@
 # Current Status
 
-Last updated: 2026-06-13.
+Last updated: 2026-06-17.
 
 ## Latest Accepted Work
 
+- WorkMap Alpha Online Deployment Smoke with Cognito reconciliation on 2026-06-17 is blocked on external deployment configuration, not code changes.
+- The corrected deployment smoke target is the current WorkMap Cognito path: `@workmap/web`, `@workmap/api`, Cognito Hosted UI/JWT verification, pilot Bearer auth, development dev-token fallback, and platform-admin Cognito allowlists.
+- Real online smoke still requires user-owned setup in Cognito, Vercel, Render, Supabase/Postgres, exact CORS origins, and deployed public frontend/API URLs. Do not store or paste real secrets in docs/chat.
+- Do not claim alpha online smoke passed until `pnpm smoke:alpha` runs against deployed origins and manual Cognito owner/employee invite/virtual-office/reports/compliance smoke passes.
+- Post-Round local Virtual Office map/performance stabilization was accepted by user manual QA on 2026-06-17.
+- Accepted behavior includes smoother local avatar/map interaction, corrected visible map tile/artifact issues from the recent map pass, and minimum mouse-wheel zoom that keeps the map covering the full viewport without blurring the map.
+- Local development convention for this accepted round used WorkMap web on `http://localhost:3002` and API on `http://localhost:3001`; do not assume WorkMap owns `3000` in the user's current machine state.
+- The next recommended product task is STAGE 4 Virtual Office Alpha Interaction Pass: improve click-to-move reliability, desk/room/area feedback, proximity interaction entry points, and presence/status consistency while preserving the accepted map clarity/performance.
 - Commit `9815b7a` (`feat: productize dashboard reports and compliance`) completed STAGE 3 Round 5: Alpha Pilot Packaging + User-Facing Readiness Pack.
 - This was docs-only and added `docs/alpha-pilot/` as the operator/user-facing packet for a controlled 5-person alpha pilot.
 - The pack includes Owner and Employee quick-start guides, a privacy/compliance one-pager, known limitations, a before-pilot smoke checklist, pilot feedback template, and bug report template.
@@ -246,6 +254,8 @@ Last updated: 2026-06-13.
 
 ## Recommended Next Tasks
 
+- Start STAGE 4 Virtual Office Alpha Interaction Pass after preserving the accepted map baseline: click-to-move reliability, desk/room/area feedback, proximity action entry points, and map/status presence consistency.
+- Keep current map clarity, zoom-cover behavior, and avatar movement performance as regression criteria for every virtual-office interaction change.
 - Run STAGE 3 Round 4 manual QA: Owner Dashboard, Employee Dashboard, Owner Reports, Employee Reports, Reports no-data state, Reports example labels, Compliance transparency policy, collected/not-collected lists, acknowledgement flow, alpha limitation copy, and Platform Admin privacy boundary copy.
 - Review every `docs/alpha-pilot/*` file before inviting pilot users, then complete `docs/alpha-pilot/before-pilot-smoke-checklist.md` in the deployed environment.
 - Refresh `docs/ai-handoff/latest-qa.md` for STAGE 3 Round 5 so the QA handoff matches the latest implementation and commit.

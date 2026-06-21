@@ -1,46 +1,31 @@
 # Director Update
 
-## 1. Completed Task
+## Stage 4 Development Status
 
-STAGE 3 Round 5 Alpha Pilot Packaging + User-Facing Readiness Pack was completed and accepted in commit `9815b7a` (`feat: productize dashboard reports and compliance`).
+The final pure development scope is complete locally as of 2026-06-18.
 
-## 2. Accepted Changes
+Users can now create a short-lived one-time pairing code in authenticated WorkMap, pair either a Windows Desktop Agent or MV3 Browser Extension without embedding a Cognito token, collect privacy-minimised app/domain duration, survive bounded offline periods, retry safely without double-counting, view the data through Employee/Owner reports, and revoke a device credential.
 
-- Added `docs/alpha-pilot/` as the controlled 5-person alpha pilot packet.
-- Added Owner and Employee quick-start guides.
-- Added a privacy/compliance one-pager grounded in current collected/not-collected data boundaries.
-- Added known limitations for scaffolded clients, sparse activity data, in-memory realtime, copy/share invite links, placeholder integrations/workflows, read-only Platform Admin, and future identity/membership architecture.
-- Added a 30-item before-pilot smoke checklist for deployed alpha readiness.
-- Added pilot feedback and bug report templates.
-- No runtime application behavior changed.
+Delivered:
 
-## 3. Verification Summary
+- Real Windows foreground process, idle, and lock adapter using User32 P/Invoke.
+- Tested app tracking state machine and shutdown flush.
+- Real MV3 tab/window-focus/idle service worker with storage and alarms recovery.
+- Tenant/user/device/client-bound hash-only credentials and revoke closure.
+- Persistent capped queues, retry backoff, auth-expired states, and stable event identity.
+- Runnable Windows Alpha directory and Chrome/Edge load-unpacked directory.
+- Automated unit, package, migration, tracking/report, RBAC, revoke, and Virtual Office regression verification.
 
-- Implementation handoff reports `git diff --check` passed with only LF-to-CRLF warning noise.
-- Secret scan passed in the reported scope; `.env` and `.env.*` were excluded and were not read.
-- Trailing-whitespace scan passed over `docs/alpha-pilot/*` and `docs/ai-handoff/latest-implementation.md`.
-- Web/API typecheck, lint, build, Prisma, and browser QA were not run because this was docs-only.
-- Current `docs/ai-handoff/latest-qa.md` still describes STAGE 3 Round 4, so it does not provide Round 5 QA evidence.
+The existing public route smoke previously passed and is not blocked. No public deployment was changed in this round.
 
-## 4. Remaining Risks
+## Boundaries Preserved
 
-- The readiness pack is documentation only; it does not enforce product behavior.
-- Before inviting pilot users, the deployed environment still needs the full `docs/alpha-pilot/before-pilot-smoke-checklist.md` run.
-- Round 5 needs a refreshed QA handoff if the team wants `latest-qa.md` to match the latest implementation and commit.
-- Docs must be updated if auth, invite, activity, reporting, compliance, realtime, or Platform Admin behavior changes.
+- Cognito/current WorkMap auth remains in place.
+- No Clerk was added.
+- No 3CX implementation was added.
+- No screenshot, recording, title, full URL, path/query/fragment, page body, form, password, keystroke, clipboard, camera, microphone, email, Teams, or private-message collection was added.
+- Platform Admin and tenant/RBAC privacy boundaries remain intact.
 
-## 5. Updated Docs
+## Remaining Work
 
-- `docs/skills/current-status.md`
-- `docs/skills/deployment-skill.md`
-- `docs/skills/qa-skill.md`
-- `docs/skills/ui-ux-skill.md`
-- `docs/skills/project-summary.md`
-- `docs/ai-handoff/director-update.md`
-
-## 6. Recommended Next Tasks
-
-- Refresh `docs/ai-handoff/latest-qa.md` for STAGE 3 Round 5.
-- Review every `docs/alpha-pilot/*` file for product accuracy and pilot-facing tone.
-- Run the full before-pilot smoke checklist in the deployed Vercel/Render/Supabase/Cognito environment.
-- Keep pilot docs aligned with privacy boundaries and avoid implying production desktop/browser tracking, hidden monitoring, real email delivery, or production integrations.
+Deferred by user, pending final consolidated manual QA. After that single QA pass, fix discovered defects and perform final deployment/online acceptance. These are not reported as passed yet.

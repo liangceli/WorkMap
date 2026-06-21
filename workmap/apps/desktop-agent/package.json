@@ -2,11 +2,12 @@
   "name": "@workmap/desktop-agent",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "tsc --watch --noEmit",
-    "build": "tsc",
+    "build": "tsc && node scripts/build-alpha.mjs",
     "lint": "eslint .",
-    "test": "tsx test/agent-harness.test.ts",
+    "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

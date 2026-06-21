@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ContactTarget } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { OfficeIcon } from "./OfficeIcons";
@@ -10,11 +11,12 @@ type InteractionDrawerProps = {
   onClose: () => void;
   onGoTo?: () => void;
   onOpenChat?: () => void;
-  onWave?: () => void;
-  onOpenTeams?: () => void;
-  onOpenOutlook?: () => void;
   onSchedule?: () => void;
   onViewProfile?: () => void;
+  onWave?: () => void;
+  onSendMessage?: (message: string) => boolean;
+  onOpenTeams?: () => void;
+  onOpenEmail?: () => void;
   onActionNote?: (message: string) => void;
 };
 
@@ -23,15 +25,30 @@ export function InteractionDrawer({
   onClose,
   onGoTo,
   onOpenChat,
-  onWave,
-  onOpenTeams,
-  onOpenOutlook,
   onSchedule,
   onViewProfile,
+  onWave,
+  onSendMessage,
+  onOpenTeams,
+  onOpenEmail,
   onActionNote,
 }: InteractionDrawerProps) {
+  const [messageText, setMessageText] = useState("");
   const firstName = target.displayName.split(" ")[0] ?? target.displayName;
   const guidance = getGuidance(target.status, firstName);
+  const callDisabled = true;
+
+  const submitMessage = () => {
+    const text = messageText.trim();
+
+    if (!text) {
+      return;
+    }
+
+    if (onSendMessage?.(text)) {
+      setMessageText("");
+    }
+  };
 
   const handleAction = (action: string) => {
     if (action === "Message" && onOpenChat) {
@@ -59,11 +76,11 @@ export function InteractionDrawer({
       return;
     }
     if (action === "Outlook") {
-      onOpenOutlook?.();
+      onOpenEmail?.();
       return;
     }
     if (action === "3CX") {
-      onActionNote?.("3CX calling is coming later.");
+      onActionNote?.("3CX calling is coming later and is disabled in this alpha.");
       return;
     }
 
@@ -94,7 +111,25 @@ export function InteractionDrawer({
         <p style={styles.kicker}>People here</p>
         <h3 style={styles.greeting}>{guidance.title}</h3>
         <p style={styles.subtext}>{guidance.text}</p>
-        <p style={styles.integrationNote}>Teams and Outlook use company contact links when an email is available. 3CX is coming later.</p>
+        <div style={styles.composer}>
+          <input
+            value={messageText}
+            onChange={(event) => setMessageText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitMessage();
+              }
+            }}
+            maxLength={500}
+            placeholder={`Message ${firstName}`}
+            style={styles.input}
+          />
+          <button type="button" onClick={submitMessage} style={styles.sendButton}>
+            Send
+          </button>
+        </div>
+        <p style={styles.integrationNote}>Messages and waves deliver only to teammates currently connected to this office. WorkMap does not read Teams or email content.</p>
       </div>
 
       <div style={styles.actions}>
@@ -111,10 +146,10 @@ export function InteractionDrawer({
           Teams
         </button>
         <button style={styles.actionButton} onClick={() => handleAction("Outlook")} type="button">
-          Outlook
+          Email
         </button>
-        <button style={{ ...styles.actionButton, ...styles.actionButtonDisabled }} disabled onClick={() => handleAction("3CX")} type="button">
-          3CX later
+        <button style={{ ...styles.actionButton, ...(callDisabled ? styles.actionButtonDisabled : {}) }} disabled={callDisabled} onClick={() => handleAction("3CX")} type="button">
+          3CX Call
         </button>
         <button style={styles.actionButton} onClick={() => handleAction("View profile")} type="button">
           View profile
@@ -285,6 +320,25 @@ const styles = {
     fontSize: "12px",
     lineHeight: 1.4,
     fontWeight: 750,
+  },
+  composer: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: "8px",
+    marginTop: "12px",
+  },
+  input: {
+    ...wmStyles.input,
+    minHeight: "42px",
+    borderRadius: "12px",
+    fontSize: "13px",
+  },
+  sendButton: {
+    ...wmStyles.primaryButton,
+    minHeight: "42px",
+    borderRadius: "12px",
+    padding: "0 14px",
+    fontSize: "13px",
   },
   actions: {
     display: "grid",
