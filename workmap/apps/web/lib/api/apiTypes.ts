@@ -114,6 +114,18 @@ export type WorkMapApiInvitationList = {
   invitations: WorkMapApiInvitation[];
 };
 
+export type WorkMapApiInvitationPreview = {
+  invitedEmail: string;
+  role: string;
+  status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
+  company: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  expiresAt: string;
+};
+
 export type WorkMapApiOfficeRoom = {
   id: string;
   name: string;

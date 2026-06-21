@@ -142,15 +142,19 @@ export function getCognitoApiAuthOptions():
   };
 }
 
-export async function startCognitoSignIn() {
-  await startCognitoAuth("authorize");
+type StartCognitoAuthOptions = {
+  loginHint?: string;
+};
+
+export async function startCognitoSignIn(options: StartCognitoAuthOptions = {}) {
+  await startCognitoAuth("authorize", options);
 }
 
-export async function startCognitoSignUp() {
-  await startCognitoAuth("signup");
+export async function startCognitoSignUp(options: StartCognitoAuthOptions = {}) {
+  await startCognitoAuth("signup", options);
 }
 
-async function startCognitoAuth(entry: "authorize" | "signup") {
+async function startCognitoAuth(entry: "authorize" | "signup", options: StartCognitoAuthOptions) {
   const status = getCognitoConfigStatus();
 
   if (!status.configured) {
@@ -170,6 +174,11 @@ async function startCognitoAuth(entry: "authorize" | "signup") {
     scope: status.config.scope,
     state: transaction.state,
   });
+  const loginHint = options.loginHint?.trim().toLowerCase();
+
+  if (loginHint) {
+    params.set("login_hint", loginHint);
+  }
 
   window.location.assign(`${status.config.domain}/${entry === "signup" ? "signup" : "oauth2/authorize"}?${params.toString()}`);
 }

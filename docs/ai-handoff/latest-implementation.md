@@ -2,80 +2,60 @@
 
 ## Original Task Brief
 
-Optimize the app entry flow for the formal version: Owner-first Cognito sign-up/sign-in, Owner workspace creation and invitations, invited Employee Cognito sign-up before workspace access, remove local login paths, remove virtual NPCs, remove visible demo/test messages, improve the sign-in/sign-up interface, and verify Virtual Office interaction plus app/domain tracking readiness without overclaiming production status.
+Continue optimizing the invite flow so an Employee who opens an Owner-generated invitation signs up with the original invited email address, instead of freely choosing a different email and entering the workspace.
 
 ## Changed Files
 
-- `workmap/apps/web/app/page.tsx`
-- `workmap/apps/web/app/login/page.tsx`
-- `workmap/apps/web/app/login/callback/page.tsx`
+- `workmap/apps/api/src/modules/invitations/invitations.controller.ts`
+- `workmap/apps/api/src/modules/invitations/invitations.service.ts`
+- `workmap/apps/api/test/invitation-email-lock.test.ts`
 - `workmap/apps/web/app/invite/[token]/page.tsx`
-- `workmap/apps/web/app/onboarding/company/page.tsx`
-- `workmap/apps/web/app/virtual-office/page.tsx`
-- `workmap/apps/web/app/{employees,reports,settings,compliance}/*`
-- `workmap/apps/web/components/login/CognitoLoginPanel.tsx`
-- `workmap/apps/web/components/layout/AppShell.tsx`
-- `workmap/apps/web/components/office/*`
-- `workmap/apps/web/components/{dashboard,reports,employees,integrations,compliance}/*`
-- `workmap/apps/web/lib/api/{apiAuth,apiTypes,authApi}.ts`
+- `workmap/apps/web/lib/api/apiTypes.ts`
+- `workmap/apps/web/lib/api/invitationsApi.ts`
 - `workmap/apps/web/lib/auth/cognitoSession.ts`
-- `workmap/apps/web/lib/workflow/workflowState.ts`
-- Removed `MockLoginPanel`, `pilotSession`, and `developmentApiAuth`.
 
 ## Implementation Summary
 
-- Replaced the local/pilot login surface with a Cognito-only entry panel and formal landing copy.
-- Added Cognito Hosted UI sign-up support for Owner creation and invited Employee account creation.
-- Removed frontend development-token/pilot-session auth helpers from the active app auth path.
-- Preserved backend `/auth/me` user mapping after Cognito callback, with unmapped Owner users routed to workspace creation and invited Employees routed through invitation acceptance and onboarding.
-- Protected `/virtual-office` behind Cognito-backed WorkMap API auth instead of rendering the map for unauthenticated local state.
-- Removed default virtual NPC presence rows and default fake quick messages, meetings, and notices from the virtual office side panel.
-- Reworked dashboards, reports, employees, settings, compliance, and integration labels so visible empty states are formal and backend-backed instead of demo/test oriented.
-- Replaced sample-person avatar fallback in API-backed people views with the shared default avatar.
+- Added unauthenticated `GET /invitations/preview/:token`, using the secret invite token to return only invite metadata needed before Cognito sign-up: invited email, role, status, company, and expiry.
+- Kept the existing backend security boundary: `POST /invitations/accept` still requires Cognito-only auth and rejects any verified Cognito email that does not exactly match `Invitation.invitedEmail`.
+- Updated the invite page to load the preview before sign-up, show the invited email in a read-only field, and block the accept UI when the current Cognito session email does not match the invited email.
+- Updated Cognito Hosted UI launch helpers so invite sign-up can pass `login_hint=<invited email>`.
+- Added API test coverage for invitation preview plus wrong-email accept rejection.
 
 ## Role And Access Behavior
 
-- Owner entry starts at Cognito sign-up/sign-in, then workspace creation.
-- Employees can use invitation links, but unauthenticated invite acceptance now directs them to Cognito sign-up first.
-- App shell role/navigation no longer trusts local pilot session state; it relies on backend user summary when available.
-- Platform Admin boundaries were not expanded.
-- Local onboarding state remains only a frontend progress cache, not authentication or RBAC.
+- Owners still create invites normally.
+- Employees can see which email the invite is locked to before sign-up.
+- A wrong Cognito account cannot accept the invitation or enter the workspace.
+- Cognito Hosted UI may still visually allow editing depending on AWS Hosted UI configuration, but WorkMap backend acceptance is locked to the original invited verified email.
 
 ## Verification Commands And Results
 
+- `pnpm --filter @workmap/api typecheck`: passed.
 - `pnpm --filter @workmap/web typecheck`: passed.
+- `pnpm --filter @workmap/api lint`: passed.
+- `pnpm --filter @workmap/api build`: passed.
 - `pnpm --filter @workmap/web lint`: passed.
 - `pnpm --filter @workmap/web build`: passed, with the existing Next.js ESLint-plugin warning.
-- `pnpm --filter @workmap/api typecheck`: passed.
-- `pnpm --filter @workmap/api build`: passed.
-- `pnpm --filter @workmap/api test`: passed after elevated rerun; sandboxed Jest spawn was blocked by EPERM.
-- `pnpm --filter @workmap/desktop-agent typecheck`: passed.
-- `pnpm --filter @workmap/desktop-agent build`: passed after elevated rerun; sandbox write to `dist` was blocked by EPERM.
-- `pnpm --filter @workmap/desktop-agent test`: passed after elevated rerun; sandboxed test spawn was blocked by EPERM.
-- `pnpm --filter @workmap/browser-extension typecheck`: passed.
-- `pnpm --filter @workmap/browser-extension build`: passed.
-- `pnpm --filter @workmap/browser-extension test`: passed after elevated rerun; sandboxed test spawn was blocked by EPERM.
+- `pnpm --filter @workmap/api test`: blocked in sandbox by Windows `spawn EPERM`; elevated rerun was rejected by the environment usage-limit approval error.
 - `git diff --check`: passed with CRLF conversion warnings only.
 - Secret scan excluding env/generated/reference directories: passed.
 
 ## Manual QA
 
-No browser manual QA was completed in this round. The work was verified by local typecheck, lint, build, and automated tests.
+Not run. Real Cognito Hosted UI behavior still needs browser QA with configured AWS Cognito.
 
 ## Intentionally Not Changed
 
-- No Cognito pool/domain/client configuration was changed in external AWS resources.
-- No cloud deployment, database migration, or production secret was changed.
-- No persisted chat, real calendar integration, 3CX calling, Teams/Graph integration, or app-store/browser-store release was implemented.
-- Existing internal files with `mock` naming for local map/static scaffolding were not broadly renamed.
+- No Cognito external Hosted UI settings, user-pool attributes, app-client settings, callback URLs, or AWS resources were changed.
+- No invite email delivery, revoke/resend lifecycle, or database schema change was added.
 
 ## Remaining Risks
 
-- A real Cognito environment must be configured for the Hosted UI URLs before end-to-end sign-up can be manually accepted.
-- Virtual Office realtime messages are live-session events, not persisted inbox/chat history.
-- Teams/email launchers depend on configured backend contact links; 3CX remains disabled.
-- Desktop Agent and Browser Extension are verified by harness/tests/builds, but still need real OS/browser manual installation checks before production readiness is claimed.
+- The frontend can prefill Cognito with `login_hint`, but only AWS Cognito Hosted UI/custom UI configuration can make that input visually non-editable. WorkMap enforces the lock at accept time.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by `next build`; automatic restore was blocked because escalated `git restore` approval hit the environment usage limit.
+- The new API test is present but could not be executed due the same test-run approval limit after sandbox `spawn EPERM`.
 
 ## Suggested Next Steps
 
-Run real Cognito Hosted UI manual QA for Owner sign-up, workspace creation, invite generation, Employee sign-up via invite, Employee login, and workspace entry. Then run the deferred Desktop Agent and MV3 Extension manual installation checks.
+When command approval/usage is available, run `pnpm --filter @workmap/api test`, restore `workmap/apps/web/tsconfig.tsbuildinfo`, then manually QA the invite link with invited-email and wrong-email Cognito accounts.

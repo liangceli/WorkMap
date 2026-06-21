@@ -18,6 +18,48 @@ const INVITABLE_ROLES = new Set<UserRole>([
 export class InvitationsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async preview(tokenValue: string) {
+    const token = typeof tokenValue === "string" ? tokenValue.trim() : "";
+
+    if (token.length < 20 || token.length > 256) {
+      throw new BadRequestException("A valid invitation token is required.");
+    }
+
+    const invitation = await this.prisma.invitation.findUnique({
+      where: { tokenHash: hashInviteToken(token) },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    });
+
+    if (!invitation) {
+      throw new BadRequestException("Invitation is invalid.");
+    }
+
+    const expired = invitation.status === InvitationStatus.PENDING && invitation.expiresAt.getTime() <= Date.now();
+
+    if (expired) {
+      await this.prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { status: InvitationStatus.EXPIRED },
+      });
+    }
+
+    return {
+      invitedEmail: invitation.invitedEmail,
+      role: invitation.role,
+      status: expired ? InvitationStatus.EXPIRED : invitation.status,
+      company: invitation.company,
+      expiresAt: invitation.expiresAt.toISOString(),
+    };
+  }
+
   async list(context: RequestContext) {
     assertCanManageInvitations(context);
 

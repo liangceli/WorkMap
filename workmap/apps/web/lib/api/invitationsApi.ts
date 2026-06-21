@@ -3,6 +3,7 @@ import type {
   ApiClientOptions,
   WorkMapApiCreateInvitationResponse,
   WorkMapApiInvitationList,
+  WorkMapApiInvitationPreview,
   WorkMapApiWorkspaceContext,
 } from "./apiTypes";
 
@@ -18,6 +19,10 @@ export function createInvitation(
   options?: ApiClientOptions,
 ) {
   return workMapApiPost<WorkMapApiCreateInvitationResponse>("/invitations", body, options);
+}
+
+export function previewInvitation(token: string) {
+  return workMapApiGet<WorkMapApiInvitationPreview>(`/invitations/preview/${encodeURIComponent(token)}`);
 }
 
 export function acceptInvitation(body: { token: string; displayName: string }, options?: ApiClientOptions) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import type { CognitoJwtPayload, RequestContext } from "@workmap/auth";
 import { CognitoOnlyGuard } from "../auth/cognito-only.guard.js";
 import { CurrentCognito } from "../auth/current-cognito.decorator.js";
@@ -11,6 +11,11 @@ import { InvitationsService } from "./invitations.service.js";
 @Controller("invitations")
 export class InvitationsController {
   constructor(private readonly invitations: InvitationsService) {}
+
+  @Get("preview/:token")
+  preview(@Param("token") token: string) {
+    return this.invitations.preview(token);
+  }
 
   @Get()
   @UseGuards(RequestContextGuard, RolesGuard)
