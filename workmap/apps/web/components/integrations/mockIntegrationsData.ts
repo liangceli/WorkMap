@@ -1,4 +1,4 @@
-export type IntegrationStatus = "ready" | "mock" | "needs_setup";
+export type IntegrationStatus = "ready" | "link_launcher" | "needs_setup";
 
 export type IntegrationItem = {
   id: string;
@@ -19,7 +19,7 @@ export const integrationItems: IntegrationItem[] = [
     description: "Open a teammate chat from WorkMap contact actions.",
     actionLabel: "Open Teams link",
     href: "https://teams.microsoft.com/l/chat/0/0",
-    status: "mock",
+    status: "link_launcher",
     privacyNote: "Link-based only. No Microsoft Graph permissions are requested in this MVP.",
   },
   {
@@ -39,7 +39,7 @@ export const integrationItems: IntegrationItem[] = [
     description: "Prepare meeting scheduling entry points for teammate contact cards.",
     actionLabel: "Open calendar",
     href: "https://outlook.office.com/calendar/",
-    status: "mock",
+    status: "link_launcher",
     privacyNote: "No calendar read/write API access is enabled yet.",
   },
   {

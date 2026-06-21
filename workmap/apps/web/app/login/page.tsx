@@ -1,4 +1,4 @@
-import { MockLoginPanel } from "../../components/login/MockLoginPanel";
+import { CognitoLoginPanel } from "../../components/login/CognitoLoginPanel";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 export default function LoginPage() {
@@ -7,16 +7,16 @@ export default function LoginPage() {
       <section style={styles.shell}>
         <div style={styles.copy}>
           <p style={styles.eyebrow}>WorkMap</p>
-          <h1 style={styles.title}>Transparent work visibility for hybrid teams</h1>
+          <h1 style={styles.title}>Start with an Owner workspace, then invite your team</h1>
           <p style={styles.subtitle}>
-            Sign in to a workspace where presence, contact actions, activity summaries, and compliance boundaries stay understandable.
+            WorkMap uses Cognito for sign-up and sign-in. New teams begin with an Owner account; employees join only from an invitation link.
           </p>
           <div style={styles.privacyBox}>
             <strong>Privacy boundary</strong>
-            <span>No keystrokes, screenshots, camera, microphone, message content, email body, or full URLs by default.</span>
+            <span>No keystrokes, screenshots, recordings, camera, microphone, message or email body, webpage body, form inputs, passwords, or full URL paths.</span>
           </div>
         </div>
-        <MockLoginPanel />
+        <CognitoLoginPanel />
       </section>
     </main>
   );

@@ -27,13 +27,6 @@ export type WorkMapApiUser = {
   contactOnly?: boolean;
 };
 
-export type WorkMapApiDevelopmentToken = {
-  accessToken: string;
-  tokenType: "Bearer";
-  expiresAt: string;
-  user: WorkMapApiAuthUser;
-};
-
 export type WorkMapApiAuthUser = {
   id: string;
   companyId: string;
@@ -64,13 +57,6 @@ export type WorkMapApiPlatformContext = {
     displayName: string;
   };
   source: "cognito";
-};
-
-export type WorkMapApiPilotSession = {
-  accessToken: string;
-  tokenType: "Bearer";
-  expiresAt: string;
-  user: WorkMapApiAuthUser;
 };
 
 export type WorkMapApiWorkspaceContext = {

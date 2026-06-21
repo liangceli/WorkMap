@@ -11,7 +11,7 @@ export type UserSetupState = {
 
 export const USER_SETUP_STORAGE_KEY = "workmap.userSetupState";
 
-// Frontend-only demo workflow state. This is not authentication, authorization, or backend RBAC.
+// Frontend-only onboarding progress. Authentication, authorization, and RBAC come from Cognito and the backend API.
 export function getUserSetupState(): UserSetupState | null {
   if (typeof window === "undefined") {
     return null;

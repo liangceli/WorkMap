@@ -7,13 +7,13 @@ type IntegrationButtonProps = {
 
 const statusLabels: Record<IntegrationStatus, string> = {
   ready: "Ready",
-  mock: "Mock link",
+  link_launcher: "Link launcher",
   needs_setup: "Needs setup",
 };
 
 const statusColors: Record<IntegrationStatus, { color: string; background: string; border: string }> = {
   ready: { color: wm.colors.success, background: wm.colors.successBg, border: wm.colors.successBorder },
-  mock: { color: wm.colors.infoText, background: wm.colors.infoBg, border: wm.colors.infoBorder },
+  link_launcher: { color: wm.colors.infoText, background: wm.colors.infoBg, border: wm.colors.infoBorder },
   needs_setup: { color: wm.colors.warning, background: wm.colors.warningBg, border: wm.colors.warningBorder },
 };
 

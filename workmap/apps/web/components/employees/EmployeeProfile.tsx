@@ -61,7 +61,7 @@ export function EmployeeProfile({ employee, teammates }: EmployeeProfileProps) {
           </div>
           <p style={styles.modeText}>
             {mode === "manager"
-              ? "Manager summaries are mock data until backend RBAC APIs exist."
+              ? "Manager summaries require backend RBAC and real report rows."
               : "Employee view only shows contact, role, status, and local time."}
           </p>
         </div>
@@ -122,8 +122,8 @@ export function EmployeeProfile({ employee, teammates }: EmployeeProfileProps) {
                 <p style={styles.bodyText}>Name, role, department, presence status, local time, and contact actions.</p>
               </div>
               <div>
-                <h3 style={styles.smallTitle}>Manager-only mock summary</h3>
-                <p style={styles.bodyText}>Active time, idle time, app summary, and domain summary. Real data requires backend RBAC.</p>
+                <h3 style={styles.smallTitle}>Manager-only summary</h3>
+                <p style={styles.bodyText}>Active time, idle time, app summary, and domain summary require backend RBAC and real activity rows.</p>
               </div>
             </div>
           </section>
@@ -135,7 +135,7 @@ export function EmployeeProfile({ employee, teammates }: EmployeeProfileProps) {
             <h2 style={styles.panelTitle}>Same department</h2>
             <div style={styles.teammateList}>
               {teammates.length === 0 ? (
-                <p style={styles.bodyText}>No other teammates in this mock department.</p>
+                <p style={styles.bodyText}>No other teammates are available in this view.</p>
               ) : (
                 teammates.map((teammate) => (
                   <a key={teammate.id} href={`/employees/${teammate.id}`} style={styles.teammateLink}>

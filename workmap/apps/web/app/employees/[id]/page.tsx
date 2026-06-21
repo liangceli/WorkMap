@@ -1,44 +1,35 @@
-import { notFound } from "next/navigation";
-import { EmployeeProfile } from "../../../components/employees/EmployeeProfile";
 import { AppShell } from "../../../components/layout/AppShell";
-import { employeeDirectoryRows } from "../../../lib/mock/mockPeople";
+import { WorkMapButton } from "../../../components/ui/WorkMapButton";
+import { WorkMapPageHeader } from "../../../components/ui/WorkMapPageHeader";
+import { WorkMapPrivacyNotice } from "../../../components/ui/WorkMapPrivacyNotice";
+import { wmStyles } from "../../../lib/theme/workmapTheme";
 
-type EmployeeDetailPageProps = {
-  params: Promise<{
-    id: string;
-  }>;
-};
-
-export function generateStaticParams() {
-  return employeeDirectoryRows.map((employee) => ({
-    id: employee.id,
-  }));
-}
-
-export async function generateMetadata({ params }: EmployeeDetailPageProps) {
-  const { id } = await params;
-  const employee = employeeDirectoryRows.find((candidate) => candidate.id === id);
-
-  return {
-    title: employee ? `${employee.name} | WorkMap` : "Employee | WorkMap",
-  };
-}
-
-export default async function EmployeeDetailPage({ params }: EmployeeDetailPageProps) {
-  const { id } = await params;
-  const employee = employeeDirectoryRows.find((candidate) => candidate.id === id);
-
-  if (!employee) {
-    notFound();
-  }
-
-  const teammates = employeeDirectoryRows.filter(
-    (candidate) => candidate.department === employee.department && candidate.id !== employee.id,
-  );
-
+export default function EmployeeDetailPage() {
   return (
     <AppShell>
-      <EmployeeProfile employee={employee} teammates={teammates} />
+      <section style={styles.shell}>
+        <WorkMapPageHeader
+          eyebrow="People directory"
+          title="Employee profile"
+          subtitle="Employee detail pages require backend-backed profile data before they can show role-scoped summaries."
+          actions={
+            <>
+              <WorkMapButton href="/employees">Employees</WorkMapButton>
+              <WorkMapButton href="/virtual-office" tone="primary">Open office</WorkMapButton>
+            </>
+          }
+        />
+        <WorkMapPrivacyNotice title="Profile detail unavailable">
+          This route no longer displays placeholder employee profiles. Use the directory and virtual-office contact drawer until the
+          backend profile-detail view is connected for the signed-in workspace role.
+        </WorkMapPrivacyNotice>
+      </section>
     </AppShell>
   );
 }
+
+const styles = {
+  shell: {
+    ...wmStyles.pageStack,
+  },
+};

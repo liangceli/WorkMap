@@ -47,15 +47,9 @@ export function OfficeSidePanel({
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [chatTarget, setChatTarget] = useState("general");
-  const [messages, setMessages] = useState([
-    { channel: "general", text: "Welcome to WorkMap quick messages." },
-    { channel: "announcements", text: "Policy acknowledgement completed." },
-  ]);
+  const [messages, setMessages] = useState<Array<{ channel: string; text: string }>>([]);
   const [messageText, setMessageText] = useState("");
-  const [meetings, setMeetings] = useState([
-    { title: "Product sync", time: "10:30", room: "Main Meeting Room", attendees: "Mia, Ethan, Sofia" },
-    { title: "Support handoff", time: "14:00", room: "IT Support", attendees: "Ava, Ethan" },
-  ]);
+  const meetings: Array<{ title: string; time: string; room: string; attendees: string }> = [];
   const presenceSummary = useMemo(() => summarizePresence(people), [people]);
   const roomNameById = useMemo(() => createRoomNameMap(destinations), [destinations]);
 
@@ -219,9 +213,13 @@ export function OfficeSidePanel({
               ))}
             </select>
             <div style={styles.messageList}>
-              {messages.filter((message) => message.channel === chatTarget).map((message, index) => (
-                <p key={`${message.channel}-${index}`} style={styles.message}>{message.text}</p>
-              ))}
+              {messages.filter((message) => message.channel === chatTarget).length > 0 ? (
+                messages.filter((message) => message.channel === chatTarget).map((message, index) => (
+                  <p key={`${message.channel}-${index}`} style={styles.message}>{message.text}</p>
+                ))
+              ) : (
+                <p style={styles.emptyText}>No messages in this local channel.</p>
+              )}
             </div>
             <div style={styles.composer}>
               <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Add local note" style={styles.input} />
@@ -236,11 +234,11 @@ export function OfficeSidePanel({
             <button
               type="button"
               style={styles.primaryButton}
-              onClick={() => setMeetings((current) => [...current, { title: "New WorkMap meeting", time: "15:30", room: "Focus Room", attendees: "Selected teammates" }])}
+              onClick={() => toast("Calendar scheduling requires a connected calendar integration.")}
             >
               Schedule meeting
             </button>
-            {meetings.map((meeting) => (
+            {meetings.length === 0 ? <p style={styles.emptyText}>No calendar items are connected yet.</p> : meetings.map((meeting) => (
               <article key={`${meeting.title}-${meeting.time}`} style={styles.roomCard}>
                 <h3 style={styles.cardTitle}>{meeting.title}</h3>
                 <p style={styles.cardText}>{meeting.time} / {meeting.room}</p>
@@ -265,17 +263,7 @@ export function OfficeSidePanel({
 
         {activePanel === "notices" ? (
           <section style={styles.stack}>
-            {[
-              "Mia waved at you",
-              "Sofia is available",
-              "Your desk is ready",
-              "Policy acknowledgement completed",
-              "Desktop Agent setup pending",
-              "Meeting starts in 10 minutes",
-              "Teams launcher ready",
-            ].map((notice) => (
-              <button key={notice} type="button" onClick={() => toast(notice)} style={styles.noticeRow}>{notice}</button>
-            ))}
+            <p style={styles.emptyText}>No workspace notices yet.</p>
           </section>
         ) : null}
 
@@ -370,7 +358,7 @@ function summarizePresence(people: RemoteOfficePlayer[]) {
 
 function presenceNote(source: OfficeSidePanelProps["presenceSource"], peopleCount: number) {
   if (source === "mock") {
-    return "Demo team shown while backend presence is unavailable.";
+    return "Workspace presence is unavailable until Cognito auth and backend office data are connected.";
   }
 
   if (peopleCount === 0) {
@@ -635,6 +623,17 @@ const styles = {
     padding: "10px",
     color: wm.colors.textSecondary,
     fontSize: "13px",
+  },
+  emptyText: {
+    margin: 0,
+    border: `1px dashed ${wm.colors.border}`,
+    borderRadius: "14px",
+    background: "rgba(255, 253, 248, 0.64)",
+    color: wm.colors.textMuted,
+    padding: "12px",
+    fontSize: "13px",
+    lineHeight: 1.45,
+    fontWeight: 750,
   },
   composer: {
     display: "grid",

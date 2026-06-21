@@ -10,7 +10,7 @@ import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import type { WorkMapApiUser } from "../../lib/api/apiTypes";
 import { listUsers } from "../../lib/api/usersApi";
 import { decodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
-import { employeeDirectoryRows } from "../../lib/mock/mockPeople";
+import { defaultLayeredAvatarConfig } from "../../lib/avatar/avatarLayerAssets";
 import { wmStyles } from "../../lib/theme/workmapTheme";
 import { getUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 import type { DashboardEmployee } from "../../components/dashboard/mockDashboardData";
@@ -49,8 +49,8 @@ export default function EmployeesPage() {
         setDirectoryState({
           loading: false,
           source: "fallback",
-          employees: employeeDirectoryRows,
-          statusText: `Example directory shown because API auth is unavailable: ${auth.reason}`,
+          employees: [],
+          statusText: `Sign in with Cognito to load the workspace directory. ${auth.reason}`,
         });
         return;
       }
@@ -65,8 +65,8 @@ export default function EmployeesPage() {
         setDirectoryState({
           loading: false,
           source: "fallback",
-          employees: employeeDirectoryRows,
-          statusText: `Example directory shown because GET /users failed: ${result.error}`,
+          employees: [],
+          statusText: `Workspace directory could not be loaded: ${result.error}`,
         });
         return;
       }
@@ -103,7 +103,7 @@ export default function EmployeesPage() {
           }
         />
 
-        <WorkMapPrivacyNotice title={directoryState.source === "api" ? "Backend directory" : "Example directory fallback"}>
+        <WorkMapPrivacyNotice title={directoryState.source === "api" ? "Backend directory" : "Directory unavailable"}>
           {directoryState.loading
             ? "Checking whether this browser has an authenticated WorkMap API context."
             : directoryState.statusText}
@@ -115,8 +115,7 @@ export default function EmployeesPage() {
   );
 }
 
-function toDirectoryEmployee(user: WorkMapApiUser, index: number): DashboardEmployee {
-  const fallback = employeeDirectoryRows[index % employeeDirectoryRows.length];
+function toDirectoryEmployee(user: WorkMapApiUser): DashboardEmployee {
   const status = user.status ?? "offline";
   const backendAvatar = decodeLayeredAvatarId(user.avatarId);
 
@@ -127,7 +126,7 @@ function toDirectoryEmployee(user: WorkMapApiUser, index: number): DashboardEmpl
     department: readDepartmentName(user.department),
     status,
     localTime: "Backend directory",
-    avatar: backendAvatar ?? fallback.avatar,
+    avatar: backendAvatar ?? defaultLayeredAvatarConfig,
     activeTime: "API scoped",
     idleTime: "Contact view",
     topApp: "Not shown",

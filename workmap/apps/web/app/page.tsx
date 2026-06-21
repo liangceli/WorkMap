@@ -1,120 +1,95 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  getDefaultSetupState,
-  getNextRouteForUser,
-  getUserSetupState,
-  saveUserSetupState,
-  type UserSetupState,
-  type WorkMapRole,
-} from "../lib/workflow/workflowState";
+import { getCognitoConfigStatus, getCognitoSession, startCognitoSignIn, startCognitoSignUp } from "../lib/auth/cognitoSession";
 import { wm, wmStyles } from "../lib/theme/workmapTheme";
 
-const roles: Array<{ role: WorkMapRole; title: string; description: string }> = [
-  { role: "EMPLOYEE", title: "Employee", description: "Create an avatar, acknowledge the policy, and enter the virtual office." },
-  { role: "MANAGER", title: "Manager", description: "Review team visibility, reports, and employee contact workflows." },
-  { role: "OWNER", title: "Owner", description: "Create a workspace before reviewing compliance and dashboard flows." },
-  { role: "IT_ADMIN", title: "IT Admin", description: "Explore operational setup, integrations, and admin-facing entry points." },
-];
-
-const quickLinks = [
-  ["/virtual-office", "Office"],
-  ["/dashboard", "Dashboard"],
-  ["/employees", "Employees"],
-  ["/reports", "Reports"],
-  ["/compliance", "Compliance"],
-  ["/integrations", "Integrations"],
-  ["/settings", "Settings"],
-  ["/login", "Login"],
-] as const;
-
 export default function HomePage() {
-  const router = useRouter();
-  const [setupState, setSetupState] = useState<UserSetupState | null>(null);
-  const [selectedRole, setSelectedRole] = useState<WorkMapRole>("EMPLOYEE");
+  const [configStatus, setConfigStatus] = useState<ReturnType<typeof getCognitoConfigStatus> | null>(null);
+  const [hasSession, setHasSession] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<"signup" | "signin" | null>(null);
 
   useEffect(() => {
-    setSetupState(getUserSetupState());
+    setConfigStatus(getCognitoConfigStatus());
+    setHasSession(Boolean(getCognitoSession()));
   }, []);
 
-  const startDemoFlow = () => {
-    const nextState = getDefaultSetupState(selectedRole);
-    saveUserSetupState(nextState);
-    router.push(getNextRouteForUser(nextState));
+  const beginOwnerSignup = async () => {
+    setBusyAction("signup");
+    setStatus(null);
+
+    try {
+      await startCognitoSignUp();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Cognito sign-up could not be opened.");
+      setBusyAction(null);
+    }
   };
 
-  const continueToWorkMap = () => {
-    router.push(getNextRouteForUser(setupState));
+  const beginSignin = async () => {
+    setBusyAction("signin");
+    setStatus(null);
+
+    try {
+      await startCognitoSignIn();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Cognito sign-in could not be opened.");
+      setBusyAction(null);
+    }
   };
+
+  const configured = Boolean(configStatus?.configured);
+  const missing = configStatus && !configStatus.configured ? configStatus.missing.join(", ") : "";
 
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
         <div style={styles.hero}>
           <p style={styles.eyebrow}>WorkMap</p>
-          <h1 style={styles.title}>A virtual office for presence, collaboration, and transparent work visibility.</h1>
+          <h1 style={styles.title}>Create the workspace first. Invite employees second.</h1>
           <p style={styles.subtitle}>
-            Walk the office as an avatar, contact teammates quickly, and review role-based work patterns without private content collection.
+            WorkMap starts with a Cognito Owner account. After the Owner creates the workspace, employees join from secure invitation links
+            and use Cognito for every future sign-in.
           </p>
           <section style={styles.privacyBox}>
             <strong>Transparent by design</strong>
-            <span>No keystrokes, screenshots, camera, microphone, message content, email body, passwords, or full URLs by default.</span>
+            <span>
+              App names and usage duration, browser domains and usage duration, device heartbeat, office presence, and acknowledgement
+              timestamps may be collected. Screenshots, screen recordings, keystrokes, clipboard, webcam, microphone, private messages,
+              email body, webpage body, form inputs, passwords, and full URL paths are not collected.
+            </span>
           </section>
         </div>
 
         <section style={styles.card}>
-          {setupState ? (
-            <>
-              <p style={styles.cardLabel}>Resume demo</p>
-              <h2 style={styles.cardTitle}>Continue to WorkMap</h2>
-              <p style={styles.cardText}>
-                Current demo role: <strong>{setupState.role.replace("_", " ")}</strong>. The next step is{" "}
-                <strong>{getNextRouteForUser(setupState)}</strong>.
-              </p>
-              <button type="button" onClick={continueToWorkMap} style={styles.primaryButton}>
-                Continue to WorkMap
-              </button>
-              <a href="/login" style={styles.secondaryLink}>Change demo role</a>
-            </>
-          ) : (
-            <>
-              <p style={styles.cardLabel}>Choose a demo role</p>
-              <h2 style={styles.cardTitle}>Start demo flow</h2>
-              <div style={styles.roleGrid}>
-                {roles.map((item) => (
-                  <button
-                    key={item.role}
-                    type="button"
-                    onClick={() => setSelectedRole(item.role)}
-                    style={{
-                      ...styles.roleButton,
-                      borderColor: selectedRole === item.role ? wm.colors.secondary : wm.colors.border,
-                      background: selectedRole === item.role ? wm.colors.infoBg : wm.colors.surface,
-                    }}
-                  >
-                    <strong>{item.title}</strong>
-                    <span>{item.description}</span>
-                  </button>
-                ))}
-              </div>
-              <button type="button" onClick={startDemoFlow} style={styles.primaryButton}>
-                Start demo flow
-              </button>
-            </>
-          )}
-        </section>
+          <p style={styles.cardLabel}>Official entry</p>
+          <h2 style={styles.cardTitle}>{hasSession ? "Continue your Cognito session" : "Start WorkMap"}</h2>
+          <p style={styles.cardText}>
+            New companies must begin with an Owner sign-up. Employees should use their invitation link first, then return here and sign in
+            as an existing workspace user.
+          </p>
 
-        <section style={styles.devLinks}>
-          <p style={styles.devTitle}>Developer quick links</p>
-          <div style={styles.linkRow}>
-            {quickLinks.map(([href, label]) => (
-              <a key={href} href={href} style={styles.quickLink}>
-                {label}
+          {configured ? (
+            <div style={styles.actionGrid}>
+              <button type="button" onClick={beginOwnerSignup} disabled={Boolean(busyAction)} style={styles.primaryButton}>
+                {busyAction === "signup" ? "Opening Cognito..." : "Create Owner account"}
+              </button>
+              <button type="button" onClick={beginSignin} disabled={Boolean(busyAction)} style={styles.secondaryButton}>
+                {busyAction === "signin" ? "Opening Cognito..." : "Sign in"}
+              </button>
+              <a href="/login" style={styles.secondaryLink}>
+                Review sign-in options
               </a>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <section style={styles.missingBox}>
+              <strong>Cognito setup required</strong>
+              <span>Missing public config: {missing || "checking"}</span>
+            </section>
+          )}
+
+          {status ? <p style={styles.status}>{status}</p> : null}
         </section>
       </section>
     </main>
@@ -175,8 +150,9 @@ const styles = {
   card: {
     ...wmStyles.elevatedCard,
     alignSelf: "stretch",
-    padding: "20px",
+    padding: "22px",
     display: "grid",
+    alignContent: "center",
     gap: "14px",
   },
   cardLabel: {
@@ -188,7 +164,9 @@ const styles = {
   },
   cardTitle: {
     margin: 0,
-    fontSize: "26px",
+    color: wm.colors.textHeading,
+    fontSize: "28px",
+    lineHeight: 1.2,
   },
   cardText: {
     margin: 0,
@@ -196,24 +174,19 @@ const styles = {
     fontSize: "14px",
     lineHeight: 1.5,
   },
-  roleGrid: {
+  actionGrid: {
     display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
     gap: "10px",
-  },
-  roleButton: {
-    display: "grid",
-    gap: "5px",
-    border: `1px solid ${wm.colors.border}`,
-    borderRadius: wm.radius.lg,
-    color: wm.colors.text,
-    padding: "12px",
-    textAlign: "left" as const,
-    cursor: "pointer",
-    fontSize: "13px",
-    lineHeight: 1.4,
   },
   primaryButton: {
     ...wmStyles.primaryButton,
+    padding: "12px 14px",
+    cursor: "pointer",
+    fontWeight: 900,
+  },
+  secondaryButton: {
+    ...wmStyles.secondaryButton,
     padding: "12px 14px",
     cursor: "pointer",
     fontWeight: 900,
@@ -222,35 +195,26 @@ const styles = {
     display: "grid",
     placeItems: "center",
     ...wmStyles.secondaryButton,
-    padding: "11px",
+    padding: "12px 14px",
     textDecoration: "none",
     fontWeight: 900,
   },
-  devLinks: {
-    gridColumn: "1 / -1",
-    borderTop: `1px solid ${wm.colors.border}`,
-    paddingTop: "14px",
+  missingBox: {
+    display: "grid",
+    gap: "5px",
+    border: `1px solid ${wm.colors.warningBorder}`,
+    borderRadius: wm.radius.lg,
+    background: wm.colors.warningBg,
+    color: wm.colors.warning,
+    padding: "12px",
+    fontSize: "13px",
+    lineHeight: 1.4,
   },
-  devTitle: {
-    margin: "0 0 8px",
-    color: wm.colors.textMuted,
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
-  },
-  linkRow: {
-    display: "flex",
-    flexWrap: "wrap" as const,
-    gap: "8px",
-  },
-  quickLink: {
-    border: `1px solid ${wm.colors.border}`,
-    borderRadius: "999px",
-    background: wm.colors.surface,
-    color: wm.colors.textSecondary,
-    padding: "7px 10px",
-    textDecoration: "none",
-    fontSize: "12px",
+  status: {
+    margin: 0,
+    color: wm.colors.errorText,
+    fontSize: "13px",
     fontWeight: 800,
+    lineHeight: 1.4,
   },
 };

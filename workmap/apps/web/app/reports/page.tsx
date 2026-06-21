@@ -3,7 +3,6 @@ import { WorkMapButton } from "../../components/ui/WorkMapButton";
 import { WorkMapPageHeader } from "../../components/ui/WorkMapPageHeader";
 import { WorkMapPrivacyNotice } from "../../components/ui/WorkMapPrivacyNotice";
 import { AppShell } from "../../components/layout/AppShell";
-import { reportMetrics, reportRows } from "../../lib/mock/mockReports";
 import { wmStyles } from "../../lib/theme/workmapTheme";
 
 export default function ReportsPage() {
@@ -23,13 +22,13 @@ export default function ReportsPage() {
           }
         />
 
-        <WorkMapPrivacyNotice title="Pilot report boundary">
-          Reports use the backend usage-summary API when an authenticated session is available. Sparse alpha data is expected;
+        <WorkMapPrivacyNotice title="Report privacy boundary">
+          Reports use the backend usage-summary API when an authenticated Cognito session is available. Sparse data means tracking clients are not connected yet;
           reports show app names, domains, active time, and idle time only, never full URLs, messages, screenshots, keystrokes,
           camera, or microphone data.
         </WorkMapPrivacyNotice>
 
-        <ReportSummaryPanel metrics={reportMetrics} rows={reportRows} />
+        <ReportSummaryPanel />
       </section>
     </AppShell>
   );

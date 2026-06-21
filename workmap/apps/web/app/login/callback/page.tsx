@@ -8,8 +8,7 @@ import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { completeCognitoRedirect } from "../../../lib/auth/cognitoSession";
 import { getPendingInviteToken } from "../../../lib/auth/pendingInvite";
-import { toWorkflowRole } from "../../../lib/auth/pilotSession";
-import { getDefaultSetupState, getNextRouteForUser, saveUserSetupState } from "../../../lib/workflow/workflowState";
+import { getDefaultSetupState, getNextRouteForUser, saveUserSetupState, type WorkMapRole } from "../../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 
 export default function CognitoCallbackPage() {
@@ -103,6 +102,22 @@ export default function CognitoCallbackPage() {
       </section>
     </main>
   );
+}
+
+function toWorkflowRole(role: string | undefined): WorkMapRole {
+  if (role === "OWNER") {
+    return "OWNER";
+  }
+
+  if (role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN") {
+    return "MANAGER";
+  }
+
+  if (role === "IT_ADMIN") {
+    return "IT_ADMIN";
+  }
+
+  return "EMPLOYEE";
 }
 
 const styles = {

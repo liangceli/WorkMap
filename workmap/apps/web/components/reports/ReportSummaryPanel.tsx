@@ -1,16 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ReportMetric, ReportRow } from "./mockReportsData";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { getUsageSummary } from "../../lib/api/reportsApi";
 import type { WorkMapApiUsageSummary } from "../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
-
-type ReportSummaryPanelProps = {
-  metrics: ReportMetric[];
-  rows: ReportRow[];
-};
 
 type ReportState = {
   loading: boolean;
@@ -30,19 +24,7 @@ const initialReportState: ReportState = {
   error: null,
 };
 
-const healthLabels: Record<ReportRow["health"], string> = {
-  normal: "Normal",
-  watch: "Watch",
-  quiet: "Quiet",
-};
-
-const healthStyles: Record<ReportRow["health"], { color: string; background: string; borderColor: string }> = {
-  normal: { color: wm.colors.success, background: wm.colors.successBg, borderColor: wm.colors.successBorder },
-  watch: { color: wm.colors.warning, background: wm.colors.warningBg, borderColor: wm.colors.warningBorder },
-  quiet: { color: wm.colors.textSecondary, background: wm.colors.surfaceLow, borderColor: wm.colors.border },
-};
-
-export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
+export function ReportSummaryPanel() {
   const [reportState, setReportState] = useState<ReportState>(initialReportState);
 
   useEffect(() => {
@@ -80,7 +62,7 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
           authSource: auth.source,
           role: auth.role ?? null,
           summary: null,
-          statusText: "Reports API could not be loaded. Example rows are shown as a clearly labeled fallback.",
+          statusText: "Reports API could not be loaded.",
           error: result.error,
         });
         return;
@@ -135,21 +117,31 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
           title="Owner view"
           text="Owners and allowed manager roles can request company aggregate summaries. These reports summarize app/domain time and device coverage without raw private content."
         />
-        <ReportBoundaryCard
-          title="Alpha data availability"
-          text="Device coverage and usage rows appear only after the current harness/scaffold clients submit events. Empty rows mean setup is incomplete or still sparse."
+          <ReportBoundaryCard
+          title="Data availability"
+          text="Device coverage and usage rows appear only after the desktop agent and browser extension submit real app/domain duration events."
         />
       </section>
 
-      <section style={styles.metricGrid}>
-        {(apiMetrics ?? metrics).map((metric) => (
-          <article key={metric.label} style={styles.metricCard}>
-            <p style={styles.metricLabel}>{metric.label}</p>
-            <strong style={styles.metricValue}>{metric.value}</strong>
-            <p style={styles.metricDetail}>{metric.detail}</p>
-          </article>
-        ))}
-      </section>
+      {apiMetrics ? (
+        <section style={styles.metricGrid}>
+          {apiMetrics.map((metric) => (
+            <article key={metric.label} style={styles.metricCard}>
+              <p style={styles.metricLabel}>{metric.label}</p>
+              <strong style={styles.metricValue}>{metric.value}</strong>
+              <p style={styles.metricDetail}>{metric.detail}</p>
+            </article>
+          ))}
+        </section>
+      ) : (
+        <section style={styles.emptyPanel}>
+          <h2 style={styles.panelTitle}>No report data loaded</h2>
+          <p style={styles.panelText}>
+            Sign in with Cognito and connect tracking clients before validating usage numbers. WorkMap will not show placeholder report rows
+            as tenant data.
+          </p>
+        </section>
+      )}
 
       {reportState.summary ? (
         <section style={styles.apiPanel}>
@@ -189,47 +181,6 @@ export function ReportSummaryPanel({ metrics, rows }: ReportSummaryPanelProps) {
         </section>
       ) : null}
 
-      <section style={styles.tablePanel}>
-        <div style={styles.sampleIntro}>
-          <p style={styles.panelLabel}>Example layout</p>
-          <h2 style={styles.panelTitle}>Team summary pattern</h2>
-          <p style={styles.panelText}>
-            These rows are frontend examples for layout and privacy review only. Treat the API panel above as the source of real tenant
-            report data when authenticated rows are available.
-          </p>
-        </div>
-        <div style={styles.tableHeader}>
-          <span>Department</span>
-          <span>Active</span>
-          <span>Idle</span>
-          <span>Top app</span>
-          <span>Top domain</span>
-          <span>Health</span>
-        </div>
-        {rows.map((row) => {
-          const statusStyle = healthStyles[row.health];
-
-          return (
-            <div key={row.department} style={styles.row}>
-              <strong>{row.department}</strong>
-              <span>{row.activeTime}</span>
-              <span>{row.idleTime}</span>
-              <span>{row.topApp}</span>
-              <span>{row.topDomain}</span>
-              <span
-                style={{
-                  ...styles.health,
-                  color: statusStyle.color,
-                  background: statusStyle.background,
-                  borderColor: statusStyle.borderColor,
-                }}
-              >
-                {healthLabels[row.health]}
-              </span>
-            </div>
-          );
-        })}
-      </section>
     </div>
   );
 }
@@ -274,7 +225,7 @@ function SummaryUsageList({ title, rows }: { title: string; rows: SummaryUsageRo
   );
 }
 
-function buildApiMetrics(summary: WorkMapApiUsageSummary | null): ReportMetric[] | null {
+function buildApiMetrics(summary: WorkMapApiUsageSummary | null) {
   if (!summary) {
     return null;
   }
@@ -338,19 +289,7 @@ function formatDuration(seconds: number) {
 }
 
 function formatAuthSource(source: string) {
-  if (source === "pilot-session") {
-    return "Pilot session";
-  }
-
-  if (source === "dev-token") {
-    return "Development token";
-  }
-
-  if (source === "dev-cache") {
-    return "Development token cache";
-  }
-
-  return source;
+  return source === "cognito-session" ? "Cognito session" : source;
 }
 
 const styles = {
@@ -422,6 +361,12 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "12px",
+  },
+  emptyPanel: {
+    ...wmStyles.infoNotice,
+    display: "grid",
+    gap: "6px",
+    padding: "16px",
   },
   metricCard: {
     ...wmStyles.card,
@@ -522,49 +467,5 @@ const styles = {
     color: wm.colors.textSecondary,
     fontSize: "13px",
     lineHeight: 1.45,
-  },
-  tablePanel: {
-    ...wmStyles.card,
-    maxWidth: "100%",
-    minWidth: 0,
-    overflowX: "auto" as const,
-    overflowY: "hidden" as const,
-  },
-  sampleIntro: {
-    padding: "16px",
-  },
-  tableHeader: {
-    display: "grid",
-    gridTemplateColumns: "1.3fr repeat(4, 1fr) 100px",
-    minWidth: "860px",
-    gap: "12px",
-    borderTop: `1px solid ${wm.colors.borderSubtle}`,
-    borderBottom: `1px solid ${wm.colors.borderSubtle}`,
-    background: wm.colors.surfaceLow,
-    color: wm.colors.textMuted,
-    padding: "11px 14px",
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
-  },
-  row: {
-    display: "grid",
-    gridTemplateColumns: "1.3fr repeat(4, 1fr) 100px",
-    minWidth: "860px",
-    gap: "12px",
-    alignItems: "center",
-    borderBottom: `1px solid ${wm.colors.borderSubtle}`,
-    padding: "13px 14px",
-    color: wm.colors.textSecondary,
-    fontSize: "14px",
-  },
-  health: {
-    justifySelf: "start",
-    borderWidth: "1px",
-    borderStyle: "solid" as const,
-    borderRadius: "999px",
-    padding: "5px 9px",
-    fontSize: "12px",
-    fontWeight: 900,
   },
 };

@@ -2,40 +2,42 @@
 
 ## Reviewed Implementation
 
-Reviewed the real Windows Desktop Agent, MV3 Browser Extension, pairing/credential/revoke APIs, Prisma migration, persistent queues, retry/backoff, report idempotency, Web pairing status UI, Alpha builds, privacy payloads, and Virtual Office regression smoke.
+Reviewed the formal entry flow changes, Cognito-only frontend auth path, invite-to-sign-up behavior, removal of pilot/local login helpers, virtual-office unauthenticated gate, virtual NPC removal, visible demo/test copy cleanup, and Stage 4 tracking/report verification status.
 
 ## Diff Review Summary
 
-The implementation changes runtime behavior and closes the previous scaffold gaps. Follow-up review fixed worker-restart focus overcounting, client-type pairing mismatch, fixed fallback code pepper, Desktop shutdown/sample race, dynamic Extension API-origin permission, pairing success/expiry visibility, and concurrent duplicate replay handling.
+The active web entry path now points to Cognito Hosted UI instead of local pilot/dev-token login. Owner and invited Employee flows route through Cognito before workspace/onboarding access. Virtual Office no longer renders for unauthenticated local-only state and no longer seeds default NPC coworkers or fake side-panel content. Reports/dashboards/directories now show empty backend-backed states instead of sample rows.
 
 ## Findings Ordered By Severity
 
-- Blocking: none in automated verification.
-- Medium: interactive Windows installation/runtime and Chrome/Edge load-unpacked verification are deferred by the user.
-- Low: Web build retains the existing Next.js ESLint-plugin warning; CRLF working-copy conversion warnings remain non-failing.
+- Blocking: none found in automated verification.
+- Medium: real Cognito Hosted UI, Owner workspace creation, invite link, Employee sign-up, and first workspace entry still need manual browser QA against configured AWS Cognito values.
+- Medium: Desktop Agent and Browser Extension are still harness/build verified only; real Windows foreground tracking and load-unpacked browser tracking need manual installation checks before production readiness is claimed.
+- Low: Next build keeps the existing Next.js ESLint-plugin warning; `git diff --check` reports CRLF conversion warnings only.
 
 ## Test And Verification Status
 
-- API tests: 4 passed.
-- Desktop Agent tests: 7 passed.
-- Browser Extension tests: 7 passed.
-- Shared/Web/API/Agent/Extension typecheck: passed.
-- Web/API/Agent/Extension lint and build: passed.
-- Prisma validate and migration status: passed; database schema is current.
-- Stage 4 local runtime smoke: passed on fresh API port 3011, including pairing, heartbeat, app/domain ingest, duplicate retry, Employee/Owner reports, tenant/user/client scope, revoke, and realtime regression.
-- Alpha artifact and secret scans: passed.
-- `git diff --check`: passed.
+- Web typecheck, lint, and build: passed.
+- API typecheck, build, and tests: passed.
+- Desktop Agent typecheck, build, and tests: passed.
+- Browser Extension typecheck, build, and tests: passed.
+- API tracking/report tests verify app/domain event ingestion, report summaries, and access-boundary behavior.
+- Desktop Agent tests verify app tracking harness behavior and privacy constraints.
+- Browser Extension tests verify domain tracking harness behavior and MV3 privacy constraints.
+- `git diff --check`: passed with CRLF warnings only.
+- Secret scan excluding env/generated/reference directories: passed.
 
 ## Manual QA Status
 
-Deferred by user, pending final consolidated manual QA. It is neither passed nor failed.
+Not run in this round. No in-browser acceptance, real Cognito Hosted UI flow, Windows tray/agent run, or Chrome/Edge load-unpacked session is claimed as passed.
 
 ## Risks
 
-- The Alpha clients still need the deferred interactive OS/browser checks before deployment acceptance.
-- The Desktop Alpha package depends on an installed supported Node.js runtime.
-- Final cloud migration/deployment was outside this round.
+- External Cognito configuration may still block complete sign-up/sign-in acceptance until confirmed by the user.
+- Realtime direct messages are not persisted and should not be presented as a full chat product yet.
+- External app launch is link-based; Teams/email require backend contact-link configuration and 3CX is not implemented.
+- Internal `mock` filenames remain for local/static map scaffolding even though visible demo rows/messages were removed from the main flow.
 
 ## Recommendation
 
-Automated development gate: PASS. The project can proceed to final consolidated manual QA, defect fixes discovered there, and final deployment. It should not be described as manually accepted or deployed yet.
+Automated gate: PASS. Proceed to manual Cognito entry-flow QA and then real Desktop Agent / MV3 Extension installation QA before calling this production-ready.

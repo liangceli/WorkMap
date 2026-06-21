@@ -46,10 +46,10 @@ export default function CompliancePage() {
           }
         />
 
-        <WorkMapPrivacyNotice title={onboardingMode ? "First-time transparency step" : "Pilot transparency boundary"}>
+        <WorkMapPrivacyNotice title={onboardingMode ? "First-time transparency step" : "Workspace transparency boundary"}>
           {onboardingMode
             ? "Review what WorkMap does and does not collect before entering the workspace."
-            : "Review what is visible in WorkMap, what is not collected, and whether the current pilot session can record acknowledgement through the backend policy API."}
+            : "Review what is visible in WorkMap, what is not collected, and whether the current Cognito session can record acknowledgement through the backend policy API."}
         </WorkMapPrivacyNotice>
 
         <CompliancePolicyPanel />

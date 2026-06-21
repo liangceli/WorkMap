@@ -78,8 +78,8 @@ function connectionCopy(
 ) {
   if (presenceSource === "mock") {
     return {
-      label: "Demo presence",
-      detail: "API unavailable; map stays usable",
+      label: "Presence offline",
+      detail: "Sign in to load workspace teammates",
       color: wm.status.idle,
     };
   }

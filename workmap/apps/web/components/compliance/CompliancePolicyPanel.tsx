@@ -51,7 +51,7 @@ export function CompliancePolicyPanel() {
       if (!auth.available) {
         setLoading(false);
         setAuthSource(null);
-        setStatusText("Sign in with pilot auth to load and record backend policy acknowledgement. Safe transparency copy is shown below.");
+        setStatusText("Sign in with Cognito to load and record backend policy acknowledgement. Safe transparency copy is shown below.");
         return;
       }
 
@@ -76,7 +76,7 @@ export function CompliancePolicyPanel() {
       setStatusText(
         storedAcknowledgement
           ? `Policy ${policyResult.data.policyVersion} was acknowledged from this browser at ${storedAcknowledgement}.`
-          : `Backend policy ${policyResult.data.policyVersion} loaded for this pilot session.`,
+          : `Backend policy ${policyResult.data.policyVersion} loaded for this Cognito session.`,
       );
     }
 
@@ -99,7 +99,7 @@ export function CompliancePolicyPanel() {
 
     if (!auth.available) {
       setAcknowledging(false);
-      setStatusText("No active API session is available. Sign in with pilot auth before recording acknowledgement.");
+      setStatusText("No active API session is available. Sign in with Cognito before recording acknowledgement.");
       setModalOpen(false);
       return;
     }

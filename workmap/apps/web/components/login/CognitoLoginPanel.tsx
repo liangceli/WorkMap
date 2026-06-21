@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPilotSession, getAuthContext, getCurrentUser } from "../../lib/api/authApi";
+import { getAuthContext, getCurrentUser } from "../../lib/api/authApi";
 import { getPlatformContext } from "../../lib/api/platformApi";
 import { decodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../lib/avatar/avatarStorage";
@@ -13,10 +13,10 @@ import {
   getCognitoLogoutUrl,
   getCognitoSession,
   startCognitoSignIn,
+  startCognitoSignUp,
   type StoredCognitoSession,
 } from "../../lib/auth/cognitoSession";
 import { getPendingInviteToken } from "../../lib/auth/pendingInvite";
-import { clearPilotSession, getPilotSession, savePilotSession, toWorkflowRole, type StoredPilotSession } from "../../lib/auth/pilotSession";
 import {
   getDefaultSetupState,
   getNextRouteForUser,
@@ -26,67 +26,49 @@ import {
 } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
-const pilotUsers: Array<{ label: string; email: string; role: WorkMapRole }> = [
-  { label: "Employee / Ethan Engineer", email: "engineer@workmap.demo", role: "EMPLOYEE" },
-  { label: "Manager / Mia Manager", email: "manager@workmap.demo", role: "MANAGER" },
-  { label: "Owner / Olivia Owner", email: "owner@workmap.demo", role: "OWNER" },
-  { label: "IT Admin / Isaac IT Admin", email: "it.admin@workmap.demo", role: "IT_ADMIN" },
-];
-
-export function MockLoginPanel() {
+export function CognitoLoginPanel() {
   const router = useRouter();
-  const [email, setEmail] = useState("engineer@workmap.demo");
-  const [password, setPassword] = useState("workmap-pilot");
-  const [companySlug, setCompanySlug] = useState("workmap-demo-company");
-  const [role, setRole] = useState<WorkMapRole>("MANAGER");
-  const [session, setSession] = useState<StoredPilotSession | null>(null);
   const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
   const [cognitoConfig, setCognitoConfig] = useState<ReturnType<typeof getCognitoConfigStatus> | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [cognitoSubmitting, setCognitoSubmitting] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState<"signin" | "signup" | "continue" | null>(null);
 
   useEffect(() => {
-    setSession(getPilotSession());
     setCognitoSession(getCognitoSession());
     setCognitoConfig(getCognitoConfigStatus());
   }, []);
 
-  const loginCognito = async () => {
-    setCognitoSubmitting(true);
+  const startSignIn = async () => {
+    setSubmittingAction("signin");
     setStatus(null);
 
     try {
       await startCognitoSignIn();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Cognito sign-in could not be started.");
-      setCognitoSubmitting(false);
+      setSubmittingAction(null);
     }
   };
 
-  const loginPilot = async () => {
-    setSubmitting(true);
+  const startOwnerSignUp = async () => {
+    setSubmittingAction("signup");
     setStatus(null);
 
-    const result = await createPilotSession({ email, password, companySlug });
-    setSubmitting(false);
-
-    if (!result.ok) {
-      setStatus("Pilot login failed. Check the API is running and the password hash is configured.");
-      return;
+    try {
+      await startCognitoSignUp();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Cognito sign-up could not be started.");
+      setSubmittingAction(null);
     }
-
-    savePilotSession(result.data);
-    setSession(result.data);
-    const nextState = { ...getDefaultSetupState(toWorkflowRole(result.data.user.role)), hasCompany: true };
-    router.push(getNextRouteForUser(nextState));
   };
 
   const continueCognito = async () => {
+    setSubmittingAction("continue");
     const cognitoAuth = getCognitoApiAuthOptions();
 
     if (!cognitoAuth.available) {
       setStatus(cognitoAuth.reason);
+      setSubmittingAction(null);
       return;
     }
 
@@ -118,34 +100,27 @@ export function MockLoginPanel() {
     router.push(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/onboarding/company");
   };
 
-  const continueDemo = () => {
-    const state = getDefaultSetupState(role);
-    saveUserSetupState(state);
-    router.push(getNextRouteForUser(state));
-  };
-
   const logout = () => {
     clearCognitoSession();
-    clearPilotSession();
     resetUserSetupState();
     setCognitoSession(null);
-    setSession(null);
-    setStatus("Auth sessions cleared on this browser.");
+    setStatus("Cognito session cleared on this browser.");
   };
 
   const cognitoLogoutUrl = getCognitoLogoutUrl();
   const cognitoMissing = cognitoConfig && !cognitoConfig.configured ? cognitoConfig.missing.join(", ") : "";
+  const canUseCognito = Boolean(cognitoConfig?.configured);
 
   return (
     <section style={styles.card}>
       <p style={styles.eyebrow}>WorkMap sign-in</p>
-      <h1 style={styles.title}>Sign in to WorkMap</h1>
+      <h1 style={styles.title}>Enter with Cognito</h1>
       <p style={styles.subtitle}>
-        Use Cognito for deployed alpha testing, or pilot auth for local fallback while the workspace is being configured.
+        New workspaces start with an Owner account. Employees join through an Owner invitation, then return here to sign in.
       </p>
 
       <section style={styles.cognitoBox}>
-        <p style={styles.demoTitle}>Cognito workspace login</p>
+        <p style={styles.sectionTitle}>Cognito workspace access</p>
         {cognitoSession ? (
           <section style={styles.sessionCard}>
             <strong>{cognitoSession.claims.displayName ?? cognitoSession.claims.email ?? "Cognito user"}</strong>
@@ -153,7 +128,7 @@ export function MockLoginPanel() {
             <span>expires {new Date(cognitoSession.expiresAt).toLocaleString()}</span>
             <div style={styles.sessionActions}>
               <button type="button" onClick={continueCognito} style={styles.secondaryButton}>
-                Continue
+                {submittingAction === "continue" ? "Checking..." : "Continue"}
               </button>
               {cognitoLogoutUrl ? (
                 <a href={cognitoLogoutUrl} onClick={logout} style={styles.secondaryButton}>
@@ -167,94 +142,54 @@ export function MockLoginPanel() {
             </div>
           </section>
         ) : null}
-        {cognitoConfig?.configured ? (
-          <button type="button" onClick={loginCognito} disabled={cognitoSubmitting} style={styles.primaryAction}>
-            {cognitoSubmitting ? "Opening Cognito..." : "Sign in with Cognito"}
-          </button>
+        {canUseCognito ? (
+          <div style={styles.actionGrid}>
+            <button type="button" onClick={startOwnerSignUp} disabled={Boolean(submittingAction)} style={styles.primaryAction}>
+              {submittingAction === "signup" ? "Opening Cognito..." : "Create Owner account"}
+            </button>
+            <button type="button" onClick={startSignIn} disabled={Boolean(submittingAction)} style={styles.secondaryAction}>
+              {submittingAction === "signin" ? "Opening Cognito..." : "Sign in"}
+            </button>
+          </div>
         ) : (
           <p style={styles.note}>
-            Cognito is not configured in this environment. Missing public config: {cognitoMissing || "checking"}.
+            Cognito must be configured before WorkMap sign-up or sign-in can run. Missing public config: {cognitoMissing || "checking"}.
           </p>
         )}
         <p style={styles.note}>
-          This path uses Cognito Hosted UI with PKCE and backend-verified WorkMap user or platform mapping.
+          WorkMap uses Cognito Hosted UI with PKCE. Workspace role, company, and invite state are resolved by the backend.
         </p>
       </section>
 
-      {session ? (
-        <section style={styles.sessionCard}>
-          <strong>{session.user.displayName}</strong>
-          <span>{session.user.email}</span>
-          <span>{session.user.role.replace("_", " ")} / expires {new Date(session.expiresAt).toLocaleString()}</span>
-          <div style={styles.sessionActions}>
-            <button type="button" onClick={() => router.push("/virtual-office")} style={styles.secondaryButton}>
-              Open office
-            </button>
-            <button type="button" onClick={logout} style={styles.secondaryButton}>
-              Clear session
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      <label style={styles.label}>
-        <span>Pilot user</span>
-        <select
-          value={email}
-          onChange={(event) => {
-            const nextEmail = event.target.value;
-            setEmail(nextEmail);
-            setRole(pilotUsers.find((user) => user.email === nextEmail)?.role ?? "EMPLOYEE");
-          }}
-          style={styles.input}
-        >
-          {pilotUsers.map((user) => (
-            <option key={user.email} value={user.email}>{user.label}</option>
-          ))}
-        </select>
-      </label>
-
-      <label style={styles.label}>
-        <span>Email</span>
-        <input value={email} onChange={(event) => setEmail(event.target.value)} style={styles.input} />
-      </label>
-
-      <label style={styles.label}>
-        <span>Password</span>
-        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" style={styles.input} />
-      </label>
-
-      <label style={styles.label}>
-        <span>Company slug</span>
-        <input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} style={styles.input} />
-      </label>
-
-      <button type="button" onClick={loginPilot} disabled={submitting} style={styles.primaryAction}>
-        {submitting ? "Signing in..." : "Sign in with pilot auth"}
-      </button>
-
       {status ? <p style={styles.status}>{status}</p> : null}
 
-      <section style={styles.demoBox}>
-        <p style={styles.demoTitle}>Frontend fallback</p>
-        <label style={styles.label}>
-          <span>Demo role</span>
-        <select value={role} onChange={(event) => setRole(event.target.value as WorkMapRole)} style={styles.input}>
-          <option value="EMPLOYEE">Employee</option>
-          <option value="MANAGER">Manager</option>
-          <option value="OWNER">Owner</option>
-          <option value="IT_ADMIN">IT Admin</option>
-        </select>
-      </label>
-        <button type="button" onClick={continueDemo} style={styles.secondaryAction}>Continue without API session</button>
+      <section style={styles.flowBox}>
+        <p style={styles.sectionTitle}>Entry rules</p>
+        <ol style={styles.stepList}>
+          <li>Owner creates a Cognito account first and creates the workspace.</li>
+          <li>Owner invites employees from the workspace.</li>
+          <li>Employees open the invite link, sign up with Cognito, accept the invite, then complete onboarding.</li>
+          <li>Returning Owner or Employee users sign in here and WorkMap resolves their backend role.</li>
+        </ol>
       </section>
-
-      <p style={styles.note}>
-        Pilot auth remains available during the transition. Dev-token fallback remains development-only; full enterprise account lifecycle is
-        still staged work.
-      </p>
     </section>
   );
+}
+
+function toWorkflowRole(role: string | undefined): WorkMapRole {
+  if (role === "OWNER") {
+    return "OWNER";
+  }
+
+  if (role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN") {
+    return "MANAGER";
+  }
+
+  if (role === "IT_ADMIN") {
+    return "IT_ADMIN";
+  }
+
+  return "EMPLOYEE";
 }
 
 const styles = {
@@ -281,18 +216,6 @@ const styles = {
     color: wm.colors.textSecondary,
     fontSize: "14px",
     lineHeight: 1.45,
-  },
-  label: {
-    display: "grid",
-    gap: "6px",
-    color: wm.colors.textSecondary,
-    fontSize: "13px",
-    fontWeight: 700,
-  },
-  input: {
-    ...wmStyles.input,
-    height: "40px",
-    padding: "0 10px",
   },
   primaryAction: {
     ...wmStyles.primaryButton,
@@ -328,7 +251,7 @@ const styles = {
     gap: "8px",
     marginTop: "6px",
   },
-  demoBox: {
+  flowBox: {
     display: "grid",
     gap: "10px",
     border: `1px solid ${wm.colors.border}`,
@@ -344,7 +267,12 @@ const styles = {
     background: wm.colors.infoBg,
     padding: "12px",
   },
-  demoTitle: {
+  actionGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: "10px",
+  },
+  sectionTitle: {
     margin: 0,
     color: wm.colors.textMuted,
     fontSize: "12px",
@@ -363,5 +291,12 @@ const styles = {
     color: wm.colors.textMuted,
     fontSize: "12px",
     lineHeight: 1.45,
+  },
+  stepList: {
+    margin: 0,
+    paddingLeft: "20px",
+    color: wm.colors.textSecondary,
+    fontSize: "13px",
+    lineHeight: 1.55,
   },
 };

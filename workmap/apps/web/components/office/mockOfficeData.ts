@@ -18,47 +18,7 @@ export const roomZones: OfficeRoomZone[] = WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.r
   ...room.bounds,
 }));
 
-export const remotePlayers: RemoteOfficePlayer[] = [
-  {
-    userId: "demo-manager",
-    displayName: "Mia Manager",
-    avatarId: "placeholder-manager",
-    x: 1010,
-    y: 210,
-    direction: "down",
-    isMoving: false,
-    status: "busy",
-    roomId: "focus-room",
-    updatedAt: new Date().toISOString(),
-    role: "Manager",
-  },
-  {
-    userId: "demo-engineer",
-    displayName: "Ethan Engineer",
-    avatarId: "placeholder-engineer",
-    x: 230,
-    y: 735,
-    direction: "right",
-    isMoving: false,
-    status: "focus",
-    roomId: "engineering-zone",
-    updatedAt: new Date().toISOString(),
-    role: "Software Engineer",
-  },
-  {
-    userId: "demo-sales",
-    displayName: "Sofia Sales",
-    avatarId: "placeholder-sales",
-    x: 1005,
-    y: 760,
-    direction: "left",
-    isMoving: false,
-    status: "available",
-    roomId: "sales-zone",
-    updatedAt: new Date().toISOString(),
-    role: "Account Executive",
-  },
-];
+export const remotePlayers: RemoteOfficePlayer[] = [];
 
 export const officeTilesets: OfficeTileset[] = [
   {

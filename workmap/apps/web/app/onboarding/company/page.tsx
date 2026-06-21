@@ -7,14 +7,13 @@ import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { deriveDisplayNameFromCognito, sanitizeDisplayName } from "../../../lib/auth/displayName";
 import { getCognitoApiAuthOptions } from "../../../lib/auth/cognitoSession";
-import { toWorkflowRole } from "../../../lib/auth/pilotSession";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
-import { getDefaultSetupState, saveUserSetupState, updateUserSetupState } from "../../../lib/workflow/workflowState";
+import { getDefaultSetupState, saveUserSetupState, type WorkMapRole } from "../../../lib/workflow/workflowState";
 
 export default function CompanyOnboardingPage() {
   const router = useRouter();
-  const [companyName, setCompanyName] = useState("Acme Operations");
-  const [workspaceName, setWorkspaceName] = useState("Acme HQ");
+  const [companyName, setCompanyName] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -32,7 +31,7 @@ export default function CompanyOnboardingPage() {
     const confirmedDisplayName = sanitizeDisplayName(displayName);
 
     if (!cognitoAuth.available) {
-      continueWithDemoFallback();
+      setStatus("Owner workspace creation requires Cognito sign-up. Return to /login and create an Owner account first.");
       return;
     }
 
@@ -62,11 +61,6 @@ export default function CompanyOnboardingPage() {
     const nextState = { ...defaultState, hasCompany: true, hasAvatar: Boolean(backendAvatar) || defaultState.hasAvatar };
     saveUserSetupState(nextState);
     router.push(backendAvatar ? result.data.onboarding.nextRoute : "/onboarding/avatar");
-  };
-
-  const continueWithDemoFallback = () => {
-    updateUserSetupState({ hasCompany: true }, "OWNER");
-    router.push("/compliance");
   };
 
   return (
@@ -115,6 +109,22 @@ export default function CompanyOnboardingPage() {
       </section>
     </main>
   );
+}
+
+function toWorkflowRole(role: string | undefined): WorkMapRole {
+  if (role === "OWNER") {
+    return "OWNER";
+  }
+
+  if (role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN") {
+    return "MANAGER";
+  }
+
+  if (role === "IT_ADMIN") {
+    return "IT_ADMIN";
+  }
+
+  return "EMPLOYEE";
 }
 
 const styles = {

@@ -143,6 +143,14 @@ export function getCognitoApiAuthOptions():
 }
 
 export async function startCognitoSignIn() {
+  await startCognitoAuth("authorize");
+}
+
+export async function startCognitoSignUp() {
+  await startCognitoAuth("signup");
+}
+
+async function startCognitoAuth(entry: "authorize" | "signup") {
   const status = getCognitoConfigStatus();
 
   if (!status.configured) {
@@ -163,7 +171,7 @@ export async function startCognitoSignIn() {
     state: transaction.state,
   });
 
-  window.location.assign(`${status.config.domain}/oauth2/authorize?${params.toString()}`);
+  window.location.assign(`${status.config.domain}/${entry === "signup" ? "signup" : "oauth2/authorize"}?${params.toString()}`);
 }
 
 export async function completeCognitoRedirect(currentUrl?: string):

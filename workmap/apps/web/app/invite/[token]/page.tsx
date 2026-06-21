@@ -5,11 +5,10 @@ import { useParams, useRouter } from "next/navigation";
 import { acceptInvitation } from "../../../lib/api/invitationsApi";
 import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
-import { getCognitoApiAuthOptions, startCognitoSignIn } from "../../../lib/auth/cognitoSession";
+import { getCognitoApiAuthOptions, startCognitoSignUp } from "../../../lib/auth/cognitoSession";
 import { sanitizeDisplayName } from "../../../lib/auth/displayName";
 import { clearPendingInviteToken, savePendingInviteToken } from "../../../lib/auth/pendingInvite";
-import { toWorkflowRole } from "../../../lib/auth/pilotSession";
-import { getDefaultSetupState, getNextRouteForUser, saveUserSetupState } from "../../../lib/workflow/workflowState";
+import { getDefaultSetupState, getNextRouteForUser, saveUserSetupState, type WorkMapRole } from "../../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 
 type CognitoAuthState = ReturnType<typeof getCognitoApiAuthOptions>;
@@ -38,7 +37,7 @@ export default function InviteAcceptancePage() {
 
     if (!nextAuth.available) {
       savePendingInviteToken(token);
-      setStatus("Sign in with Cognito to accept this invitation.");
+      setStatus("Create or open your Cognito account to accept this invitation.");
       return;
     }
 
@@ -46,23 +45,23 @@ export default function InviteAcceptancePage() {
     setStatus("Ready to join this workspace. Enter the display name teammates should see.");
   }, [token]);
 
-  const signIn = async () => {
+  const signUp = async () => {
     if (token) {
       savePendingInviteToken(token);
     }
 
-    setStatus("Opening Cognito sign-in...");
+    setStatus("Opening Cognito sign-up...");
 
     try {
-      await startCognitoSignIn();
+      await startCognitoSignUp();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Cognito sign-in could not be started.");
+      setStatus(error instanceof Error ? error.message : "Cognito sign-up could not be started.");
     }
   };
 
   const accept = async () => {
     if (!cognitoAuth?.available) {
-      await signIn();
+      await signUp();
       return;
     }
 
@@ -106,7 +105,7 @@ export default function InviteAcceptancePage() {
         <p style={styles.text}>{status}</p>
         <section style={styles.flowNote}>
           <strong>What happens next</strong>
-          <span>After this invite is accepted, WorkMap will take you through compliance, avatar/profile, and device setup before opening the virtual office.</span>
+          <span>Employees must use Cognito and accept the invite before WorkMap takes them through compliance, avatar/profile, and device setup.</span>
         </section>
         {!cognitoAuth ? (
           <button type="button" disabled style={styles.primaryButton}>
@@ -128,8 +127,8 @@ export default function InviteAcceptancePage() {
             </button>
           </>
         ) : (
-          <button type="button" onClick={signIn} disabled={!token} style={styles.primaryButton}>
-            Sign in with Cognito
+          <button type="button" onClick={signUp} disabled={!token} style={styles.primaryButton}>
+            Sign up with Cognito
           </button>
         )}
         <a href="/login" style={styles.secondaryLink}>
@@ -138,6 +137,22 @@ export default function InviteAcceptancePage() {
       </section>
     </main>
   );
+}
+
+function toWorkflowRole(role: string | undefined): WorkMapRole {
+  if (role === "OWNER") {
+    return "OWNER";
+  }
+
+  if (role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN") {
+    return "MANAGER";
+  }
+
+  if (role === "IT_ADMIN") {
+    return "IT_ADMIN";
+  }
+
+  return "EMPLOYEE";
 }
 
 function formatInviteError(error: string) {

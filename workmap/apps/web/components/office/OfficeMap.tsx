@@ -15,7 +15,6 @@ import type {
 } from "@workmap/shared-types";
 import { WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST } from "@workmap/shared-types";
 import {
-  avatarLayersByType,
   getLayeredAvatarAssets,
   type AvatarLayerAsset,
   type LayeredAvatarConfig,
@@ -134,16 +133,8 @@ const REALTIME_REMOTE_STALE_MS = 20000;
 const MIN_MANUAL_ZOOM = 0.4;
 const MAX_MANUAL_ZOOM = 2;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {
-  "demo-manager": createRandomRemoteAvatarConfig("demo-manager"),
-  "demo-engineer": createRandomRemoteAvatarConfig("demo-engineer"),
-  "demo-sales": createRandomRemoteAvatarConfig("demo-sales"),
-};
-const remoteProfileRouteIds: Record<string, string> = {
-  "demo-manager": "mia",
-  "demo-engineer": "ethan",
-  "demo-sales": "sofia",
-};
+const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {};
+const remoteProfileRouteIds: Record<string, string> = {};
 
 export function OfficeMap() {
   const router = useRouter();
@@ -2231,42 +2222,6 @@ function readRemoteAvatarConfigs(remotePlayers: RemoteOfficePlayer[]): Record<st
   }
 
   return configs;
-}
-
-function createRandomRemoteAvatarConfig(seed: string): LayeredAvatarConfig {
-  const random = createSeededRandom(seed);
-  const accessory = pickRandom(avatarLayersByType.accessory, random);
-  const useAccessory = random() > 0.35;
-
-  return {
-    version: 2,
-    bodyId: pickRandom(avatarLayersByType.body, random)?.id ?? "",
-    eyesId: pickRandom(avatarLayersByType.eyes, random)?.id,
-    hairstyleId: pickRandom(avatarLayersByType.hairstyle, random)?.id,
-    outfitId: pickRandom(avatarLayersByType.outfit, random)?.id,
-    accessoryIds: useAccessory && accessory ? [accessory.id] : [],
-  };
-}
-
-function pickRandom<T>(items: T[], random: () => number) {
-  return items[Math.floor(random() * items.length)];
-}
-
-function createSeededRandom(seed: string) {
-  let state = 2166136261;
-
-  for (let index = 0; index < seed.length; index += 1) {
-    state ^= seed.charCodeAt(index);
-    state = Math.imul(state, 16777619);
-  }
-
-  return () => {
-    state += 0x6d2b79f5;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 const styles = {

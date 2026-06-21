@@ -11,7 +11,9 @@ export function UsageTable({ title, rows }: UsageTableProps) {
     <section style={styles.card}>
       <h2 style={styles.title}>{title}</h2>
       <div style={styles.table}>
-        {rows.map((row) => (
+        {rows.length === 0 ? (
+          <p style={styles.emptyText}>No usage rows yet. Connect tracking clients and submit app/domain events to populate this section.</p>
+        ) : rows.map((row) => (
           <div key={row.name} style={styles.row}>
             <div>
               <p style={styles.name}>{row.name}</p>
@@ -67,5 +69,13 @@ const styles = {
     color: wm.colors.textSecondary,
     fontSize: "12px",
     fontWeight: 800,
+  },
+  emptyText: {
+    margin: 0,
+    borderTop: `1px solid ${wm.colors.borderSubtle}`,
+    color: wm.colors.textSecondary,
+    paddingTop: "10px",
+    fontSize: "13px",
+    lineHeight: 1.45,
   },
 };

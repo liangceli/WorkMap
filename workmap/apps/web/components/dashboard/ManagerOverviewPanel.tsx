@@ -11,16 +11,10 @@ import { getCompliancePolicy } from "../../lib/api/complianceApi";
 import { getApiHealth } from "../../lib/api/healthApi";
 import { getUsageSummary } from "../../lib/api/reportsApi";
 import type { WorkMapApiPlayerPosition, WorkMapApiUsageSummary } from "../../lib/api/apiTypes";
+import { defaultLayeredAvatarConfig } from "../../lib/avatar/avatarLayerAssets";
 import { getVirtualOfficeMap, listVirtualOfficePositions } from "../../lib/api/virtualOfficeApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
-import {
-  appUsageRows,
-  dashboardEmployees,
-  websiteUsageRows,
-  type DashboardEmployee,
-  type UsageMetric,
-  type UsageRow,
-} from "../../lib/mock/mockPeople";
+import type { DashboardEmployee, UsageMetric, UsageRow } from "./mockDashboardData";
 
 type DashboardState = {
   loading: boolean;
@@ -77,7 +71,7 @@ export function ManagerOverviewPanel() {
       let positions: WorkMapApiPlayerPosition[] = [];
       let roomNames: Record<string, string> = {};
       let policyVersion: string | null = null;
-      let complianceText = "Sign in with pilot auth to load backend policy status.";
+      let complianceText = "Sign in with Cognito to load backend policy status.";
       let usageSummary: WorkMapApiUsageSummary | null = null;
 
       if (auth.available) {
@@ -155,7 +149,7 @@ export function ManagerOverviewPanel() {
     () =>
       dashboardState.positions.length > 0
         ? dashboardState.positions.map((position, index) => toDashboardEmployee(position, index, dashboardState.roomNames))
-        : dashboardEmployees,
+        : [],
     [dashboardState.positions, dashboardState.roomNames],
   );
 
@@ -172,7 +166,7 @@ export function ManagerOverviewPanel() {
         value: dashboardState.authSource ? formatAuthSource(dashboardState.authSource) : "Missing",
         detail: dashboardState.authSource
           ? "Dashboard data is using an authenticated API context."
-          : "Sign in first; development token fallback stays development-only.",
+          : "Sign in with Cognito before reviewing workspace data.",
         tone: dashboardState.authSource ? "blue" : "amber",
       },
       {
@@ -181,7 +175,7 @@ export function ManagerOverviewPanel() {
         detail:
           dashboardState.positions.length > 0
             ? "Active / idle / offline teammates from office positions."
-            : "No remote position rows were available; clearly labeled examples are shown below.",
+            : "No remote position rows are available yet.",
         tone: dashboardState.positions.length > 0 ? "green" : "slate",
       },
       {
@@ -269,12 +263,12 @@ export function ManagerOverviewPanel() {
       <div style={styles.contentGrid}>
         <section style={styles.panel}>
           <h2 style={styles.panelTitle}>
-            {dashboardState.positions.length > 0 ? "People in the office" : "Example people"}
+            {dashboardState.positions.length > 0 ? "People in the office" : "No teammates visible yet"}
           </h2>
           <p style={styles.panelText}>
             {dashboardState.positions.length > 0
               ? "Remote teammates are loaded from the virtual-office positions API. Your own current-user row is not duplicated here."
-              : "No office position rows were available, so sample people are clearly labeled until real presence appears."}
+              : "Teammates appear here after they join the same workspace and publish a safe virtual-office presence row."}
           </p>
           <div style={styles.employeeGrid}>
             {people.map((employee) => (
@@ -286,11 +280,11 @@ export function ManagerOverviewPanel() {
         <aside style={styles.sideStack}>
           <PrivacyNoticeCard />
           <AppUsageTable
-            title={usageRows.fromApi ? "Top apps from Reports API" : "Pilot example apps"}
+            title={usageRows.fromApi ? "Top apps from Reports API" : "No app rows yet"}
             rows={usageRows.apps}
           />
           <WebsiteUsageTable
-            title={usageRows.fromApi ? "Top domains from Reports API" : "Pilot example domains"}
+            title={usageRows.fromApi ? "Top domains from Reports API" : "No domain rows yet"}
             rows={usageRows.websites}
           />
         </aside>
@@ -318,20 +312,19 @@ function countPresence(positions: WorkMapApiPlayerPosition[]) {
 
 function toDashboardEmployee(
   position: WorkMapApiPlayerPosition,
-  index: number,
+  _index: number,
   roomNames: Record<string, string>,
 ): DashboardEmployee {
-  const fallback = dashboardEmployees[index % dashboardEmployees.length];
   const roomName = position.roomId ? roomNames[position.roomId] : null;
 
   return {
     id: position.userId,
     name: position.displayName,
-    role: "Pilot teammate",
+    role: "Team member",
     department: roomName ?? "Office area",
     status: position.status,
     localTime: formatTimestamp(position.updatedAt),
-    avatar: fallback.avatar,
+    avatar: defaultLayeredAvatarConfig,
     activeTime: statusLabel(position.status),
     idleTime: formatFreshness(position.updatedAt),
     topApp: "Reports API",
@@ -342,7 +335,7 @@ function toDashboardEmployee(
 
 function buildUsageRows(summary: WorkMapApiUsageSummary | null): { fromApi: boolean; apps: UsageRow[]; websites: UsageRow[] } {
   if (!summary || (summary.apps.length === 0 && summary.websites.length === 0)) {
-    return { fromApi: false, apps: appUsageRows, websites: websiteUsageRows };
+    return { fromApi: false, apps: [], websites: [] };
   }
 
   const appTotal = summary.apps.reduce((sum, row) => sum + row.activeSeconds + row.idleSeconds, 0);
@@ -419,19 +412,7 @@ function statusLabel(status: WorkMapApiPlayerPosition["status"]) {
 }
 
 function formatAuthSource(source: string) {
-  if (source === "pilot-session") {
-    return "Pilot";
-  }
-
-  if (source === "dev-token") {
-    return "Dev token";
-  }
-
-  if (source === "dev-cache") {
-    return "Dev cache";
-  }
-
-  return source;
+  return source === "cognito-session" ? "Cognito" : source;
 }
 
 function canRequestCompanySummary(role: string | undefined) {
@@ -447,7 +428,7 @@ function getDashboardJourney(role: string | null) {
       guidanceLabel: "Owner next steps",
       guidance:
         "Start with employee invites, then ask the team to complete compliance, avatar, and device setup. Reports stay sparse until a paired Desktop Agent or Browser Extension submits app/domain summary data.",
-      setupTitle: "Bring the pilot workspace online",
+      setupTitle: "Bring the workspace online",
       alphaNote:
         "The current alpha includes Windows active-app tracking, MV3 active-domain tracking, secure device pairing, bounded offline queues, retry backoff, revocation, and local Alpha packages.",
       setupItems: ["Invite employees", "Complete compliance", "Finish avatar/profile", "Register devices"],
@@ -489,7 +470,7 @@ function getDashboardJourney(role: string | null) {
       "Use the office and directory for day-to-day presence. Reports and admin actions appear only when the signed-in role can use them.",
     setupTitle: "Resolve workspace context",
     alphaNote:
-      "Sign in with a tenant role to see API-backed workspace data. Fallback/example rows remain labeled and should not be treated as real tenant metrics.",
+        "Sign in with Cognito to see API-backed workspace data. WorkMap no longer displays placeholder rows as tenant metrics.",
     setupItems: ["Sign in", "Resolve role", "Load policy", "Load summaries"],
     actions: [
       { label: "Open office", href: "/virtual-office", primary: true },
