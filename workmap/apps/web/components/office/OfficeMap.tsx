@@ -47,6 +47,7 @@ import { InteractionDrawer } from "./InteractionDrawer";
 import { OfficeBottomDock } from "./OfficeBottomDock";
 import { OfficeCommandPalette } from "./OfficeCommandPalette";
 import { OfficeIcon } from "./OfficeIcons";
+import { closeReservedContactWindow, navigateReservedContactWindow, reserveContactWindow, toOutlookComposeHref } from "./contactLauncher";
 import { OfficeLeftRail, type OfficePanelKey } from "./OfficeLeftRail";
 import { OfficeMiniMap } from "./OfficeMiniMap";
 import { OfficeSidePanel } from "./OfficeSidePanel";
@@ -1269,7 +1270,8 @@ export function OfficeMap() {
   };
 
   const openEmailLauncher = (target: ContactTarget) => {
-    void openContactLauncher(target, "email", officeData.apiOptions, setToast);
+    const reservedWindow = reserveContactWindow();
+    void openContactLauncher(target, "email", officeData.apiOptions, setToast, reservedWindow);
   };
 
   const recenterCamera = () => {
@@ -1459,8 +1461,10 @@ async function openContactLauncher(
   provider: "teams" | "email",
   apiOptions: ReturnType<typeof useVirtualOfficeData>["apiOptions"],
   showToast: (message: string) => void,
+  reservedWindow: Window | null = null,
 ) {
   if (!apiOptions) {
+    closeReservedContactWindow(reservedWindow);
     showToast("Contact links require an authenticated WorkMap API session.");
     return;
   }
@@ -1468,6 +1472,7 @@ async function openContactLauncher(
   const result = await getContactLinks(target.userId, apiOptions);
 
   if (!result.ok) {
+    closeReservedContactWindow(reservedWindow);
     showToast(`Could not load contact links for ${target.displayName}.`);
     return;
   }
@@ -1475,12 +1480,16 @@ async function openContactLauncher(
   const href = provider === "teams" ? getTeamsHref(result.data) : getEmailHref(result.data);
 
   if (!href) {
+    closeReservedContactWindow(reservedWindow);
     showToast(`${provider === "teams" ? "Teams" : "Email"} link is not configured for ${target.displayName}.`);
     return;
   }
 
   if (provider === "email") {
-    window.location.href = href;
+    if (!navigateReservedContactWindow(reservedWindow, href)) {
+      showToast("Outlook could not be opened. Allow pop-ups for WorkMap and try again.");
+      return;
+    }
   } else {
     window.open(href, "_blank", "noopener,noreferrer");
   }
@@ -1493,7 +1502,7 @@ function getTeamsHref(links: WorkMapApiContactLinks) {
 }
 
 function getEmailHref(links: WorkMapApiContactLinks) {
-  return links.outlookMailtoUrl ?? links.email ?? readContactLinkHref(links.outlook);
+  return toOutlookComposeHref(links.outlookMailtoUrl ?? links.email ?? readContactLinkHref(links.outlook));
 }
 
 function readContactLinkHref(value: WorkMapApiContactLinks["teams"] | WorkMapApiContactLinks["outlook"]) {

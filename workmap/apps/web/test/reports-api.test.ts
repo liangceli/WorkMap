@@ -32,10 +32,13 @@ test("reports API sends date, department and scope filters", async () => {
   }
 });
 
-test("Reports navigation is visible to employee own-report roles", async () => {
+test("Reports navigation and page are hidden from employees", async () => {
   const source = await readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8");
   const reportsItem = source.split("\n").find((line) => line.includes('label: "Reports"')) ?? "";
-  assert.match(reportsItem, /EMPLOYEE/);
+  const gateSource = await readFile(new URL("../components/reports/ReportsAccessGate.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(reportsItem, /EMPLOYEE/);
   assert.match(reportsItem, /IT_ADMIN/);
   assert.match(reportsItem, /OWNER/);
+  assert.match(gateSource, /auth\.role === "EMPLOYEE"/);
+  assert.match(gateSource, /router\.replace\("\/virtual-office"\)/);
 });

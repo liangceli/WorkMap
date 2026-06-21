@@ -2,53 +2,50 @@
 
 ## Original Task Brief
 
-Resolve the full monitoring/report gap list in one development round: real desktop/domain idle tracking, report ranges/trends/filtering/export, role navigation consistency, clearer access copy, safer extension credentials, improved Windows Alpha packaging, stronger verification, and an end-of-round manual test list. Review and test all touched packages without broad unrelated changes.
+1. Employee accounts should not see or enter the Reports page.
+2. Virtual-office Email actions should open the Outlook application when available and must never replace the current WorkMap page; web Outlook must open separately.
 
 ## Changed Files
 
-- Desktop Agent: `apps/desktop-agent/src/{index,trackingState,types}.ts`, installer/build scripts, tests, and generated Alpha installer scripts.
-- Browser Extension: tracking/background/storage/API/options sources, new `credentialVault.ts`, manifest, tests, and generated Alpha manifest.
-- API: activity categorisation, reports controller/service, and tracking/report verification tests.
-- Web: Reports page/panel/API types/client, AppShell Reports role visibility, and Reports API tests.
-- No Prisma schema or migration changed.
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/app/reports/page.tsx`
+- `workmap/apps/web/components/reports/ReportsAccessGate.tsx`
+- `workmap/apps/web/components/office/OfficeMap.tsx`
+- `workmap/apps/web/components/office/contactLauncher.ts`
+- `workmap/apps/web/test/reports-api.test.ts`
+- `workmap/apps/web/test/contact-launcher.test.ts`
 
 ## Implementation Summary
 
-- Desktop app sessions now split active and idle time for the foreground process; lock/no-process stops attribution.
-- Browser sessions now split active and idle time for the current hostname; browser blur/lock stops attribution.
-- Browser device credentials are encrypted with AES-GCM. The non-extractable key is stored in IndexedDB; legacy plaintext extension config is migrated on first read.
-- Windows Alpha now includes current-user install/uninstall scripts and HKCU auto-start, with Node.js 22+ validation. It remains an Alpha package, not a signed installer.
-- Reports default to the latest 30 UTC days and accept validated ranges up to 366 days.
-- Reports provide separate app/domain top rows, daily active/idle trends, company/department/user scopes, non-revoked device coverage, and UTC range metadata.
-- Known work apps/domains are marked Productive; unknown items remain Uncategorised.
-- Owner/authorized manager views default to company aggregate and can select a department or audited employee report. Employee and IT Admin views remain own-scope.
-- Reports UI adds 7/30/90-day presets, custom dates, scope/department/member controls, daily bars, CSV export with formula-injection protection, and no app/domain double-counted total.
+- Removed Reports from Employee navigation while preserving Manager, Owner, and IT Admin visibility.
+- Added a client access gate that redirects an authenticated Employee who directly visits `/reports` to `/virtual-office`.
+- Email actions synchronously reserve a separate window before the contact API request, preventing browser pop-up blocking after the asynchronous response.
+- API `mailto:` links are converted to `ms-outlook://compose?to=...`, preferring the installed Outlook application instead of the machine's default `mailto:` handler.
+- HTTPS Outlook Web links remain HTTPS and navigate only the reserved new tab/window.
+- Invalid/non-email schemes such as `javascript:` are rejected.
+- Failed API/contact-link/pop-up paths close the reserved blank window and show existing WorkMap toast feedback.
 
 ## Role And Access Behavior
 
-- Employee and IT Admin: own report only; Reports navigation is visible.
-- Owner, Manager, Team Lead, HR Admin: company aggregate, department aggregate, own report, or authorized employee report.
-- Employee-level report reads remain tenant-bound and audit logged.
-- Cross-tenant user and department targets are rejected.
-- Platform Admin remains outside tenant report APIs and does not receive employee activity details by default.
+- Employee: no Reports nav item; direct `/reports` access redirects to Virtual Office.
+- Manager/Owner/IT Admin: existing Reports visibility remains.
+- Backend report API/RBAC was intentionally not changed.
 
 ## Verification
 
-- Desktop Agent: 8 tests, typecheck, lint, build passed.
-- Browser Extension: 9 tests, typecheck, lint, build passed.
-- API: 8 tests, typecheck, lint, build passed.
-- Web: 7 tests and typecheck passed; production build passed compilation, integrated lint/type validation, and 19-page generation.
-- `git diff --check` passed. Scoped secret and prohibited-collection scans returned no matches.
-- Automated in-app browser visual QA was blocked by missing browser sandbox metadata. Local production Web is running at `http://127.0.0.1:3011/reports` for manual QA.
+- `pnpm --filter @workmap/web test`: 10/10 passed.
+- `pnpm --filter @workmap/web typecheck`: passed.
+- `pnpm --filter @workmap/web lint`: passed.
+- `pnpm --filter @workmap/web build`: passed; 19 routes generated.
+- `git diff --check`: passed.
 
-## Intentionally Not Changed And Remaining Risks
+## Manual QA And Risks
 
-- No Cognito, Prisma schema/migration, Supabase data, deployment environment, compliance RBAC, or Platform Admin boundary changed.
-- No real deployed Agent/Extension -> Render API -> Supabase -> Reports loop was executed because production device/Cognito credentials were not used.
-- Desktop still requires Node.js and external code signing for formal distribution. Browser Web Store/enterprise packaging remains external.
-- The extension vault is stronger than plaintext storage but is not equivalent to Windows DPAPI against a compromised browser profile.
-- Productivity rules are conservative built-in defaults; Owner-managed custom classification is not implemented.
+- Automated authenticated browser QA was not run because no test Cognito session was used.
+- Outlook desktop launch depends on Windows having the `ms-outlook` protocol registered. This machine reports that protocol registered.
+- Browser external-protocol confirmation and pop-up settings can still require a one-time user approval.
+- No API, Prisma, Supabase, Cognito, monitoring, map movement, or Notice behavior changed.
 
 ## Suggested Next Step
 
-Run the manual list in `latest-qa.md` with one Owner and one Employee against the deployed API/Supabase environment, then ship the updated Web/API and replace both Alpha tracking clients.
+Deploy Web and manually verify one Employee session plus one Outlook-enabled virtual-office contact action.

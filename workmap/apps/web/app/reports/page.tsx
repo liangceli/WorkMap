@@ -1,4 +1,5 @@
 import { ReportSummaryPanel } from "../../components/reports/ReportSummaryPanel";
+import { ReportsAccessGate } from "../../components/reports/ReportsAccessGate";
 import { WorkMapButton } from "../../components/ui/WorkMapButton";
 import { WorkMapPageHeader } from "../../components/ui/WorkMapPageHeader";
 import { WorkMapPrivacyNotice } from "../../components/ui/WorkMapPrivacyNotice";
@@ -8,7 +9,8 @@ import { wmStyles } from "../../lib/theme/workmapTheme";
 export default function ReportsPage() {
   return (
     <AppShell>
-      <section style={styles.shell}>
+      <ReportsAccessGate>
+        <section style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="Reports"
           title="Work summaries"
@@ -29,7 +31,8 @@ export default function ReportsPage() {
         </WorkMapPrivacyNotice>
 
         <ReportSummaryPanel />
-      </section>
+        </section>
+      </ReportsAccessGate>
     </AppShell>
   );
 }

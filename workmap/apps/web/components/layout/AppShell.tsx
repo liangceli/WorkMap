@@ -40,7 +40,7 @@ const navItems: NavItem[] = [
   { label: "Office", href: "/virtual-office", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Employees", href: "/employees", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Dashboard", href: "/dashboard", group: "insight", roles: ["MANAGER", "OWNER"] },
-  { label: "Reports", href: "/reports", group: "insight", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
+  { label: "Reports", href: "/reports", group: "insight", roles: ["MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Compliance", href: "/compliance", group: "insight", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Invites", href: "/onboarding/invite", group: "admin", roles: ["OWNER"] },
   { label: "Integrations", href: "/integrations", group: "admin", roles: ["OWNER", "IT_ADMIN"] },
