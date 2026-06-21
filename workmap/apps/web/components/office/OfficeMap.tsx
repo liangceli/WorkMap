@@ -180,6 +180,10 @@ export function OfficeMap() {
   const sendRealtimeMessageRef = useRef<(targetUserId: string, message: string) => boolean>(() => false);
   const sendRealtimeReactionRef = useRef<(reaction: VirtualOfficeReaction) => boolean>(() => false);
   const floatingReactionsRef = useRef(new Map<string, FloatingReaction>());
+  const activePanelRef = useRef<OfficePanelKey | null>(null);
+  const noticeRefreshGenerationRef = useRef(0);
+  const noticeReconcileTimeoutsRef = useRef<number[]>([]);
+  const optimisticUnreadFloorRef = useRef(0);
   const selectedRemoteIdRef = useRef<string | null>(null);
   const autoPathRef = useRef<PathPoint[]>([]);
   const autoDestinationRef = useRef<PathPoint | null>(null);
@@ -242,20 +246,63 @@ export function OfficeMap() {
   );
   const remoteAvatarConfigSignature = useMemo(() => createRemoteAvatarConfigSignature(officePeople), [officePeople]);
 
-  const refreshNotices = useCallback(async () => {
+  const refreshNotices = useCallback(async (minimumUnreadCount = 0) => {
     if (!officeData.apiOptions) {
       return;
     }
 
+    const generation = ++noticeRefreshGenerationRef.current;
     setNoticesLoading(true);
     const result = await listNotices(officeData.apiOptions);
+
+    if (generation !== noticeRefreshGenerationRef.current) {
+      return;
+    }
+
     setNoticesLoading(false);
 
     if (result.ok) {
       setNotices(result.data.items);
-      setUnreadNoticeCount(result.data.unreadCount);
+      if (activePanelRef.current === "notices") {
+        optimisticUnreadFloorRef.current = 0;
+        setUnreadNoticeCount(0);
+        if (result.data.unreadCount > 0) {
+          void markNoticesRead(officeData.apiOptions);
+        }
+      } else {
+        setUnreadNoticeCount(Math.max(
+          result.data.unreadCount,
+          minimumUnreadCount,
+          optimisticUnreadFloorRef.current,
+        ));
+      }
     }
   }, [officeData.apiOptions]);
+
+  const scheduleNoticeReconciliation = useCallback(() => {
+    noticeRefreshGenerationRef.current += 1;
+    noticeReconcileTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    noticeReconcileTimeoutsRef.current = [
+      window.setTimeout(() => {
+        void refreshNotices(optimisticUnreadFloorRef.current);
+      }, 300),
+      window.setTimeout(() => {
+        optimisticUnreadFloorRef.current = 0;
+        void refreshNotices();
+      }, 1200),
+    ];
+  }, [refreshNotices]);
+
+  const registerRealtimeNotice = useCallback(() => {
+    if (activePanelRef.current !== "notices") {
+      setUnreadNoticeCount((current) => {
+        const next = current + 1;
+        optimisticUnreadFloorRef.current = Math.max(optimisticUnreadFloorRef.current, next);
+        return next;
+      });
+    }
+    scheduleNoticeReconciliation();
+  }, [scheduleNoticeReconciliation]);
 
   const showFloatingReaction = useCallback((userId: string, reaction: VirtualOfficeReaction) => {
     floatingReactionsRef.current.set(userId, { reaction, startedAt: Date.now() });
@@ -366,19 +413,19 @@ export function OfficeMap() {
   const handleRealtimeWave = useCallback((payload: VirtualOfficeRealtimeTeammateEventPayload) => {
     showFloatingReaction(payload.fromUserId, "wave");
     setToast(`${payload.fromDisplayName} waved to you.`);
-    void refreshNotices();
-  }, [refreshNotices, showFloatingReaction]);
+    registerRealtimeNotice();
+  }, [registerRealtimeNotice, showFloatingReaction]);
 
   const handleRealtimeMessage = useCallback((payload: VirtualOfficeRealtimeTeammateMessageEventPayload) => {
     setToast(`${payload.fromDisplayName}: ${payload.message}`);
-    void refreshNotices();
-  }, [refreshNotices]);
+    registerRealtimeNotice();
+  }, [registerRealtimeNotice]);
 
   const handleRealtimeReaction = useCallback((payload: VirtualOfficeRealtimeReactionEventPayload) => {
     showFloatingReaction(payload.fromUserId, payload.reaction);
     setToast(`${payload.fromDisplayName} reacted ${reactionEmoji(payload.reaction)}`);
-    void refreshNotices();
-  }, [refreshNotices, showFloatingReaction]);
+    registerRealtimeNotice();
+  }, [registerRealtimeNotice, showFloatingReaction]);
 
   const {
     connectionState: realtimeConnectionState,
@@ -429,11 +476,16 @@ export function OfficeMap() {
     return () => window.clearInterval(intervalId);
   }, [officeData.apiOptions, refreshNotices]);
 
+  useEffect(() => () => {
+    noticeReconcileTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+  }, []);
+
   useEffect(() => {
     if (activePanel !== "notices" || unreadNoticeCount === 0 || !officeData.apiOptions) {
       return;
     }
 
+    optimisticUnreadFloorRef.current = 0;
     const readAt = new Date().toISOString();
     setUnreadNoticeCount(0);
     setNotices((current) => current.map((notice) =>
@@ -441,6 +493,10 @@ export function OfficeMap() {
     ));
     void markNoticesRead(officeData.apiOptions);
   }, [activePanel, officeData.apiOptions, unreadNoticeCount]);
+
+  useEffect(() => {
+    activePanelRef.current = activePanel;
+  }, [activePanel]);
 
   useEffect(() => {
     officePeopleRef.current = officePeople;
@@ -1123,26 +1179,35 @@ export function OfficeMap() {
   };
 
   const waveToRemote = async (target: ContactTarget) => {
+    showFloatingReaction(playerRef.current.userId, "wave");
+    const deliveredLive = sendRealtimeWaveRef.current(target.userId);
+    setToast(deliveredLive ? `Wave sent to ${target.displayName}.` : `Saving wave for ${target.displayName}...`);
+
     const saved = await persistInteraction({ targetUserId: target.userId, type: "WAVE" });
     if (!saved) {
-      setToast("Wave could not be saved. Try again.");
+      setToast(deliveredLive
+        ? `Wave reached ${target.displayName}, but could not be saved in Notices.`
+        : "Wave could not be delivered or saved. Try again.");
       return;
     }
 
-    const deliveredLive = sendRealtimeWaveRef.current(target.userId);
-    showFloatingReaction(playerRef.current.userId, "wave");
-    setToast(deliveredLive ? `Wave sent to ${target.displayName}.` : `Wave saved for ${target.displayName} in Notices.`);
+    if (!deliveredLive) {
+      setToast(`Wave saved for ${target.displayName} in Notices.`);
+    }
   };
 
-  const sendQuickMessage = async (target: ContactTarget, message: string) => {
-    const saved = await persistInteraction({ targetUserId: target.userId, type: "MESSAGE", message });
-    if (!saved) {
-      setToast("Message could not be saved. Try again.");
-      return false;
-    }
-
+  const sendQuickMessage = (target: ContactTarget, message: string) => {
     const deliveredLive = sendRealtimeMessageRef.current(target.userId, message);
-    setToast(deliveredLive ? `Message sent to ${target.displayName}.` : `Message saved for ${target.displayName} in Notices.`);
+    setToast(deliveredLive ? `Message sent to ${target.displayName}.` : `Saving message for ${target.displayName}...`);
+    void persistInteraction({ targetUserId: target.userId, type: "MESSAGE", message }).then((saved) => {
+      if (!saved) {
+        setToast(deliveredLive
+          ? `Message reached ${target.displayName}, but could not be saved in Notices.`
+          : "Message could not be delivered or saved. Try again.");
+      } else if (!deliveredLive) {
+        setToast(`Message saved for ${target.displayName} in Notices.`);
+      }
+    });
     return true;
   };
 
@@ -1154,21 +1219,35 @@ export function OfficeMap() {
       return;
     }
 
+    const deliveredLive = officePeople.reduce(
+      (count, person) => count + (sendRealtimeWaveRef.current(person.userId) ? 1 : 0),
+      0,
+    );
+    setToast(deliveredLive > 0 ? "Wave sent to the office." : "Saving wave for the office...");
+
     const results = await Promise.all(officePeople.map((person) =>
       persistInteraction({ targetUserId: person.userId, type: "WAVE" }),
     ));
-    officePeople.forEach((person) => sendRealtimeWaveRef.current(person.userId));
-    setToast(results.some(Boolean) ? "Wave sent to the office and saved in Notices." : "Wave could not be saved. Try again.");
+    if (!results.some(Boolean)) {
+      setToast(deliveredLive > 0
+        ? "Wave reached the office, but could not be saved in Notices."
+        : "Wave could not be delivered or saved. Try again.");
+    } else if (deliveredLive === 0) {
+      setToast("Wave saved for the office in Notices.");
+    }
   };
 
   const reactToOffice = async (reaction: VirtualOfficeReaction) => {
     showFloatingReaction(playerRef.current.userId, reaction);
     const deliveredLive = sendRealtimeReactionRef.current(reaction);
+    setToast(deliveredLive
+      ? `${reactionEmoji(reaction)} reaction shared live.`
+      : `${reactionEmoji(reaction)} reaction shown locally.`);
 
     if (officePeople.length === 0) {
-      setToast(deliveredLive
-        ? `${reactionEmoji(reaction)} reaction shared live.`
-        : `${reactionEmoji(reaction)} reaction shown locally. No teammates are available yet.`);
+      if (!deliveredLive) {
+        setToast(`${reactionEmoji(reaction)} reaction shown locally. No teammates are available yet.`);
+      }
       return;
     }
 
@@ -1176,9 +1255,13 @@ export function OfficeMap() {
       persistInteraction({ targetUserId: person.userId, type: "REACTION", reaction }),
     ));
     const saved = results.some(Boolean);
-    setToast(saved
-      ? `${reactionEmoji(reaction)} reaction ${deliveredLive ? "shared live and " : ""}saved in Notices.`
-      : "Reaction could not be saved. Try again.");
+    if (!saved) {
+      setToast(deliveredLive
+        ? `${reactionEmoji(reaction)} reaction was shared, but could not be saved in Notices.`
+        : "Reaction could not be shared or saved. Try again.");
+    } else if (!deliveredLive) {
+      setToast(`${reactionEmoji(reaction)} reaction saved in Notices.`);
+    }
   };
 
   const openTeamsLauncher = (target: ContactTarget) => {

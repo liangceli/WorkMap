@@ -2,29 +2,23 @@
 
 ## Reviewed Implementation
 
-Reviewed room geometry, corridor exclusion, active-room rendering, old-workspace room UUID compatibility, cached map invalidation, navigation geometry, and hallway onboarding spawn behavior.
+Reviewed incoming realtime badge updates, polling/fetch races, open-panel read behavior, outgoing interaction order, persistence failure feedback, and timer cleanup.
 
 ## Findings
 
 - High: none found.
-- Fixed: Open Office no longer extends into the horizontal hallway.
-- Fixed: the central vertical hallway is outside every room.
-- Fixed: all six highlight rectangles follow the TMX outer walls and shared room boundaries.
-- Fixed: existing workspace room UUIDs are preserved while stale coordinates are replaced.
-- Remaining: browser movement QA could not run in the current browser runtime.
+- Fixed: realtime events no longer wait for a Notice refetch before changing the badge.
+- Fixed: stale polling cannot overwrite a newer optimistic unread count.
+- Fixed: opening Notices prevents badge reappearance during read reconciliation.
+- Fixed: wave/message/reaction feedback is emitted before database persistence.
+- Remaining: live two-browser timing was not measured.
 
 ## Test And Verification Status
 
-- API: typecheck, lint, build, and 8/8 tests passed.
-- Web: typecheck, lint, and production build passed.
-- Shared types: typecheck and build passed.
+- Web typecheck, lint, and production build: passed.
 - Diff and secret checks: passed.
-- Focused room test: authored and compiled; execution blocked by environment `spawn EPERM` before assertions.
-
-## Manual QA Status
-
-TMX source rendering with six overlaid rectangles passed. Live authenticated browser movement was not run.
+- Manual browser QA: not run.
 
 ## Risks And Recommendation
 
-Code gate passes. Proceed to deployment and one live walk-through, but do not call the visual interaction fully accepted until all six rooms and both corridors are checked in-browser.
+Code gate passes and Web deployment can proceed. Do not claim latency acceptance until a deployed two-user WebSocket smoke confirms badge timing and Notice persistence under real network conditions.

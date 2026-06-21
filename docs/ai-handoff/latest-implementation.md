@@ -2,48 +2,38 @@
 
 ## Original Task Brief
 
-Correct Virtual Office room highlighting so corridors never trigger dimming and each highlighted rectangle follows the six room boundaries shown in the supplied screenshots.
+Make the Notices badge update immediately for incoming WorkMap activity and reduce the perceived delay when sending wave, message, or reaction interactions.
 
 ## Changed Files
 
-- `workmap/packages/shared-types/src/index.ts`
-- `workmap/apps/web/lib/office/roomGeometry.ts`
-- `workmap/apps/web/lib/office/virtualOfficeMapAdapter.ts`
-- `workmap/apps/web/lib/office/virtualOfficeCache.ts`
-- `workmap/apps/web/components/office/useVirtualOfficeData.ts`
 - `workmap/apps/web/components/office/OfficeMap.tsx`
-- `workmap/apps/web/test/room-geometry.test.ts`
-- `workmap/apps/api/src/modules/tenant-onboarding/tenant-onboarding.service.ts`
 
 ## Implementation Summary
 
-- Replaced the six approximate room bounds with exact 32px TMX wall-aligned rectangles.
-- Kept the default spawn in the main hallway but removed its false Open Office room assignment.
-- Added strict room entry geometry with a one-tile wall inset; the horizontal and vertical main corridors return no active room.
-- Updated navigation anchors/bounds to the same room geometry.
-- Existing workspace API room UUIDs remain authoritative, while stale stored geometry is replaced by the current manifest through room key/name matching.
-- Stale cached default-map geometry is discarded after the map-version change; local position cache remains separate.
-- New workspace onboarding accepts a hallway spawn without an `officeRoomId`.
+- Incoming realtime wave, message, and reaction events increment the unread badge synchronously when Notices is closed.
+- Realtime events schedule database reconciliation at 300ms and 1200ms so the Notice list catches up after persistence.
+- Request generations prevent stale polling/fetch responses from overwriting newer unread state.
+- An optimistic unread floor prevents a poll from briefly dropping the new badge before the database row is visible.
+- While Notices is open, the badge remains zero and unread backend rows are marked read without UI flicker.
+- Outgoing wave/message/reaction now sends WebSocket feedback and local animation before waiting for Notice persistence. Persistence failures remain visible and honest.
 
 ## Role And Access Behavior
 
-No auth, RBAC, tenant, Platform Admin, tracking, Notices, or reporting behavior changed.
+No auth, RBAC, tenant, Platform Admin, Notice API, or database behavior changed. The badge represents incoming unread activity; sent activity updates the sender's Notice list after persistence.
 
 ## Verification
 
-- Web typecheck and lint: passed.
-- Web production build: passed.
-- Shared types typecheck/build: passed.
-- API typecheck, lint, build, and 8/8 tests: passed.
+- `pnpm --filter @workmap/web typecheck`: passed.
+- `pnpm --filter @workmap/web lint`: passed.
+- `pnpm --filter @workmap/web build`: passed with the existing Next.js ESLint-plugin warning.
 - `git diff --check`: passed; scoped secret scan: no matches.
-- Source-level visual QA: rendered the actual TMX layers and overlaid all six configured rectangles; boundaries align with outer walls and exclude both main corridors.
-- Focused Web Node test execution was blocked before assertions by sandbox `spawn EPERM`; the test file is included and typechecks.
+- Manual two-user browser QA: not run in this environment.
 
 ## Intentionally Not Changed And Risks
 
-- No TMX art, collision layers, movement, pathfinding, database schema, or deployed workspace rows changed.
-- In-app browser QA was blocked by the browser runtime before page access. A signed-in movement smoke should still confirm entry/exit timing after deployment.
+- No WebSocket protocol, API, Prisma schema, Supabase migration, map, or interaction visuals changed.
+- A deployed two-user smoke is still required to measure real network latency and reconnect fallback behavior.
 
 ## Suggested Next Step
 
-Deploy Web/API together, then walk through each of the six rooms and both corridors in one authenticated browser.
+Deploy Web only, then verify one user sends wave/message/reaction while a second user watches the badge with Notices closed and open.
