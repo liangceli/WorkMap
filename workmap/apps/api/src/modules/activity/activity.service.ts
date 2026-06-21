@@ -93,6 +93,8 @@ export class ActivityService {
     const usageDate = toUtcDateOnly(event.startedAt);
     const activeSeconds = event.isIdle ? 0 : event.durationSeconds;
     const idleSeconds = event.isIdle ? event.durationSeconds : 0;
+    const category = categorizeApp(event.appName);
+    const productivityLabel = category ? "PRODUCTIVE" : "UNCATEGORISED";
 
     try {
       await this.prisma.$transaction([
@@ -122,6 +124,8 @@ export class ActivityService {
           },
         },
         update: {
+          category,
+          productivityLabel,
           activeSeconds: { increment: activeSeconds },
           idleSeconds: { increment: idleSeconds },
         },
@@ -130,8 +134,8 @@ export class ActivityService {
           userId: context.userId,
           date: usageDate,
           appName: event.appName,
-          category: categorizeApp(event.appName),
-          productivityLabel: "UNCATEGORISED",
+          category,
+          productivityLabel,
           activeSeconds,
           idleSeconds,
         },
@@ -157,6 +161,8 @@ export class ActivityService {
     const usageDate = toUtcDateOnly(event.startedAt);
     const activeSeconds = event.isIdle ? 0 : event.durationSeconds;
     const idleSeconds = event.isIdle ? event.durationSeconds : 0;
+    const category = categorizeDomain(event.domain);
+    const productivityLabel = category ? "PRODUCTIVE" : "UNCATEGORISED";
 
     try {
       await this.prisma.$transaction([
@@ -188,6 +194,8 @@ export class ActivityService {
           },
         },
         update: {
+          category,
+          productivityLabel,
           activeSeconds: { increment: activeSeconds },
           idleSeconds: { increment: idleSeconds },
         },
@@ -197,8 +205,8 @@ export class ActivityService {
           date: usageDate,
           domain: event.domain,
           browserName: event.browserName,
-          category: categorizeDomain(event.domain),
-          productivityLabel: "UNCATEGORISED",
+          category,
+          productivityLabel,
           activeSeconds,
           idleSeconds,
         },

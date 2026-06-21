@@ -2,38 +2,53 @@
 
 ## Original Task Brief
 
-Make the Notices badge update immediately for incoming WorkMap activity and reduce the perceived delay when sending wave, message, or reaction interactions.
+Resolve the full monitoring/report gap list in one development round: real desktop/domain idle tracking, report ranges/trends/filtering/export, role navigation consistency, clearer access copy, safer extension credentials, improved Windows Alpha packaging, stronger verification, and an end-of-round manual test list. Review and test all touched packages without broad unrelated changes.
 
 ## Changed Files
 
-- `workmap/apps/web/components/office/OfficeMap.tsx`
+- Desktop Agent: `apps/desktop-agent/src/{index,trackingState,types}.ts`, installer/build scripts, tests, and generated Alpha installer scripts.
+- Browser Extension: tracking/background/storage/API/options sources, new `credentialVault.ts`, manifest, tests, and generated Alpha manifest.
+- API: activity categorisation, reports controller/service, and tracking/report verification tests.
+- Web: Reports page/panel/API types/client, AppShell Reports role visibility, and Reports API tests.
+- No Prisma schema or migration changed.
 
 ## Implementation Summary
 
-- Incoming realtime wave, message, and reaction events increment the unread badge synchronously when Notices is closed.
-- Realtime events schedule database reconciliation at 300ms and 1200ms so the Notice list catches up after persistence.
-- Request generations prevent stale polling/fetch responses from overwriting newer unread state.
-- An optimistic unread floor prevents a poll from briefly dropping the new badge before the database row is visible.
-- While Notices is open, the badge remains zero and unread backend rows are marked read without UI flicker.
-- Outgoing wave/message/reaction now sends WebSocket feedback and local animation before waiting for Notice persistence. Persistence failures remain visible and honest.
+- Desktop app sessions now split active and idle time for the foreground process; lock/no-process stops attribution.
+- Browser sessions now split active and idle time for the current hostname; browser blur/lock stops attribution.
+- Browser device credentials are encrypted with AES-GCM. The non-extractable key is stored in IndexedDB; legacy plaintext extension config is migrated on first read.
+- Windows Alpha now includes current-user install/uninstall scripts and HKCU auto-start, with Node.js 22+ validation. It remains an Alpha package, not a signed installer.
+- Reports default to the latest 30 UTC days and accept validated ranges up to 366 days.
+- Reports provide separate app/domain top rows, daily active/idle trends, company/department/user scopes, non-revoked device coverage, and UTC range metadata.
+- Known work apps/domains are marked Productive; unknown items remain Uncategorised.
+- Owner/authorized manager views default to company aggregate and can select a department or audited employee report. Employee and IT Admin views remain own-scope.
+- Reports UI adds 7/30/90-day presets, custom dates, scope/department/member controls, daily bars, CSV export with formula-injection protection, and no app/domain double-counted total.
 
 ## Role And Access Behavior
 
-No auth, RBAC, tenant, Platform Admin, Notice API, or database behavior changed. The badge represents incoming unread activity; sent activity updates the sender's Notice list after persistence.
+- Employee and IT Admin: own report only; Reports navigation is visible.
+- Owner, Manager, Team Lead, HR Admin: company aggregate, department aggregate, own report, or authorized employee report.
+- Employee-level report reads remain tenant-bound and audit logged.
+- Cross-tenant user and department targets are rejected.
+- Platform Admin remains outside tenant report APIs and does not receive employee activity details by default.
 
 ## Verification
 
-- `pnpm --filter @workmap/web typecheck`: passed.
-- `pnpm --filter @workmap/web lint`: passed.
-- `pnpm --filter @workmap/web build`: passed with the existing Next.js ESLint-plugin warning.
-- `git diff --check`: passed; scoped secret scan: no matches.
-- Manual two-user browser QA: not run in this environment.
+- Desktop Agent: 8 tests, typecheck, lint, build passed.
+- Browser Extension: 9 tests, typecheck, lint, build passed.
+- API: 8 tests, typecheck, lint, build passed.
+- Web: 7 tests and typecheck passed; production build passed compilation, integrated lint/type validation, and 19-page generation.
+- `git diff --check` passed. Scoped secret and prohibited-collection scans returned no matches.
+- Automated in-app browser visual QA was blocked by missing browser sandbox metadata. Local production Web is running at `http://127.0.0.1:3011/reports` for manual QA.
 
-## Intentionally Not Changed And Risks
+## Intentionally Not Changed And Remaining Risks
 
-- No WebSocket protocol, API, Prisma schema, Supabase migration, map, or interaction visuals changed.
-- A deployed two-user smoke is still required to measure real network latency and reconnect fallback behavior.
+- No Cognito, Prisma schema/migration, Supabase data, deployment environment, compliance RBAC, or Platform Admin boundary changed.
+- No real deployed Agent/Extension -> Render API -> Supabase -> Reports loop was executed because production device/Cognito credentials were not used.
+- Desktop still requires Node.js and external code signing for formal distribution. Browser Web Store/enterprise packaging remains external.
+- The extension vault is stronger than plaintext storage but is not equivalent to Windows DPAPI against a compromised browser profile.
+- Productivity rules are conservative built-in defaults; Owner-managed custom classification is not implemented.
 
 ## Suggested Next Step
 
-Deploy Web only, then verify one user sends wave/message/reaction while a second user watches the badge with Notices closed and open.
+Run the manual list in `latest-qa.md` with one Owner and one Employee against the deployed API/Supabase environment, then ship the updated Web/API and replace both Alpha tracking clients.

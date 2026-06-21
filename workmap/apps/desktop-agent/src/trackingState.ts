@@ -3,6 +3,7 @@ import type { AppUsageEvent, ForegroundSample } from "./types.js";
 
 type ActiveSegment = {
   appName: string;
+  isIdle: boolean;
   startedAtMs: number;
   lastObservedAtMs: number;
 };
@@ -29,7 +30,7 @@ export class AppTrackingState {
     if (!Number.isFinite(sample.observedAtMs)) return [];
     if (this.active && sample.observedAtMs <= this.active.lastObservedAtMs) return [];
 
-    if (sample.isIdle || sample.isLocked || !sample.appName) {
+    if (sample.isLocked || !sample.appName) {
       const completed = this.finish(deviceId, sample.observedAtMs);
       return completed ? [completed] : [];
     }
@@ -41,17 +42,17 @@ export class AppTrackingState {
     }
 
     if (!this.active) {
-      this.active = { appName, startedAtMs: sample.observedAtMs, lastObservedAtMs: sample.observedAtMs };
+      this.active = this.start(appName, sample.isIdle, sample.observedAtMs);
       return [];
     }
 
-    if (this.active.appName === appName) {
+    if (this.active.appName === appName && this.active.isIdle === sample.isIdle) {
       this.active.lastObservedAtMs = sample.observedAtMs;
       return [];
     }
 
     const completed = this.finish(deviceId, sample.observedAtMs);
-    this.active = { appName, startedAtMs: sample.observedAtMs, lastObservedAtMs: sample.observedAtMs };
+    this.active = this.start(appName, sample.isIdle, sample.observedAtMs);
     return completed ? [completed] : [];
   }
 
@@ -76,8 +77,12 @@ export class AppTrackingState {
       startedAt: new Date(segment.startedAtMs).toISOString(),
       endedAt: new Date(cappedEndMs).toISOString(),
       durationSeconds: Math.max(1, Math.round(durationMs / 1000)),
-      isIdle: false,
+      isIdle: segment.isIdle,
     };
+  }
+
+  private start(appName: string, isIdle: boolean, observedAtMs: number): ActiveSegment {
+    return { appName, isIdle, startedAtMs: observedAtMs, lastObservedAtMs: observedAtMs };
   }
 }
 

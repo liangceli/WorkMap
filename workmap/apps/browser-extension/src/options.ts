@@ -1,5 +1,5 @@
 import { exchangePairingCode } from "./extensionApi.js";
-import { readStoredState, writeStoredState } from "./extensionStorage.js";
+import { readStoredState, savePairedConfig, writeStoredState } from "./extensionStorage.js";
 
 declare const chrome: {
   permissions: { request(permissions: { origins: string[] }, callback: (allowed: boolean) => void): void };
@@ -26,8 +26,8 @@ async function pair() {
     await writeStoredState({ workmapStatus: { state: "pairing", queuedEvents: 0 } });
     await refreshStatus();
     const result = await exchangePairingCode(apiBaseUrl, code, browserSelect.value);
+    await savePairedConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, browserName: browserSelect.value });
     await writeStoredState({
-      workmapConfig: { apiBaseUrl, credential: result.credential, deviceId: result.device.id, browserName: browserSelect.value },
       workmapStatus: { state: "connected", queuedEvents: 0 },
       workmapTracker: { active: null },
       workmapQueue: [],

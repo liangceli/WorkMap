@@ -8,5 +8,7 @@ await mkdir(new URL("scripts/", output), { recursive: true });
 await cp(new URL("../dist/", import.meta.url), new URL("dist/", output), { recursive: true });
 await cp(new URL("windows-foreground.ps1", import.meta.url), new URL("scripts/windows-foreground.ps1", output));
 await cp(new URL("credential-protection.ps1", import.meta.url), new URL("scripts/credential-protection.ps1", output));
+await cp(new URL("install-workmap-agent.ps1", import.meta.url), new URL("install-workmap-agent.ps1", output));
+await cp(new URL("uninstall-workmap-agent.ps1", import.meta.url), new URL("uninstall-workmap-agent.ps1", output));
 await writeFile(new URL("run-workmap-agent.cmd", output), "@echo off\r\nnode \"%~dp0dist\\index.js\" %*\r\n", "utf8");
 await writeFile(new URL("package.json", output), JSON.stringify({ name: "workmap-desktop-agent-alpha", private: true, type: "module" }, null, 2) + "\n", "utf8");

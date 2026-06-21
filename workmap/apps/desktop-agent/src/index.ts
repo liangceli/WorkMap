@@ -11,7 +11,7 @@ export * from "./trackingState.js";
 export * from "./types.js";
 export * from "./windowsForeground.js";
 
-const AGENT_VERSION = "desktop-agent-windows-alpha/0.2.0";
+const AGENT_VERSION = "desktop-agent-windows-alpha/0.3.0";
 
 async function main() {
   const [command = "run"] = process.argv.slice(2);

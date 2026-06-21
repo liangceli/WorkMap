@@ -1,5 +1,6 @@
 export type DomainSession = {
   domain: string;
+  isIdle: boolean;
   startedAt: number;
   lastObservedAt?: number;
   clientEventId?: string;
@@ -55,6 +56,6 @@ export function createDomainUsageEvent(
     startedAt: new Date(session.startedAt).toISOString(),
     endedAt: new Date(safeEndMs).toISOString(),
     durationSeconds: Math.max(1, Math.round(durationMs / 1000)),
-    isIdle: false,
+    isIdle: session.isIdle,
   };
 }

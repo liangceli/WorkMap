@@ -1,12 +1,15 @@
 import type { DomainUsageEvent } from "./domainTracking.js";
 import type { DomainTrackerSnapshot } from "./domainState.js";
+import { protectCredential, unprotectCredential, type ProtectedCredential } from "./credentialVault.js";
 
-export type ExtensionConfig = {
+type ExtensionConfigMetadata = {
   apiBaseUrl: string;
-  credential: string;
   deviceId: string;
   browserName: string;
 };
+
+export type ExtensionConfig = ExtensionConfigMetadata & { credential: string };
+export type PersistedExtensionConfig = ExtensionConfigMetadata & Partial<ProtectedCredential> & { credential?: string };
 
 export type ExtensionStatus = {
   state: "unpaired" | "pairing" | "connected" | "offline" | "auth_required" | "error";
@@ -19,7 +22,7 @@ export type ExtensionStatus = {
 export type QueuedDomainEvent = { event: DomainUsageEvent; attempts: number; nextAttemptAtMs: number; createdAtMs: number };
 
 type StoredState = {
-  workmapConfig?: ExtensionConfig;
+  workmapConfig?: PersistedExtensionConfig;
   workmapStatus?: ExtensionStatus;
   workmapTracker?: DomainTrackerSnapshot;
   workmapQueue?: QueuedDomainEvent[];
@@ -35,6 +38,34 @@ export function readStoredState(keys: (keyof StoredState)[]) {
 
 export function writeStoredState(value: StoredState) {
   return new Promise<void>((resolve) => chrome.storage.local.set(value, resolve));
+}
+
+export async function savePairedConfig(config: ExtensionConfig) {
+  const protectedCredential = await protectCredential(config.credential);
+  const metadata: ExtensionConfigMetadata = {
+    apiBaseUrl: config.apiBaseUrl,
+    deviceId: config.deviceId,
+    browserName: config.browserName,
+  };
+  await writeStoredState({ workmapConfig: { ...metadata, ...protectedCredential } });
+}
+
+export async function resolveStoredConfig(config: PersistedExtensionConfig | undefined): Promise<ExtensionConfig | null> {
+  if (!config) return null;
+
+  const { apiBaseUrl, deviceId, browserName } = config;
+  if (config.credentialCiphertext && config.credentialIv && config.credentialVersion === 1) {
+    const credential = await unprotectCredential(config as PersistedExtensionConfig & ProtectedCredential);
+    return { apiBaseUrl, deviceId, browserName, credential };
+  }
+
+  if (config.credential) {
+    const runtimeConfig = { apiBaseUrl, deviceId, browserName, credential: config.credential };
+    await savePairedConfig(runtimeConfig);
+    return runtimeConfig;
+  }
+
+  return null;
 }
 
 export const MAX_EXTENSION_QUEUE = 1_000;

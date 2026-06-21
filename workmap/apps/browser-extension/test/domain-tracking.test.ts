@@ -17,6 +17,7 @@ test("creates minimized stable event and filters short slices", () => {
   const event = createDomainUsageEvent(
     {
       domain: "github.com",
+      isIdle: true,
       startedAt: Date.parse("2026-06-17T09:00:00.000Z"),
       lastObservedAt: Date.parse("2026-06-17T09:05:00.000Z"),
       clientEventId: "00000000-0000-4000-8000-000000000001",
@@ -33,9 +34,9 @@ test("creates minimized stable event and filters short slices", () => {
     startedAt: "2026-06-17T09:00:00.000Z",
     endedAt: "2026-06-17T09:05:00.000Z",
     durationSeconds: 300,
-    isIdle: false,
+    isIdle: true,
   });
   const serialized = JSON.stringify(event);
   for (const forbidden of ["url", "title", "content", "query", "fragment"]) assert(!serialized.toLowerCase().includes(`"${forbidden}`));
-  assert.equal(createDomainUsageEvent({ domain: "github.com", startedAt: 0 }, 3_000, DEVICE_ID, "CHROME"), null);
+  assert.equal(createDomainUsageEvent({ domain: "github.com", isIdle: false, startedAt: 0 }, 3_000, DEVICE_ID, "CHROME"), null);
 });

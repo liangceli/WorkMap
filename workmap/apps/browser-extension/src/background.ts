@@ -5,6 +5,7 @@ import {
   enqueueDomainEvents,
   normalizeQueue,
   readStoredState,
+  resolveStoredConfig,
   retryDomainEvents,
   writeStoredState,
   type ExtensionConfig,
@@ -41,7 +42,7 @@ chrome.runtime.onStartup.addListener(() => { chrome.idle.setDetectionInterval(60
 chrome.tabs.onActivated.addListener(({ tabId }) => { void schedule(() => switchToTab(tabId)); });
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => { if (change.url && tab.active) void schedule(() => switchToTab(tabId)); });
 chrome.windows.onFocusChanged.addListener((windowId) => { focused = windowId !== chrome.windows.WINDOW_ID_NONE; void schedule(focused ? reconcileActiveTab : stopTracking); });
-chrome.idle.onStateChanged.addListener((state) => { idleState = state; void schedule(state === "active" ? reconcileActiveTab : stopTracking); });
+chrome.idle.onStateChanged.addListener((state) => { idleState = state; void schedule(state === "locked" ? stopTracking : reconcileActiveTab); });
 chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === ALARM_NAME) void schedule(onAlarm); });
 
 void schedule(async () => {
@@ -63,7 +64,7 @@ async function switchToTab(tabId: number) {
 }
 
 async function reconcileActiveTab() {
-  if (!focused || idleState !== "active") return stopTracking();
+  if (!focused || idleState === "locked") return stopTracking();
   const tabs = await queryTabs();
   await updateTracking(readDomainFromUrl(tabs[0]?.url));
 }
@@ -72,13 +73,13 @@ async function stopTracking() { await updateTracking(null); }
 
 async function updateTracking(domain: string | null, checkpoint = false) {
   const stored = await readStoredState(["workmapConfig", "workmapTracker", "workmapQueue", "workmapStatus"]);
-  const config = stored.workmapConfig;
+  const config = await resolveRuntimeConfig(stored.workmapConfig, stored.workmapStatus?.queuedEvents ?? 0);
   const now = Date.now();
   const tracker = new DomainTrackingState(stored.workmapTracker);
   const events = config
     ? checkpoint
       ? tracker.checkpoint(now, config.deviceId, config.browserName)
-      : tracker.observe(domain, focused && idleState === "active", now, config.deviceId, config.browserName)
+      : tracker.observe(domain, !focused || idleState === "locked" ? "stopped" : idleState, now, config.deviceId, config.browserName)
     : [];
   const queue = enqueueDomainEvents(normalizeQueue(stored.workmapQueue, now), events, now);
   await writeStoredState({ workmapTracker: tracker.snapshot(), workmapQueue: queue, workmapStatus: statusWithQueue(stored.workmapStatus, queue.length, config) });
@@ -90,9 +91,10 @@ async function onAlarm() {
   await reconcileActiveTab();
   await updateTracking((await activeDomain()), true);
   const stored = await readStoredState(["workmapConfig", "workmapQueue", "workmapStatus"]);
-  if (!stored.workmapConfig) return;
-  await heartbeat(stored.workmapConfig, stored.workmapStatus);
-  await flushQueue(stored.workmapConfig);
+  const config = await resolveRuntimeConfig(stored.workmapConfig, stored.workmapStatus?.queuedEvents ?? 0);
+  if (!config) return;
+  await heartbeat(config, stored.workmapStatus);
+  await flushQueue(config);
 }
 
 async function heartbeat(config: ExtensionConfig, previous?: ExtensionStatus) {
@@ -131,11 +133,19 @@ async function storeFailure(error: unknown, queuedEvents: number) {
   await writeStoredState({ workmapStatus: { state: auth ? "auth_required" : "offline", queuedEvents, error: safeError(error) } });
 }
 
-function statusWithQueue(status: ExtensionStatus | undefined, queuedEvents: number, config?: ExtensionConfig): ExtensionStatus {
+function statusWithQueue(status: ExtensionStatus | undefined, queuedEvents: number, config?: ExtensionConfig | null): ExtensionStatus {
   return { ...status, state: config ? status?.state ?? "connected" : "unpaired", queuedEvents };
 }
 
 function safeError(error: unknown) { return error instanceof Error ? error.message.replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]") : "Unknown error"; }
+async function resolveRuntimeConfig(config: Parameters<typeof resolveStoredConfig>[0], queuedEvents: number) {
+  try {
+    return await resolveStoredConfig(config);
+  } catch {
+    await writeStoredState({ workmapStatus: { state: "auth_required", queuedEvents, error: "Device credential vault could not be opened. Pair this extension again." } });
+    return null;
+  }
+}
 async function activeDomain() { return readDomainFromUrl((await queryTabs())[0]?.url); }
 function getTab(id: number) { return new Promise<ChromeTab>((resolve) => chrome.tabs.get(id, resolve)); }
 function queryTabs() { return new Promise<ChromeTab[]>((resolve) => chrome.tabs.query({ active: true, lastFocusedWindow: true }, resolve)); }

@@ -19,7 +19,7 @@ export type AppUsageEvent = {
   startedAt: string;
   endedAt: string;
   durationSeconds: number;
-  isIdle: false;
+  isIdle: boolean;
 };
 
 export type QueuedEvent = {

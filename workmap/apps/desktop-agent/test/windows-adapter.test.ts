@@ -24,3 +24,12 @@ test("production PowerShell adapter uses foreground and last-input APIs without 
   assert.match(source, /OpenInputDesktop/);
   assert.doesNotMatch(source, /GetWindowText/);
 });
+
+test("Windows Alpha package provides current-user install and uninstall scripts", async () => {
+  const install = await readFile(new URL("../scripts/install-workmap-agent.ps1", import.meta.url), "utf8");
+  const uninstall = await readFile(new URL("../scripts/uninstall-workmap-agent.ps1", import.meta.url), "utf8");
+  assert.match(install, /WorkMapDesktopAgent/);
+  assert.match(install, /CurrentVersion\\Run/);
+  assert.match(uninstall, /RemoveLocalData/);
+  assert.doesNotMatch(install, /LocalMachine/);
+});

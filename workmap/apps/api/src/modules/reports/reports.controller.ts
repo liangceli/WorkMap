@@ -14,8 +14,11 @@ export class ReportsController {
   getUsageSummary(
     @CurrentContext() context: RequestContext,
     @Query("userId", OptionalUuidPipe) userId?: string,
+    @Query("departmentId", OptionalUuidPipe) departmentId?: string,
     @Query("scope") scope?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
   ) {
-    return this.reports.getUsageSummary(context, { userId, scope });
+    return this.reports.getUsageSummary(context, { userId, departmentId, scope, from, to });
   }
 }

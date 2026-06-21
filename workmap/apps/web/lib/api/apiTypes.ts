@@ -229,8 +229,14 @@ export type WorkMapApiPolicyAcknowledgement = {
 };
 
 export type WorkMapApiUsageSummary = {
-  scope?: "user" | "company";
+  scope: "user" | "company";
   userId: string | null;
+  departmentId: string | null;
+  range: {
+    from: string;
+    to: string;
+    timeZone: "UTC";
+  };
   apps: Array<{
     appName: string;
     category: string | null;
@@ -244,6 +250,13 @@ export type WorkMapApiUsageSummary = {
     productivityLabel: string | null;
     activeSeconds: number;
     idleSeconds: number;
+  }>;
+  daily: Array<{
+    date: string;
+    appActiveSeconds: number;
+    appIdleSeconds: number;
+    domainActiveSeconds: number;
+    domainIdleSeconds: number;
   }>;
   deviceCoverage?: {
     registeredDevices: number;

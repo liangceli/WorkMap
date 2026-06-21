@@ -23,6 +23,7 @@ const OWNER_ID = "22222222-2222-4222-8222-222222222222";
 const OTHER_USER_ID = "33333333-3333-4333-8333-333333333333";
 const DEVICE_ID = "44444444-4444-4444-8444-444444444444";
 const OTHER_DEVICE_ID = "55555555-5555-4555-8555-555555555555";
+const DEPARTMENT_ID = "66666666-6666-4666-8666-666666666666";
 
 const employeeContext: RequestContext = {
   companyId: COMPANY_ID,
@@ -114,6 +115,13 @@ async function testActivityIngestionAndReportsLoop() {
         endedAt: "2026-06-17T09:05:00.000Z",
         isIdle: false,
       },
+      {
+        deviceId: DEVICE_ID,
+        appName: "Visual Studio Code",
+        startedAt: "2026-06-17T09:05:00.000Z",
+        durationSeconds: 60,
+        isIdle: true,
+      },
     ],
   });
   const domainResult = await activity.ingestDomainUsage(employeeContext, {
@@ -126,38 +134,58 @@ async function testActivityIngestionAndReportsLoop() {
         durationSeconds: 180,
         isIdle: false,
       },
+      {
+        deviceId: DEVICE_ID,
+        domain: "github.com",
+        browserName: "CHROME",
+        startedAt: "2026-06-17T09:08:00.000Z",
+        durationSeconds: 60,
+        isIdle: true,
+      },
     ],
   });
 
   assert.deepEqual(appResult, {
-    accepted: 1,
+    accepted: 2,
     source: ActivityEventSource.DESKTOP_AGENT,
     eventType: ActivityEventType.APP,
   });
   assert.deepEqual(domainResult, {
-    accepted: 1,
+    accepted: 2,
     source: ActivityEventSource.BROWSER_EXTENSION,
     eventType: ActivityEventType.BROWSER,
   });
-  assert.equal(prisma.activityEvents.length, 2);
+  assert.equal(prisma.activityEvents.length, 4);
   assert.equal(prisma.activityEvents[0]?.companyId, COMPANY_ID);
   assert.equal(prisma.activityEvents[0]?.userId, EMPLOYEE_ID);
-  assert.equal(prisma.activityEvents[1]?.domain, "github.com");
+  assert.equal(prisma.activityEvents[2]?.domain, "github.com");
   assert(!JSON.stringify(prisma.activityEvents).includes("private-path"));
   assert(!JSON.stringify(prisma.activityEvents).includes("secret"));
 
-  const ownSummary = await reports.getUsageSummary(employeeContext, {});
+  const ownSummary = await reports.getUsageSummary(employeeContext, { from: "2026-06-17", to: "2026-06-17" });
   assert.equal(ownSummary.scope, "user");
   assert.equal(ownSummary.userId, EMPLOYEE_ID);
   assert.deepEqual(ownSummary.apps.map((row: any) => [row.appName, row.activeSeconds]), [["Visual Studio Code", 300]]);
   assert.deepEqual(ownSummary.websites.map((row: any) => [row.domain, row.activeSeconds]), [["github.com", 180]]);
+  assert.equal(ownSummary.apps[0]?.idleSeconds, 60);
+  assert.equal(ownSummary.websites[0]?.idleSeconds, 60);
+  assert.equal(ownSummary.apps[0]?.productivityLabel, "PRODUCTIVE");
+  assert.equal(ownSummary.websites[0]?.productivityLabel, "PRODUCTIVE");
+  assert.deepEqual(ownSummary.range, { from: "2026-06-17", to: "2026-06-17", timeZone: "UTC" });
+  assert.deepEqual(ownSummary.daily, [{
+    date: "2026-06-17",
+    appActiveSeconds: 300,
+    appIdleSeconds: 60,
+    domainActiveSeconds: 180,
+    domainIdleSeconds: 60,
+  }]);
   assert.deepEqual(ownSummary.deviceCoverage, {
     registeredDevices: 1,
     activeDevices24h: 1,
     usersWithActivity: 1,
   });
 
-  const companySummary = await reports.getUsageSummary(ownerContext, { scope: "company" });
+  const companySummary = await reports.getUsageSummary(ownerContext, { scope: "company", from: "2026-06-17", to: "2026-06-17" });
   assert.equal(companySummary.scope, "company");
   assert.equal(companySummary.userId, null);
   assert.equal(companySummary.apps[0]?.appName, "Visual Studio Code");
@@ -167,6 +195,20 @@ async function testActivityIngestionAndReportsLoop() {
     activeDevices24h: 1,
     usersWithActivity: 1,
   });
+
+  const departmentSummary = await reports.getUsageSummary(ownerContext, {
+    scope: "company",
+    departmentId: DEPARTMENT_ID,
+    from: "2026-06-17",
+    to: "2026-06-17",
+  });
+  assert.equal(departmentSummary.departmentId, DEPARTMENT_ID);
+  assert.equal(departmentSummary.apps[0]?.activeSeconds, 300);
+
+  await assertRejectsWith(
+    () => reports.getUsageSummary(ownerContext, { from: "2025-01-01", to: "2026-06-17" }),
+    BadRequestException,
+  );
 
   await assertRejectsWith(
     () => activity.ingestAppUsage(employeeContext, {
@@ -205,6 +247,10 @@ async function testReportAccessBoundaries() {
   );
   await assertRejectsWith(
     () => reports.getUsageSummary(ownerContext, { userId: OTHER_USER_ID }),
+    NotFoundException,
+  );
+  await assertRejectsWith(
+    () => reports.getUsageSummary(ownerContext, { scope: "company", departmentId: OTHER_DEVICE_ID }),
     NotFoundException,
   );
 }
@@ -276,9 +322,9 @@ class MockAuditService {
 
 class MockPrisma {
   users = [
-    { id: EMPLOYEE_ID, companyId: COMPANY_ID, role: UserRole.EMPLOYEE },
-    { id: OWNER_ID, companyId: COMPANY_ID, role: UserRole.OWNER },
-    { id: OTHER_USER_ID, companyId: OTHER_COMPANY_ID, role: UserRole.EMPLOYEE },
+    { id: EMPLOYEE_ID, companyId: COMPANY_ID, departmentId: DEPARTMENT_ID, role: UserRole.EMPLOYEE },
+    { id: OWNER_ID, companyId: COMPANY_ID, departmentId: null, role: UserRole.OWNER },
+    { id: OTHER_USER_ID, companyId: OTHER_COMPANY_ID, departmentId: null, role: UserRole.EMPLOYEE },
   ];
   devices: DeviceRow[] = [];
   activityEvents: ActivityEventRow[] = [];
@@ -352,7 +398,9 @@ class MockPrisma {
       row.updatedAt = new Date();
       return row;
     },
-    groupBy: async ({ where, take }: any) => groupAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)), take),
+    groupBy: async ({ where, take, by }: any) => by.includes("date")
+      ? groupDailySummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
+      : groupAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)), take),
   };
 
   websiteUsageSummary = {
@@ -377,7 +425,9 @@ class MockPrisma {
       row.updatedAt = new Date();
       return row;
     },
-    groupBy: async ({ where, take }: any) => groupWebsiteSummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)), take),
+    groupBy: async ({ where, take, by }: any) => by.includes("date")
+      ? groupDailySummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)))
+      : groupWebsiteSummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)), take),
   };
 
   user = {
@@ -389,6 +439,9 @@ class MockPrisma {
       return select?.id ? { id: user.id } : user;
     },
     count: async ({ where }: any) => this.users.filter((user) => matchesWhere(user, where)).length,
+    findMany: async ({ where, select }: any) => this.users
+      .filter((user) => matchesWhere(user, where))
+      .map((user) => select?.id ? { id: user.id } : user),
     groupBy: async ({ where }: any) => {
       const counts = new Map<string, number>();
       for (const user of this.users.filter((item) => matchesWhere(item, where))) {
@@ -400,6 +453,10 @@ class MockPrisma {
         return { companyId, role, _count: { _all: count } };
       });
     },
+  };
+
+  department = {
+    findFirst: async ({ where }: any) => where.id === DEPARTMENT_ID && where.companyId === COMPANY_ID ? { id: DEPARTMENT_ID } : null,
   };
 
   company = {
@@ -557,14 +614,30 @@ function matchesWhere(row: Record<string, any>, where: Record<string, any> | und
     if (expected instanceof Date) {
       return actual instanceof Date && actual.getTime() === expected.getTime();
     }
-    if (expected && typeof expected === "object" && "gte" in expected) {
-      return actual instanceof Date && actual >= expected.gte;
-    }
     if (expected && typeof expected === "object" && "in" in expected) {
       return Array.isArray(expected.in) && expected.in.includes(actual);
     }
+    if (expected && typeof expected === "object" && ("gte" in expected || "lte" in expected || "lt" in expected)) {
+      if (!(actual instanceof Date)) return false;
+      if (expected.gte && actual < expected.gte) return false;
+      if (expected.lte && actual > expected.lte) return false;
+      if (expected.lt && actual >= expected.lt) return false;
+      return true;
+    }
     return actual === expected;
   });
+}
+
+function groupDailySummaries(rows: Array<{ date: Date; activeSeconds: number; idleSeconds: number }>) {
+  const grouped = new Map<number, { date: Date; _sum: { activeSeconds: number; idleSeconds: number } }>();
+  for (const row of rows) {
+    const key = row.date.getTime();
+    const item = grouped.get(key) ?? { date: row.date, _sum: { activeSeconds: 0, idleSeconds: 0 } };
+    item._sum.activeSeconds += row.activeSeconds;
+    item._sum.idleSeconds += row.idleSeconds;
+    grouped.set(key, item);
+  }
+  return Array.from(grouped.values()).sort((left, right) => left.date.getTime() - right.date.getTime());
 }
 
 function groupAppSummaries(rows: AppSummaryRow[], take: number) {
