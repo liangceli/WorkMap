@@ -143,6 +143,20 @@ export function AppShell({ children }: AppShellProps) {
           ? "Workspace mapping pending"
           : "No workspace session";
 
+  const logout = async () => {
+    try {
+      const { signOutCognitoAccount } = await import("../../lib/auth/cognitoUserPoolAuth");
+      await signOutCognitoAccount();
+    } catch {
+      clearCognitoSession();
+    }
+
+    resetUserSetupState();
+    setCognitoSession(null);
+    setApiSummary(null);
+    setPlatformSummary(null);
+  };
+
   return (
     <main className="wm-app-shell" style={styles.page}>
       <header className="wm-app-top-nav" style={styles.topNav}>
@@ -181,13 +195,7 @@ export function AppShell({ children }: AppShellProps) {
             <button
               type="button"
               style={styles.logoutButton}
-              onClick={() => {
-                clearCognitoSession();
-                resetUserSetupState();
-                setCognitoSession(null);
-                setApiSummary(null);
-                setPlatformSummary(null);
-              }}
+              onClick={() => void logout()}
             >
               Log out
             </button>

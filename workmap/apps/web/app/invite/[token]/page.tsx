@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { CognitoAuthForm } from "../../../components/login/CognitoAuthForm";
 import { acceptInvitation, previewInvitation } from "../../../lib/api/invitationsApi";
 import type { WorkMapApiInvitationPreview } from "../../../lib/api/apiTypes";
 import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
-import { clearCognitoSession, getCognitoApiAuthOptions, startCognitoSignUp } from "../../../lib/auth/cognitoSession";
+import { getCognitoApiAuthOptions, type StoredCognitoSession } from "../../../lib/auth/cognitoSession";
+import { restoreCognitoAccountSession } from "../../../lib/auth/cognitoUserPoolAuth";
 import { sanitizeDisplayName } from "../../../lib/auth/displayName";
 import { clearPendingInviteToken, savePendingInviteToken } from "../../../lib/auth/pendingInvite";
 import { getDefaultSetupState, getNextRouteForUser, saveUserSetupState, type WorkMapRole } from "../../../lib/workflow/workflowState";
@@ -50,18 +52,11 @@ export default function InviteAcceptancePage() {
 
       if (!preview.ok) {
         if (preview.status === 404) {
-          const nextAuth = getCognitoApiAuthOptions();
           setInvitePreview(null);
           setPreviewRouteUnavailable(true);
-          setCognitoAuth(nextAuth);
+          setCognitoAuth({ available: false, reason: "Invitation preview API is unavailable." });
           savePendingInviteToken(token);
-
-          if (nextAuth.available) {
-            setDisplayName("");
-            setStatus("Ready to continue. WorkMap will verify your Cognito email against the invitation when you join.");
-          } else {
-            setStatus("Continue with the exact email address that received this invitation. WorkMap will verify it after Cognito sign-up.");
-          }
+          setStatus("Invitation details are temporarily unavailable. Try this link again after the WorkMap API update completes.");
           return;
         }
 
@@ -81,7 +76,20 @@ export default function InviteAcceptancePage() {
         return;
       }
 
-      const nextAuth = getCognitoApiAuthOptions();
+      let nextAuth = getCognitoApiAuthOptions();
+
+      if (!nextAuth.available) {
+        const restoredSession = await restoreCognitoAccountSession();
+
+        if (cancelled) {
+          return;
+        }
+
+        if (restoredSession) {
+          nextAuth = getCognitoApiAuthOptions();
+        }
+      }
+
       setCognitoAuth(nextAuth);
 
       if (!nextAuth.available) {
@@ -110,31 +118,34 @@ export default function InviteAcceptancePage() {
   }, [token]);
 
   const invitedEmail = invitePreview?.invitedEmail ?? "";
-  const canUseInvite = Boolean(token && (invitePreview?.status === "PENDING" || previewRouteUnavailable));
+  const canUseInvite = Boolean(token && invitePreview?.status === "PENDING" && invitedEmail);
   const signedInEmail = cognitoAuth?.available ? cognitoAuth.email?.trim().toLowerCase() ?? "" : "";
   const emailMismatch = Boolean(canUseInvite && signedInEmail && invitedEmail && signedInEmail !== invitedEmail.toLowerCase());
 
-  const signUp = async () => {
-    if (token) {
-      savePendingInviteToken(token);
+  const handleAuthenticated = async (session: StoredCognitoSession) => {
+    const nextAuth = getCognitoApiAuthOptions();
+
+    if (!nextAuth.available) {
+      setStatus(nextAuth.reason);
+      return;
     }
 
-    if (emailMismatch) {
-      clearCognitoSession();
+    const authenticatedEmail = session.claims.email?.trim().toLowerCase() ?? "";
+
+    if (!authenticatedEmail || authenticatedEmail !== invitedEmail.toLowerCase()) {
+      setCognitoAuth(nextAuth);
+      setStatus(`This invitation is locked to ${invitedEmail}. Sign in with that exact Cognito email.`);
+      return;
     }
 
-    setStatus("Opening Cognito sign-up...");
-
-    try {
-      await startCognitoSignUp({ loginHint: invitedEmail });
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Cognito sign-up could not be started.");
-    }
+    setCognitoAuth(nextAuth);
+    setDisplayName(sanitizeDisplayName(session.claims.displayName ?? "") ?? "");
+    setStatus("Cognito account verified. Confirm the display name teammates should see.");
   };
 
   const accept = async () => {
     if (!cognitoAuth?.available || emailMismatch) {
-      await signUp();
+      setStatus(`Sign in with the Cognito account for ${invitedEmail} before accepting this invitation.`);
       return;
     }
 
@@ -180,7 +191,7 @@ export default function InviteAcceptancePage() {
           <strong>What happens next</strong>
           <span>Employees must use the invited Cognito email before WorkMap takes them through compliance, avatar/profile, and device setup.</span>
         </section>
-        {invitePreview ? (
+        {invitePreview && cognitoAuth?.available && !emailMismatch ? (
           <section style={styles.lockPanel}>
             <span style={styles.lockLabel}>Invited account</span>
             <input value={invitePreview.invitedEmail} readOnly aria-label="Invited email" style={styles.readOnlyInput} />
@@ -200,29 +211,39 @@ export default function InviteAcceptancePage() {
           <button type="button" disabled style={styles.primaryButton}>
             Invitation unavailable
           </button>
-        ) : emailMismatch ? (
-          <button type="button" onClick={signUp} disabled={!token || !invitedEmail} style={styles.primaryButton}>
-            Use invited email in Cognito
-          </button>
         ) : cognitoAuth.available ? (
-          <>
-            <label style={styles.label}>
-              <span>Your display name</span>
-              <input
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="How teammates should see you"
-                style={styles.input}
-              />
-            </label>
-            <button type="button" onClick={accept} disabled={accepting || !token || !sanitizeDisplayName(displayName)} style={styles.primaryButton}>
-              {accepting ? "Joining..." : "Accept invitation"}
-            </button>
-          </>
+          emailMismatch ? (
+            <CognitoAuthForm
+              key={`invite-auth-${invitedEmail}`}
+              initialMode="signin"
+              lockedEmail={invitedEmail}
+              accountContext="employee"
+              onAuthenticated={handleAuthenticated}
+            />
+          ) : (
+            <>
+              <label style={styles.label}>
+                <span>Your display name</span>
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder="How teammates should see you"
+                  style={styles.input}
+                />
+              </label>
+              <button type="button" onClick={accept} disabled={accepting || !token || !sanitizeDisplayName(displayName)} style={styles.primaryButton}>
+                {accepting ? "Joining..." : "Accept invitation"}
+              </button>
+            </>
+          )
         ) : (
-          <button type="button" onClick={signUp} disabled={!canUseInvite} style={styles.primaryButton}>
-            {invitedEmail ? "Sign up with invited email" : "Continue to Cognito sign-up"}
-          </button>
+          <CognitoAuthForm
+            key={`invite-auth-${invitedEmail}`}
+            initialMode="signup"
+            lockedEmail={invitedEmail}
+            accountContext="employee"
+            onAuthenticated={handleAuthenticated}
+          />
         )}
         <a href="/login" style={styles.secondaryLink}>
           Back to login

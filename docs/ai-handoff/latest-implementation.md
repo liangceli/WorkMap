@@ -2,51 +2,45 @@
 
 ## Original Task Brief
 
-Finish the previously blocked invitation email-lock verification and fix the deployed invite page showing `WorkMap API returned 404` when the web deployment reaches the new invitation preview route before the API deployment does.
+Replace Cognito Hosted UI sign-up/sign-in with a WorkMap-owned interface while keeping Cognito as the identity provider, and make an employee invitation email truly read-only throughout account creation and sign-in.
 
 ## Changed Files
 
+- `workmap/apps/web/components/login/CognitoAuthForm.tsx`
+- `workmap/apps/web/components/login/CognitoLoginPanel.tsx`
+- `workmap/apps/web/lib/auth/cognitoUserPoolAuth.ts`
+- `workmap/apps/web/lib/auth/cognitoSession.ts`
 - `workmap/apps/web/app/invite/[token]/page.tsx`
-
-The prior commit already contains the invitation preview API, Cognito `login_hint`, backend verified-email enforcement, and `invitation-email-lock.test.ts`.
+- `workmap/apps/web/app/login/page.tsx`
+- `workmap/apps/web/app/page.tsx`
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/package.json`
+- `workmap/pnpm-lock.yaml`
 
 ## Implementation Summary
 
-- Completed the previously blocked API test run; the invitation preview and wrong-email rejection test passed.
-- Added a deployment-order fallback for `GET /invitations/preview/:token` returning 404.
-- A preview-route 404 no longer marks the invitation unavailable. The page keeps the pending token, allows Cognito sign-up, and explains that the exact invited email must be used.
-- Invalid, expired, accepted, and other non-404 preview failures still remain blocked.
-- Invitation acceptance still calls the Cognito-only backend endpoint, which rejects any verified Cognito email different from the invitation email.
+- Added a custom WorkMap Cognito form using Amplify v6 modular Auth for sign-up, email confirmation, sign-in, password reset, supported MFA codes, new-password challenge, session restore, and sign-out.
+- Owner entry now opens the custom form instead of Cognito Hosted UI.
+- Employee invite entry locks the previewed invitation email in both create-account and sign-in modes. Cognito receives that exact email as the username, and backend invitation acceptance remains the final exact-email authority.
+- A missing invitation preview API now blocks account creation because the client cannot safely determine the locked email.
+- Existing Hosted UI callback helpers remain only for compatibility; the normal entry flow no longer uses them.
 
 ## Role And Access Behavior
 
-- Owner invitation behavior is unchanged.
-- Employee can continue sign-up during a staggered web/API deployment instead of being trapped by a preview-route 404.
-- The fallback does not grant workspace access; backend invitation token, status, expiry, Cognito verification, and exact email matching remain authoritative.
+- New public registration is presented as Owner account creation.
+- Employee account creation is available from a valid pending invitation and is bound to the Owner-invited email.
+- After Cognito authentication, existing backend context still decides Owner, Employee, Platform Admin, tenant, and onboarding routes.
 
-## Verification Commands And Results
+## Verification
 
-- `pnpm --filter @workmap/api test`: passed, 5 tests.
 - `pnpm --filter @workmap/web typecheck`: passed.
 - `pnpm --filter @workmap/web lint`: passed.
-- `pnpm --filter @workmap/web build`: passed with the existing Next.js ESLint-plugin warning.
-- `git diff --check`: passed with CRLF conversion warnings only.
-- Generated `workmap/apps/web/tsconfig.tsbuildinfo` was restored and is not part of the source diff.
+- `pnpm --filter @workmap/web build`: passed; existing Next.js ESLint-plugin warning remains.
+- Manual local QA: Owner create-account and sign-in views rendered and switched successfully at `http://127.0.0.1:3002/login`; no Cognito credentials were submitted.
+- Invitation browser QA: the supplied old token returned API 400 against the current local database, so a valid-invitation browser pass remains pending.
 
-## Manual QA
+## Intentionally Not Changed And Risks
 
-The user supplied deployed-browser evidence of the 404 state. The new fallback was code-reviewed and build-verified, but has not yet been deployed for live browser recheck.
-
-## Intentionally Not Changed
-
-- No AWS Cognito, Vercel, Render, database, CORS, callback URL, or secret configuration changed.
-- No schema or invitation token format changed.
-
-## Remaining Risks
-
-- The deployed API should still be upgraded to include `GET /invitations/preview/:token`; the fallback is compatibility protection, not a replacement for deployment.
-- Existing token-only links cannot prefill the invite email while the old API is serving 404, but the backend accept route still prevents wrong-email workspace access.
-
-## Suggested Next Steps
-
-Deploy API commit `edd19c2` before or together with the new web fallback, then reopen the invite link in Incognito and verify the invited email display, Cognito sign-up, wrong-email rejection, and successful matching-email acceptance.
+- No backend, schema, RBAC, tenant boundary, Cognito AWS setting, Vercel setting, or secret changed.
+- Cognito must allow self-service sign-up, use a browser app client without a secret, enable SRP auth, and deliver verification email before the live flow can pass.
+- This is build-verified and partially browser-verified, not claimed production-ready. Run matching-email, existing-account, wrong-account, reset-password, and session-restore browser smoke tests after deployment.

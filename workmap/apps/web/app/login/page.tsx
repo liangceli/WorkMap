@@ -9,7 +9,7 @@ export default function LoginPage() {
           <p style={styles.eyebrow}>WorkMap</p>
           <h1 style={styles.title}>Start with an Owner workspace, then invite your team</h1>
           <p style={styles.subtitle}>
-            WorkMap uses Cognito for sign-up and sign-in. New teams begin with an Owner account; employees join only from an invitation link.
+            Create, confirm, and access your Cognito account without leaving WorkMap. New teams begin with an Owner account; employees join only from an invitation link.
           </p>
           <div style={styles.privacyBox}>
             <strong>Privacy boundary</strong>

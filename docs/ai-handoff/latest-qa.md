@@ -2,36 +2,22 @@
 
 ## Reviewed Implementation
 
-Reviewed the invitation email-lock implementation and the deployed 404 compatibility fix for staggered web/API releases.
+Reviewed the custom Cognito owner/employee auth flow, invitation email locking, session restoration, logout, and post-auth backend routing.
 
-## Diff Review Summary
+## Findings
 
-Only the invite page changed in this follow-up. A 404 from the preview endpoint is treated as an unavailable route version, while every other preview error remains blocked. The final authenticated accept request and backend exact-email enforcement are unchanged.
+- Blocking code findings: none.
+- Medium: live Cognito verification is pending external user-pool settings and deployment.
+- Low: legacy Hosted UI callback code remains for compatibility but is not used by normal entry actions.
 
-## Findings Ordered By Severity
+## Verification Status
 
-- Blocking: none in automated verification.
-- Medium: the deployed API shown in user evidence does not yet expose the preview route and should be redeployed.
-- Low: in the 404 compatibility state the frontend cannot display or prefill the invited email because old invite links contain only the token; it clearly asks for the original email and relies on backend enforcement.
-
-## Test And Verification Status
-
-- API tests: passed, 5 tests including invitation preview and wrong verified Cognito email rejection.
 - Web typecheck: passed.
 - Web lint: passed.
-- Web build: passed with existing Next.js ESLint-plugin warning.
-- `git diff --check`: passed with CRLF warnings only.
-- Generated TypeScript build metadata was restored.
+- Web production build: passed with the existing Next.js ESLint-plugin warning.
+- Manual browser QA: custom Owner sign-up/sign-in rendering and mode switching passed locally. No external Cognito form submission was made.
+- Valid invitation browser QA: pending because the supplied old token returned API 400 in the current local database.
 
-## Manual QA Status
+## Risks And Recommendation
 
-Pre-fix deployed 404 was confirmed by user screenshot. Post-fix live browser QA is pending deployment.
-
-## Risks
-
-- Web-only deployment removes the dead end but does not provide the read-only invited email until the API preview route is deployed.
-- Cognito Hosted UI visual field immutability still depends on AWS/custom UI behavior; backend accept-time exact-email enforcement is the security boundary.
-
-## Recommendation
-
-Automated gate: PASS. Proceed to deploy API plus web, then run matching-email and wrong-email Incognito acceptance smoke before calling the flow accepted.
+The invitation email is read-only in the UI, is used directly as the Cognito username, and is independently enforced by the backend accept endpoint. Automated gate passes; proceed to deployment/configuration smoke testing, but do not call the auth flow production-ready until real Cognito sign-up, confirmation, sign-in, and invite acceptance complete successfully.

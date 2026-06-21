@@ -1,47 +1,6 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { getCognitoConfigStatus, getCognitoSession, startCognitoSignIn, startCognitoSignUp } from "../lib/auth/cognitoSession";
 import { wm, wmStyles } from "../lib/theme/workmapTheme";
 
 export default function HomePage() {
-  const [configStatus, setConfigStatus] = useState<ReturnType<typeof getCognitoConfigStatus> | null>(null);
-  const [hasSession, setHasSession] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<"signup" | "signin" | null>(null);
-
-  useEffect(() => {
-    setConfigStatus(getCognitoConfigStatus());
-    setHasSession(Boolean(getCognitoSession()));
-  }, []);
-
-  const beginOwnerSignup = async () => {
-    setBusyAction("signup");
-    setStatus(null);
-
-    try {
-      await startCognitoSignUp();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Cognito sign-up could not be opened.");
-      setBusyAction(null);
-    }
-  };
-
-  const beginSignin = async () => {
-    setBusyAction("signin");
-    setStatus(null);
-
-    try {
-      await startCognitoSignIn();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Cognito sign-in could not be opened.");
-      setBusyAction(null);
-    }
-  };
-
-  const configured = Boolean(configStatus?.configured);
-  const missing = configStatus && !configStatus.configured ? configStatus.missing.join(", ") : "";
-
   return (
     <main style={styles.page}>
       <section style={styles.shell}>
@@ -64,32 +23,20 @@ export default function HomePage() {
 
         <section style={styles.card}>
           <p style={styles.cardLabel}>Official entry</p>
-          <h2 style={styles.cardTitle}>{hasSession ? "Continue your Cognito session" : "Start WorkMap"}</h2>
+          <h2 style={styles.cardTitle}>Start WorkMap</h2>
           <p style={styles.cardText}>
             New companies must begin with an Owner sign-up. Employees should use their invitation link first, then return here and sign in
             as an existing workspace user.
           </p>
 
-          {configured ? (
-            <div style={styles.actionGrid}>
-              <button type="button" onClick={beginOwnerSignup} disabled={Boolean(busyAction)} style={styles.primaryButton}>
-                {busyAction === "signup" ? "Opening Cognito..." : "Create Owner account"}
-              </button>
-              <button type="button" onClick={beginSignin} disabled={Boolean(busyAction)} style={styles.secondaryButton}>
-                {busyAction === "signin" ? "Opening Cognito..." : "Sign in"}
-              </button>
-              <a href="/login" style={styles.secondaryLink}>
-                Review sign-in options
-              </a>
-            </div>
-          ) : (
-            <section style={styles.missingBox}>
-              <strong>Cognito setup required</strong>
-              <span>Missing public config: {missing || "checking"}</span>
-            </section>
-          )}
-
-          {status ? <p style={styles.status}>{status}</p> : null}
+          <div style={styles.actionGrid}>
+            <a href="/login?mode=signup" style={styles.primaryButton}>
+              Create Owner account
+            </a>
+            <a href="/login?mode=signin" style={styles.secondaryButton}>
+              Sign in
+            </a>
+          </div>
         </section>
       </section>
     </main>
@@ -181,40 +128,16 @@ const styles = {
   },
   primaryButton: {
     ...wmStyles.primaryButton,
+    display: "grid",
+    placeItems: "center",
     padding: "12px 14px",
-    cursor: "pointer",
     fontWeight: 900,
   },
   secondaryButton: {
     ...wmStyles.secondaryButton,
-    padding: "12px 14px",
-    cursor: "pointer",
-    fontWeight: 900,
-  },
-  secondaryLink: {
     display: "grid",
     placeItems: "center",
-    ...wmStyles.secondaryButton,
     padding: "12px 14px",
-    textDecoration: "none",
     fontWeight: 900,
-  },
-  missingBox: {
-    display: "grid",
-    gap: "5px",
-    border: `1px solid ${wm.colors.warningBorder}`,
-    borderRadius: wm.radius.lg,
-    background: wm.colors.warningBg,
-    color: wm.colors.warning,
-    padding: "12px",
-    fontSize: "13px",
-    lineHeight: 1.4,
-  },
-  status: {
-    margin: 0,
-    color: wm.colors.errorText,
-    fontSize: "13px",
-    fontWeight: 800,
-    lineHeight: 1.4,
   },
 };

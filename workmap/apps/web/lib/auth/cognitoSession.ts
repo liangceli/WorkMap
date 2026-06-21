@@ -34,6 +34,17 @@ type CognitoConfigStatus =
   | { configured: true; config: CognitoConfig }
   | { configured: false; missing: string[]; message: string };
 
+export type CognitoUserPoolConfigStatus =
+  | {
+      configured: true;
+      config: {
+        region: string;
+        userPoolId: string;
+        appClientId: string;
+      };
+    }
+  | { configured: false; missing: string[]; message: string };
+
 type CognitoTransaction = {
   state: string;
   nonce: string;
@@ -97,6 +108,36 @@ export function getCognitoConfigStatus(): CognitoConfigStatus {
       redirectUri,
       logoutUri,
       scope: process.env.NEXT_PUBLIC_COGNITO_SCOPE?.trim() || DEFAULT_COGNITO_SCOPE,
+    },
+  };
+}
+
+export function getCognitoUserPoolConfigStatus(): CognitoUserPoolConfigStatus {
+  const region = process.env.NEXT_PUBLIC_COGNITO_REGION?.trim() ?? "";
+  const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID?.trim() ?? "";
+  const appClientId = process.env.NEXT_PUBLIC_COGNITO_APP_CLIENT_ID?.trim() ?? "";
+  const missing = [
+    ["NEXT_PUBLIC_COGNITO_REGION", region],
+    ["NEXT_PUBLIC_COGNITO_USER_POOL_ID", userPoolId],
+    ["NEXT_PUBLIC_COGNITO_APP_CLIENT_ID", appClientId],
+  ]
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+  if (missing.length > 0) {
+    return {
+      configured: false,
+      missing,
+      message: `Cognito user pool is not configured yet. Missing: ${missing.join(", ")}.`,
+    };
+  }
+
+  return {
+    configured: true,
+    config: {
+      region,
+      userPoolId,
+      appClientId,
     },
   };
 }
@@ -268,6 +309,32 @@ export function clearCognitoSession() {
 
   window.localStorage.removeItem(COGNITO_SESSION_STORAGE_KEY);
   clearTransaction();
+}
+
+export function storeCognitoTokenSession(accessToken: string, idToken: string) {
+  const claims = decodeJwtPayload<CognitoIdTokenClaims>(idToken);
+
+  if (!claims.sub) {
+    throw new Error("Cognito ID token did not include a subject.");
+  }
+
+  const expiresAt = new Date((claims.exp ?? Math.floor(Date.now() / 1000) + 3600) * 1000).toISOString();
+  const session: StoredCognitoSession = {
+    accessToken,
+    idToken,
+    tokenType: "Bearer",
+    expiresAt,
+    claims: {
+      sub: claims.sub,
+      email: claims.email,
+      displayName: claims.name,
+      username: claims["cognito:username"],
+      tokenUse: claims.token_use,
+    },
+  };
+
+  saveCognitoSession(session);
+  return session;
 }
 
 export function getCognitoLogoutUrl() {

@@ -1,19 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getAuthContext, getCurrentUser } from "../../lib/api/authApi";
 import { getPlatformContext } from "../../lib/api/platformApi";
 import { decodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../lib/avatar/avatarStorage";
+import { restoreCognitoAccountSession, signOutCognitoAccount } from "../../lib/auth/cognitoUserPoolAuth";
 import {
   clearCognitoSession,
-  getCognitoApiAuthOptions,
-  getCognitoConfigStatus,
-  getCognitoLogoutUrl,
   getCognitoSession,
-  startCognitoSignIn,
-  startCognitoSignUp,
+  getCognitoUserPoolConfigStatus,
   type StoredCognitoSession,
 } from "../../lib/auth/cognitoSession";
 import { getPendingInviteToken } from "../../lib/auth/pendingInvite";
@@ -25,66 +23,48 @@ import {
   type WorkMapRole,
 } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { CognitoAuthForm } from "./CognitoAuthForm";
 
 export function CognitoLoginPanel() {
   const router = useRouter();
   const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
-  const [cognitoConfig, setCognitoConfig] = useState<ReturnType<typeof getCognitoConfigStatus> | null>(null);
+  const [cognitoConfig, setCognitoConfig] = useState<ReturnType<typeof getCognitoUserPoolConfigStatus> | null>(null);
+  const [initialMode, setInitialMode] = useState<"signin" | "signup">("signin");
   const [status, setStatus] = useState<string | null>(null);
-  const [submittingAction, setSubmittingAction] = useState<"signin" | "signup" | "continue" | null>(null);
+  const [continuing, setContinuing] = useState(false);
 
   useEffect(() => {
-    setCognitoSession(getCognitoSession());
-    setCognitoConfig(getCognitoConfigStatus());
+    const storedSession = getCognitoSession();
+    setCognitoSession(storedSession);
+    setCognitoConfig(getCognitoUserPoolConfigStatus());
+    setInitialMode(new URLSearchParams(window.location.search).get("mode") === "signup" ? "signup" : "signin");
+
+    if (!storedSession) {
+      void restoreCognitoAccountSession().then((restoredSession) => {
+        if (restoredSession) {
+          setCognitoSession(restoredSession);
+        }
+      });
+    }
   }, []);
 
-  const startSignIn = async () => {
-    setSubmittingAction("signin");
-    setStatus(null);
-
-    try {
-      await startCognitoSignIn();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Cognito sign-in could not be started.");
-      setSubmittingAction(null);
-    }
-  };
-
-  const startOwnerSignUp = async () => {
-    setSubmittingAction("signup");
-    setStatus(null);
-
-    try {
-      await startCognitoSignUp();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Cognito sign-up could not be started.");
-      setSubmittingAction(null);
-    }
-  };
-
-  const continueCognito = async () => {
-    setSubmittingAction("continue");
-    const cognitoAuth = getCognitoApiAuthOptions();
-
-    if (!cognitoAuth.available) {
-      setStatus(cognitoAuth.reason);
-      setSubmittingAction(null);
-      return;
-    }
-
+  const continueCognito = async (session: StoredCognitoSession) => {
+    setContinuing(true);
+    setStatus("Checking your WorkMap access...");
+    const options = { token: session.idToken || session.accessToken };
     const inviteToken = getPendingInviteToken();
-    const platformContextResult = await getPlatformContext(cognitoAuth.options);
+    const platformContextResult = await getPlatformContext(options);
 
     if (!inviteToken && platformContextResult.ok) {
       router.push("/platform-admin");
       return;
     }
 
-    const contextResult = await getAuthContext(cognitoAuth.options);
+    const contextResult = await getAuthContext(options);
 
     if (contextResult.ok) {
       const defaultState = getDefaultSetupState(toWorkflowRole(contextResult.data.role));
-      const currentUserResult = await getCurrentUser(cognitoAuth.options);
+      const currentUserResult = await getCurrentUser(options);
       const backendAvatar = currentUserResult.ok ? decodeLayeredAvatarId(currentUserResult.data.avatarId) : null;
 
       if (backendAvatar) {
@@ -100,78 +80,62 @@ export function CognitoLoginPanel() {
     router.push(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/onboarding/company");
   };
 
-  const logout = () => {
-    clearCognitoSession();
-    resetUserSetupState();
-    setCognitoSession(null);
-    setStatus("Cognito session cleared on this browser.");
+  const handleAuthenticated = async (session: StoredCognitoSession) => {
+    setCognitoSession(session);
+    await continueCognito(session);
   };
 
-  const cognitoLogoutUrl = getCognitoLogoutUrl();
+  const logout = async () => {
+    setContinuing(true);
+
+    try {
+      await signOutCognitoAccount();
+    } catch {
+      clearCognitoSession();
+    }
+
+    resetUserSetupState();
+    setCognitoSession(null);
+    setContinuing(false);
+    setStatus("Signed out on this browser.");
+  };
+
   const cognitoMissing = cognitoConfig && !cognitoConfig.configured ? cognitoConfig.missing.join(", ") : "";
   const canUseCognito = Boolean(cognitoConfig?.configured);
 
   return (
     <section style={styles.card}>
-      <p style={styles.eyebrow}>WorkMap sign-in</p>
-      <h1 style={styles.title}>Enter with Cognito</h1>
-      <p style={styles.subtitle}>
-        New workspaces start with an Owner account. Employees join through an Owner invitation, then return here to sign in.
-      </p>
-
-      <section style={styles.cognitoBox}>
-        <p style={styles.sectionTitle}>Cognito workspace access</p>
-        {cognitoSession ? (
-          <section style={styles.sessionCard}>
-            <strong>{cognitoSession.claims.displayName ?? cognitoSession.claims.email ?? "Cognito user"}</strong>
-            <span>{cognitoSession.claims.email ?? cognitoSession.claims.sub}</span>
-            <span>expires {new Date(cognitoSession.expiresAt).toLocaleString()}</span>
-            <div style={styles.sessionActions}>
-              <button type="button" onClick={continueCognito} style={styles.secondaryButton}>
-                {submittingAction === "continue" ? "Checking..." : "Continue"}
-              </button>
-              {cognitoLogoutUrl ? (
-                <a href={cognitoLogoutUrl} onClick={logout} style={styles.secondaryButton}>
-                  Sign out
-                </a>
-              ) : (
-                <button type="button" onClick={logout} style={styles.secondaryButton}>
-                  Clear session
-                </button>
-              )}
+      {cognitoSession ? (
+        <section style={styles.sessionPanel}>
+          <div style={styles.sessionHeading}>
+            <div>
+              <p style={styles.eyebrow}>Active Cognito session</p>
+              <h1 style={styles.title}>{cognitoSession.claims.displayName ?? cognitoSession.claims.email ?? "Cognito user"}</h1>
             </div>
-          </section>
-        ) : null}
-        {canUseCognito ? (
-          <div style={styles.actionGrid}>
-            <button type="button" onClick={startOwnerSignUp} disabled={Boolean(submittingAction)} style={styles.primaryAction}>
-              {submittingAction === "signup" ? "Opening Cognito..." : "Create Owner account"}
-            </button>
-            <button type="button" onClick={startSignIn} disabled={Boolean(submittingAction)} style={styles.secondaryAction}>
-              {submittingAction === "signin" ? "Opening Cognito..." : "Sign in"}
+            <button type="button" onClick={logout} disabled={continuing} aria-label="Sign out" title="Sign out" style={styles.iconButton}>
+              <LogOut size={18} />
             </button>
           </div>
-        ) : (
-          <p style={styles.note}>
-            Cognito must be configured before WorkMap sign-up or sign-in can run. Missing public config: {cognitoMissing || "checking"}.
-          </p>
-        )}
-        <p style={styles.note}>
-          WorkMap uses Cognito Hosted UI with PKCE. Workspace role, company, and invite state are resolved by the backend.
-        </p>
-      </section>
+          <p style={styles.subtitle}>{cognitoSession.claims.email ?? cognitoSession.claims.sub}</p>
+          <button type="button" onClick={() => continueCognito(cognitoSession)} disabled={continuing} style={styles.primaryAction}>
+            {continuing ? "Checking access..." : "Continue to WorkMap"}
+          </button>
+        </section>
+      ) : canUseCognito ? (
+        <CognitoAuthForm initialMode={initialMode} accountContext="owner" onAuthenticated={handleAuthenticated} />
+      ) : (
+        <section style={styles.missingPanel}>
+          <p style={styles.eyebrow}>Cognito setup required</p>
+          <h1 style={styles.title}>Authentication is unavailable</h1>
+          <p style={styles.subtitle}>Missing public config: {cognitoMissing || "checking"}.</p>
+        </section>
+      )}
 
-      {status ? <p style={styles.status}>{status}</p> : null}
+      {status ? <p aria-live="polite" style={styles.status}>{status}</p> : null}
 
-      <section style={styles.flowBox}>
-        <p style={styles.sectionTitle}>Entry rules</p>
-        <ol style={styles.stepList}>
-          <li>Owner creates a Cognito account first and creates the workspace.</li>
-          <li>Owner invites employees from the workspace.</li>
-          <li>Employees open the invite link, sign up with Cognito, accept the invite, then complete onboarding.</li>
-          <li>Returning Owner or Employee users sign in here and WorkMap resolves their backend role.</li>
-        </ol>
-      </section>
+      <p style={styles.note}>
+        WorkMap uses Cognito for account creation, email confirmation, password recovery, and sign-in. Workspace role and company access are resolved by the backend.
+      </p>
     </section>
   );
 }
@@ -195,108 +159,83 @@ function toWorkflowRole(role: string | undefined): WorkMapRole {
 const styles = {
   card: {
     ...wmStyles.elevatedCard,
-    width: "min(430px, 100%)",
-    padding: "22px",
+    width: "min(450px, 100%)",
+    minWidth: 0,
+    boxSizing: "border-box" as const,
+    padding: "24px",
     display: "grid",
-    gap: "13px",
+    gap: "16px",
+  },
+  sessionPanel: {
+    display: "grid",
+    gap: "12px",
+  },
+  sessionHeading: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "start",
+    gap: "12px",
   },
   eyebrow: {
     ...wmStyles.eyebrow,
-    margin: 0,
+    margin: "0 0 5px",
   },
   title: {
     margin: 0,
-    color: wm.colors.text,
-    fontSize: "32px",
-    lineHeight: 1.1,
-    fontWeight: 700,
+    color: wm.colors.textHeading,
+    fontFamily: wm.typography.displayFontFamily,
+    fontSize: "26px",
+    lineHeight: 1.2,
+    fontWeight: 750,
   },
   subtitle: {
     margin: 0,
     color: wm.colors.textSecondary,
-    fontSize: "14px",
-    lineHeight: 1.45,
+    fontSize: "13px",
+    lineHeight: 1.5,
+    overflowWrap: "anywhere" as const,
   },
   primaryAction: {
     ...wmStyles.primaryButton,
+    minHeight: "44px",
     display: "flex",
+    alignItems: "center",
     justifyContent: "center",
-    padding: "11px",
+    padding: "10px 14px",
   },
-  secondaryAction: {
-    ...wmStyles.secondaryButton,
-    display: "flex",
-    justifyContent: "center",
-    padding: "10px",
-  },
-  secondaryButton: {
-    ...wmStyles.secondaryButton,
-    display: "flex",
-    justifyContent: "center",
-    padding: "9px 10px",
-  },
-  sessionCard: {
+  iconButton: {
+    width: "40px",
+    height: "40px",
+    flex: "0 0 40px",
     display: "grid",
-    gap: "5px",
-    border: `1px solid ${wm.colors.successBorder}`,
-    borderRadius: wm.radius.lg,
-    background: wm.colors.successBg,
-    color: wm.colors.compliance,
-    padding: "12px",
-    fontSize: "13px",
-  },
-  sessionActions: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-    gap: "8px",
-    marginTop: "6px",
-  },
-  flowBox: {
-    display: "grid",
-    gap: "10px",
+    placeItems: "center",
     border: `1px solid ${wm.colors.border}`,
-    borderRadius: wm.radius.lg,
-    background: wm.colors.surfaceLow,
-    padding: "12px",
+    borderRadius: wm.radius.md,
+    background: wm.colors.surface,
+    color: wm.colors.textSecondary,
+    cursor: "pointer",
   },
-  cognitoBox: {
+  missingPanel: {
     display: "grid",
-    gap: "10px",
-    border: `1px solid ${wm.colors.infoBorder}`,
-    borderRadius: wm.radius.lg,
-    background: wm.colors.infoBg,
-    padding: "12px",
-  },
-  actionGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-    gap: "10px",
-  },
-  sectionTitle: {
-    margin: 0,
-    color: wm.colors.textMuted,
-    fontSize: "12px",
-    fontWeight: 900,
-    textTransform: "uppercase" as const,
+    gap: "8px",
   },
   status: {
     margin: 0,
-    color: wm.colors.errorText,
+    border: `1px solid ${wm.colors.infoBorder}`,
+    borderRadius: wm.radius.md,
+    background: wm.colors.infoBg,
+    color: wm.colors.infoText,
+    padding: "10px 11px",
     fontSize: "12px",
-    lineHeight: 1.4,
-    fontWeight: 800,
+    lineHeight: 1.45,
+    fontWeight: 650,
   },
   note: {
     margin: 0,
+    paddingTop: "12px",
+    borderTop: `1px solid ${wm.colors.borderSubtle}`,
     color: wm.colors.textMuted,
-    fontSize: "12px",
-    lineHeight: 1.45,
-  },
-  stepList: {
-    margin: 0,
-    paddingLeft: "20px",
-    color: wm.colors.textSecondary,
-    fontSize: "13px",
-    lineHeight: 1.55,
+    fontSize: "11px",
+    lineHeight: 1.5,
   },
 };
