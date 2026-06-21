@@ -2,22 +2,20 @@
 
 ## Reviewed Implementation
 
-Reviewed the custom Cognito owner/employee auth flow, invitation email locking, session restoration, logout, and post-auth backend routing.
+Reviewed and tested the Employee create-account dispatch, Cognito error mapping, successful registration state, and email-confirmation state.
 
 ## Findings
 
-- Blocking code findings: none.
-- Medium: live Cognito verification is pending external user-pool settings and deployment.
-- Low: legacy Hosted UI callback code remains for compatibility but is not used by normal entry actions.
+- Fixed: registration `NotAuthorizedException` was incorrectly displayed as `Email or password is incorrect`.
+- Fixed: successful sign-up or confirmation could invoke sign-in within the same submission, making the action boundary unclear.
+- External: Cognito may still reject registration until self-service sign-up and the public no-secret app client are configured correctly.
 
 ## Verification Status
 
-- Web typecheck: passed.
-- Web lint: passed.
-- Web production build: passed with the existing Next.js ESLint-plugin warning.
-- Manual browser QA: custom Owner sign-up/sign-in rendering and mode switching passed locally. No external Cognito form submission was made.
-- Valid invitation browser QA: pending because the supplied old token returned API 400 in the current local database.
+- Web tests: passed, including proof that create-account calls sign-up once and sign-in zero times.
+- Web typecheck, lint, and production build: passed.
+- Manual external account creation: not run.
 
-## Risks And Recommendation
+## Recommendation
 
-The invitation email is read-only in the UI, is used directly as the Cognito username, and is independently enforced by the backend accept endpoint. Automated gate passes; proceed to deployment/configuration smoke testing, but do not call the auth flow production-ready until real Cognito sign-up, confirmation, sign-in, and invite acceptance complete successfully.
+Code gate passes. Proceed to Cognito configuration check and deployment, then repeat the valid Employee invitation registration smoke. Do not call the flow production-ready until the real registration, confirmation, explicit sign-in, and invite acceptance complete successfully.

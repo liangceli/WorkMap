@@ -37,6 +37,15 @@ export type CognitoSignUpResult = {
   destination?: string;
 };
 
+export type CognitoAuthOperation =
+  | "sign_up"
+  | "sign_in"
+  | "confirm_sign_up"
+  | "reset_password"
+  | "confirm_reset_password"
+  | "confirm_sign_in"
+  | "unknown";
+
 let configuredSignature = "";
 
 export function configureCognitoUserPoolClient() {
@@ -210,14 +219,27 @@ function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-export function formatCognitoAuthError(error: unknown) {
+export function formatCognitoAuthError(error: unknown, operation: CognitoAuthOperation = "unknown") {
   const name = error instanceof Error ? error.name : "";
   const fallback = error instanceof Error ? error.message : "Cognito could not complete this request.";
 
   switch (name) {
     case "UserNotFoundException":
-    case "NotAuthorizedException":
       return "Email or password is incorrect.";
+    case "NotAuthorizedException":
+      if (operation !== "sign_up") {
+        return "Email or password is incorrect.";
+      }
+
+      if (fallback.toLowerCase().includes("secret hash")) {
+        return "This Cognito browser app client requires a client secret. Use a public app client without a client secret.";
+      }
+
+      if (fallback.toLowerCase().includes("signup is not permitted")) {
+        return "New account registration is disabled in Cognito. Ask the WorkMap administrator to enable self-service sign-up.";
+      }
+
+      return "Cognito rejected account registration. Check self-service sign-up and browser app client settings.";
     case "UsernameExistsException":
       return "An account already exists for this email. Sign in instead.";
     case "UserNotConfirmedException":

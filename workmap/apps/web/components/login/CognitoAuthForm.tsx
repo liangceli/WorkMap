@@ -7,13 +7,13 @@ import {
   completeCognitoPasswordReset,
   confirmCognitoAccount,
   confirmCognitoSignIn,
-  createCognitoAccount,
   formatCognitoAuthError,
   requestCognitoPasswordReset,
   resendCognitoSignUpCode,
-  signInCognitoAccount,
+  type CognitoAuthOperation,
   type CognitoSignInResult,
 } from "../../lib/auth/cognitoUserPoolAuth";
+import { runCognitoPrimaryAction } from "../../lib/auth/cognitoPrimaryAction";
 import type { StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
@@ -81,8 +81,8 @@ export function CognitoAuthForm({
 
     try {
       if (screen === "sign_in") {
-        const result = await signInCognitoAccount(accountEmail, password);
-        await handleSignInResult(result);
+        const submission = await runCognitoPrimaryAction("sign_in", { email: accountEmail, password });
+        await handleSignInResult(submission.result);
       } else if (screen === "sign_up") {
         const safeDisplayName = sanitizeDisplayName(displayName);
 
@@ -91,10 +91,16 @@ export function CognitoAuthForm({
         }
 
         validatePasswordPair(password, confirmPassword);
-        const result = await createCognitoAccount({ email: accountEmail, password, displayName: safeDisplayName });
+        const submission = await runCognitoPrimaryAction("sign_up", {
+          email: accountEmail,
+          password,
+          displayName: safeDisplayName,
+        });
+        const result = submission.result;
 
         if (result.complete) {
-          await handleSignInResult(await signInCognitoAccount(accountEmail, password));
+          setScreen("sign_in");
+          setMessage({ tone: "success", text: "Account created. Sign in to continue to WorkMap." });
         } else {
           setDeliveryDestination(result.destination);
           setScreen("confirm_sign_up");
@@ -106,8 +112,9 @@ export function CognitoAuthForm({
         }
 
         await confirmCognitoAccount(accountEmail, confirmationCode);
-        setMessage({ tone: "success", text: "Email confirmed. Signing you in..." });
-        await handleSignInResult(await signInCognitoAccount(accountEmail, password));
+        setConfirmationCode("");
+        setScreen("sign_in");
+        setMessage({ tone: "success", text: "Email confirmed. Sign in to continue to WorkMap." });
       } else if (screen === "forgot_password") {
         const result = await requestCognitoPasswordReset(accountEmail);
 
@@ -142,7 +149,7 @@ export function CognitoAuthForm({
         await handleSignInResult(result);
       }
     } catch (error) {
-      const text = formatCognitoAuthError(error);
+      const text = formatCognitoAuthError(error, operationForScreen(screen));
       setMessage({ tone: "error", text });
 
       if (error instanceof Error && error.name === "UserNotConfirmedException") {
@@ -207,7 +214,7 @@ export function CognitoAuthForm({
       setDeliveryDestination(destination);
       setMessage({ tone: "success", text: deliveryMessage("A new confirmation code was sent", destination) });
     } catch (error) {
-      setMessage({ tone: "error", text: formatCognitoAuthError(error) });
+      setMessage({ tone: "error", text: formatCognitoAuthError(error, "confirm_sign_up") });
     } finally {
       setBusy(false);
     }
@@ -481,6 +488,23 @@ function validatePasswordPair(password: string, confirmation: string) {
 
   if (password !== confirmation) {
     throw new Error("Passwords do not match.");
+  }
+}
+
+function operationForScreen(screen: AuthScreen): CognitoAuthOperation {
+  switch (screen) {
+    case "sign_up":
+      return "sign_up";
+    case "sign_in":
+      return "sign_in";
+    case "confirm_sign_up":
+      return "confirm_sign_up";
+    case "forgot_password":
+      return "reset_password";
+    case "confirm_reset_password":
+      return "confirm_reset_password";
+    case "sign_in_challenge":
+      return "confirm_sign_in";
   }
 }
 

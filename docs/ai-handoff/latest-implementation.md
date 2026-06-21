@@ -2,45 +2,37 @@
 
 ## Original Task Brief
 
-Replace Cognito Hosted UI sign-up/sign-in with a WorkMap-owned interface while keeping Cognito as the identity provider, and make an employee invitation email truly read-only throughout account creation and sign-in.
+Investigate why Employee `Create account` displayed `Email or password is incorrect`, verify whether it was incorrectly calling sign-in, and fix the real behavior.
 
 ## Changed Files
 
 - `workmap/apps/web/components/login/CognitoAuthForm.tsx`
-- `workmap/apps/web/components/login/CognitoLoginPanel.tsx`
+- `workmap/apps/web/lib/auth/cognitoPrimaryAction.ts`
 - `workmap/apps/web/lib/auth/cognitoUserPoolAuth.ts`
-- `workmap/apps/web/lib/auth/cognitoSession.ts`
-- `workmap/apps/web/app/invite/[token]/page.tsx`
-- `workmap/apps/web/app/login/page.tsx`
-- `workmap/apps/web/app/page.tsx`
-- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/test/cognito-primary-action.test.ts`
 - `workmap/apps/web/package.json`
-- `workmap/pnpm-lock.yaml`
 
 ## Implementation Summary
 
-- Added a custom WorkMap Cognito form using Amplify v6 modular Auth for sign-up, email confirmation, sign-in, password reset, supported MFA codes, new-password challenge, session restore, and sign-out.
-- Owner entry now opens the custom form instead of Cognito Hosted UI.
-- Employee invite entry locks the previewed invitation email in both create-account and sign-in modes. Cognito receives that exact email as the username, and backend invitation acceptance remains the final exact-email authority.
-- A missing invitation preview API now blocks account creation because the client cannot safely determine the locked email.
-- Existing Hosted UI callback helpers remain only for compatibility; the normal entry flow no longer uses them.
+- Confirmed the create-account branch called Cognito `signUp`, but a `NotAuthorizedException` from registration was incorrectly rendered as a sign-in password error.
+- Added an explicit, tested primary-action dispatcher: create account calls only `createCognitoAccount`; sign-in calls only `signInCognitoAccount`.
+- Removed automatic sign-in from the create-account and email-confirmation submissions. A successful registration or confirmation now moves to the explicit sign-in screen.
+- Added registration-specific errors for disabled self-service sign-up, an app client secret, and other Cognito registration rejection.
 
 ## Role And Access Behavior
 
-- New public registration is presented as Owner account creation.
-- Employee account creation is available from a valid pending invitation and is bound to the Owner-invited email.
-- After Cognito authentication, existing backend context still decides Owner, Employee, Platform Admin, tenant, and onboarding routes.
+Employee invitation email locking and backend exact-email enforcement are unchanged. Owner, Employee, Platform Admin, tenant, and onboarding routing are unchanged.
 
 ## Verification
 
+- `pnpm --filter @workmap/web test`: passed, 3 tests.
 - `pnpm --filter @workmap/web typecheck`: passed.
 - `pnpm --filter @workmap/web lint`: passed.
-- `pnpm --filter @workmap/web build`: passed; existing Next.js ESLint-plugin warning remains.
-- Manual local QA: Owner create-account and sign-in views rendered and switched successfully at `http://127.0.0.1:3002/login`; no Cognito credentials were submitted.
-- Invitation browser QA: the supplied old token returned API 400 against the current local database, so a valid-invitation browser pass remains pending.
+- `pnpm --filter @workmap/web build`: passed with the existing Next.js ESLint-plugin warning.
+- Manual live Cognito registration: not run because it would create an external account and current user-pool configuration must first be checked.
 
 ## Intentionally Not Changed And Risks
 
-- No backend, schema, RBAC, tenant boundary, Cognito AWS setting, Vercel setting, or secret changed.
-- Cognito must allow self-service sign-up, use a browser app client without a secret, enable SRP auth, and deliver verification email before the live flow can pass.
-- This is build-verified and partially browser-verified, not claimed production-ready. Run matching-email, existing-account, wrong-account, reset-password, and session-restore browser smoke tests after deployment.
+- No backend, schema, RBAC, tenant boundary, invitation security, AWS setting, deployment setting, or secret changed.
+- If the new UI reports disabled registration, enable Cognito self-service sign-up. If it reports a client secret, use a public browser app client without a secret.
+- Deploy the web change before repeating the Employee invitation registration smoke.
