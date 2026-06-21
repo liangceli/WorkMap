@@ -2,37 +2,47 @@
 
 ## Original Task Brief
 
-Investigate why Employee `Create account` displayed `Email or password is incorrect`, verify whether it was incorrectly calling sign-in, and fix the real behavior.
+Fix ten production-flow issues: immediate top navigation, avatar name validation, persistent realtime Notices for messages/waves/reactions, stable virtual-office state, hidden room links, disabled scheduling, richer reaction feedback, room focus dimming, and review Cognito email delivery plus Platform Admin behavior.
 
 ## Changed Files
 
-- `workmap/apps/web/components/login/CognitoAuthForm.tsx`
-- `workmap/apps/web/lib/auth/cognitoPrimaryAction.ts`
-- `workmap/apps/web/lib/auth/cognitoUserPoolAuth.ts`
-- `workmap/apps/web/test/cognito-primary-action.test.ts`
-- `workmap/apps/web/package.json`
+- API: `workmap/apps/api/src/modules/notices/*`, `app.module.ts`, realtime gateway, and `test/notices.test.ts`.
+- Web: AppShell, avatar onboarding, virtual-office map/data/realtime/controls/panels, Notices API/types, privacy and compliance copy.
+- Shared/schema: `packages/shared-types/src/index.ts`, `prisma/schema.prisma`, and `prisma/migrations/20260621000000_virtual_office_notices/`.
 
 ## Implementation Summary
 
-- Confirmed the create-account branch called Cognito `signUp`, but a `NotAuthorizedException` from registration was incorrectly rendered as a sign-in password error.
-- Added an explicit, tested primary-action dispatcher: create account calls only `createCognitoAccount`; sign-in calls only `signInCognitoAccount`.
-- Removed automatic sign-in from the create-account and email-confirmation submissions. A successful registration or confirmation now moves to the explicit sign-in screen.
-- Added registration-specific errors for disabled self-service sign-up, an app client secret, and other Cognito registration rejection.
+- AppShell restores the Cognito user's cached role/company context before paint, then refreshes it from protected APIs.
+- Empty avatar display names now produce a red field and required error after Save and continue is clicked.
+- WorkMap messages, waves, and eight reactions are tenant-scoped database Notices. Received activity refreshes the list and unread number through realtime events; opening Notices marks received items read.
+- Reactions display above avatars, rise and fade; feedback remains visible for about five seconds.
+- Local and remote office snapshots restore immediately per Cognito user. Stale cached presence is downgraded while saved positions remain visible.
+- Entering a room dims the complete surrounding map and outside avatars. Room Copy link is hidden and Schedule meeting is disabled.
+- Compliance copy now distinguishes stored WorkMap interactions from external private messages, Teams/email bodies, webpage content, inputs, screenshots, recordings, keystrokes, clipboard, camera, and microphone data.
 
 ## Role And Access Behavior
 
-Employee invitation email locking and backend exact-email enforcement are unchanged. Owner, Employee, Platform Admin, tenant, and onboarding routing are unchanged.
+- Notice creation resolves recipients only inside `context.companyId`; cross-tenant and self-target interactions are rejected.
+- Owner and Employee users can see their sent and received Notices. Platform Admin does not receive tenant Notices or employee activity through the platform surface.
+- Platform Admin remains allowlist-based through `WORKMAP_PLATFORM_ADMIN_EMAILS` or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` and sees privacy-safe tenant metadata, health, and audit information.
 
 ## Verification
 
-- `pnpm --filter @workmap/web test`: passed, 3 tests.
-- `pnpm --filter @workmap/web typecheck`: passed.
-- `pnpm --filter @workmap/web lint`: passed.
-- `pnpm --filter @workmap/web build`: passed with the existing Next.js ESLint-plugin warning.
-- Manual live Cognito registration: not run because it would create an external account and current user-pool configuration must first be checked.
+- Shared types typecheck/build: passed.
+- Web typecheck, lint, and production build: passed.
+- API typecheck, lint, production build, and all 8 tests: passed.
+- Notice tests cover persistence, cross-tenant rejection, and tenant/user-scoped read updates.
+- Local API `/health`: 200; unauthenticated `/notices`: 401.
+- `git diff --check`: passed; scoped secret scan: no matches.
+- User confirmed `prisma migrate deploy` completed against Supabase.
+- Browser visual QA was not run because the in-app browser runtime rejected the connection before page access.
 
 ## Intentionally Not Changed And Risks
 
-- No backend, schema, RBAC, tenant boundary, invitation security, AWS setting, deployment setting, or secret changed.
-- If the new UI reports disabled registration, enable Cognito self-service sign-up. If it reports a client secret, use a public browser app client without a secret.
-- Deploy the web change before repeating the Employee invitation registration smoke.
+- Cognito/SES sender configuration was not changed. Spam placement requires a verified SES domain/from address, DKIM/SPF/DMARC, production sending access, and reputation checks outside this repository.
+- No Platform Admin identity or secret was committed. No unrelated map, auth, report, or tracking architecture was changed.
+- A real two-user browser smoke is still required for unread badge timing, reaction animation, refresh restoration, and room dimming before production-readiness claims.
+
+## Suggested Next Step
+
+Deploy API and Web, then run one Owner/Employee two-browser smoke against the migrated Supabase database and configure Cognito email delivery through SES.

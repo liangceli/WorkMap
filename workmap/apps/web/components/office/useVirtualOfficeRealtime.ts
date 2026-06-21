@@ -5,6 +5,7 @@ import type {
   VirtualOfficeRealtimeClientEvent,
   VirtualOfficeRealtimeMovePayload,
   VirtualOfficeRealtimePlayerState,
+  VirtualOfficeRealtimeReactionEventPayload,
   VirtualOfficeRealtimeServerEvent,
   VirtualOfficeRealtimeTeammateEventPayload,
   VirtualOfficeRealtimeTeammateMessageEventPayload,
@@ -21,6 +22,7 @@ type UseVirtualOfficeRealtimeInput = {
   onRemoteState: (state: VirtualOfficeRealtimePlayerState) => void;
   onWave?: (payload: VirtualOfficeRealtimeTeammateEventPayload) => void;
   onMessage?: (payload: VirtualOfficeRealtimeTeammateMessageEventPayload) => void;
+  onReaction?: (payload: VirtualOfficeRealtimeReactionEventPayload) => void;
   onError?: (message: string) => void;
 };
 
@@ -35,6 +37,7 @@ export function useVirtualOfficeRealtime({
   onRemoteState,
   onWave,
   onMessage,
+  onReaction,
   onError,
 }: UseVirtualOfficeRealtimeInput) {
   const [connectionState, setConnectionState] = useState<VirtualOfficeRealtimeState>("fallback");
@@ -45,6 +48,7 @@ export function useVirtualOfficeRealtime({
   const onRemoteStateRef = useRef(onRemoteState);
   const onWaveRef = useRef(onWave);
   const onMessageRef = useRef(onMessage);
+  const onReactionRef = useRef(onReaction);
   const onErrorRef = useRef(onError);
 
   useEffect(() => {
@@ -58,6 +62,10 @@ export function useVirtualOfficeRealtime({
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
+
+  useEffect(() => {
+    onReactionRef.current = onReaction;
+  }, [onReaction]);
 
   useEffect(() => {
     onErrorRef.current = onError;
@@ -126,6 +134,13 @@ export function useVirtualOfficeRealtime({
         if (message.event === "teammate:message") {
           if (message.payload.targetUserId === currentUserId) {
             onMessageRef.current?.(message.payload);
+          }
+          return;
+        }
+
+        if (message.event === "office:reaction") {
+          if (message.payload.fromUserId !== currentUserId) {
+            onReactionRef.current?.(message.payload);
           }
           return;
         }
@@ -237,11 +252,23 @@ export function useVirtualOfficeRealtime({
     return true;
   }, []);
 
+  const sendReaction = useCallback((reaction: import("@workmap/shared-types").VirtualOfficeReaction) => {
+    const socket = socketRef.current;
+
+    if (!joinedRef.current || !socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    sendSocketEvent(socket, { event: "office:reaction", payload: { reaction } });
+    return true;
+  }, []);
+
   return {
     connectionState,
     sendMovement,
     sendWave,
     sendMessage,
+    sendReaction,
   };
 }
 
@@ -315,6 +342,25 @@ function parseServerEvent(raw: string): VirtualOfficeRealtimeServerEvent | null 
       };
     }
 
+    if (
+      value.event === "office:reaction" &&
+      isRecord(value.payload) &&
+      typeof value.payload.fromUserId === "string" &&
+      typeof value.payload.fromDisplayName === "string" &&
+      isReaction(value.payload.reaction) &&
+      typeof value.payload.createdAt === "string"
+    ) {
+      return {
+        event: "office:reaction",
+        payload: {
+          fromUserId: value.payload.fromUserId,
+          fromDisplayName: value.payload.fromDisplayName,
+          reaction: value.payload.reaction,
+          createdAt: value.payload.createdAt,
+        },
+      };
+    }
+
     return null;
   } catch {
     return null;
@@ -366,6 +412,10 @@ function isStatus(value: unknown) {
     value === "offline" ||
     value === "on_call"
   );
+}
+
+function isReaction(value: unknown): value is import("@workmap/shared-types").VirtualOfficeReaction {
+  return value === "wave" || value === "heart" || value === "party" || value === "thumbs_up" || value === "laugh" || value === "clap" || value === "hundred" || value === "fire";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

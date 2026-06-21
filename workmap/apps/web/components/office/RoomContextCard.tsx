@@ -40,12 +40,6 @@ export function RoomContextCard({ destination, peopleCount, onGoTo, onViewPeople
         ) : (
           <button type="button" onClick={onViewPeople} style={styles.secondaryButton}>View people</button>
         )}
-        <button type="button" onClick={() => {
-          navigator.clipboard?.writeText(window.location.href);
-          onNotice?.("Office link copied.");
-        }} style={styles.secondaryButton}>
-          Copy link
-        </button>
       </div>
     </aside>
   );

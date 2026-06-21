@@ -564,6 +564,12 @@ export type VirtualOfficeRealtimeTeammateMessagePayload = {
   message: string;
 };
 
+export type VirtualOfficeReaction = "wave" | "heart" | "party" | "thumbs_up" | "laugh" | "clap" | "hundred" | "fire";
+
+export type VirtualOfficeRealtimeReactionPayload = {
+  reaction: VirtualOfficeReaction;
+};
+
 export type VirtualOfficeRealtimeTeammateEventPayload = {
   fromUserId: string;
   fromDisplayName: string;
@@ -573,6 +579,13 @@ export type VirtualOfficeRealtimeTeammateEventPayload = {
 
 export type VirtualOfficeRealtimeTeammateMessageEventPayload = VirtualOfficeRealtimeTeammateEventPayload & {
   message: string;
+};
+
+export type VirtualOfficeRealtimeReactionEventPayload = {
+  fromUserId: string;
+  fromDisplayName: string;
+  reaction: VirtualOfficeReaction;
+  createdAt: string;
 };
 
 export type VirtualOfficeRealtimeClientEvent =
@@ -595,6 +608,10 @@ export type VirtualOfficeRealtimeClientEvent =
   | {
       event: "teammate:message";
       payload: VirtualOfficeRealtimeTeammateMessagePayload;
+    }
+  | {
+      event: "office:reaction";
+      payload: VirtualOfficeRealtimeReactionPayload;
     };
 
 export type VirtualOfficeRealtimeServerEvent =
@@ -622,4 +639,8 @@ export type VirtualOfficeRealtimeServerEvent =
   | {
       event: "teammate:message";
       payload: VirtualOfficeRealtimeTeammateMessageEventPayload;
+    }
+  | {
+      event: "office:reaction";
+      payload: VirtualOfficeRealtimeReactionEventPayload;
     };

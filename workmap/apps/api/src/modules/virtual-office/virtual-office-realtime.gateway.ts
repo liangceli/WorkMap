@@ -3,6 +3,7 @@ import { HttpAdapterHost } from "@nestjs/core";
 import { canAccessVirtualOffice, type RequestContext } from "@workmap/auth";
 import type {
   UserPresenceStatus,
+  VirtualOfficeReaction,
   VirtualOfficeMapManifest,
   VirtualOfficeRealtimeClientEvent,
   VirtualOfficeRealtimeMovePayload,
@@ -51,6 +52,7 @@ const MAX_MESSAGE_BYTES = 16 * 1024;
 const MIN_MOVE_INTERVAL_MS = 50;
 const MAX_TEAMMATE_MESSAGE_LENGTH = 500;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const REACTIONS = new Set<VirtualOfficeReaction>(["wave", "heart", "party", "thumbs_up", "laugh", "clap", "hundred", "fire"]);
 
 @Injectable()
 export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplicationShutdown {
@@ -204,6 +206,9 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
         case "teammate:message":
           this.handleTeammateMessage(client, message.payload.targetUserId, message.payload.message);
           break;
+        case "office:reaction":
+          this.handleOfficeReaction(client, message.payload.reaction);
+          break;
       }
     } catch (error) {
       this.sendError(client, error instanceof Error ? error.message : "Realtime action failed.");
@@ -285,11 +290,6 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
   private handleTeammateWave(client: RealtimeClient, targetUserId: string) {
     const targetClients = this.resolveTargetClients(client, targetUserId);
 
-    if (targetClients.length === 0) {
-      this.sendError(client, "Teammate is not currently connected to this office.");
-      return;
-    }
-
     const payload = {
       fromUserId: client.context.userId,
       fromDisplayName: client.profile!.displayName,
@@ -312,11 +312,6 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
 
     const targetClients = this.resolveTargetClients(client, targetUserId);
 
-    if (targetClients.length === 0) {
-      this.sendError(client, "Teammate is not currently connected to this office.");
-      return;
-    }
-
     const payload = {
       fromUserId: client.context.userId,
       fromDisplayName: client.profile!.displayName,
@@ -328,6 +323,23 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
     for (const target of targetClients) {
       sendEvent(target, { event: "teammate:message", payload });
     }
+  }
+
+  private handleOfficeReaction(client: RealtimeClient, reaction: VirtualOfficeReaction) {
+    if (!client.roomKey || !client.officeMapId || !client.profile || !REACTIONS.has(reaction)) {
+      this.sendError(client, "Join an office map before sending a supported reaction.");
+      return;
+    }
+
+    this.broadcast(client.roomKey, {
+      event: "office:reaction",
+      payload: {
+        fromUserId: client.context.userId,
+        fromDisplayName: client.profile.displayName,
+        reaction,
+        createdAt: new Date().toISOString(),
+      },
+    }, client.id);
   }
 
   private resolveTargetClients(client: RealtimeClient, targetUserId: string) {
@@ -360,18 +372,6 @@ export class VirtualOfficeRealtimeGateway implements OnModuleInit, OnApplication
 
     if (clients?.size === 0) {
       this.rooms.delete(roomKey);
-    }
-
-    if (client.lastState) {
-      this.broadcast(roomKey, {
-        event: "player:state",
-        payload: {
-          ...client.lastState,
-          isMoving: false,
-          status: "offline",
-          updatedAt: new Date().toISOString(),
-        },
-      });
     }
 
     client.roomKey = undefined;
@@ -464,6 +464,18 @@ function parseClientEvent(rawMessage: string): VirtualOfficeRealtimeClientEvent 
           targetUserId: value.payload.targetUserId,
           message: value.payload.message,
         },
+      };
+    }
+
+    if (
+      value.event === "office:reaction" &&
+      isRecord(value.payload) &&
+      typeof value.payload.reaction === "string" &&
+      REACTIONS.has(value.payload.reaction as VirtualOfficeReaction)
+    ) {
+      return {
+        event: "office:reaction",
+        payload: { reaction: value.payload.reaction as VirtualOfficeReaction },
       };
     }
 

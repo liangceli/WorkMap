@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import type {
   OfficeRoomZone,
   PlayerDirection,
@@ -29,6 +29,7 @@ import {
   isPlayerPositionValidForMap,
   type VirtualOfficeMapConfigSource,
 } from "../../lib/office/virtualOfficeMapAdapter";
+import { readVirtualOfficeDataCache, writeVirtualOfficeDataCache } from "../../lib/office/virtualOfficeCache";
 import { remotePlayers, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
 import { statusFromFreshness } from "./presence";
 
@@ -67,6 +68,22 @@ const PRESENCE_POLL_HIDDEN_MS = 15000;
 
 export function useVirtualOfficeData(): VirtualOfficeData {
   const [data, setData] = useState<VirtualOfficeData>(MOCK_DATA);
+
+  useLayoutEffect(() => {
+    const cached = readVirtualOfficeDataCache();
+
+    if (cached) {
+      setData({
+        ...cached,
+        remotePlayers: cached.remotePlayers.map((player) => ({
+          ...player,
+          status: statusFromFreshness(player.status, player.updatedAt),
+          isMoving: false,
+        })),
+        loaded: true,
+      });
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,6 +298,25 @@ export function useVirtualOfficeData(): VirtualOfficeData {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [data.apiOptions, data.currentUserId, data.mapManifest, data.officeMapId]);
+
+  useEffect(() => {
+    if (!data.loaded || data.source === "mock") {
+      return;
+    }
+
+    writeVirtualOfficeDataCache({
+      rooms: data.rooms,
+      destinations: data.destinations,
+      remotePlayers: data.remotePlayers,
+      officeMapId: data.officeMapId,
+      mapManifest: data.mapManifest,
+      currentUserId: data.currentUserId,
+      currentUserPosition: data.currentUserPosition,
+      mapConfigSource: data.mapConfigSource,
+      mapValidationWarnings: data.mapValidationWarnings,
+      source: data.source,
+    });
+  }, [data.currentUserId, data.currentUserPosition, data.destinations, data.loaded, data.mapConfigSource, data.mapManifest, data.mapValidationWarnings, data.officeMapId, data.remotePlayers, data.rooms, data.source]);
 
   return data;
 }

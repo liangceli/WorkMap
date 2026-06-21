@@ -16,6 +16,7 @@ const visibleItems = [
   "Device registration and heartbeat status",
   "Last-seen timestamp",
   "Policy acknowledgement timestamp",
+  "WorkMap in-app messages, waves, reactions, and Notice read state",
 ];
 
 const notVisibleItems = [
@@ -24,7 +25,7 @@ const notVisibleItems = [
   "Keystrokes are not collected",
   "Clipboard contents are not collected",
   "Webcam or microphone data is not collected",
-  "Private message or email body content is not collected",
+  "External private message, Teams, or email body content is not collected",
   "Webpage body, form inputs, and passwords are not collected",
   "Full URL paths, query strings, and fragments are not collected",
 ];

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { OfficeMap } from "../../components/office/OfficeMap";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
+import { getCognitoSession } from "../../lib/auth/cognitoSession";
+import { getUserSetupState } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type GateState =
@@ -12,6 +14,12 @@ type GateState =
 
 export default function VirtualOfficePage() {
   const [gate, setGate] = useState<GateState>({ status: "checking" });
+
+  useLayoutEffect(() => {
+    if (getCognitoSession() && getUserSetupState()?.hasCompany) {
+      setGate({ status: "ready" });
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

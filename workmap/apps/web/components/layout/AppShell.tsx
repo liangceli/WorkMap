@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { getCurrentCompany } from "../../lib/api/companiesApi";
@@ -8,7 +8,7 @@ import { getCurrentUser } from "../../lib/api/authApi";
 import { getWorkMapPlatformApiAuthOptions } from "../../lib/api/platformAuth";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
-import { resetUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
+import { getUserSetupState, resetUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 
 type AppShellProps = {
   children: ReactNode;
@@ -48,15 +48,29 @@ const navItems: NavItem[] = [
   { label: "Platform Admin", href: "/platform-admin", group: "platform", platformOnly: true },
 ];
 
+const APP_SHELL_CACHE_KEY = "workmap.appShellContext";
+
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
   const [apiSummary, setApiSummary] = useState<ApiSessionSummary | null>(null);
   const [platformSummary, setPlatformSummary] = useState<PlatformSessionSummary | null>(null);
-  const activeRole = apiSummary?.role ? toWorkflowRole(apiSummary.role) : null;
+  const [cachedRole, setCachedRole] = useState<WorkMapRole | null>(null);
+  const activeRole = apiSummary?.role ? toWorkflowRole(apiSummary.role) : cachedRole;
+
+  useLayoutEffect(() => {
+    const session = getCognitoSession();
+    const cached = readAppShellCache(session?.claims.sub);
+    const setup = getUserSetupState();
+
+    setCognitoSession(session);
+    setApiSummary(cached?.apiSummary ?? null);
+    setPlatformSummary(cached?.platformSummary ?? null);
+    setCachedRole(cached?.apiSummary?.role ? toWorkflowRole(cached.apiSummary.role) : setup?.role ?? null);
+  }, []);
 
   useEffect(() => {
-    setCognitoSession(getCognitoSession());
+    const session = getCognitoSession();
 
     let cancelled = false;
 
@@ -64,12 +78,14 @@ export function AppShell({ children }: AppShellProps) {
       const platformAuth = await getWorkMapPlatformApiAuthOptions();
 
       if (!cancelled && platformAuth.available) {
-        setPlatformSummary({
+        const summary: PlatformSessionSummary = {
           userName: platformAuth.context.identity.displayName,
           email: platformAuth.context.identity.email,
           platformRole: platformAuth.context.platformRole,
           source: platformAuth.source,
-        });
+        };
+        setPlatformSummary(summary);
+        updateAppShellCache(session?.claims.sub, { platformSummary: summary });
       }
 
       const auth = await getWorkMapApiAuthOptions();
@@ -87,12 +103,15 @@ export function AppShell({ children }: AppShellProps) {
         return;
       }
 
-      setApiSummary({
+      const summary: ApiSessionSummary = {
         companyName: companyResult.data.name,
         userName: userResult.data.displayName,
         role: userResult.data.role ?? auth.source,
         source: auth.source,
-      });
+      };
+      setApiSummary(summary);
+      setCachedRole(toWorkflowRole(summary.role));
+      updateAppShellCache(session?.claims.sub, { apiSummary: summary });
     }
 
     void loadApiSummary();
@@ -152,6 +171,7 @@ export function AppShell({ children }: AppShellProps) {
     }
 
     resetUserSetupState();
+    clearAppShellCache();
     setCognitoSession(null);
     setApiSummary(null);
     setPlatformSummary(null);
@@ -224,6 +244,40 @@ export function AppShell({ children }: AppShellProps) {
       <section className="wm-app-content" style={styles.content}>{children}</section>
     </main>
   );
+}
+
+type CachedAppShellContext = {
+  cognitoSub: string;
+  apiSummary?: ApiSessionSummary;
+  platformSummary?: PlatformSessionSummary;
+};
+
+function readAppShellCache(cognitoSub?: string): CachedAppShellContext | null {
+  if (!cognitoSub || typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(APP_SHELL_CACHE_KEY) ?? "null") as CachedAppShellContext | null;
+    return parsed?.cognitoSub === cognitoSub ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function updateAppShellCache(cognitoSub: string | undefined, update: Partial<Omit<CachedAppShellContext, "cognitoSub">>) {
+  if (!cognitoSub || typeof window === "undefined") {
+    return;
+  }
+
+  const current = readAppShellCache(cognitoSub);
+  window.localStorage.setItem(APP_SHELL_CACHE_KEY, JSON.stringify({ cognitoSub, ...current, ...update }));
+}
+
+function clearAppShellCache() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(APP_SHELL_CACHE_KEY);
+  }
 }
 
 function formatRole(role: string) {

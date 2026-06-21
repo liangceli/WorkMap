@@ -31,8 +31,9 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
         <p style={styles.bodyText}>
           WorkMap may collect presence, avatar location, workspace status, desktop app name and usage duration, browser domain and
           usage duration, device heartbeat, freshness, and last-seen context so workspace activity summaries stay transparent.
-          It does not collect screenshots, screen recordings, keystrokes, clipboard data, webcam or microphone data, private
-          message/email body content, webpage body content, form inputs, or passwords.
+          WorkMap messages, waves, reactions, and Notice read state are stored when users intentionally send them. It does not
+          collect screenshots, screen recordings, keystrokes, clipboard data, webcam or microphone data, external private
+          message, Teams, or email body content, webpage body content, form inputs, or passwords.
         </p>
 
         <div style={styles.grid}>
@@ -47,6 +48,7 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
               <li>Workspace status and freshness</li>
               <li>Last-seen timestamp</li>
               <li>Policy acknowledgement time</li>
+              <li>WorkMap messages, waves, reactions, and Notice read state</li>
             </ul>
           </div>
           <div style={styles.panel}>
@@ -56,7 +58,7 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
               <li>Keystrokes</li>
               <li>Clipboard contents</li>
               <li>Webcam or microphone data</li>
-              <li>Private message or email body content</li>
+              <li>External private message, Teams, or email body content</li>
               <li>Webpage body content, form inputs, or passwords</li>
               <li>Full URL paths, query strings, or fragments</li>
             </ul>

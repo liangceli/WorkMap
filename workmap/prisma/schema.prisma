@@ -98,6 +98,12 @@ enum InvitationStatus {
   REVOKED
 }
 
+enum NoticeType {
+  MESSAGE
+  WAVE
+  REACTION
+}
+
 model Company {
   id                 String                  @id @default(uuid()) @db.Uuid
   name               String
@@ -120,6 +126,7 @@ model Company {
   invitations        Invitation[]
   devicePairingCodes DevicePairingCode[]
   deviceCredentials  DeviceCredential[]
+  notices            Notice[]
 }
 
 model Department {
@@ -162,10 +169,30 @@ model User {
   invitationsSent        Invitation[]            @relation("InvitationInvitedBy")
   devicePairingCodes     DevicePairingCode[]
   deviceCredentials      DeviceCredential[]
+  noticesSent            Notice[]                @relation("NoticeActor")
+  noticesReceived        Notice[]                @relation("NoticeRecipient")
 
   @@unique([companyId, email])
   @@index([companyId, departmentId])
   @@index([companyId, role])
+}
+
+model Notice {
+  id              String     @id @default(uuid()) @db.Uuid
+  companyId       String     @db.Uuid
+  actorUserId     String     @db.Uuid
+  recipientUserId String     @db.Uuid
+  type            NoticeType
+  message         String?
+  reaction        String?
+  createdAt       DateTime   @default(now())
+  readAt          DateTime?
+  company         Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor           User       @relation("NoticeActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+  recipient       User       @relation("NoticeRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, recipientUserId, readAt, createdAt])
+  @@index([companyId, actorUserId, createdAt])
 }
 
 model Invitation {

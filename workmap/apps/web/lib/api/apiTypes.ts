@@ -1,4 +1,4 @@
-import type { PlayerDirection, UserPresenceStatus } from "@workmap/shared-types";
+import type { PlayerDirection, UserPresenceStatus, VirtualOfficeReaction } from "@workmap/shared-types";
 
 export type ApiResult<T> =
   | { ok: true; data: T; source: "api" }
@@ -357,4 +357,21 @@ export type WorkMapApiPlatformAuditList = {
     metadata: unknown;
     createdAt: string;
   }>;
+};
+
+export type WorkMapApiNotice = {
+  id: string;
+  type: "MESSAGE" | "WAVE" | "REACTION";
+  direction: "sent" | "received";
+  actor: { id: string; displayName: string };
+  recipient: { id: string; displayName: string };
+  message: string | null;
+  reaction: VirtualOfficeReaction | null;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export type WorkMapApiNoticeList = {
+  items: WorkMapApiNotice[];
+  unreadCount: number;
 };

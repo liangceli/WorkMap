@@ -13,8 +13,8 @@ type InteractionDrawerProps = {
   onOpenChat?: () => void;
   onSchedule?: () => void;
   onViewProfile?: () => void;
-  onWave?: () => void;
-  onSendMessage?: (message: string) => boolean;
+  onWave?: () => void | Promise<void>;
+  onSendMessage?: (message: string) => boolean | Promise<boolean>;
   onOpenTeams?: () => void;
   onOpenEmail?: () => void;
   onActionNote?: (message: string) => void;
@@ -38,14 +38,14 @@ export function InteractionDrawer({
   const guidance = getGuidance(target.status, firstName);
   const callDisabled = true;
 
-  const submitMessage = () => {
+  const submitMessage = async () => {
     const text = messageText.trim();
 
     if (!text) {
       return;
     }
 
-    if (onSendMessage?.(text)) {
+    if (await onSendMessage?.(text)) {
       setMessageText("");
     }
   };
@@ -118,18 +118,18 @@ export function InteractionDrawer({
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                submitMessage();
+                void submitMessage();
               }
             }}
             maxLength={500}
             placeholder={`Message ${firstName}`}
             style={styles.input}
           />
-          <button type="button" onClick={submitMessage} style={styles.sendButton}>
+          <button type="button" onClick={() => void submitMessage()} style={styles.sendButton}>
             Send
           </button>
         </div>
-        <p style={styles.integrationNote}>Messages and waves deliver only to teammates currently connected to this office. WorkMap does not read Teams or email content.</p>
+        <p style={styles.integrationNote}>WorkMap messages and waves are saved in Notices. External Teams and email content is never read.</p>
       </div>
 
       <div style={styles.actions}>
@@ -154,8 +154,8 @@ export function InteractionDrawer({
         <button style={styles.actionButton} onClick={() => handleAction("View profile")} type="button">
           View profile
         </button>
-        <button style={styles.actionButton} onClick={() => handleAction("Schedule meeting")} type="button">
-          Schedule
+        <button style={{ ...styles.actionButton, ...styles.actionButtonDisabled }} disabled title="Schedule meeting is not available yet" type="button">
+          Schedule later
         </button>
       </div>
     </section>

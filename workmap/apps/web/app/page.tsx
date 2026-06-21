@@ -14,9 +14,9 @@ export default function HomePage() {
           <section style={styles.privacyBox}>
             <strong>Transparent by design</strong>
             <span>
-              App names and usage duration, browser domains and usage duration, device heartbeat, office presence, and acknowledgement
-              timestamps may be collected. Screenshots, screen recordings, keystrokes, clipboard, webcam, microphone, private messages,
-              email body, webpage body, form inputs, passwords, and full URL paths are not collected.
+              App names and usage duration, browser domains and usage duration, device heartbeat, office presence, acknowledgement
+              timestamps, and WorkMap messages or reactions may be collected. Screenshots, screen recordings, keystrokes, clipboard,
+              webcam, microphone, external private messages, Teams or email body, webpage body, form inputs, passwords, and full URL paths are not collected.
             </span>
           </section>
         </div>

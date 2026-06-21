@@ -1,6 +1,6 @@
 "use client";
 
-import { MouseEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MouseEvent, WheelEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   ContactTarget,
@@ -8,8 +8,10 @@ import type {
   PlayerDirection,
   PlayerState,
   UserPresenceStatus,
+  VirtualOfficeReaction,
   VirtualOfficeMapManifest,
   VirtualOfficeRealtimePlayerState,
+  VirtualOfficeRealtimeReactionEventPayload,
   VirtualOfficeRealtimeTeammateEventPayload,
   VirtualOfficeRealtimeTeammateMessageEventPayload,
 } from "@workmap/shared-types";
@@ -23,8 +25,9 @@ import { getAvatarFrameIndex, layeredAvatarFrameMap } from "../../lib/avatar/ava
 import { decodeLayeredAvatarId, encodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { getAvatarConfigForOffice, saveLayeredAvatarConfig } from "../../lib/avatar/avatarStorage";
 import { getContactLinks } from "../../lib/api/integrationsApi";
+import { createNoticeInteraction, listNotices, markNoticesRead } from "../../lib/api/noticesApi";
 import { saveCurrentVirtualOfficePosition } from "../../lib/api/virtualOfficeApi";
-import type { WorkMapApiContactLinks } from "../../lib/api/apiTypes";
+import type { WorkMapApiContactLinks, WorkMapApiNotice } from "../../lib/api/apiTypes";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { findGridPath, type PathBounds, type PathPoint } from "../../lib/office/pathfinding";
 import {
@@ -32,6 +35,11 @@ import {
   isPlayerPositionValidForMap,
   validateParsedTmxAgainstManifest,
 } from "../../lib/office/virtualOfficeMapAdapter";
+import {
+  readLocalOfficePosition,
+  writeLocalOfficePosition,
+  type CachedLocalOfficePosition,
+} from "../../lib/office/virtualOfficeCache";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { FloatingRoomPill } from "./FloatingRoomPill";
 import { InteractionDrawer } from "./InteractionDrawer";
@@ -41,9 +49,10 @@ import { OfficeIcon } from "./OfficeIcons";
 import { OfficeLeftRail, type OfficePanelKey } from "./OfficeLeftRail";
 import { OfficeMiniMap } from "./OfficeMiniMap";
 import { OfficeSidePanel } from "./OfficeSidePanel";
-import { officeTilesets, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
+import { officeTilesets, type RemoteOfficePlayer } from "./mockOfficeData";
 import { RoomContextCard } from "./RoomContextCard";
 import { statusColors } from "./presence";
+import { reactionEmoji } from "./reactions";
 import { drawTiledTile, getTiledTileGid } from "./tiledTiles";
 import { useVirtualOfficeRealtime } from "./useVirtualOfficeRealtime";
 import { useVirtualOfficeData } from "./useVirtualOfficeData";
@@ -108,6 +117,11 @@ type InterpolatedRemotePlayer = RemoteOfficePlayer & {
   lastRealtimeAt: number;
 };
 
+type FloatingReaction = {
+  reaction: VirtualOfficeReaction;
+  startedAt: number;
+};
+
 type OfficeUiStateSnapshot = PositionSnapshot & {
   activeRoomId?: string;
   nearbyTargetId?: string;
@@ -127,6 +141,7 @@ const CHAIR_INTERACTION_DISTANCE = 46;
 const POSITION_SAVE_THROTTLE_MS = 2500;
 const POSITION_SAVE_MIN_DISTANCE = 8;
 const UI_STATE_SYNC_INTERVAL_MS = 120;
+const LOCAL_POSITION_CACHE_INTERVAL_MS = 240;
 const REALTIME_REMOTE_INTERPOLATION_RATE = 10;
 const REALTIME_REMOTE_SNAP_DISTANCE = 260;
 const REALTIME_REMOTE_STALE_MS = 20000;
@@ -162,6 +177,8 @@ export function OfficeMap() {
   const sendRealtimeMovementRef = useRef<(position: PositionSnapshot) => void>(() => undefined);
   const sendRealtimeWaveRef = useRef<(targetUserId: string) => boolean>(() => false);
   const sendRealtimeMessageRef = useRef<(targetUserId: string, message: string) => boolean>(() => false);
+  const sendRealtimeReactionRef = useRef<(reaction: VirtualOfficeReaction) => boolean>(() => false);
+  const floatingReactionsRef = useRef(new Map<string, FloatingReaction>());
   const selectedRemoteIdRef = useRef<string | null>(null);
   const autoPathRef = useRef<PathPoint[]>([]);
   const autoDestinationRef = useRef<PathPoint | null>(null);
@@ -169,6 +186,8 @@ export function OfficeMap() {
   const latestMapRef = useRef<ParsedMap | null>(null);
   const dragRef = useRef<{ dragging: boolean; x: number; y: number; moved: boolean }>({ dragging: false, x: 0, y: 0, moved: false });
   const restoredPositionRef = useRef(false);
+  const cachedPositionRestoredRef = useRef(false);
+  const cachedLocalPositionRef = useRef<CachedLocalOfficePosition | null>(null);
   const localPlayerTouchedRef = useRef(false);
   const activeSpawnManifestRef = useRef<string | null>(null);
   const lastPersistedPositionRef = useRef<PositionSnapshot | null>(null);
@@ -176,6 +195,7 @@ export function OfficeMap() {
   const lastPersistAttemptAtRef = useRef(0);
   const pendingPersistTimeoutRef = useRef<number | null>(null);
   const lastUiStateSyncAtRef = useRef(0);
+  const lastLocalPositionCacheAtRef = useRef(0);
   const uiStateSnapshotRef = useRef<OfficeUiStateSnapshot | null>(null);
   const playerRef = useRef<PlayerState>({
     userId: "local-user",
@@ -192,7 +212,7 @@ export function OfficeMap() {
   const [map, setMap] = useState<ParsedMap | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [player, setPlayer] = useState(playerRef.current);
-  const [activeRoom, setActiveRoom] = useState<OfficeRoomZone | undefined>(roomZones[0]);
+  const [activeRoom, setActiveRoom] = useState<OfficeRoomZone | undefined>();
   const [contactTarget, setContactTarget] = useState<ContactTarget | null>(null);
   const [nearbyTarget, setNearbyTarget] = useState<ContactTarget | null>(null);
   const [dismissedContactTargetId, setDismissedContactTargetId] = useState<string | null>(null);
@@ -208,6 +228,9 @@ export function OfficeMap() {
   const [zoom, setZoom] = useState(1);
   const [draggingMap, setDraggingMap] = useState(false);
   const [realtimeAvatarSignature, setRealtimeAvatarSignature] = useState("");
+  const [notices, setNotices] = useState<WorkMapApiNotice[]>([]);
+  const [unreadNoticeCount, setUnreadNoticeCount] = useState(0);
+  const [noticesLoading, setNoticesLoading] = useState(false);
 
   const mapPixels = useMemo(
     () => ({
@@ -217,6 +240,41 @@ export function OfficeMap() {
     [map],
   );
   const remoteAvatarConfigSignature = useMemo(() => createRemoteAvatarConfigSignature(officePeople), [officePeople]);
+
+  const refreshNotices = useCallback(async () => {
+    if (!officeData.apiOptions) {
+      return;
+    }
+
+    setNoticesLoading(true);
+    const result = await listNotices(officeData.apiOptions);
+    setNoticesLoading(false);
+
+    if (result.ok) {
+      setNotices(result.data.items);
+      setUnreadNoticeCount(result.data.unreadCount);
+    }
+  }, [officeData.apiOptions]);
+
+  const showFloatingReaction = useCallback((userId: string, reaction: VirtualOfficeReaction) => {
+    floatingReactionsRef.current.set(userId, { reaction, startedAt: Date.now() });
+  }, []);
+
+  useLayoutEffect(() => {
+    const cached = readLocalOfficePosition(mapManifest.mapKey);
+    const cachedPlayer = cached
+      ? { ...playerRef.current, ...cached, isMoving: false, updatedAt: cached.savedAt }
+      : null;
+
+    if (!cached || !cachedPlayer || !isPlayerPositionValidForMap(cachedPlayer, mapManifest)) {
+      return;
+    }
+
+    cachedLocalPositionRef.current = cached;
+    cachedPositionRestoredRef.current = true;
+    playerRef.current = cachedPlayer;
+    setPlayer(playerRef.current);
+  }, [mapManifest]);
 
   const enforceMinimumZoom = useCallback(() => {
     const canvas = canvasRef.current;
@@ -275,12 +333,16 @@ export function OfficeMap() {
 
       uiStateSnapshotRef.current = nextSnapshot;
       lastUiStateSyncAtRef.current = time;
+      if (time - lastLocalPositionCacheAtRef.current >= LOCAL_POSITION_CACHE_INTERVAL_MS) {
+        lastLocalPositionCacheAtRef.current = time;
+        writeLocalOfficePosition(mapManifest.mapKey, nextPlayer);
+      }
       setPlayer(nextPlayer);
       setActiveRoom(room);
       setNearbyTarget(nearby);
       setNearestChair(chair);
     },
-    [],
+    [mapManifest.mapKey],
   );
 
   const handleRealtimeRemoteState = useCallback(
@@ -301,18 +363,28 @@ export function OfficeMap() {
   );
 
   const handleRealtimeWave = useCallback((payload: VirtualOfficeRealtimeTeammateEventPayload) => {
+    showFloatingReaction(payload.fromUserId, "wave");
     setToast(`${payload.fromDisplayName} waved to you.`);
-  }, []);
+    void refreshNotices();
+  }, [refreshNotices, showFloatingReaction]);
 
   const handleRealtimeMessage = useCallback((payload: VirtualOfficeRealtimeTeammateMessageEventPayload) => {
     setToast(`${payload.fromDisplayName}: ${payload.message}`);
-  }, []);
+    void refreshNotices();
+  }, [refreshNotices]);
+
+  const handleRealtimeReaction = useCallback((payload: VirtualOfficeRealtimeReactionEventPayload) => {
+    showFloatingReaction(payload.fromUserId, payload.reaction);
+    setToast(`${payload.fromDisplayName} reacted ${reactionEmoji(payload.reaction)}`);
+    void refreshNotices();
+  }, [refreshNotices, showFloatingReaction]);
 
   const {
     connectionState: realtimeConnectionState,
     sendMovement: sendRealtimeMovement,
     sendWave: sendRealtimeWave,
     sendMessage: sendRealtimeMessage,
+    sendReaction: sendRealtimeReaction,
   } = useVirtualOfficeRealtime({
     officeMapId: officeData.officeMapId,
     apiOptions: officeData.apiOptions,
@@ -320,6 +392,7 @@ export function OfficeMap() {
     onRemoteState: handleRealtimeRemoteState,
     onWave: handleRealtimeWave,
     onMessage: handleRealtimeMessage,
+    onReaction: handleRealtimeReaction,
     onError: setToast,
   });
 
@@ -340,6 +413,33 @@ export function OfficeMap() {
   useEffect(() => {
     sendRealtimeMessageRef.current = sendRealtimeMessage;
   }, [sendRealtimeMessage]);
+
+  useEffect(() => {
+    sendRealtimeReactionRef.current = sendRealtimeReaction;
+  }, [sendRealtimeReaction]);
+
+  useEffect(() => {
+    if (!officeData.apiOptions) {
+      return undefined;
+    }
+
+    void refreshNotices();
+    const intervalId = window.setInterval(() => void refreshNotices(), 15000);
+    return () => window.clearInterval(intervalId);
+  }, [officeData.apiOptions, refreshNotices]);
+
+  useEffect(() => {
+    if (activePanel !== "notices" || unreadNoticeCount === 0 || !officeData.apiOptions) {
+      return;
+    }
+
+    const readAt = new Date().toISOString();
+    setUnreadNoticeCount(0);
+    setNotices((current) => current.map((notice) =>
+      notice.direction === "received" && !notice.readAt ? { ...notice, readAt } : notice,
+    ));
+    void markNoticesRead(officeData.apiOptions);
+  }, [activePanel, officeData.apiOptions, unreadNoticeCount]);
 
   useEffect(() => {
     officePeopleRef.current = officePeople;
@@ -408,14 +508,21 @@ export function OfficeMap() {
       roomId: officeData.currentUserPosition.roomId,
       updatedAt: new Date().toISOString(),
     };
-    const restoredPlayer = isPlayerPositionValidForMap(restoredCandidate, mapManifest)
+    const cachedPosition = cachedLocalPositionRef.current;
+    const cachedIsNewer = Boolean(cachedPosition && Date.parse(cachedPosition.savedAt) > Date.parse(officeData.currentUserPosition.updatedAt));
+    const cachedCandidate = cachedPosition
+      ? { ...restoredCandidate, ...cachedPosition, isMoving: false, updatedAt: cachedPosition.savedAt }
+      : null;
+    const restoredPlayer = cachedIsNewer && cachedCandidate && isPlayerPositionValidForMap(cachedCandidate, mapManifest)
+      ? cachedCandidate
+      : isPlayerPositionValidForMap(restoredCandidate, mapManifest)
       ? restoredCandidate
       : createSafeSpawnPlayer(restoredCandidate, mapManifest, officeRooms);
 
     playerRef.current = restoredPlayer;
     const restoredSnapshot = toPositionSnapshot(restoredPlayer);
-    lastPersistedPositionRef.current = restoredSnapshot;
-    restorePersistGuardRef.current = restoredSnapshot;
+    lastPersistedPositionRef.current = cachedIsNewer ? toPositionSnapshot(restoredCandidate) : restoredSnapshot;
+    restorePersistGuardRef.current = cachedIsNewer ? null : restoredSnapshot;
     setPlayer(restoredPlayer);
   }, [mapManifest, officeData.currentUserPosition, officeRooms]);
 
@@ -424,6 +531,7 @@ export function OfficeMap() {
       !officeData.loaded ||
       officeData.currentUserPosition ||
       restoredPositionRef.current ||
+      cachedPositionRestoredRef.current ||
       localPlayerTouchedRef.current
     ) {
       return;
@@ -453,7 +561,7 @@ export function OfficeMap() {
     let cancelled = false;
 
     const loadMap = () => {
-      fetch(mapManifest.tmxPath, { cache: "no-store" })
+      fetch(mapManifest.tmxPath, { cache: process.env.NODE_ENV === "development" ? "no-store" : "force-cache" })
         .then((response) => {
         if (!response.ok) {
           throw new Error(`Failed to load map: ${response.status}`);
@@ -577,7 +685,7 @@ export function OfficeMap() {
       return undefined;
     }
 
-    const timeoutId = window.setTimeout(() => setToast(null), 2200);
+    const timeoutId = window.setTimeout(() => setToast(null), 5200);
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
@@ -777,7 +885,6 @@ export function OfficeMap() {
           staticMap,
           nextPlayer,
           mapPixels,
-          room,
           nearest,
           chair,
           seatedChairRef.current,
@@ -785,6 +892,8 @@ export function OfficeMap() {
           renderedRemotePlayers,
           selectedRemoteIdRef.current,
           autoDestinationRef.current,
+          room,
+          floatingReactionsRef.current,
           zoomRef.current,
           cameraOffsetRef.current,
         );
@@ -993,15 +1102,82 @@ export function OfficeMap() {
     setContactTarget(target);
   };
 
-  const waveToRemote = (target: ContactTarget) => {
-    const sent = sendRealtimeWaveRef.current(target.userId);
-    setToast(sent ? `Wave sent to ${target.displayName}.` : "Realtime is not connected. Wave was not delivered.");
+  const persistInteraction = async (
+    input:
+      | { targetUserId: string; type: "MESSAGE"; message: string }
+      | { targetUserId: string; type: "WAVE" }
+      | { targetUserId: string; type: "REACTION"; reaction: VirtualOfficeReaction },
+  ) => {
+    if (!officeData.apiOptions) {
+      return false;
+    }
+
+    const result = await createNoticeInteraction(input, officeData.apiOptions);
+    if (!result.ok) {
+      return false;
+    }
+
+    setNotices((current) => [result.data, ...current.filter((notice) => notice.id !== result.data.id)]);
+    return true;
   };
 
-  const sendQuickMessage = (target: ContactTarget, message: string) => {
-    const sent = sendRealtimeMessageRef.current(target.userId, message);
-    setToast(sent ? `Message sent to ${target.displayName}.` : "Realtime is not connected. Message was not delivered.");
-    return sent;
+  const waveToRemote = async (target: ContactTarget) => {
+    const saved = await persistInteraction({ targetUserId: target.userId, type: "WAVE" });
+    if (!saved) {
+      setToast("Wave could not be saved. Try again.");
+      return;
+    }
+
+    const deliveredLive = sendRealtimeWaveRef.current(target.userId);
+    showFloatingReaction(playerRef.current.userId, "wave");
+    setToast(deliveredLive ? `Wave sent to ${target.displayName}.` : `Wave saved for ${target.displayName} in Notices.`);
+  };
+
+  const sendQuickMessage = async (target: ContactTarget, message: string) => {
+    const saved = await persistInteraction({ targetUserId: target.userId, type: "MESSAGE", message });
+    if (!saved) {
+      setToast("Message could not be saved. Try again.");
+      return false;
+    }
+
+    const deliveredLive = sendRealtimeMessageRef.current(target.userId, message);
+    setToast(deliveredLive ? `Message sent to ${target.displayName}.` : `Message saved for ${target.displayName} in Notices.`);
+    return true;
+  };
+
+  const waveToOffice = async () => {
+    showFloatingReaction(playerRef.current.userId, "wave");
+
+    if (officePeople.length === 0) {
+      setToast("No teammates are available to receive this wave yet.");
+      return;
+    }
+
+    const results = await Promise.all(officePeople.map((person) =>
+      persistInteraction({ targetUserId: person.userId, type: "WAVE" }),
+    ));
+    officePeople.forEach((person) => sendRealtimeWaveRef.current(person.userId));
+    setToast(results.some(Boolean) ? "Wave sent to the office and saved in Notices." : "Wave could not be saved. Try again.");
+  };
+
+  const reactToOffice = async (reaction: VirtualOfficeReaction) => {
+    showFloatingReaction(playerRef.current.userId, reaction);
+    const deliveredLive = sendRealtimeReactionRef.current(reaction);
+
+    if (officePeople.length === 0) {
+      setToast(deliveredLive
+        ? `${reactionEmoji(reaction)} reaction shared live.`
+        : `${reactionEmoji(reaction)} reaction shown locally. No teammates are available yet.`);
+      return;
+    }
+
+    const results = await Promise.all(officePeople.map((person) =>
+      persistInteraction({ targetUserId: person.userId, type: "REACTION", reaction }),
+    ));
+    const saved = results.some(Boolean);
+    setToast(saved
+      ? `${reactionEmoji(reaction)} reaction ${deliveredLive ? "shared live and " : ""}saved in Notices.`
+      : "Reaction could not be saved. Try again.");
   };
 
   const openTeamsLauncher = (target: ContactTarget) => {
@@ -1059,7 +1235,7 @@ export function OfficeMap() {
           remoteCount={officePeople.length}
           onSearch={() => setCommandOpen(true)}
         />
-        <OfficeLeftRail activePanel={activePanel} onSelectPanel={openPanel} />
+        <OfficeLeftRail activePanel={activePanel} onSelectPanel={openPanel} unreadNoticeCount={unreadNoticeCount} />
         <OfficeSidePanel
           activePanel={activePanel}
           people={officePeople}
@@ -1075,6 +1251,8 @@ export function OfficeMap() {
           onGoToDestination={goToDestination}
           onOpenPanel={setActivePanel}
           toast={setToast}
+          notices={notices}
+          noticesLoading={noticesLoading}
         />
 
         <div className="wm-office-canvas-panel" style={styles.canvasPanel}>
@@ -1123,8 +1301,8 @@ export function OfficeMap() {
           onSearch={() => setCommandOpen(true)}
           onOpenChat={() => setActivePanel("chat")}
           onOpenCalendar={() => setActivePanel("calendar")}
-          onWave={() => setToast("You waved to nearby teammates.")}
-          onEmoji={() => setToast("Emoji reactions are local feedback in this MVP.")}
+          onWave={() => void waveToOffice()}
+          onEmoji={(reaction) => void reactToOffice(reaction)}
           onToast={setToast}
         />
         {drawerTarget ? (
@@ -1293,7 +1471,6 @@ function drawScene(
   staticMap: StaticMapCache | null,
   player: PlayerState,
   mapPixels: { width: number; height: number },
-  activeRoom?: OfficeRoomZone,
   nearbyTarget?: ContactTarget | null,
   nearestChair?: ChairSpot | null,
   seatedChair?: ChairSpot | null,
@@ -1301,6 +1478,8 @@ function drawScene(
   remotePlayers: RemoteOfficePlayer[] = [],
   selectedRemoteId?: string | null,
   destinationMarker?: PathPoint | null,
+  highlightedRoom?: OfficeRoomZone,
+  floatingReactions: Map<string, FloatingReaction> = new Map(),
   zoom = 1,
   cameraOffset = { x: 0, y: 0 },
 ) {
@@ -1370,9 +1549,64 @@ function drawScene(
       false,
       avatars?.[remote.userId],
     );
+    drawFloatingReaction(context, remote, floatingReactions);
   }
 
   drawPlayer(context, player, "You", false, true, Boolean(seatedChair), avatars?.[player.userId], localOverRemote);
+  drawFloatingReaction(context, player, floatingReactions);
+  context.restore();
+
+  if (highlightedRoom) {
+    drawRoomFocusOverlay(context, highlightedRoom, mapPixels, snappedCameraX, snappedCameraY, zoom);
+  }
+}
+
+function drawFloatingReaction(
+  context: CanvasRenderingContext2D,
+  player: Pick<PlayerState, "userId" | "x" | "y">,
+  reactions: Map<string, FloatingReaction>,
+) {
+  const active = reactions.get(player.userId);
+  if (!active) {
+    return;
+  }
+
+  const elapsed = Date.now() - active.startedAt;
+  const duration = 3200;
+  if (elapsed >= duration) {
+    reactions.delete(player.userId);
+    return;
+  }
+
+  const progress = elapsed / duration;
+  context.save();
+  context.globalAlpha = Math.min(1, (1 - progress) * 1.5);
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.font = `${30 + progress * 8}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+  context.fillText(reactionEmoji(active.reaction), player.x, player.y - 54 - progress * 58);
+  context.restore();
+}
+
+function drawRoomFocusOverlay(
+  context: CanvasRenderingContext2D,
+  room: OfficeRoomZone,
+  mapPixels: { width: number; height: number },
+  cameraX: number,
+  cameraY: number,
+  zoom: number,
+) {
+  context.save();
+  context.scale(zoom, zoom);
+  context.translate(-cameraX, -cameraY);
+  context.fillStyle = "rgba(8, 15, 24, 0.48)";
+  context.beginPath();
+  context.rect(0, 0, mapPixels.width, mapPixels.height);
+  context.rect(room.x, room.y, room.width, room.height);
+  context.fill("evenodd");
+  context.strokeStyle = "rgba(255, 255, 255, 0.8)";
+  context.lineWidth = 3 / zoom;
+  context.strokeRect(room.x, room.y, room.width, room.height);
   context.restore();
 }
 

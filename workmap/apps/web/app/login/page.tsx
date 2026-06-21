@@ -13,7 +13,7 @@ export default function LoginPage() {
           </p>
           <div style={styles.privacyBox}>
             <strong>Privacy boundary</strong>
-            <span>No keystrokes, screenshots, recordings, camera, microphone, message or email body, webpage body, form inputs, passwords, or full URL paths.</span>
+            <span>No keystrokes, screenshots, recordings, camera, microphone, external private message, Teams or email body, webpage body, form inputs, passwords, or full URL paths.</span>
           </div>
         </div>
         <CognitoLoginPanel />

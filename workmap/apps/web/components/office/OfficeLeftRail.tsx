@@ -8,19 +8,20 @@ export type OfficePanelKey = "search" | "rooms" | "people" | "chat" | "calendar"
 type OfficeLeftRailProps = {
   activePanel: OfficePanelKey | null;
   onSelectPanel: (panel: OfficePanelKey) => void;
+  unreadNoticeCount?: number;
 };
 
-const railItems: Array<{ key: OfficePanelKey; label: string; icon: Parameters<typeof OfficeIcon>[0]["name"]; hasBadge?: boolean; bottom?: boolean }> = [
+const railItems: Array<{ key: OfficePanelKey; label: string; icon: Parameters<typeof OfficeIcon>[0]["name"]; bottom?: boolean }> = [
   { key: "search", label: "Search", icon: "search" },
   { key: "rooms", label: "Rooms and map", icon: "map" },
   { key: "people", label: "People", icon: "people" },
-  { key: "chat", label: "Chat", icon: "chat", hasBadge: true },
+  { key: "chat", label: "Chat", icon: "chat" },
   { key: "calendar", label: "Calendar", icon: "calendar" },
-  { key: "notices", label: "Notices", icon: "chat", hasBadge: true },
+  { key: "notices", label: "Notices", icon: "chat" },
   { key: "settings", label: "Settings", icon: "settings", bottom: true },
 ];
 
-export function OfficeLeftRail({ activePanel, onSelectPanel }: OfficeLeftRailProps) {
+export function OfficeLeftRail({ activePanel, onSelectPanel, unreadNoticeCount = 0 }: OfficeLeftRailProps) {
   return (
     <nav className="wm-office-left-rail" style={styles.rail} aria-label="Office tools">
       {railItems.map((item) => (
@@ -38,7 +39,9 @@ export function OfficeLeftRail({ activePanel, onSelectPanel }: OfficeLeftRailPro
           }}
         >
           <OfficeIcon name={item.icon} size={30} />
-          {item.hasBadge ? <span style={styles.badge} /> : null}
+          {item.key === "notices" && unreadNoticeCount > 0 ? (
+            <span style={styles.countBadge}>{unreadNoticeCount > 99 ? "99+" : unreadNoticeCount}</span>
+          ) : null}
         </button>
       ))}
     </nav>
@@ -84,14 +87,21 @@ const styles = {
   buttonBottom: {
     marginTop: "auto",
   },
-  badge: {
+  countBadge: {
     position: "absolute" as const,
-    right: "8px",
-    top: "8px",
-    width: "10px",
-    height: "10px",
+    right: "2px",
+    top: "2px",
+    display: "grid",
+    placeItems: "center",
+    minWidth: "19px",
+    height: "19px",
+    border: `2px solid ${wm.colors.surface}`,
     borderRadius: "999px",
-    border: `2.5px solid ${wm.colors.surface}`,
     background: wm.colors.error,
+    color: "#ffffff",
+    padding: "0 4px",
+    fontSize: "9px",
+    fontWeight: 900,
+    lineHeight: 1,
   },
 };

@@ -245,7 +245,7 @@ export function ManagerOverviewPanel() {
           <h2 style={styles.panelTitle}>{dashboardState.loading ? "Checking setup" : dashboardState.statusText}</h2>
           <p style={styles.panelText}>
             This dashboard combines session health, office presence, compliance policy, setup coverage, and role-appropriate usage
-            summaries. It shows availability and aggregate signals only; it does not expose screenshots, keystrokes, private messages,
+            summaries. It shows availability and aggregate signals only; it does not expose screenshots, keystrokes, external private messages,
             full URLs, webpage content, or hidden monitoring data.
           </p>
         </div>
@@ -451,7 +451,7 @@ function getDashboardJourney(role: string | null) {
         "Company-wide reports, invites, integrations, and settings are owner/admin areas. Your dashboard focuses on your own presence, compliance status, and personal summary availability.",
       setupTitle: "Your setup checklist",
       alphaNote:
-        "Activity summaries appear only after your paired Desktop Agent or Browser Extension submits events. WorkMap does not show screenshots, keystrokes, private messages, or webpage content.",
+        "Activity summaries appear only after your paired Desktop Agent or Browser Extension submits events. WorkMap does not show screenshots, keystrokes, external private messages, or webpage content.",
       setupItems: ["Review compliance", "Finish profile/avatar", "Set up device", "Open office"],
       actions: [
         { label: "Open office", href: "/virtual-office", primary: true },

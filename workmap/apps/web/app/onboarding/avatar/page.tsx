@@ -31,6 +31,7 @@ export default function AvatarOnboardingPage() {
   const router = useRouter();
   const [config, setConfig] = useState<LayeredAvatarConfig>(defaultLayeredAvatarConfig);
   const [displayName, setDisplayName] = useState("");
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [apiAuth, setApiAuth] = useState<Extract<WorkMapApiAuthResult, { available: true }> | null>(null);
   const [profileStatus, setProfileStatus] = useState("Enter the name teammates should see in WorkMap.");
   const assetsAvailable = avatarLayersByType.body.length > 0;
@@ -93,9 +94,11 @@ export default function AvatarOnboardingPage() {
     const confirmedDisplayName = sanitizeDisplayName(displayName);
 
     if (!confirmedDisplayName) {
-      setProfileStatus("Display name must be between 2 and 80 characters.");
+      setDisplayNameError("Display name is required and must be between 2 and 80 characters.");
       return;
     }
+
+    setDisplayNameError(null);
 
     if (apiAuth) {
       setProfileStatus("Saving your profile...");
@@ -141,10 +144,18 @@ export default function AvatarOnboardingPage() {
                 <span>Your display name</span>
                 <input
                   value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
+                  onChange={(event) => {
+                    setDisplayName(event.target.value);
+                    if (displayNameError && sanitizeDisplayName(event.target.value)) {
+                      setDisplayNameError(null);
+                    }
+                  }}
                   placeholder="How teammates should see you"
-                  style={styles.input}
+                  aria-invalid={Boolean(displayNameError)}
+                  aria-describedby={displayNameError ? "avatar-display-name-error" : undefined}
+                  style={{ ...styles.input, ...(displayNameError ? styles.inputError : {}) }}
                 />
+                {displayNameError ? <span id="avatar-display-name-error" style={styles.errorText}>{displayNameError}</span> : null}
                 <span style={styles.helpText}>{profileStatus}</span>
               </label>
 
@@ -164,7 +175,7 @@ export default function AvatarOnboardingPage() {
               <p style={styles.trustNote}>
                 WorkMap uses avatars for presence and collaboration. Activity visibility remains transparent and role-based.
               </p>
-              <button type="button" onClick={saveAndEnterOffice} disabled={!config.bodyId || !sanitizeDisplayName(displayName)} style={styles.saveButton}>
+              <button type="button" onClick={saveAndEnterOffice} disabled={!config.bodyId} style={styles.saveButton}>
                 Save and continue
               </button>
             </aside>
@@ -355,6 +366,16 @@ const styles = {
     ...wmStyles.input,
     padding: "0 10px",
     fontSize: "14px",
+  },
+  inputError: {
+    borderColor: wm.colors.error,
+    boxShadow: `0 0 0 3px ${wm.colors.errorBg}`,
+  },
+  errorText: {
+    color: wm.colors.errorText,
+    fontSize: "12px",
+    fontWeight: 800,
+    lineHeight: 1.4,
   },
   helpText: {
     color: wm.colors.textMuted,

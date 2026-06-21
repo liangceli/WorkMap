@@ -8,11 +8,11 @@ export function PrivacyNoticeCard() {
       <div style={styles.grid}>
         <div>
           <p style={styles.subhead}>Collected</p>
-          <p style={styles.text}>App name, website domain, active/idle state, device heartbeat, work session time.</p>
+          <p style={styles.text}>App name, website domain, active/idle state, device heartbeat, work session time, and WorkMap messages or reactions.</p>
         </div>
         <div>
           <p style={styles.subhead}>Not collected</p>
-          <p style={styles.text}>Keystrokes, screenshots, camera, microphone, message content, email body, passwords.</p>
+          <p style={styles.text}>Keystrokes, screenshots, camera, microphone, external private messages, Teams or email body, passwords.</p>
         </div>
       </div>
     </section>

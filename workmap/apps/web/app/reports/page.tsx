@@ -24,7 +24,7 @@ export default function ReportsPage() {
 
         <WorkMapPrivacyNotice title="Report privacy boundary">
           Reports use the backend usage-summary API when an authenticated Cognito session is available. Sparse data means tracking clients are not connected yet;
-          reports show app names, domains, active time, and idle time only, never full URLs, messages, screenshots, keystrokes,
+          reports show app names, domains, active time, and idle time only, never full URLs, external private messages, screenshots, keystrokes,
           camera, or microphone data.
         </WorkMapPrivacyNotice>
 

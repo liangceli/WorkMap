@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import type { UserPresenceStatus } from "@workmap/shared-types";
+import type { VirtualOfficeReaction } from "@workmap/shared-types";
 import { wm } from "../../lib/theme/workmapTheme";
 import { OfficeIcon } from "./OfficeIcons";
 import { labelStatus, statusColors } from "./presence";
+import { reactionOptions } from "./reactions";
 
 type OfficeBottomDockProps = {
   status: UserPresenceStatus;
@@ -12,7 +15,7 @@ type OfficeBottomDockProps = {
   onOpenChat: () => void;
   onOpenCalendar: () => void;
   onWave: () => void;
-  onEmoji: () => void;
+  onEmoji: (reaction: VirtualOfficeReaction) => void;
   onToast: (message: string) => void;
 };
 
@@ -26,6 +29,8 @@ export function OfficeBottomDock({
   onEmoji,
   onToast,
 }: OfficeBottomDockProps) {
+  const [emojiOpen, setEmojiOpen] = useState(false);
+
   if (hidden) {
     return null;
   }
@@ -66,10 +71,31 @@ export function OfficeBottomDock({
           <OfficeIcon name="wave" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Wave</span>
         </button>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={onEmoji} aria-label="Emote">
-          <OfficeIcon name="smile" size={28} />
-          <span className="office-dock-tooltip" style={styles.tooltip}>Emote</span>
-        </button>
+        <span style={styles.emojiWrap}>
+          {emojiOpen ? (
+            <span style={styles.emojiMenu} aria-label="Choose reaction">
+              {reactionOptions.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  aria-label={option.label}
+                  title={option.label}
+                  onClick={() => {
+                    onEmoji(option.key);
+                    setEmojiOpen(false);
+                  }}
+                  style={styles.emojiButton}
+                >
+                  {option.emoji}
+                </button>
+              ))}
+            </span>
+          ) : null}
+          <button type="button" className="office-dock-action" style={styles.action} onClick={() => setEmojiOpen((current) => !current)} aria-label="Emote" aria-expanded={emojiOpen}>
+            <OfficeIcon name="smile" size={28} />
+            <span className="office-dock-tooltip" style={styles.tooltip}>Emote</span>
+          </button>
+        </span>
         <button type="button" className="office-dock-action" style={styles.action} onClick={onSearch} aria-label="Search">
           <OfficeIcon name="search" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Search</span>
@@ -185,6 +211,35 @@ const styles = {
     color: wm.colors.textMuted,
     cursor: "not-allowed",
     opacity: 0.62,
+  },
+  emojiWrap: {
+    position: "relative" as const,
+    display: "grid",
+    placeItems: "center",
+  },
+  emojiMenu: {
+    position: "absolute" as const,
+    left: "50%",
+    bottom: "calc(100% + 14px)",
+    display: "flex",
+    gap: "4px",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "18px",
+    background: "rgba(35, 31, 30, 0.96)",
+    padding: "8px",
+    boxShadow: wm.shadow.overlay,
+    transform: "translateX(-50%)",
+  },
+  emojiButton: {
+    display: "grid",
+    placeItems: "center",
+    width: "38px",
+    height: "38px",
+    border: 0,
+    borderRadius: "10px",
+    background: "transparent",
+    cursor: "pointer",
+    fontSize: "24px",
   },
   tooltip: {
     position: "absolute" as const,

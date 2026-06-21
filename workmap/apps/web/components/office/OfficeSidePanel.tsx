@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import type { ContactTarget, PlayerState, UserPresenceStatus } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
+import type { WorkMapApiNotice } from "../../lib/api/apiTypes";
 import type { OfficePanelKey } from "./OfficeLeftRail";
 import { OfficeIcon } from "./OfficeIcons";
 import type { RemoteOfficePlayer } from "./mockOfficeData";
 import { labelStatus, presenceFreshnessLabel, statusColors } from "./presence";
+import { reactionEmoji } from "./reactions";
 
 type OfficeSidePanelProps = {
   activePanel: OfficePanelKey | null;
@@ -24,6 +26,8 @@ type OfficeSidePanelProps = {
   onGoToDestination: (destination: OfficeDestination) => void;
   onOpenPanel: (panel: OfficePanelKey) => void;
   toast: (message: string) => void;
+  notices: WorkMapApiNotice[];
+  noticesLoading: boolean;
 };
 
 type StatusFilter = "all" | "available" | "focus" | "busy" | "idle" | "offline";
@@ -43,6 +47,8 @@ export function OfficeSidePanel({
   onGoToDestination,
   onOpenPanel,
   toast,
+  notices,
+  noticesLoading,
 }: OfficeSidePanelProps) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -233,10 +239,11 @@ export function OfficeSidePanel({
             <p style={styles.note}>Calendar is a schedule launcher in this MVP. WorkMap does not sync calendar content yet.</p>
             <button
               type="button"
-              style={styles.primaryButton}
-              onClick={() => toast("Calendar scheduling requires a connected calendar integration.")}
+              style={{ ...styles.primaryButton, ...styles.disabledButton }}
+              disabled
+              title="Schedule meeting is not available yet"
             >
-              Schedule meeting
+              Schedule meeting later
             </button>
             {meetings.length === 0 ? <p style={styles.emptyText}>No calendar items are connected yet.</p> : meetings.map((meeting) => (
               <article key={`${meeting.title}-${meeting.time}`} style={styles.roomCard}>
@@ -263,7 +270,18 @@ export function OfficeSidePanel({
 
         {activePanel === "notices" ? (
           <section style={styles.stack}>
-            <p style={styles.emptyText}>No workspace notices yet.</p>
+            {noticesLoading && notices.length === 0 ? <p style={styles.emptyText}>Loading notices...</p> : null}
+            {!noticesLoading && notices.length === 0 ? <p style={styles.emptyText}>No workspace notices yet.</p> : null}
+            {notices.map((notice) => (
+              <article key={notice.id} style={{ ...styles.noticeCard, ...(!notice.readAt && notice.direction === "received" ? styles.noticeCardUnread : {}) }}>
+                <span style={styles.noticeIcon}>{notice.type === "REACTION" ? reactionEmoji(notice.reaction) : notice.type === "WAVE" ? "👋" : "✉"}</span>
+                <span style={styles.noticeBody}>
+                  <strong>{noticeTitle(notice)}</strong>
+                  {notice.message ? <span style={styles.noticeMessage}>{notice.message}</span> : null}
+                  <time style={styles.noticeTime}>{formatNoticeTime(notice.createdAt)}</time>
+                </span>
+              </article>
+            ))}
           </section>
         ) : null}
 
@@ -302,6 +320,28 @@ function panelTitle(panel: OfficePanelKey) {
   };
 
   return titles[panel];
+}
+
+function noticeTitle(notice: WorkMapApiNotice) {
+  const person = notice.direction === "sent" ? notice.recipient.displayName : notice.actor.displayName;
+  const prefix = notice.direction === "sent" ? "You" : person;
+  const suffix = notice.direction === "sent" ? ` to ${person}` : "";
+
+  if (notice.type === "MESSAGE") {
+    return notice.direction === "sent" ? `You messaged ${person}` : `${person} sent you a message`;
+  }
+  if (notice.type === "WAVE") {
+    return `${prefix} waved${suffix}`;
+  }
+  return `${prefix} reacted ${reactionEmoji(notice.reaction)}${suffix}`;
+}
+
+function formatNoticeTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Recently";
+  }
+  return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function panelSubtitle(panel: OfficePanelKey) {
@@ -635,6 +675,46 @@ const styles = {
     lineHeight: 1.45,
     fontWeight: 750,
   },
+  noticeCard: {
+    display: "grid",
+    gridTemplateColumns: "38px minmax(0, 1fr)",
+    gap: "11px",
+    alignItems: "start",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: "14px",
+    background: "rgba(255, 253, 248, 0.78)",
+    padding: "12px",
+  },
+  noticeCardUnread: {
+    borderColor: wm.colors.secondary,
+    background: "rgba(31, 122, 120, 0.09)",
+  },
+  noticeIcon: {
+    display: "grid",
+    placeItems: "center",
+    width: "38px",
+    height: "38px",
+    borderRadius: "12px",
+    background: wm.colors.surfaceContainer,
+    fontSize: "20px",
+  },
+  noticeBody: {
+    display: "grid",
+    gap: "4px",
+    minWidth: 0,
+    color: wm.colors.text,
+    fontSize: "13px",
+  },
+  noticeMessage: {
+    overflowWrap: "anywhere" as const,
+    color: wm.colors.textSecondary,
+    lineHeight: 1.45,
+  },
+  noticeTime: {
+    color: wm.colors.textMuted,
+    fontSize: "10px",
+    fontWeight: 700,
+  },
   composer: {
     display: "grid",
     gridTemplateColumns: "1fr auto",
@@ -651,6 +731,14 @@ const styles = {
     ...wmStyles.secondaryButton,
     borderRadius: "14px",
     padding: "11px 12px",
+  },
+  disabledButton: {
+    borderColor: wm.colors.border,
+    background: wm.colors.surfaceContainer,
+    color: wm.colors.textMuted,
+    cursor: "not-allowed",
+    opacity: 0.72,
+    boxShadow: "none",
   },
   roomCard: {
     border: `1px solid ${wm.colors.border}`,
