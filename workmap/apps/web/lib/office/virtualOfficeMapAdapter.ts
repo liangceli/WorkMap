@@ -149,7 +149,11 @@ function isPointInRect(point: { x: number; y: number }, rect: { x: number; y: nu
 }
 
 function toRoomZone(room: WorkMapApiOfficeRoom, manifest: VirtualOfficeMapManifest): OfficeRoomZone | null {
-  const zone = readRect(room.zoneData);
+  const roomKey = readRoomKey(room.zoneData);
+  const manifestRoom = manifest.rooms.find((candidate) =>
+    candidate.key === roomKey || (!roomKey && candidate.name === room.name),
+  );
+  const zone = manifestRoom?.bounds ?? readRect(room.zoneData);
 
   if (!zone || !isVirtualOfficeRectInBounds(zone, manifest) || typeof room.id !== "string" || typeof room.name !== "string") {
     return null;
@@ -163,9 +167,14 @@ function toRoomZone(room: WorkMapApiOfficeRoom, manifest: VirtualOfficeMapManife
   };
 }
 
+function readRoomKey(value: unknown) {
+  return isObject(value) && typeof value.roomKey === "string" ? value.roomKey : undefined;
+}
+
 function toOfficeDestination(destination: WorkMapApiNavigationDestination, manifest: VirtualOfficeMapManifest): OfficeDestination | null {
-  const anchor = readPoint(destination.anchor);
-  const bounds = readRect(destination.bounds);
+  const manifestDestination = manifest.navigation.find((candidate) => candidate.key === destination.id);
+  const anchor = manifestDestination?.anchor ?? readPoint(destination.anchor);
+  const bounds = manifestDestination?.bounds ?? readRect(destination.bounds);
 
   if (
     !anchor ||

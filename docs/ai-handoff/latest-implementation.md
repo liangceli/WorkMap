@@ -2,47 +2,48 @@
 
 ## Original Task Brief
 
-Fix ten production-flow issues: immediate top navigation, avatar name validation, persistent realtime Notices for messages/waves/reactions, stable virtual-office state, hidden room links, disabled scheduling, richer reaction feedback, room focus dimming, and review Cognito email delivery plus Platform Admin behavior.
+Correct Virtual Office room highlighting so corridors never trigger dimming and each highlighted rectangle follows the six room boundaries shown in the supplied screenshots.
 
 ## Changed Files
 
-- API: `workmap/apps/api/src/modules/notices/*`, `app.module.ts`, realtime gateway, and `test/notices.test.ts`.
-- Web: AppShell, avatar onboarding, virtual-office map/data/realtime/controls/panels, Notices API/types, privacy and compliance copy.
-- Shared/schema: `packages/shared-types/src/index.ts`, `prisma/schema.prisma`, and `prisma/migrations/20260621000000_virtual_office_notices/`.
+- `workmap/packages/shared-types/src/index.ts`
+- `workmap/apps/web/lib/office/roomGeometry.ts`
+- `workmap/apps/web/lib/office/virtualOfficeMapAdapter.ts`
+- `workmap/apps/web/lib/office/virtualOfficeCache.ts`
+- `workmap/apps/web/components/office/useVirtualOfficeData.ts`
+- `workmap/apps/web/components/office/OfficeMap.tsx`
+- `workmap/apps/web/test/room-geometry.test.ts`
+- `workmap/apps/api/src/modules/tenant-onboarding/tenant-onboarding.service.ts`
 
 ## Implementation Summary
 
-- AppShell restores the Cognito user's cached role/company context before paint, then refreshes it from protected APIs.
-- Empty avatar display names now produce a red field and required error after Save and continue is clicked.
-- WorkMap messages, waves, and eight reactions are tenant-scoped database Notices. Received activity refreshes the list and unread number through realtime events; opening Notices marks received items read.
-- Reactions display above avatars, rise and fade; feedback remains visible for about five seconds.
-- Local and remote office snapshots restore immediately per Cognito user. Stale cached presence is downgraded while saved positions remain visible.
-- Entering a room dims the complete surrounding map and outside avatars. Room Copy link is hidden and Schedule meeting is disabled.
-- Compliance copy now distinguishes stored WorkMap interactions from external private messages, Teams/email bodies, webpage content, inputs, screenshots, recordings, keystrokes, clipboard, camera, and microphone data.
+- Replaced the six approximate room bounds with exact 32px TMX wall-aligned rectangles.
+- Kept the default spawn in the main hallway but removed its false Open Office room assignment.
+- Added strict room entry geometry with a one-tile wall inset; the horizontal and vertical main corridors return no active room.
+- Updated navigation anchors/bounds to the same room geometry.
+- Existing workspace API room UUIDs remain authoritative, while stale stored geometry is replaced by the current manifest through room key/name matching.
+- Stale cached default-map geometry is discarded after the map-version change; local position cache remains separate.
+- New workspace onboarding accepts a hallway spawn without an `officeRoomId`.
 
 ## Role And Access Behavior
 
-- Notice creation resolves recipients only inside `context.companyId`; cross-tenant and self-target interactions are rejected.
-- Owner and Employee users can see their sent and received Notices. Platform Admin does not receive tenant Notices or employee activity through the platform surface.
-- Platform Admin remains allowlist-based through `WORKMAP_PLATFORM_ADMIN_EMAILS` or `WORKMAP_PLATFORM_ADMIN_COGNITO_SUBS` and sees privacy-safe tenant metadata, health, and audit information.
+No auth, RBAC, tenant, Platform Admin, tracking, Notices, or reporting behavior changed.
 
 ## Verification
 
+- Web typecheck and lint: passed.
+- Web production build: passed.
 - Shared types typecheck/build: passed.
-- Web typecheck, lint, and production build: passed.
-- API typecheck, lint, production build, and all 8 tests: passed.
-- Notice tests cover persistence, cross-tenant rejection, and tenant/user-scoped read updates.
-- Local API `/health`: 200; unauthenticated `/notices`: 401.
+- API typecheck, lint, build, and 8/8 tests: passed.
 - `git diff --check`: passed; scoped secret scan: no matches.
-- User confirmed `prisma migrate deploy` completed against Supabase.
-- Browser visual QA was not run because the in-app browser runtime rejected the connection before page access.
+- Source-level visual QA: rendered the actual TMX layers and overlaid all six configured rectangles; boundaries align with outer walls and exclude both main corridors.
+- Focused Web Node test execution was blocked before assertions by sandbox `spawn EPERM`; the test file is included and typechecks.
 
 ## Intentionally Not Changed And Risks
 
-- Cognito/SES sender configuration was not changed. Spam placement requires a verified SES domain/from address, DKIM/SPF/DMARC, production sending access, and reputation checks outside this repository.
-- No Platform Admin identity or secret was committed. No unrelated map, auth, report, or tracking architecture was changed.
-- A real two-user browser smoke is still required for unread badge timing, reaction animation, refresh restoration, and room dimming before production-readiness claims.
+- No TMX art, collision layers, movement, pathfinding, database schema, or deployed workspace rows changed.
+- In-app browser QA was blocked by the browser runtime before page access. A signed-in movement smoke should still confirm entry/exit timing after deployment.
 
 ## Suggested Next Step
 
-Deploy API and Web, then run one Owner/Employee two-browser smoke against the migrated Supabase database and configure Cognito email delivery through SES.
+Deploy Web/API together, then walk through each of the six rooms and both corridors in one authenticated browser.

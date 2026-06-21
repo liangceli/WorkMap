@@ -30,6 +30,7 @@ import { saveCurrentVirtualOfficePosition } from "../../lib/api/virtualOfficeApi
 import type { WorkMapApiContactLinks, WorkMapApiNotice } from "../../lib/api/apiTypes";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import { findGridPath, type PathBounds, type PathPoint } from "../../lib/office/pathfinding";
+import { findRoomAtPoint } from "../../lib/office/roomGeometry";
 import {
   getSpawnPlayerPatch,
   isPlayerPositionValidForMap,
@@ -865,7 +866,7 @@ export function OfficeMap() {
           deltaSeconds,
         );
         renderedOfficePeopleRef.current = renderedRemotePlayers;
-        const room = findRoom(nextPlayer.x, nextPlayer.y, officeRooms);
+        const room = findRoomAtPoint(nextPlayer.x, nextPlayer.y, officeRooms);
         const nearest = findNearbyPlayer(nextPlayer, renderedRemotePlayers);
         const chair = seatedChairRef.current ? null : findNearestChair(nextPlayer, chairs);
 
@@ -2132,10 +2133,6 @@ function isOverlappingRemotePlayer(x: number, y: number, remotePlayers: RemoteOf
   return remotePlayers.some((remote) => distance({ x, y }, remote) < PLAYER_COLLISION_DISTANCE);
 }
 
-function findRoom(x: number, y: number, roomZones: OfficeRoomZone[]) {
-  return roomZones.find((room) => x >= room.x && x <= room.x + room.width && y >= room.y && y <= room.y + room.height);
-}
-
 function findNearbyPlayer(player: PlayerState, remotePlayers: RemoteOfficePlayer[]): ContactTarget | null {
   const nearby = remotePlayers.find((candidate) => distance(player, candidate) <= PROXIMITY_DISTANCE);
 
@@ -2167,7 +2164,7 @@ function createSafeSpawnPlayer(
 ): PlayerState {
   const spawn = getSpawnPlayerPatch(manifest);
   const point = map && collision ? findNearestWalkablePoint(spawn, map, collision) ?? spawn : spawn;
-  const room = findRoom(point.x, point.y, rooms);
+  const room = findRoomAtPoint(point.x, point.y, rooms);
 
   return {
     ...player,

@@ -1,6 +1,11 @@
 "use client";
 
-import type { OfficeRoomZone, PlayerState, VirtualOfficeMapManifest } from "@workmap/shared-types";
+import {
+  WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST,
+  type OfficeRoomZone,
+  type PlayerState,
+  type VirtualOfficeMapManifest,
+} from "@workmap/shared-types";
 import { getCognitoSession } from "../auth/cognitoSession";
 import type { OfficeDestination } from "./officeNavigationConfig";
 import type { VirtualOfficeMapConfigSource } from "./virtualOfficeMapAdapter";
@@ -44,6 +49,13 @@ export function readVirtualOfficeDataCache(): CachedVirtualOfficeData | null {
     !isRecord(data.mapManifest) ||
     !isVirtualOfficeMapConfigSource(data.mapConfigSource) ||
     !Array.isArray(data.mapValidationWarnings)
+  ) {
+    return null;
+  }
+
+  if (
+    data.mapManifest.mapKey === WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.mapKey &&
+    data.mapManifest.mapVersion !== WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST.mapVersion
   ) {
     return null;
   }

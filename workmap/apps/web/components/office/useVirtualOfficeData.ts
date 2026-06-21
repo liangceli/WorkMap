@@ -22,7 +22,6 @@ import type {
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
 import {
   getDefaultOfficeDestinations,
-  getDefaultOfficeRoomZones,
   readApiNavigationDestinations,
   readApiOfficeRooms,
   resolveVirtualOfficeMapConfig,
@@ -123,10 +122,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
         nextMapManifest = mapConfig.manifest;
         nextMapConfigSource = mapConfig.source;
         nextMapValidationWarnings = mapConfig.warnings;
-        const rooms =
-          mapConfig.source === "api-manifest"
-            ? readApiOfficeRooms(mapResult.data.rooms, mapConfig.manifest)
-            : getDefaultOfficeRoomZones();
+        const rooms = readApiOfficeRooms(mapResult.data.rooms, mapConfig.manifest);
 
         if (rooms.length > 0) {
           nextRooms = rooms;
@@ -152,7 +148,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
         usedMockPart = true;
       }
 
-      if (navigationResult.ok && Array.isArray(navigationResult.data) && nextMapConfigSource === "api-manifest") {
+      if (navigationResult.ok && Array.isArray(navigationResult.data)) {
         const destinations = readApiNavigationDestinations(navigationResult.data, nextMapManifest);
 
         if (destinations.length > 0) {

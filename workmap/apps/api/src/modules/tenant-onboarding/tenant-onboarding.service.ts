@@ -1,7 +1,11 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { AvatarDirection, OfficeRoomType, Prisma, UserRole, UserStatus } from "@prisma/client";
 import type { CognitoJwtPayload, RequestContext } from "@workmap/auth";
-import { WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST, type UserPresenceStatus } from "@workmap/shared-types";
+import {
+  WORKMAP_DEFAULT_OFFICE_MAP_MANIFEST,
+  type UserPresenceStatus,
+  type VirtualOfficeMapSpawn,
+} from "@workmap/shared-types";
 import { getVerifiedCognitoIdentity } from "../auth/cognito-identity.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -308,7 +312,7 @@ async function createDefaultWorkspaceData(
     roomsByKey.set(room.key, createdRoom);
   }
 
-  const ownerSpawn = mapManifest.defaultSpawn;
+  const ownerSpawn: VirtualOfficeMapSpawn = mapManifest.defaultSpawn;
   const ownerSpawnRoom = ownerSpawn.roomKey ? roomsByKey.get(ownerSpawn.roomKey) : undefined;
 
   await tx.virtualOfficePosition.create({

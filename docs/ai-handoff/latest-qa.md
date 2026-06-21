@@ -2,29 +2,29 @@
 
 ## Reviewed Implementation
 
-Reviewed the ten requested login-shell, onboarding, Notices, realtime interaction, map restoration, room-focus, disabled-control, privacy, email-delivery, and Platform Admin items.
+Reviewed room geometry, corridor exclusion, active-room rendering, old-workspace room UUID compatibility, cached map invalidation, navigation geometry, and hallway onboarding spawn behavior.
 
 ## Findings
 
-- High: none found in code verification.
-- Medium, remaining: visual two-user browser QA could not run because the browser runtime failed before connecting.
-- External, remaining: Cognito verification-email inbox placement cannot be guaranteed by application code; SES/domain authentication must be configured and tested.
-- Fixed: Notices are persistent and tenant-scoped, unread state clears on view, reaction choices animate above avatars, and realtime events refresh recipients.
-- Fixed: map state restores before API refresh, stale presence is not shown as live, the active room alone remains highlighted, room links are hidden, scheduling is disabled, and avatar name validation is explicit.
+- High: none found.
+- Fixed: Open Office no longer extends into the horizontal hallway.
+- Fixed: the central vertical hallway is outside every room.
+- Fixed: all six highlight rectangles follow the TMX outer walls and shared room boundaries.
+- Fixed: existing workspace room UUIDs are preserved while stale coordinates are replaced.
+- Remaining: browser movement QA could not run in the current browser runtime.
 
 ## Test And Verification Status
 
 - API: typecheck, lint, build, and 8/8 tests passed.
 - Web: typecheck, lint, and production build passed.
 - Shared types: typecheck and build passed.
-- HTTP: health 200 and unauthenticated Notices 401.
-- Supabase migration: reported complete by the user.
 - Diff and secret checks: passed.
+- Focused room test: authored and compiled; execution blocked by environment `spawn EPERM` before assertions.
 
 ## Manual QA Status
 
-Not run automatically. Required deployment smoke: two authenticated users exchange message/wave/reaction, verify unread badge and read clearing, refresh/navigate away and back, and enter/leave rooms.
+TMX source rendering with six overlaid rectangles passed. Live authenticated browser movement was not run.
 
-## Recommendation
+## Risks And Recommendation
 
-Code gate passes and the next deployment/smoke round can proceed. Do not claim production readiness until the two-user browser smoke and SES-delivered Cognito verification-email test pass.
+Code gate passes. Proceed to deployment and one live walk-through, but do not call the visual interaction fully accepted until all six rooms and both corridors are checked in-browser.
