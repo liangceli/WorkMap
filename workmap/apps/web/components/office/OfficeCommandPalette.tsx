@@ -34,7 +34,7 @@ const actions: Array<{ id: string; title: string; subtitle: string; href: string
   {
     id: "integrations",
     title: "Open integrations",
-    subtitle: "Teams, Outlook, calendar, and 3CX links",
+    subtitle: "Teams, Outlook, and calendar links",
     href: "/integrations",
     roles: ["OWNER", "IT_ADMIN"],
   },

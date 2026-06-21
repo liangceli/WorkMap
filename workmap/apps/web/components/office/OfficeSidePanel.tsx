@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ContactTarget, PlayerState, UserPresenceStatus } from "@workmap/shared-types";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import type { OfficeDestination } from "../../lib/office/officeNavigationConfig";
@@ -15,15 +15,39 @@ type OfficeSidePanelProps = {
   currentUser: PlayerState;
   presenceSource: "mock" | "api" | "partial-api";
   destinations: OfficeDestination[];
+  messages: OfficeDirectMessage[];
+  notices: OfficeNotice[];
+  selectedChatUserId?: string | null;
   onClose: () => void;
   onSelectPerson: (target: ContactTarget) => void;
   onGoToPerson: (player: RemoteOfficePlayer) => void;
   onGoToDestination: (destination: OfficeDestination) => void;
   onOpenPanel: (panel: OfficePanelKey) => void;
+  onStartChat: (target: ContactTarget) => void;
+  onWaveToPerson: (target: ContactTarget) => void;
+  onOpenTeams: (target: ContactTarget) => void;
+  onOpenOutlook: (target: ContactTarget) => void;
+  onSelectChatTarget: (userId: string) => void;
+  onSendDirectMessage: (targetUserId: string, text: string) => boolean;
   toast: (message: string) => void;
 };
 
 type StatusFilter = "all" | "available" | "focus" | "busy" | "idle" | "offline";
+
+export type OfficeDirectMessage = {
+  id: string;
+  peerUserId: string;
+  peerDisplayName: string;
+  direction: "sent" | "received";
+  text: string;
+  createdAt: string;
+};
+
+export type OfficeNotice = {
+  id: string;
+  text: string;
+  createdAt: string;
+};
 
 export function OfficeSidePanel({
   activePanel,
@@ -31,20 +55,25 @@ export function OfficeSidePanel({
   currentUser,
   presenceSource,
   destinations,
+  messages,
+  notices,
+  selectedChatUserId,
   onClose,
   onSelectPerson,
   onGoToPerson,
   onGoToDestination,
   onOpenPanel,
+  onStartChat,
+  onWaveToPerson,
+  onOpenTeams,
+  onOpenOutlook,
+  onSelectChatTarget,
+  onSendDirectMessage,
   toast,
 }: OfficeSidePanelProps) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [chatTarget, setChatTarget] = useState("general");
-  const [messages, setMessages] = useState([
-    { channel: "general", text: "Welcome to WorkMap quick messages." },
-    { channel: "announcements", text: "Policy acknowledgement completed." },
-  ]);
+  const [chatTarget, setChatTarget] = useState(selectedChatUserId ?? "");
   const [messageText, setMessageText] = useState("");
   const [meetings, setMeetings] = useState([
     { title: "Product sync", time: "10:30", room: "Main Meeting Room", attendees: "Mia, Ethan, Sofia" },
@@ -52,6 +81,8 @@ export function OfficeSidePanel({
   ]);
   const presenceSummary = useMemo(() => summarizePresence(people), [people]);
   const roomNameById = useMemo(() => createRoomNameMap(destinations), [destinations]);
+  const activeChatPerson = people.find((person) => person.userId === chatTarget);
+  const activeMessages = messages.filter((message) => message.peerUserId === chatTarget);
 
   const filteredPeople = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -63,6 +94,18 @@ export function OfficeSidePanel({
     });
   }, [people, query, roomNameById, statusFilter]);
 
+  useEffect(() => {
+    if (selectedChatUserId) {
+      setChatTarget(selectedChatUserId);
+      return;
+    }
+
+    if (!chatTarget && people[0]) {
+      setChatTarget(people[0].userId);
+      onSelectChatTarget(people[0].userId);
+    }
+  }, [chatTarget, onSelectChatTarget, people, selectedChatUserId]);
+
   if (!activePanel || activePanel === "search") {
     return null;
   }
@@ -72,8 +115,15 @@ export function OfficeSidePanel({
     if (!text) {
       return;
     }
-    setMessages((current) => [...current, { channel: chatTarget, text }]);
-    setMessageText("");
+
+    if (!chatTarget) {
+      toast("Choose a teammate before sending a message.");
+      return;
+    }
+
+    if (onSendDirectMessage(chatTarget, text)) {
+      setMessageText("");
+    }
   };
 
   return (
@@ -161,11 +211,12 @@ export function OfficeSidePanel({
                       </button>
                       <div style={styles.actionGrid}>
                         <button type="button" onClick={() => onSelectPerson(toContactTarget(person))} style={styles.smallButton}>Details</button>
-                        <button type="button" onClick={() => toast(`You waved to ${person.displayName}. Local feedback only.`)} style={styles.smallButton}>Wave</button>
+                        <button type="button" onClick={() => onStartChat(toContactTarget(person))} style={styles.smallButton}>Message</button>
+                        <button type="button" onClick={() => onWaveToPerson(toContactTarget(person))} style={styles.smallButton}>Wave</button>
                         <button type="button" onClick={() => onGoToPerson(person)} style={styles.smallButton}>Go to</button>
-                        <button type="button" onClick={() => toast("Teams launcher is not connected yet.")} style={styles.smallButton}>Teams</button>
-                        <button type="button" onClick={() => toast("Outlook contact links are not configured yet.")} style={styles.smallButton}>Outlook</button>
-                        <button type="button" onClick={() => toast("3CX calling is not connected yet.")} style={styles.smallButton}>3CX</button>
+                        <button type="button" onClick={() => onOpenTeams(toContactTarget(person))} style={styles.smallButton}>Teams</button>
+                        <button type="button" onClick={() => onOpenOutlook(toContactTarget(person))} style={styles.smallButton}>Outlook</button>
+                        <button type="button" disabled style={{ ...styles.smallButton, ...styles.smallButtonDisabled }}>3CX later</button>
                       </div>
                     </article>
                   );
@@ -202,23 +253,43 @@ export function OfficeSidePanel({
 
         {activePanel === "chat" ? (
           <section style={styles.stack}>
-            <p style={styles.note}>WorkMap quick messages are frontend-only notes in this MVP. They do not sync to teammates or read Teams or Outlook content.</p>
-            <select value={chatTarget} onChange={(event) => setChatTarget(event.target.value)} style={styles.input}>
-              <option value="general"># general</option>
-              <option value="announcements"># announcements</option>
-              <option value="support"># support</option>
+            <p style={styles.note}>Messages send through WorkMap realtime for this office session. They are not app/domain tracking data.</p>
+            <select
+              value={chatTarget}
+              onChange={(event) => {
+                setChatTarget(event.target.value);
+                onSelectChatTarget(event.target.value);
+              }}
+              style={styles.input}
+            >
+              {people.length === 0 ? <option value="">No visible teammates</option> : null}
               {people.map((person) => (
                 <option key={person.userId} value={person.userId}>DM: {person.displayName}</option>
               ))}
             </select>
             <div style={styles.messageList}>
-              {messages.filter((message) => message.channel === chatTarget).map((message, index) => (
-                <p key={`${message.channel}-${index}`} style={styles.message}>{message.text}</p>
-              ))}
+              {activeMessages.length > 0 ? (
+                activeMessages.map((message) => (
+                  <p
+                    key={message.id}
+                    style={{
+                      ...styles.message,
+                      ...(message.direction === "sent" ? styles.sentMessage : styles.receivedMessage),
+                    }}
+                  >
+                    <strong>{message.direction === "sent" ? "You" : message.peerDisplayName}</strong>
+                    <span>{message.text}</span>
+                  </p>
+                ))
+              ) : (
+                <p style={styles.emptyMessage}>
+                  {activeChatPerson ? `No messages with ${activeChatPerson.displayName} yet.` : "Choose a teammate to start a message."}
+                </p>
+              )}
             </div>
             <div style={styles.composer}>
-              <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Add local note" style={styles.input} />
-              <button type="button" onClick={sendMessage} style={styles.primaryButton}>Add note</button>
+              <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Message teammate" style={styles.input} />
+              <button type="button" onClick={sendMessage} style={styles.primaryButton}>Send</button>
             </div>
           </section>
         ) : null}
@@ -239,7 +310,7 @@ export function OfficeSidePanel({
                 <p style={styles.cardText}>{meeting.time} / {meeting.room}</p>
                 <p style={styles.cardText}>{meeting.attendees}</p>
                 <div style={styles.twoActions}>
-                  <button type="button" onClick={() => toast("Teams launcher is not connected yet.")} style={styles.smallButton}>Open Teams</button>
+                  <button type="button" onClick={() => toast("Open a teammate from People to launch Teams with their email contact link.")} style={styles.smallButton}>Open Teams</button>
                   <button
                     type="button"
                     onClick={() => {
@@ -258,16 +329,8 @@ export function OfficeSidePanel({
 
         {activePanel === "notices" ? (
           <section style={styles.stack}>
-            {[
-              "Mia waved at you",
-              "Sofia is available",
-              "Your desk is ready",
-              "Policy acknowledgement completed",
-              "Desktop Agent setup pending",
-              "Meeting starts in 10 minutes",
-              "Teams launcher ready",
-            ].map((notice) => (
-              <button key={notice} type="button" onClick={() => toast(notice)} style={styles.noticeRow}>{notice}</button>
+            {(notices.length > 0 ? notices : [{ id: "empty", text: "No new teammate notifications.", createdAt: "" }]).map((notice) => (
+              <button key={notice.id} type="button" onClick={() => toast(notice.text)} style={styles.noticeRow}>{notice.text}</button>
             ))}
           </section>
         ) : null}
@@ -314,7 +377,7 @@ function panelSubtitle(panel: OfficePanelKey) {
     search: "Find people, rooms, or actions",
     rooms: "Go to office areas",
     people: "Find teammates",
-    chat: "Frontend-only quick messages",
+    chat: "Realtime direct messages",
     calendar: "Schedule and room launchers",
     notices: "Calm workspace updates",
     settings: "Office preferences",
@@ -603,6 +666,11 @@ const styles = {
     padding: "8px",
     fontSize: "11px",
   },
+  smallButtonDisabled: {
+    color: wm.colors.textMuted,
+    cursor: "not-allowed",
+    opacity: 0.68,
+  },
   note: {
     margin: 0,
     border: `1px solid ${wm.colors.surfaceHigh}`,
@@ -622,12 +690,28 @@ const styles = {
     padding: "10px",
   },
   message: {
+    display: "grid",
+    gap: "4px",
     margin: "0 0 8px",
     borderRadius: "12px",
     background: wm.colors.surface,
     padding: "10px",
     color: wm.colors.textSecondary,
     fontSize: "13px",
+  },
+  sentMessage: {
+    marginLeft: "38px",
+    background: "rgba(31, 122, 120, 0.12)",
+  },
+  receivedMessage: {
+    marginRight: "38px",
+    background: "rgba(255, 253, 248, 0.94)",
+  },
+  emptyMessage: {
+    margin: 0,
+    color: wm.colors.textMuted,
+    fontSize: "13px",
+    fontWeight: 700,
   },
   composer: {
     display: "grid",

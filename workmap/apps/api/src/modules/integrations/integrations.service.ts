@@ -49,32 +49,36 @@ export class IntegrationsService {
       throw new NotFoundException("Contact target not found.");
     }
 
-    const encodedEmail = encodeURIComponent(user.email);
-
-    const teamsChatUrl = `https://teams.microsoft.com/l/chat/0/0?users=${encodedEmail}`;
-    const outlookMailtoUrl = `mailto:${encodedEmail}`;
-    const threeCxUrl = `https://webclient.3cx.com/call?to=${encodedEmail}`;
+    const email = user.email.trim();
+    const emailAvailable = email.length > 0;
+    const encodedEmail = encodeURIComponent(email);
+    const teamsChatUrl = emailAvailable ? `https://teams.microsoft.com/l/chat/0/0?users=${encodedEmail}` : null;
+    const outlookMailtoUrl = emailAvailable ? `mailto:${encodedEmail}` : null;
 
     return {
       targetUserId: user.id,
       displayName: user.displayName,
+      emailAvailable,
       teamsChatUrl,
       outlookMailtoUrl,
-      threeCxUrl,
+      threeCxUrl: null,
       teams: {
         label: "Teams Chat",
         href: teamsChatUrl,
-        enabled: true,
+        enabled: Boolean(teamsChatUrl),
+        reason: teamsChatUrl ? undefined : "No email address is available for this teammate.",
       },
       outlook: {
         label: "Outlook Email",
         href: outlookMailtoUrl,
-        enabled: true,
+        enabled: Boolean(outlookMailtoUrl),
+        reason: outlookMailtoUrl ? undefined : "No email address is available for this teammate.",
       },
       threeCx: {
         label: "3CX Call",
-        href: threeCxUrl,
-        enabled: true,
+        href: null,
+        enabled: false,
+        reason: "Coming later.",
       },
     };
   }

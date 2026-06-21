@@ -10,15 +10,28 @@ type InteractionDrawerProps = {
   onClose: () => void;
   onGoTo?: () => void;
   onOpenChat?: () => void;
+  onWave?: () => void;
+  onOpenTeams?: () => void;
+  onOpenOutlook?: () => void;
   onSchedule?: () => void;
   onViewProfile?: () => void;
   onActionNote?: (message: string) => void;
 };
 
-export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSchedule, onViewProfile, onActionNote }: InteractionDrawerProps) {
+export function InteractionDrawer({
+  target,
+  onClose,
+  onGoTo,
+  onOpenChat,
+  onWave,
+  onOpenTeams,
+  onOpenOutlook,
+  onSchedule,
+  onViewProfile,
+  onActionNote,
+}: InteractionDrawerProps) {
   const firstName = target.displayName.split(" ")[0] ?? target.displayName;
   const guidance = getGuidance(target.status, firstName);
-  const callDisabled = target.status === "focus" || target.status === "busy" || target.status === "offline";
 
   const handleAction = (action: string) => {
     if (action === "Message" && onOpenChat) {
@@ -38,19 +51,19 @@ export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSched
       return;
     }
     if (action === "Wave") {
-      onActionNote?.(`You waved to ${target.displayName}. Local feedback only for this MVP.`);
+      onWave?.();
       return;
     }
     if (action === "Teams") {
-      onActionNote?.("Teams launcher is ready for future integration. No Teams content is read here.");
+      onOpenTeams?.();
       return;
     }
     if (action === "Outlook") {
-      onActionNote?.("Outlook contact action is a placeholder until contact links are configured.");
+      onOpenOutlook?.();
       return;
     }
     if (action === "3CX") {
-      onActionNote?.("3CX calling is not connected yet. Use schedule or message for now.");
+      onActionNote?.("3CX calling is coming later.");
       return;
     }
 
@@ -81,7 +94,7 @@ export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSched
         <p style={styles.kicker}>People here</p>
         <h3 style={styles.greeting}>{guidance.title}</h3>
         <p style={styles.subtext}>{guidance.text}</p>
-        <p style={styles.integrationNote}>External launchers are placeholders until Teams, Outlook, or 3CX links are configured.</p>
+        <p style={styles.integrationNote}>Teams and Outlook use company contact links when an email is available. 3CX is coming later.</p>
       </div>
 
       <div style={styles.actions}>
@@ -100,8 +113,8 @@ export function InteractionDrawer({ target, onClose, onGoTo, onOpenChat, onSched
         <button style={styles.actionButton} onClick={() => handleAction("Outlook")} type="button">
           Outlook
         </button>
-        <button style={{ ...styles.actionButton, ...(callDisabled ? styles.actionButtonDisabled : {}) }} disabled={callDisabled} onClick={() => handleAction("3CX")} type="button">
-          3CX Call
+        <button style={{ ...styles.actionButton, ...styles.actionButtonDisabled }} disabled onClick={() => handleAction("3CX")} type="button">
+          3CX later
         </button>
         <button style={styles.actionButton} onClick={() => handleAction("View profile")} type="button">
           View profile

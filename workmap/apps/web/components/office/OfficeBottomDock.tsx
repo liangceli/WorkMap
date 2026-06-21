@@ -78,13 +78,13 @@ export function OfficeBottomDock({
           <OfficeIcon name="people" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Notes</span>
         </button>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("Outlook launcher is not connected yet.")} aria-label="Outlook">
+        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("Choose a teammate from People or the contact drawer to open Outlook.")} aria-label="Outlook">
           <OfficeIcon name="mail" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Outlook</span>
         </button>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("3CX calling is not connected yet.")} aria-label="3CX">
+        <button type="button" className="office-dock-action" style={{ ...styles.action, ...styles.actionDisabled }} disabled onClick={() => onToast("3CX calling is coming later.")} aria-label="3CX coming later">
           <OfficeIcon name="phone" size={28} />
-          <span className="office-dock-tooltip" style={styles.tooltip}>3CX</span>
+          <span className="office-dock-tooltip" style={styles.tooltip}>3CX later</span>
         </button>
         <button type="button" className="office-dock-action" style={styles.action} onClick={onOpenCalendar} aria-label="Schedule">
           <OfficeIcon name="calendar" size={28} />
@@ -180,6 +180,11 @@ const styles = {
     fontSize: "12px",
     fontWeight: 900,
     whiteSpace: "nowrap" as const,
+  },
+  actionDisabled: {
+    color: wm.colors.textMuted,
+    cursor: "not-allowed",
+    opacity: 0.62,
   },
   tooltip: {
     position: "absolute" as const,

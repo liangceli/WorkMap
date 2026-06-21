@@ -25,8 +25,8 @@ export function ContactMenu({ target, onClose }: ContactMenuProps) {
         <button style={styles.actionButton} type="button">
           Outlook Email
         </button>
-        <button style={styles.actionButton} type="button">
-          3CX Call
+        <button style={{ ...styles.actionButton, ...styles.actionButtonDisabled }} disabled type="button">
+          3CX later
         </button>
         <button style={styles.actionButton} type="button">
           Schedule
@@ -70,6 +70,11 @@ const styles = {
   actionButton: {
     ...wmStyles.secondaryButton,
     padding: "8px",
+  },
+  actionButtonDisabled: {
+    color: wm.colors.textMuted,
+    cursor: "not-allowed",
+    opacity: 0.68,
   },
   closeButton: {
     position: "absolute" as const,
