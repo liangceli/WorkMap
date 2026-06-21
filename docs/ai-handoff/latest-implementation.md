@@ -2,60 +2,51 @@
 
 ## Original Task Brief
 
-Continue optimizing the invite flow so an Employee who opens an Owner-generated invitation signs up with the original invited email address, instead of freely choosing a different email and entering the workspace.
+Finish the previously blocked invitation email-lock verification and fix the deployed invite page showing `WorkMap API returned 404` when the web deployment reaches the new invitation preview route before the API deployment does.
 
 ## Changed Files
 
-- `workmap/apps/api/src/modules/invitations/invitations.controller.ts`
-- `workmap/apps/api/src/modules/invitations/invitations.service.ts`
-- `workmap/apps/api/test/invitation-email-lock.test.ts`
 - `workmap/apps/web/app/invite/[token]/page.tsx`
-- `workmap/apps/web/lib/api/apiTypes.ts`
-- `workmap/apps/web/lib/api/invitationsApi.ts`
-- `workmap/apps/web/lib/auth/cognitoSession.ts`
+
+The prior commit already contains the invitation preview API, Cognito `login_hint`, backend verified-email enforcement, and `invitation-email-lock.test.ts`.
 
 ## Implementation Summary
 
-- Added unauthenticated `GET /invitations/preview/:token`, using the secret invite token to return only invite metadata needed before Cognito sign-up: invited email, role, status, company, and expiry.
-- Kept the existing backend security boundary: `POST /invitations/accept` still requires Cognito-only auth and rejects any verified Cognito email that does not exactly match `Invitation.invitedEmail`.
-- Updated the invite page to load the preview before sign-up, show the invited email in a read-only field, and block the accept UI when the current Cognito session email does not match the invited email.
-- Updated Cognito Hosted UI launch helpers so invite sign-up can pass `login_hint=<invited email>`.
-- Added API test coverage for invitation preview plus wrong-email accept rejection.
+- Completed the previously blocked API test run; the invitation preview and wrong-email rejection test passed.
+- Added a deployment-order fallback for `GET /invitations/preview/:token` returning 404.
+- A preview-route 404 no longer marks the invitation unavailable. The page keeps the pending token, allows Cognito sign-up, and explains that the exact invited email must be used.
+- Invalid, expired, accepted, and other non-404 preview failures still remain blocked.
+- Invitation acceptance still calls the Cognito-only backend endpoint, which rejects any verified Cognito email different from the invitation email.
 
 ## Role And Access Behavior
 
-- Owners still create invites normally.
-- Employees can see which email the invite is locked to before sign-up.
-- A wrong Cognito account cannot accept the invitation or enter the workspace.
-- Cognito Hosted UI may still visually allow editing depending on AWS Hosted UI configuration, but WorkMap backend acceptance is locked to the original invited verified email.
+- Owner invitation behavior is unchanged.
+- Employee can continue sign-up during a staggered web/API deployment instead of being trapped by a preview-route 404.
+- The fallback does not grant workspace access; backend invitation token, status, expiry, Cognito verification, and exact email matching remain authoritative.
 
 ## Verification Commands And Results
 
-- `pnpm --filter @workmap/api typecheck`: passed.
+- `pnpm --filter @workmap/api test`: passed, 5 tests.
 - `pnpm --filter @workmap/web typecheck`: passed.
-- `pnpm --filter @workmap/api lint`: passed.
-- `pnpm --filter @workmap/api build`: passed.
 - `pnpm --filter @workmap/web lint`: passed.
-- `pnpm --filter @workmap/web build`: passed, with the existing Next.js ESLint-plugin warning.
-- `pnpm --filter @workmap/api test`: blocked in sandbox by Windows `spawn EPERM`; elevated rerun was rejected by the environment usage-limit approval error.
+- `pnpm --filter @workmap/web build`: passed with the existing Next.js ESLint-plugin warning.
 - `git diff --check`: passed with CRLF conversion warnings only.
-- Secret scan excluding env/generated/reference directories: passed.
+- Generated `workmap/apps/web/tsconfig.tsbuildinfo` was restored and is not part of the source diff.
 
 ## Manual QA
 
-Not run. Real Cognito Hosted UI behavior still needs browser QA with configured AWS Cognito.
+The user supplied deployed-browser evidence of the 404 state. The new fallback was code-reviewed and build-verified, but has not yet been deployed for live browser recheck.
 
 ## Intentionally Not Changed
 
-- No Cognito external Hosted UI settings, user-pool attributes, app-client settings, callback URLs, or AWS resources were changed.
-- No invite email delivery, revoke/resend lifecycle, or database schema change was added.
+- No AWS Cognito, Vercel, Render, database, CORS, callback URL, or secret configuration changed.
+- No schema or invitation token format changed.
 
 ## Remaining Risks
 
-- The frontend can prefill Cognito with `login_hint`, but only AWS Cognito Hosted UI/custom UI configuration can make that input visually non-editable. WorkMap enforces the lock at accept time.
-- `workmap/apps/web/tsconfig.tsbuildinfo` was modified by `next build`; automatic restore was blocked because escalated `git restore` approval hit the environment usage limit.
-- The new API test is present but could not be executed due the same test-run approval limit after sandbox `spawn EPERM`.
+- The deployed API should still be upgraded to include `GET /invitations/preview/:token`; the fallback is compatibility protection, not a replacement for deployment.
+- Existing token-only links cannot prefill the invite email while the old API is serving 404, but the backend accept route still prevents wrong-email workspace access.
 
 ## Suggested Next Steps
 
-When command approval/usage is available, run `pnpm --filter @workmap/api test`, restore `workmap/apps/web/tsconfig.tsbuildinfo`, then manually QA the invite link with invited-email and wrong-email Cognito accounts.
+Deploy API commit `edd19c2` before or together with the new web fallback, then reopen the invite link in Incognito and verify the invited email display, Cognito sign-up, wrong-email rejection, and successful matching-email acceptance.

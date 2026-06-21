@@ -2,40 +2,36 @@
 
 ## Reviewed Implementation
 
-Reviewed the invitation email-lock change: public invite preview by token, frontend read-only invited-email display, Cognito `login_hint`, mismatch UI block, and backend accept-time verified-email enforcement.
+Reviewed the invitation email-lock implementation and the deployed 404 compatibility fix for staggered web/API releases.
 
 ## Diff Review Summary
 
-The security boundary remains backend-owned. The new preview route does not authenticate a user but requires possession of the high-entropy invite token and returns only the invite metadata needed before Cognito sign-up. The accept route still rejects wrong verified Cognito emails before user creation or workspace joining.
+Only the invite page changed in this follow-up. A 404 from the preview endpoint is treated as an unavailable route version, while every other preview error remains blocked. The final authenticated accept request and backend exact-email enforcement are unchanged.
 
 ## Findings Ordered By Severity
 
-- Blocking: API test execution is not complete because sandboxed Node test runner failed with `spawn EPERM` and elevated rerun was rejected by the environment usage-limit approval error.
-- Medium: Cognito Hosted UI can be prefilled with `login_hint`, but WorkMap cannot guarantee the hosted email input is visually immutable without Cognito/custom Hosted UI configuration.
-- Low: `workmap/apps/web/tsconfig.tsbuildinfo` remains modified by `next build` because escalated `git restore` was also blocked by the usage-limit approval error.
+- Blocking: none in automated verification.
+- Medium: the deployed API shown in user evidence does not yet expose the preview route and should be redeployed.
+- Low: in the 404 compatibility state the frontend cannot display or prefill the invited email because old invite links contain only the token; it clearly asks for the original email and relies on backend enforcement.
 
 ## Test And Verification Status
 
-- API typecheck: passed.
+- API tests: passed, 5 tests including invitation preview and wrong verified Cognito email rejection.
 - Web typecheck: passed.
-- API lint: passed.
-- API build: passed.
 - Web lint: passed.
-- Web build: passed, with existing Next.js ESLint-plugin warning.
-- API tests: not completed due environment approval limit after sandbox `spawn EPERM`.
+- Web build: passed with existing Next.js ESLint-plugin warning.
 - `git diff --check`: passed with CRLF warnings only.
-- Secret scan excluding env/generated/reference directories: passed.
+- Generated TypeScript build metadata was restored.
 
 ## Manual QA Status
 
-Not run. Needs a real Cognito invite-flow browser check.
+Pre-fix deployed 404 was confirmed by user screenshot. Post-fix live browser QA is pending deployment.
 
 ## Risks
 
-- Wrong-email workspace access is protected by backend accept enforcement.
-- Visual non-editability inside Cognito itself depends on AWS Hosted UI/custom UI behavior; the current app-level improvement is prefill plus backend lock.
-- Build artifact cleanup remains pending for `workmap/apps/web/tsconfig.tsbuildinfo`.
+- Web-only deployment removes the dead end but does not provide the read-only invited email until the API preview route is deployed.
+- Cognito Hosted UI visual field immutability still depends on AWS/custom UI behavior; backend accept-time exact-email enforcement is the security boundary.
 
 ## Recommendation
 
-Code gate: typecheck/lint/build PASS. Full QA gate: HOLD until API tests can run and the generated `tsconfig.tsbuildinfo` file is restored.
+Automated gate: PASS. Proceed to deploy API plus web, then run matching-email and wrong-email Incognito acceptance smoke before calling the flow accepted.

@@ -21,6 +21,7 @@ export default function InviteAcceptancePage() {
   const [accepting, setAccepting] = useState(false);
   const [cognitoAuth, setCognitoAuth] = useState<CognitoAuthState | null>(null);
   const [invitePreview, setInvitePreview] = useState<WorkMapApiInvitationPreview | null>(null);
+  const [previewRouteUnavailable, setPreviewRouteUnavailable] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const token = useMemo(() => {
     const raw = params.token;
@@ -35,10 +36,12 @@ export default function InviteAcceptancePage() {
         setStatus("Invitation token is missing.");
         setCognitoAuth({ available: false, reason: "Invitation token is missing." });
         setInvitePreview(null);
+        setPreviewRouteUnavailable(false);
         return;
       }
 
       setStatus("Checking invitation...");
+      setPreviewRouteUnavailable(false);
       const preview = await previewInvitation(token);
 
       if (cancelled) {
@@ -46,13 +49,31 @@ export default function InviteAcceptancePage() {
       }
 
       if (!preview.ok) {
+        if (preview.status === 404) {
+          const nextAuth = getCognitoApiAuthOptions();
+          setInvitePreview(null);
+          setPreviewRouteUnavailable(true);
+          setCognitoAuth(nextAuth);
+          savePendingInviteToken(token);
+
+          if (nextAuth.available) {
+            setDisplayName("");
+            setStatus("Ready to continue. WorkMap will verify your Cognito email against the invitation when you join.");
+          } else {
+            setStatus("Continue with the exact email address that received this invitation. WorkMap will verify it after Cognito sign-up.");
+          }
+          return;
+        }
+
         setInvitePreview(null);
+        setPreviewRouteUnavailable(false);
         setCognitoAuth({ available: false, reason: preview.error });
         setStatus(formatInviteError(preview.error));
         return;
       }
 
       setInvitePreview(preview.data);
+      setPreviewRouteUnavailable(false);
 
       if (preview.data.status !== "PENDING") {
         setCognitoAuth({ available: false, reason: `Invitation is ${preview.data.status.toLowerCase()}.` });
@@ -89,7 +110,7 @@ export default function InviteAcceptancePage() {
   }, [token]);
 
   const invitedEmail = invitePreview?.invitedEmail ?? "";
-  const canUseInvite = Boolean(token && invitePreview?.status === "PENDING");
+  const canUseInvite = Boolean(token && (invitePreview?.status === "PENDING" || previewRouteUnavailable));
   const signedInEmail = cognitoAuth?.available ? cognitoAuth.email?.trim().toLowerCase() ?? "" : "";
   const emailMismatch = Boolean(canUseInvite && signedInEmail && invitedEmail && signedInEmail !== invitedEmail.toLowerCase());
 
@@ -165,6 +186,11 @@ export default function InviteAcceptancePage() {
             <input value={invitePreview.invitedEmail} readOnly aria-label="Invited email" style={styles.readOnlyInput} />
             <span style={styles.lockHint}>WorkMap accepts this invitation only for this verified email address.</span>
           </section>
+        ) : previewRouteUnavailable ? (
+          <section style={styles.lockPanel}>
+            <span style={styles.lockLabel}>Invited account</span>
+            <span style={styles.lockHint}>Use the exact email address that received this invitation. The backend will reject any different verified Cognito email.</span>
+          </section>
         ) : null}
         {!cognitoAuth ? (
           <button type="button" disabled style={styles.primaryButton}>
@@ -194,8 +220,8 @@ export default function InviteAcceptancePage() {
             </button>
           </>
         ) : (
-          <button type="button" onClick={signUp} disabled={!token || !invitedEmail} style={styles.primaryButton}>
-            Sign up with invited email
+          <button type="button" onClick={signUp} disabled={!canUseInvite} style={styles.primaryButton}>
+            {invitedEmail ? "Sign up with invited email" : "Continue to Cognito sign-up"}
           </button>
         )}
         <a href="/login" style={styles.secondaryLink}>
