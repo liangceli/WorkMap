@@ -8,7 +8,7 @@ import type { WorkMapApiPairingCode, WorkMapApiPairingStatus } from "../../../li
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
-const desktopItems = ["Active app name", "Idle state", "Device heartbeat"];
+const desktopItems = ["Foreground application product name", "Usage start/end and active duration", "Agent start, stop, and connection health"];
 const extensionItems = ["Active website domain only"];
 const notCollectedItems = [
   "Full URLs by default",
@@ -21,6 +21,7 @@ const notCollectedItems = [
 ];
 
 export default function DeviceSetupPage() {
+  const desktopAgentDownloadUrl = process.env.NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL?.trim();
   const router = useRouter();
   const [pairing, setPairing] = useState<WorkMapApiPairingCode | null>(null);
   const [pairingStatus, setPairingStatus] = useState<WorkMapApiPairingStatus["status"] | null>(null);
@@ -101,11 +102,21 @@ export default function DeviceSetupPage() {
         <section style={styles.pairingPanel}>
           <div>
             <h2 style={styles.cardTitle}>Pair a tracking client</h2>
-            <p style={styles.subtitle}>Generate a one-time code. It expires after 10 minutes and can be exchanged only once.</p>
+            <p style={styles.subtitle}>Install the Windows Agent once, then generate its one-time code. After pairing, it starts automatically at Windows sign-in.</p>
           </div>
+          <ol style={styles.setupSteps}>
+            <li>Download and open the Windows Agent setup package on this employee computer.</li>
+            <li>Generate a Desktop Agent code below and enter it when setup asks.</li>
+            <li>Wait for paired successfully. Future Windows sign-ins start the Agent automatically.</li>
+          </ol>
           <div style={styles.actions}>
+            {desktopAgentDownloadUrl ? (
+              <a href={desktopAgentDownloadUrl} download style={styles.downloadButton}>Download Windows Agent</a>
+            ) : (
+              <span style={styles.downloadUnavailable}>Windows download pending release configuration</span>
+            )}
             <button type="button" onClick={() => void createPairing("DESKTOP_AGENT")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
-              Pair Desktop Agent
+              Generate Agent code
             </button>
             <button type="button" onClick={() => void createPairing("BROWSER_EXTENSION")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
               Pair Browser Extension
@@ -228,6 +239,31 @@ const styles = {
     display: "flex",
     flexWrap: "wrap" as const,
     gap: "10px",
+  },
+  setupSteps: {
+    margin: 0,
+    paddingLeft: "20px",
+    color: wm.colors.textSecondary,
+    fontSize: "14px",
+    lineHeight: 1.7,
+  },
+  downloadButton: {
+    ...wmStyles.primaryButton,
+    padding: "10px 14px",
+    fontWeight: 900,
+    textDecoration: "none",
+  },
+  downloadUnavailable: {
+    display: "inline-flex",
+    alignItems: "center",
+    minHeight: "40px",
+    padding: "8px 12px",
+    border: `1px solid ${wm.colors.warningBorder}`,
+    borderRadius: wm.radius.md,
+    background: wm.colors.warningBg,
+    color: wm.colors.warning,
+    fontSize: "13px",
+    fontWeight: 800,
   },
   secondaryButton: {
     ...wmStyles.secondaryButton,

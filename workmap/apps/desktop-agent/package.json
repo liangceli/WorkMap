@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsc --watch --noEmit",
     "build": "tsc && node scripts/build-alpha.mjs",
+    "release:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1",
     "lint": "eslint .",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"

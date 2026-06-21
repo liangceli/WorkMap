@@ -21,4 +21,12 @@ export class ReportsController {
   ) {
     return this.reports.getUsageSummary(context, { userId, departmentId, scope, from, to });
   }
+
+  @Get("agent-status")
+  getAgentStatus(
+    @CurrentContext() context: RequestContext,
+    @Query("userId", OptionalUuidPipe) userId?: string,
+  ) {
+    return this.reports.getAgentLiveStatus(context, userId);
+  }
 }

@@ -12,6 +12,21 @@ export type ForegroundSample = {
   observedAtMs: number;
 };
 
+export type CurrentAppActivity = {
+  appName: string;
+  startedAt: string;
+  lastObservedAt: string;
+  activeSeconds: number;
+  isIdle: boolean;
+};
+
+export type TrackingCheckpoint = {
+  appName: string;
+  isIdle: boolean;
+  startedAtMs: number;
+  lastObservedAtMs: number;
+};
+
 export type AppUsageEvent = {
   clientEventId: string;
   deviceId: string;
@@ -34,6 +49,8 @@ export type AgentStatus = {
   deviceId?: string;
   lastHeartbeatAt?: string;
   lastUploadAt?: string;
+  sessionId?: string;
+  currentActivity?: CurrentAppActivity | null;
   queuedEvents: number;
   error?: string;
 };

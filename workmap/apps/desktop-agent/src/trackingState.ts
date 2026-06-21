@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AppUsageEvent, ForegroundSample } from "./types.js";
+import type { AppUsageEvent, CurrentAppActivity, ForegroundSample, TrackingCheckpoint } from "./types.js";
 
 type ActiveSegment = {
   appName: string;
@@ -47,6 +47,11 @@ export class AppTrackingState {
     }
 
     if (this.active.appName === appName && this.active.isIdle === sample.isIdle) {
+      if (utcDateKey(this.active.startedAtMs) !== utcDateKey(sample.observedAtMs)) {
+        const completed = this.finish(deviceId, sample.observedAtMs);
+        this.active = this.start(appName, sample.isIdle, sample.observedAtMs);
+        return completed ? [completed] : [];
+      }
       this.active.lastObservedAtMs = sample.observedAtMs;
       return [];
     }
@@ -59,6 +64,21 @@ export class AppTrackingState {
   shutdown(deviceId: string, nowMs: number): AppUsageEvent[] {
     const completed = this.finish(deviceId, nowMs);
     return completed ? [completed] : [];
+  }
+
+  currentActivity(): CurrentAppActivity | null {
+    if (!this.active) return null;
+    return {
+      appName: this.active.appName,
+      startedAt: new Date(this.active.startedAtMs).toISOString(),
+      lastObservedAt: new Date(this.active.lastObservedAtMs).toISOString(),
+      activeSeconds: this.active.isIdle ? 0 : Math.max(0, Math.round((this.active.lastObservedAtMs - this.active.startedAtMs) / 1000)),
+      isIdle: this.active.isIdle,
+    };
+  }
+
+  checkpoint(): TrackingCheckpoint | null {
+    return this.active ? { ...this.active } : null;
   }
 
   private finish(deviceId: string, observedEndMs: number): AppUsageEvent | null {
@@ -86,6 +106,26 @@ export class AppTrackingState {
   }
 }
 
+export function recoverTrackingCheckpoint(
+  checkpoint: TrackingCheckpoint | null,
+  deviceId: string,
+  options: Pick<TrackingStateOptions, "minimumDurationMs" | "createEventId"> = {},
+) {
+  if (!checkpoint || checkpoint.isIdle) return null;
+  const appName = normalizeAppName(checkpoint.appName);
+  const durationMs = checkpoint.lastObservedAtMs - checkpoint.startedAtMs;
+  if (!appName || !Number.isFinite(durationMs) || durationMs < (options.minimumDurationMs ?? 5_000)) return null;
+  return {
+    clientEventId: (options.createEventId ?? randomUUID)(),
+    deviceId,
+    appName,
+    startedAt: new Date(checkpoint.startedAtMs).toISOString(),
+    endedAt: new Date(checkpoint.lastObservedAtMs).toISOString(),
+    durationSeconds: Math.max(1, Math.round(durationMs / 1000)),
+    isIdle: false,
+  } satisfies AppUsageEvent;
+}
+
 export function normalizeAppName(value: string) {
   const normalized = Array.from(value, (character) => {
     const code = character.charCodeAt(0);
@@ -93,4 +133,8 @@ export function normalizeAppName(value: string) {
   }).join("").replace(/\s+/g, " ").trim();
   const withoutExecutableSuffix = normalized.replace(/\.exe$/i, "");
   return withoutExecutableSuffix ? withoutExecutableSuffix.slice(0, 120) : null;
+}
+
+function utcDateKey(value: number) {
+  return new Date(value).toISOString().slice(0, 10);
 }

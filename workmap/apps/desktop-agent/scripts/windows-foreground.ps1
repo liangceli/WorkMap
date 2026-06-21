@@ -11,17 +11,27 @@ public static class WorkMapWindowsActivity {
 
   [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
   [DllImport("user32.dll")] private static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
   [DllImport("user32.dll", SetLastError=true)] private static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
   [DllImport("user32.dll")] private static extern bool CloseDesktop(IntPtr desktop);
 
-  public static string ProcessName() {
+  public static string AppName() {
     uint processId;
     var handle = GetForegroundWindow();
-    if (handle == IntPtr.Zero) return null;
+    if (handle == IntPtr.Zero || IsIconic(handle) || !IsWindowVisible(handle)) return null;
     GetWindowThreadProcessId(handle, out processId);
     if (processId == 0) return null;
-    try { return Process.GetProcessById((int)processId).ProcessName; } catch { return null; }
+    try {
+      var process = Process.GetProcessById((int)processId);
+      try {
+        var version = process.MainModule.FileVersionInfo;
+        if (!String.IsNullOrWhiteSpace(version.ProductName)) return version.ProductName;
+        if (!String.IsNullOrWhiteSpace(version.FileDescription)) return version.FileDescription;
+      } catch {}
+      return process.ProcessName;
+    } catch { return null; }
   }
 
   public static double IdleSeconds() {
@@ -43,11 +53,11 @@ public static class WorkMapWindowsActivity {
 '@
 
 Add-Type -TypeDefinition $source -ErrorAction Stop
-$processName = [WorkMapWindowsActivity]::ProcessName()
+$appName = [WorkMapWindowsActivity]::AppName()
 $idleSeconds = [WorkMapWindowsActivity]::IdleSeconds()
-$locked = [WorkMapWindowsActivity]::IsLocked() -or $processName -in @('LockApp', 'LogonUI')
+$locked = [WorkMapWindowsActivity]::IsLocked() -or $appName -in @('LockApp', 'LogonUI')
 [ordered]@{
-  processName = $processName
+  appName = $appName
   idleSeconds = $idleSeconds
   idle = $idleSeconds -ge $IdleThresholdSeconds
   locked = $locked

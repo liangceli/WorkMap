@@ -8,6 +8,7 @@ import type { ForegroundSample } from "./types.js";
 const execFileAsync = promisify(execFile);
 
 type NativeObservation = {
+  appName?: unknown;
   processName?: unknown;
   idleSeconds?: unknown;
   locked?: unknown;
@@ -39,7 +40,9 @@ export function minimizeWindowsObservation(observation: NativeObservation): Fore
     : 0;
   const observedAtMs = typeof observation.observedAt === "string" ? Date.parse(observation.observedAt) : Date.now();
   return {
-    appName: typeof observation.processName === "string" ? normalizeAppName(observation.processName) : null,
+    appName: typeof observation.appName === "string"
+      ? normalizeAppName(observation.appName)
+      : typeof observation.processName === "string" ? normalizeAppName(observation.processName) : null,
     isIdle: Boolean(observation.locked) || idleSeconds > 0 && Boolean((observation as { idle?: unknown }).idle),
     isLocked: Boolean(observation.locked),
     observedAtMs: Number.isFinite(observedAtMs) ? observedAtMs : Date.now(),

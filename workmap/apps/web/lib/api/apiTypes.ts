@@ -263,6 +263,40 @@ export type WorkMapApiUsageSummary = {
     activeDevices24h: number;
     usersWithActivity: number;
   };
+  agentStatus: null | {
+    state: "not_paired" | "online" | "stopped" | "interrupted";
+    sessionId?: string;
+    deviceId?: string;
+    hostname?: string | null;
+    agentVersion?: string | null;
+    startedAt?: string;
+    lastHeartbeatAt?: string;
+    endedAt?: string | null;
+    endReason?: "GRACEFUL_SHUTDOWN" | "UNEXPECTED_STOP" | null;
+    currentAppName?: string | null;
+    currentAppStartedAt?: string | null;
+    currentAppActiveSeconds?: number;
+    todayActiveSeconds?: number;
+  };
+  agentSessions: Array<{
+    id: string;
+    startedAt: string;
+    lastHeartbeatAt: string;
+    endedAt: string | null;
+    endReason: "GRACEFUL_SHUTDOWN" | "UNEXPECTED_STOP" | null;
+  }>;
+  appTimeline: Array<{
+    appName: string;
+    startedAt: string;
+    endedAt: string | null;
+    durationSeconds: number;
+  }>;
+  employeeUsage: Array<{
+    userId: string;
+    displayName: string;
+    activeSeconds: number;
+    idleSeconds: number;
+  }>;
 };
 
 export type WorkMapApiDevice = {

@@ -1,2 +1,4 @@
 @echo off
-node "%~dp0dist\index.js" %*
+set "NODE_EXE=%~dp0runtime\node.exe"
+if not exist "%NODE_EXE%" set "NODE_EXE=node"
+"%NODE_EXE%" "%~dp0dist\index.js" %*

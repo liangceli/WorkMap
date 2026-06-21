@@ -3,13 +3,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$node = Get-Command node -ErrorAction SilentlyContinue
-if (-not $node) {
-  throw "Node.js is required by this Windows Alpha package. Install Node.js 22 or newer before continuing."
-}
-$nodeMajor = [int]((& node --version).TrimStart("v").Split(".")[0])
-if ($nodeMajor -lt 22) {
-  throw "WorkMap Desktop Agent requires Node.js 22 or newer."
+$bundledNode = Join-Path $PSScriptRoot "runtime\node.exe"
+if (-not (Test-Path -LiteralPath $bundledNode)) {
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $node) {
+    throw "This development package has no bundled runtime. Use the WorkMap Windows release package or install Node.js 22+."
+  }
+  $nodeMajor = [int]((& node --version).TrimStart("v").Split(".")[0])
+  if ($nodeMajor -lt 22) {
+    throw "WorkMap Desktop Agent requires Node.js 22 or newer."
+  }
 }
 
 $source = (Resolve-Path $PSScriptRoot).Path

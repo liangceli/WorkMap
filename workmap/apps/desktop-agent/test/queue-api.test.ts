@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentApiError, sendAppUsage, sendHeartbeat } from "../src/apiClient.js";
+import { AgentApiError, sendAppUsage, sendHeartbeat, startAgentSession, stopAgentSession } from "../src/apiClient.js";
 import { EVENT_QUEUE_CAPACITY, FileEventQueue } from "../src/fileStore.js";
 import type { AgentConfig, AppUsageEvent } from "../src/types.js";
 
@@ -18,13 +18,22 @@ test("device API uses scoped credential and payload has no title or content", as
   const originalFetch = globalThis.fetch;
   const requests: Array<{ path: string; authorization: string | null; body: unknown }> = [];
   globalThis.fetch = async (input, init) => {
-    requests.push({ path: new URL(String(input)).pathname, authorization: new Headers(init?.headers).get("authorization"), body: JSON.parse(String(init?.body)) });
-    return new Response(JSON.stringify({ accepted: 1 }), { status: 200, headers: { "Content-Type": "application/json" } });
+    const path = new URL(String(input)).pathname;
+    requests.push({ path, authorization: new Headers(init?.headers).get("authorization"), body: JSON.parse(String(init?.body)) });
+    return new Response(JSON.stringify(path.endsWith("/start") ? { sessionId: "session-1", startedAt: new Date().toISOString() } : { accepted: 1 }), { status: 200, headers: { "Content-Type": "application/json" } });
   };
   try {
-    await sendHeartbeat(config);
+    const session = await startAgentSession(config);
+    await sendHeartbeat(config, session.sessionId, {
+      appName: "Visual Studio Code",
+      startedAt: "2026-06-18T00:00:00.000Z",
+      lastObservedAt: "2026-06-18T00:00:10.000Z",
+      activeSeconds: 10,
+      isIdle: false,
+    });
     await sendAppUsage(config, [event(1)]);
-    assert.deepEqual(requests.map((item) => item.path), ["/device-client/heartbeat", "/device-client/app-usage"]);
+    await stopAgentSession(config, session.sessionId);
+    assert.deepEqual(requests.map((item) => item.path), ["/device-client/session/start", "/device-client/heartbeat", "/device-client/app-usage", "/device-client/session/stop"]);
     assert(requests.every((item) => item.authorization === `Device ${config.credential}`));
     const payload = JSON.stringify(requests[1]?.body);
     assert(!payload.includes("windowTitle"));

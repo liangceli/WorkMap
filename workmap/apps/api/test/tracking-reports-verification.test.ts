@@ -54,6 +54,7 @@ async function main() {
   testControllerGuards();
   await testDeviceRegistrationHeartbeatAndOwnership();
   await testActivityIngestionAndReportsLoop();
+  await testCrossMidnightUsageIsSplitPrecisely();
   await testReportAccessBoundaries();
   await testPlatformAdminAggregateBoundary();
 
@@ -246,6 +247,10 @@ async function testReportAccessBoundaries() {
     ForbiddenException,
   );
   await assertRejectsWith(
+    () => reports.getAgentLiveStatus(employeeContext, OWNER_ID),
+    ForbiddenException,
+  );
+  await assertRejectsWith(
     () => reports.getUsageSummary(ownerContext, { userId: OTHER_USER_ID }),
     NotFoundException,
   );
@@ -253,6 +258,25 @@ async function testReportAccessBoundaries() {
     () => reports.getUsageSummary(ownerContext, { scope: "company", departmentId: OTHER_DEVICE_ID }),
     NotFoundException,
   );
+}
+
+async function testCrossMidnightUsageIsSplitPrecisely() {
+  const prisma = new MockPrisma();
+  prisma.seedDevice({ id: DEVICE_ID, companyId: COMPANY_ID, userId: EMPLOYEE_ID });
+  const activity = new ActivityService(prisma as any);
+  const result = await activity.ingestAppUsage(employeeContext, {
+    deviceId: DEVICE_ID,
+    clientEventId: "77777777-7777-4777-8777-777777777777",
+    appName: "Visual Studio Code",
+    startedAt: "2026-06-20T23:59:30.000Z",
+    endedAt: "2026-06-21T00:00:30.000Z",
+    durationSeconds: 60,
+  });
+  assert.equal(result.accepted, 2);
+  assert.deepEqual(prisma.appSummaries.map((row) => [row.date.toISOString().slice(0, 10), row.activeSeconds]), [
+    ["2026-06-20", 30],
+    ["2026-06-21", 30],
+  ]);
 }
 
 async function testPlatformAdminAggregateBoundary() {
@@ -322,9 +346,9 @@ class MockAuditService {
 
 class MockPrisma {
   users = [
-    { id: EMPLOYEE_ID, companyId: COMPANY_ID, departmentId: DEPARTMENT_ID, role: UserRole.EMPLOYEE },
-    { id: OWNER_ID, companyId: COMPANY_ID, departmentId: null, role: UserRole.OWNER },
-    { id: OTHER_USER_ID, companyId: OTHER_COMPANY_ID, departmentId: null, role: UserRole.EMPLOYEE },
+    { id: EMPLOYEE_ID, companyId: COMPANY_ID, departmentId: DEPARTMENT_ID, role: UserRole.EMPLOYEE, displayName: "Employee" },
+    { id: OWNER_ID, companyId: COMPANY_ID, departmentId: null, role: UserRole.OWNER, displayName: "Owner" },
+    { id: OTHER_USER_ID, companyId: OTHER_COMPANY_ID, departmentId: null, role: UserRole.EMPLOYEE, displayName: "Other" },
   ];
   devices: DeviceRow[] = [];
   activityEvents: ActivityEventRow[] = [];
@@ -375,6 +399,7 @@ class MockPrisma {
       const latest = rows.reduce<Date | null>((current, row) => maxDate(current, row.createdAt), null);
       return { _max: { createdAt: latest } };
     },
+    findMany: async ({ where }: any) => this.activityEvents.filter((event) => matchesWhere(event, where)),
   };
 
   appUsageSummary = {
@@ -400,7 +425,9 @@ class MockPrisma {
     },
     groupBy: async ({ where, take, by }: any) => by.includes("date")
       ? groupDailySummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
-      : groupAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)), take),
+      : by.includes("userId")
+        ? groupUserAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
+        : groupAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)), take),
   };
 
   websiteUsageSummary = {
@@ -441,7 +468,7 @@ class MockPrisma {
     count: async ({ where }: any) => this.users.filter((user) => matchesWhere(user, where)).length,
     findMany: async ({ where, select }: any) => this.users
       .filter((user) => matchesWhere(user, where))
-      .map((user) => select?.id ? { id: user.id } : user),
+      .map((user) => select?.id && select?.displayName ? { id: user.id, displayName: user.displayName } : select?.id ? { id: user.id } : user),
     groupBy: async ({ where }: any) => {
       const counts = new Map<string, number>();
       for (const user of this.users.filter((item) => matchesWhere(item, where))) {
@@ -453,6 +480,11 @@ class MockPrisma {
         return { companyId, role, _count: { _all: count } };
       });
     },
+  };
+
+  agentSession = {
+    findFirst: async () => null,
+    findMany: async () => [],
   };
 
   department = {
@@ -640,7 +672,7 @@ function groupDailySummaries(rows: Array<{ date: Date; activeSeconds: number; id
   return Array.from(grouped.values()).sort((left, right) => left.date.getTime() - right.date.getTime());
 }
 
-function groupAppSummaries(rows: AppSummaryRow[], take: number) {
+function groupAppSummaries(rows: AppSummaryRow[], take?: number) {
   const grouped = new Map<string, {
     appName: string;
     category: string | null;
@@ -663,10 +695,21 @@ function groupAppSummaries(rows: AppSummaryRow[], take: number) {
 
   return Array.from(grouped.values())
     .sort((left, right) => right._sum.activeSeconds - left._sum.activeSeconds)
-    .slice(0, take);
+    .slice(0, take ?? grouped.size);
 }
 
-function groupWebsiteSummaries(rows: WebsiteSummaryRow[], take: number) {
+function groupUserAppSummaries(rows: AppSummaryRow[]) {
+  const grouped = new Map<string, { userId: string; _sum: { activeSeconds: number; idleSeconds: number } }>();
+  for (const row of rows) {
+    const item = grouped.get(row.userId) ?? { userId: row.userId, _sum: { activeSeconds: 0, idleSeconds: 0 } };
+    item._sum.activeSeconds += row.activeSeconds;
+    item._sum.idleSeconds += row.idleSeconds;
+    grouped.set(row.userId, item);
+  }
+  return Array.from(grouped.values()).sort((left, right) => right._sum.activeSeconds - left._sum.activeSeconds);
+}
+
+function groupWebsiteSummaries(rows: WebsiteSummaryRow[], take?: number) {
   const grouped = new Map<string, {
     domain: string;
     category: string | null;
@@ -689,7 +732,7 @@ function groupWebsiteSummaries(rows: WebsiteSummaryRow[], take: number) {
 
   return Array.from(grouped.values())
     .sort((left, right) => right._sum.activeSeconds - left._sum.activeSeconds)
-    .slice(0, take);
+    .slice(0, take ?? grouped.size);
 }
 
 function uniqueBy<T>(rows: T[], key: keyof T) {

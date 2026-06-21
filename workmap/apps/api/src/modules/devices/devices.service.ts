@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { DeviceOS } from "@prisma/client";
+import { AgentSessionEndReason, DeviceOS } from "@prisma/client";
 import { canViewDeviceHealth, type RequestContext } from "@workmap/auth";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -96,7 +96,102 @@ export class DevicesService {
       },
     });
 
-    return toDeviceRegistrationResponse(updatedDevice);
+    const sessionId = readOptionalUuid(body.sessionId, "sessionId");
+    if (sessionId) {
+      const session = await this.prisma.agentSession.findFirst({
+        where: {
+          id: sessionId,
+          companyId: context.companyId,
+          userId: context.userId,
+          deviceId,
+          endedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!session) throw new ForbiddenException("Agent session is not active for this device.");
+
+      const currentActivity = readCurrentActivity(body.currentActivity);
+      await this.prisma.agentSession.update({
+        where: { id: session.id },
+        data: {
+          lastHeartbeatAt: new Date(),
+          currentAppName: currentActivity?.appName ?? null,
+          currentAppStartedAt: currentActivity?.startedAt ?? null,
+          currentAppLastObservedAt: currentActivity?.lastObservedAt ?? null,
+          currentAppIsIdle: currentActivity?.isIdle ?? false,
+        },
+      });
+    }
+
+    return { ...toDeviceRegistrationResponse(updatedDevice), sessionId: sessionId ?? null };
+  }
+
+  async startAgentSession(context: RequestContext, input: unknown) {
+    const body = readObject(input, "Agent session body must be an object.");
+    const deviceId = readRequiredUuid(body.deviceId, "deviceId");
+    const device = await this.findActiveDevice(context, deviceId);
+    const now = new Date();
+
+    const session = await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.agentSession.findFirst({
+        where: { companyId: context.companyId, userId: context.userId, deviceId, endedAt: null },
+        orderBy: { startedAt: "desc" },
+        select: { id: true, lastHeartbeatAt: true },
+      });
+      if (previous) {
+        await tx.agentSession.update({
+          where: { id: previous.id },
+          data: { endedAt: previous.lastHeartbeatAt, endReason: AgentSessionEndReason.UNEXPECTED_STOP },
+        });
+      }
+      return tx.agentSession.create({
+        data: {
+          companyId: context.companyId,
+          userId: context.userId,
+          deviceId,
+          agentVersion: sanitizeOptionalText(body.agentVersion, MAX_AGENT_VERSION_LENGTH) ?? device.agentVersion,
+          startedAt: now,
+          lastHeartbeatAt: now,
+        },
+      });
+    });
+
+    return { sessionId: session.id, startedAt: session.startedAt.toISOString() };
+  }
+
+  async stopAgentSession(context: RequestContext, input: unknown) {
+    const body = readObject(input, "Agent session body must be an object.");
+    const deviceId = readRequiredUuid(body.deviceId, "deviceId");
+    const sessionId = readRequiredUuid(body.sessionId, "sessionId");
+    await this.findActiveDevice(context, deviceId);
+    const session = await this.prisma.agentSession.findFirst({
+      where: { id: sessionId, companyId: context.companyId, userId: context.userId, deviceId },
+    });
+    if (!session) throw new ForbiddenException("Agent session is not visible for this device.");
+    if (session.endedAt) return { sessionId, endedAt: session.endedAt.toISOString(), endReason: session.endReason };
+
+    const endedAt = new Date();
+    const updated = await this.prisma.agentSession.update({
+      where: { id: session.id },
+      data: {
+        endedAt,
+        lastHeartbeatAt: endedAt,
+        endReason: AgentSessionEndReason.GRACEFUL_SHUTDOWN,
+        currentAppName: null,
+        currentAppStartedAt: null,
+        currentAppLastObservedAt: null,
+        currentAppIsIdle: false,
+      },
+    });
+    return { sessionId, endedAt: updated.endedAt?.toISOString() ?? endedAt.toISOString(), endReason: updated.endReason };
+  }
+
+  private async findActiveDevice(context: RequestContext, deviceId: string) {
+    const device = await this.prisma.device.findFirst({
+      where: { id: deviceId, companyId: context.companyId, userId: context.userId, revokedAt: null },
+    });
+    if (!device) throw new ForbiddenException("Device is not registered for this WorkMap user and tenant.");
+    return device;
   }
 }
 
@@ -164,6 +259,25 @@ function sanitizeOptionalText(value: unknown, maxLength: number) {
 
   const sanitized = replaceControlCharacters(value).replace(/\s+/g, " ").trim();
   return sanitized ? sanitized.slice(0, maxLength) : undefined;
+}
+
+function readCurrentActivity(value: unknown) {
+  if (value === undefined || value === null) return null;
+  const body = readObject(value, "currentActivity must be an object or null.");
+  const appName = sanitizeOptionalText(body.appName, 120);
+  if (!appName) return null;
+  const startedAt = readRequiredDate(body.startedAt, "currentActivity.startedAt");
+  const lastObservedAt = readRequiredDate(body.lastObservedAt, "currentActivity.lastObservedAt");
+  if (lastObservedAt < startedAt) throw new BadRequestException("Current activity observation cannot precede its start.");
+  if (lastObservedAt.getTime() > Date.now() + 60_000) throw new BadRequestException("Current activity observation is too far in the future.");
+  return { appName, startedAt, lastObservedAt, isIdle: body.isIdle === true };
+}
+
+function readRequiredDate(value: unknown, label: string) {
+  if (typeof value !== "string") throw new BadRequestException(`${label} must be an ISO timestamp.`);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new BadRequestException(`${label} must be an ISO timestamp.`);
+  return parsed;
 }
 
 function replaceControlCharacters(value: string) {

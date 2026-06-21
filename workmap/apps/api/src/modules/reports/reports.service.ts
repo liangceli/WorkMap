@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ActivityEventSource, ActivityEventType } from "@prisma/client";
 import { canViewEmployeeActivity, canViewOwnReports, canViewTeamReports, type RequestContext } from "@workmap/auth";
 import { AuditService } from "../audit/audit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -51,9 +52,12 @@ export class ReportsService {
     }
 
     const filter = { companyId: context.companyId, userId, range };
-    const [summary, deviceCoverage] = await Promise.all([
+    const [summary, deviceCoverage, agentStatus, agentSessions, appTimeline] = await Promise.all([
       this.getUsageRows(filter),
       this.getDeviceCoverage(filter),
+      this.getAgentStatus(filter),
+      this.getAgentSessions(filter),
+      this.getAppTimeline(filter),
     ]);
 
     return {
@@ -63,6 +67,18 @@ export class ReportsService {
       range: reportRangeResponse(range),
       ...summary,
       deviceCoverage,
+      agentStatus,
+      agentSessions,
+      appTimeline,
+      employeeUsage: [],
+    };
+  }
+
+  async getAgentLiveStatus(context: RequestContext, requestedUserId?: string) {
+    const userId = await this.resolveVisibleReportUserId(context, requestedUserId);
+    return {
+      userId,
+      agentStatus: await this.getAgentStatus({ companyId: context.companyId, userId }),
     };
   }
 
@@ -88,9 +104,10 @@ export class ReportsService {
     });
 
     const filter = { companyId: context.companyId, userIds, range };
-    const [summary, deviceCoverage] = await Promise.all([
+    const [summary, deviceCoverage, employeeUsage] = await Promise.all([
       this.getUsageRows(filter),
       this.getDeviceCoverage(filter),
+      this.getEmployeeUsage(filter),
     ]);
 
     return {
@@ -100,6 +117,10 @@ export class ReportsService {
       range: reportRangeResponse(range),
       ...summary,
       deviceCoverage,
+      agentStatus: null,
+      agentSessions: [],
+      appTimeline: [],
+      employeeUsage,
     };
   }
 
@@ -111,14 +132,12 @@ export class ReportsService {
         where,
         _sum: { activeSeconds: true, idleSeconds: true },
         orderBy: { _sum: { activeSeconds: "desc" } },
-        take: 10,
       }),
       this.prisma.websiteUsageSummary.groupBy({
         by: ["domain", "category", "productivityLabel"],
         where,
         _sum: { activeSeconds: true, idleSeconds: true },
         orderBy: { _sum: { activeSeconds: "desc" } },
-        take: 10,
       }),
       this.prisma.appUsageSummary.groupBy({
         by: ["date"],
@@ -202,6 +221,116 @@ export class ReportsService {
     ]);
 
     return { registeredDevices, activeDevices24h, usersWithActivity: usersWithActivity.length };
+  }
+
+  private async getAgentStatus(filter: Pick<UsageFilter, "companyId" | "userId">) {
+    if (!filter.userId) return null;
+    const session = await this.prisma.agentSession.findFirst({
+      where: { companyId: filter.companyId, userId: filter.userId },
+      include: { device: { select: { hostname: true, agentVersion: true } } },
+      orderBy: { startedAt: "desc" },
+    });
+    if (!session) return { state: "not_paired" as const };
+
+    const now = Date.now();
+    const heartbeatAgeMs = now - session.lastHeartbeatAt.getTime();
+    const isFresh = !session.endedAt && heartbeatAgeMs <= 30_000;
+    const state = isFresh
+      ? "online"
+      : session.endReason === "GRACEFUL_SHUTDOWN" ? "stopped" : "interrupted";
+    const currentAppActiveSeconds = isFresh && session.currentAppName && !session.currentAppIsIdle && session.currentAppStartedAt
+      ? Math.max(0, Math.round((Math.min(now, session.lastHeartbeatAt.getTime() + 15_000) - session.currentAppStartedAt.getTime()) / 1000))
+      : 0;
+    const today = utcDateOnly(new Date());
+    const todaySummary = await this.prisma.appUsageSummary.aggregate({
+      where: { companyId: filter.companyId, userId: filter.userId, date: today },
+      _sum: { activeSeconds: true },
+    });
+
+    return {
+      state,
+      sessionId: session.id,
+      deviceId: session.deviceId,
+      hostname: session.device.hostname,
+      agentVersion: session.agentVersion ?? session.device.agentVersion,
+      startedAt: session.startedAt.toISOString(),
+      lastHeartbeatAt: session.lastHeartbeatAt.toISOString(),
+      endedAt: session.endedAt?.toISOString() ?? null,
+      endReason: session.endReason,
+      currentAppName: isFresh && !session.currentAppIsIdle ? session.currentAppName : null,
+      currentAppStartedAt: isFresh && !session.currentAppIsIdle ? session.currentAppStartedAt?.toISOString() ?? null : null,
+      currentAppActiveSeconds,
+      todayActiveSeconds: (todaySummary._sum.activeSeconds ?? 0) + currentAppActiveSeconds,
+    };
+  }
+
+  private async getAgentSessions(filter: UsageFilter) {
+    if (!filter.userId) return [];
+    const endExclusive = addUtcDays(filter.range.to, 1);
+    const sessions = await this.prisma.agentSession.findMany({
+      where: {
+        companyId: filter.companyId,
+        userId: filter.userId,
+        startedAt: { lt: endExclusive },
+        OR: [{ endedAt: null }, { endedAt: { gte: filter.range.from } }],
+      },
+      orderBy: { startedAt: "desc" },
+      take: 100,
+    });
+    const now = Date.now();
+    return sessions.map((session) => {
+      const staleOpenSession = !session.endedAt && now - session.lastHeartbeatAt.getTime() > 30_000;
+      return {
+        id: session.id,
+        startedAt: session.startedAt.toISOString(),
+        lastHeartbeatAt: session.lastHeartbeatAt.toISOString(),
+        endedAt: session.endedAt?.toISOString() ?? (staleOpenSession ? session.lastHeartbeatAt.toISOString() : null),
+        endReason: session.endReason ?? (staleOpenSession ? "UNEXPECTED_STOP" : null),
+      };
+    });
+  }
+
+  private async getEmployeeUsage(filter: UsageFilter) {
+    const rows = await this.prisma.appUsageSummary.groupBy({
+      by: ["userId"],
+      where: summaryWhere(filter),
+      _sum: { activeSeconds: true, idleSeconds: true },
+      orderBy: { _sum: { activeSeconds: "desc" } },
+    });
+    if (rows.length === 0) return [];
+    const users = await this.prisma.user.findMany({
+      where: { companyId: filter.companyId, id: { in: rows.map((row) => row.userId) } },
+      select: { id: true, displayName: true },
+    });
+    const names = new Map(users.map((user) => [user.id, user.displayName]));
+    return rows.map((row) => ({
+      userId: row.userId,
+      displayName: names.get(row.userId) ?? "Employee",
+      activeSeconds: row._sum.activeSeconds ?? 0,
+      idleSeconds: row._sum.idleSeconds ?? 0,
+    }));
+  }
+
+  private async getAppTimeline(filter: UsageFilter) {
+    if (!filter.userId) return [];
+    const endExclusive = addUtcDays(filter.range.to, 1);
+    const events = await this.prisma.activityEvent.findMany({
+      where: {
+        companyId: filter.companyId,
+        userId: filter.userId,
+        source: ActivityEventSource.DESKTOP_AGENT,
+        eventType: ActivityEventType.APP,
+        startedAt: { gte: filter.range.from, lt: endExclusive },
+      },
+      select: { appName: true, startedAt: true, endedAt: true, durationSeconds: true },
+      orderBy: { startedAt: "asc" },
+    });
+    return events.map((event) => ({
+      appName: event.appName ?? "Unknown application",
+      startedAt: event.startedAt.toISOString(),
+      endedAt: event.endedAt?.toISOString() ?? null,
+      durationSeconds: event.durationSeconds ?? 0,
+    }));
   }
 
   private async resolveDepartmentUserIds(companyId: string, departmentId: string) {

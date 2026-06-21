@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AppTrackingState } from "../src/trackingState.js";
+import { AppTrackingState, recoverTrackingCheckpoint } from "../src/trackingState.js";
 
 const DEVICE_ID = "11111111-1111-4111-8111-111111111111";
 const base = Date.parse("2026-06-18T00:00:00.000Z");
@@ -39,6 +39,26 @@ test("filters short/no-window segments, duplicate samples and caps delayed sampl
   const delayed = state.observe(sample("C", 60_000), DEVICE_ID);
   assert.equal(delayed[0]?.durationSeconds, 15);
   assert.deepEqual(state.observe(sample(null, 61_000), DEVICE_ID), []);
+});
+
+test("exposes live foreground duration and recovers a persisted segment after an unclean stop", () => {
+  const state = new AppTrackingState();
+  state.observe(sample("Visual Studio Code", 0), DEVICE_ID);
+  state.observe(sample("Visual Studio Code", 7_000), DEVICE_ID);
+  assert.equal(state.currentActivity()?.activeSeconds, 7);
+  const recovered = recoverTrackingCheckpoint(state.checkpoint(), DEVICE_ID, {
+    createEventId: () => "00000000-0000-4000-8000-000000000009",
+  });
+  assert.equal(recovered?.appName, "Visual Studio Code");
+  assert.equal(recovered?.durationSeconds, 7);
+});
+
+test("rolls a foreground segment at the UTC day boundary for complete daily reporting", () => {
+  const state = new AppTrackingState({ createEventId: () => "00000000-0000-4000-8000-000000000010" });
+  state.observe({ ...sample("Outlook", 0), observedAtMs: Date.parse("2026-06-18T23:59:50.000Z") }, DEVICE_ID);
+  const rolled = state.observe({ ...sample("Outlook", 0), observedAtMs: Date.parse("2026-06-19T00:00:01.000Z") }, DEVICE_ID);
+  assert.equal(rolled[0]?.durationSeconds, 11);
+  assert.equal(state.currentActivity()?.startedAt, "2026-06-19T00:00:01.000Z");
 });
 
 function sample(appName: string | null, offset: number) {

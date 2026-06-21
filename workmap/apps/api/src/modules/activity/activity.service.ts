@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { ActivityEventSource, ActivityEventType, BrowserName } from "@prisma/client";
 import type { RequestContext } from "@workmap/auth";
+import { createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -43,7 +44,9 @@ export class ActivityService {
 
     for (const event of events) {
       await this.assertDeviceBoundToContext(context, event.deviceId);
-      accepted += (await this.storeAppUsageEvent(context, event)) ? 1 : 0;
+      for (const fragment of splitUsageEventByUtcDay(event)) {
+        accepted += (await this.storeAppUsageEvent(context, fragment)) ? 1 : 0;
+      }
     }
 
     return {
@@ -59,7 +62,9 @@ export class ActivityService {
 
     for (const event of events) {
       await this.assertDeviceBoundToContext(context, event.deviceId);
-      accepted += (await this.storeDomainUsageEvent(context, event)) ? 1 : 0;
+      for (const fragment of splitUsageEventByUtcDay(event)) {
+        accepted += (await this.storeDomainUsageEvent(context, fragment)) ? 1 : 0;
+      }
     }
 
     return {
@@ -492,6 +497,36 @@ function readBrowserName(value: unknown): BrowserName {
 
 function toUtcDateOnly(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function splitUsageEventByUtcDay<T extends ParsedEventBase>(event: T): T[] {
+  const fragments: T[] = [];
+  let cursor = event.startedAt;
+  let index = 0;
+  while (cursor < event.endedAt) {
+    const nextDay = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1));
+    const endedAt = event.endedAt < nextDay ? event.endedAt : nextDay;
+    const durationSeconds = Math.max(1, Math.round((endedAt.getTime() - cursor.getTime()) / 1000));
+    fragments.push({
+      ...event,
+      clientEventId: event.clientEventId && (index > 0 || endedAt < event.endedAt)
+        ? deriveFragmentEventId(event.clientEventId, index)
+        : event.clientEventId,
+      startedAt: cursor,
+      endedAt,
+      durationSeconds,
+    });
+    cursor = endedAt;
+    index += 1;
+  }
+  return fragments;
+}
+
+function deriveFragmentEventId(clientEventId: string, index: number) {
+  const hex = createHash("sha256").update(`${clientEventId}:${index}`).digest("hex").slice(0, 32).split("");
+  hex[12] = "4";
+  hex[16] = ["8", "9", "a", "b"][Number.parseInt(hex[16] ?? "0", 16) % 4] ?? "8";
+  return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
 }
 
 function categorizeApp(appName: string) {

@@ -1,4 +1,4 @@
-import type { AgentConfig, AppUsageEvent } from "./types.js";
+import type { AgentConfig, AppUsageEvent, CurrentAppActivity } from "./types.js";
 
 export class AgentApiError extends Error {
   constructor(message: string, readonly status?: number) { super(message); }
@@ -17,8 +17,21 @@ export async function exchangePairingCode(apiBaseUrl: string, code: string, agen
   });
 }
 
-export function sendHeartbeat(config: AgentConfig) {
-  return requestJson(config.apiBaseUrl, "/device-client/heartbeat", config.credential, { agentVersion: config.agentVersion });
+export function startAgentSession(config: AgentConfig) {
+  return requestJson<{ sessionId: string; startedAt: string }>(config.apiBaseUrl, "/device-client/session/start", config.credential, {
+    agentVersion: config.agentVersion,
+  });
+}
+
+export function stopAgentSession(config: AgentConfig, sessionId: string) {
+  return requestJson(config.apiBaseUrl, "/device-client/session/stop", config.credential, { sessionId });
+}
+
+export function sendHeartbeat(config: AgentConfig, sessionId?: string, currentActivity?: CurrentAppActivity | null) {
+  return requestJson(config.apiBaseUrl, "/device-client/heartbeat", config.credential, {
+    agentVersion: config.agentVersion,
+    ...(sessionId ? { sessionId, currentActivity: currentActivity ?? null } : {}),
+  });
 }
 
 export function sendAppUsage(config: AgentConfig, events: AppUsageEvent[]) {

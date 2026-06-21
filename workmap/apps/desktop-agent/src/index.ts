@@ -1,6 +1,6 @@
 import { exchangePairingCode } from "./apiClient.js";
 import { loadAgentConfig, saveAgentConfig } from "./credentialStore.js";
-import { readJson, getAgentDataDirectory, writeAgentStatus } from "./fileStore.js";
+import { FileEventQueue, readJson, getAgentDataDirectory, writeAgentStatus, writeTrackingCheckpoint } from "./fileStore.js";
 import { DesktopAgentRuntime } from "./runtime.js";
 import type { AgentStatus } from "./types.js";
 import { join } from "node:path";
@@ -11,7 +11,7 @@ export * from "./trackingState.js";
 export * from "./types.js";
 export * from "./windowsForeground.js";
 
-const AGENT_VERSION = "desktop-agent-windows-alpha/0.3.0";
+const AGENT_VERSION = "desktop-agent-windows-alpha/0.4.0";
 
 async function main() {
   const [command = "run"] = process.argv.slice(2);
@@ -43,6 +43,13 @@ async function pair() {
   await writeAgentStatus({ state: "pairing", queuedEvents: 0 });
   try {
     const result = await exchangePairingCode(apiBaseUrl, code, AGENT_VERSION);
+    const previous = await loadAgentConfig();
+    if (previous && previous.deviceId !== result.device.id) {
+      const queue = new FileEventQueue();
+      await queue.load();
+      await queue.clear();
+      await writeTrackingCheckpoint(null);
+    }
     await saveAgentConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, agentVersion: AGENT_VERSION });
     await writeAgentStatus({ state: "connected", deviceId: result.device.id, queuedEvents: 0 });
     console.info(`Desktop Agent paired for device ${result.device.id}. Credential stored with Windows DPAPI.`);

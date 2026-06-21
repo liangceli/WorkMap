@@ -1,6 +1,6 @@
-import { AgentApiError, sendAppUsage, sendHeartbeat } from "./apiClient.js";
-import { FileEventQueue, writeAgentStatus } from "./fileStore.js";
-import { AppTrackingState } from "./trackingState.js";
+import { AgentApiError, sendAppUsage, sendHeartbeat, startAgentSession, stopAgentSession } from "./apiClient.js";
+import { FileEventQueue, readTrackingCheckpoint, writeAgentStatus, writeTrackingCheckpoint } from "./fileStore.js";
+import { AppTrackingState, recoverTrackingCheckpoint } from "./trackingState.js";
 import type { AgentConfig, AgentStatus } from "./types.js";
 import { WindowsForegroundAdapter } from "./windowsForeground.js";
 
@@ -12,6 +12,7 @@ export class DesktopAgentRuntime {
   private finalized = false;
   private runPromise: Promise<void> | null = null;
   private status: AgentStatus;
+  private sessionId: string | null = null;
 
   constructor(
     private readonly config: AgentConfig,
@@ -29,22 +30,36 @@ export class DesktopAgentRuntime {
 
   private async runLoop() {
     await this.queue.load();
+    const recovered = recoverTrackingCheckpoint(await readTrackingCheckpoint(), this.config.deviceId);
+    if (recovered) await this.queue.enqueue(recovered);
+    await writeTrackingCheckpoint(null);
     await this.updateStatus();
-    const sampleInterval = readPositiveNumber("WORKMAP_AGENT_SAMPLE_INTERVAL_MS", 2_000);
-    const heartbeatInterval = readPositiveNumber("WORKMAP_AGENT_HEARTBEAT_INTERVAL_MS", 60_000);
+    const sampleInterval = readPositiveNumber("WORKMAP_AGENT_SAMPLE_INTERVAL_MS", 1_000);
+    const heartbeatInterval = readPositiveNumber("WORKMAP_AGENT_HEARTBEAT_INTERVAL_MS", 10_000);
+    const checkpointInterval = readPositiveNumber("WORKMAP_AGENT_CHECKPOINT_INTERVAL_MS", 5_000);
     let nextHeartbeatAt = 0;
+    let nextCheckpointAt = 0;
 
     try {
       while (!this.stopped) {
         const now = Date.now();
-        if (now >= nextHeartbeatAt) {
-          await this.heartbeat();
-          nextHeartbeatAt = now + heartbeatInterval;
-        }
         try {
           const sample = await this.adapter.sample();
           if (this.stopped) break;
-          for (const event of this.tracking.observe(sample, this.config.deviceId)) await this.queue.enqueue(event);
+          const events = this.tracking.observe(sample, this.config.deviceId);
+          for (const event of events) await this.queue.enqueue(event);
+          if (events.length > 0 || now >= nextCheckpointAt) {
+            await writeTrackingCheckpoint(this.tracking.checkpoint());
+            nextCheckpointAt = now + checkpointInterval;
+          }
+          if (now >= nextHeartbeatAt) {
+            await this.heartbeat();
+            nextHeartbeatAt = now + heartbeatInterval;
+          }
+          if (this.status.state === "auth_required") {
+            this.stopped = true;
+            break;
+          }
           await this.flushQueue();
         } catch (error) {
           this.status.state = "error";
@@ -69,13 +84,26 @@ export class DesktopAgentRuntime {
     if (this.finalized) return;
     this.finalized = true;
     for (const event of this.tracking.shutdown(this.config.deviceId, Date.now())) await this.queue.enqueue(event);
+    await writeTrackingCheckpoint(null);
     await this.flushQueue();
+    if (this.sessionId && this.status.state !== "auth_required") {
+      try {
+        await stopAgentSession(this.config, this.sessionId);
+      } catch (error) {
+        this.status.error = safeError(error);
+      }
+    }
+    this.sessionId = null;
     await this.updateStatus();
   }
 
   private async heartbeat() {
     try {
-      await sendHeartbeat(this.config);
+      if (!this.sessionId) {
+        const started = await startAgentSession(this.config);
+        this.sessionId = started.sessionId;
+      }
+      await sendHeartbeat(this.config, this.sessionId, this.tracking.currentActivity());
       this.status.state = "connected";
       this.status.lastHeartbeatAt = new Date().toISOString();
       this.status.error = undefined;
@@ -119,6 +147,8 @@ export class DesktopAgentRuntime {
 
   private async updateStatus() {
     this.status.queuedEvents = this.queue.size();
+    this.status.sessionId = this.sessionId ?? undefined;
+    this.status.currentActivity = this.tracking.currentActivity();
     await writeAgentStatus(this.status);
   }
 }

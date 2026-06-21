@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { AgentStatus, QueuedEvent } from "./types.js";
+import type { AgentStatus, QueuedEvent, TrackingCheckpoint } from "./types.js";
 
 const MAX_QUEUE_SIZE = 1_000;
 const MAX_QUEUE_AGE_MS = 31 * 24 * 60 * 60 * 1000;
@@ -61,11 +61,24 @@ export class FileEventQueue {
 
   size() { return this.events.length; }
 
+  async clear() {
+    this.events = [];
+    await this.save();
+  }
+
   private async save() { await writeJsonAtomic(this.filePath, this.events); }
 }
 
 export async function writeAgentStatus(status: AgentStatus, filePath = join(getAgentDataDirectory(), "status.json")) {
   await writeJsonAtomic(filePath, status);
+}
+
+export function readTrackingCheckpoint(filePath = join(getAgentDataDirectory(), "tracking-state.json")) {
+  return readJson<TrackingCheckpoint | null>(filePath, null);
+}
+
+export function writeTrackingCheckpoint(checkpoint: TrackingCheckpoint | null, filePath = join(getAgentDataDirectory(), "tracking-state.json")) {
+  return writeJsonAtomic(filePath, checkpoint);
 }
 
 export async function readJson<T>(filePath: string, fallback: T): Promise<T> {

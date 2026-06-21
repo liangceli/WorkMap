@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { getUsageSummary } from "../lib/api/reportsApi.js";
+import { getAgentLiveStatus, getUsageSummary } from "../lib/api/reportsApi.js";
 
 test("reports API sends date, department and scope filters", async () => {
   const originalFetch = globalThis.fetch;
@@ -27,6 +27,31 @@ test("reports API sends date, department and scope filters", async () => {
     assert.match(requestedUrl, /departmentId=66666666/);
     assert.match(requestedUrl, /from=2026-06-01/);
     assert.match(requestedUrl, /to=2026-06-21/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("live Agent polling requests only the selected employee status endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = "";
+  globalThis.fetch = async (input) => {
+    requestedUrl = String(input);
+    return new Response(JSON.stringify({ userId: "11111111-1111-4111-8111-111111111111", agentStatus: { state: "online" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const result = await getAgentLiveStatus({
+      baseUrl: "https://api.workmap.test",
+      token: "test-token",
+      userId: "11111111-1111-4111-8111-111111111111",
+    });
+    assert.equal(result.ok, true);
+    assert.match(requestedUrl, /\/reports\/agent-status/);
+    assert.match(requestedUrl, /userId=11111111/);
+    assert.doesNotMatch(requestedUrl, /from=/);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -9,6 +9,10 @@ $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 
 Remove-ItemProperty -Path $runKey -Name "WorkMapDesktopAgent" -ErrorAction SilentlyContinue
 
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.CommandLine -like '*WorkMap Desktop Agent*dist*index.js*run*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
 $resolvedTarget = Resolve-Path $target -ErrorAction SilentlyContinue
 $allowedRoot = (Resolve-Path (Join-Path $env:LOCALAPPDATA "Programs")).Path
 if ($resolvedTarget -and $resolvedTarget.Path.StartsWith($allowedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {

@@ -3,6 +3,9 @@ node_modules
 .next
 dist
 coverage
+apps/desktop-agent/release
+apps/desktop-agent/alpha-windows/runtime
+/artifacts
 .env
 .env.*
 !.env.example

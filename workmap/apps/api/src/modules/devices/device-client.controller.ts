@@ -32,6 +32,20 @@ export class DeviceClientController {
     return this.devices.recordHeartbeat(toRequestContext(context), { ...readBody(body), deviceId: context.deviceId });
   }
 
+  @Post("session/start")
+  @UseGuards(DeviceCredentialGuard)
+  startSession(@CurrentDeviceContext() context: DeviceRequestContext, @Body() body: unknown) {
+    assertClientType(context, DeviceClientType.DESKTOP_AGENT);
+    return this.devices.startAgentSession(toRequestContext(context), { ...readBody(body), deviceId: context.deviceId });
+  }
+
+  @Post("session/stop")
+  @UseGuards(DeviceCredentialGuard)
+  stopSession(@CurrentDeviceContext() context: DeviceRequestContext, @Body() body: unknown) {
+    assertClientType(context, DeviceClientType.DESKTOP_AGENT);
+    return this.devices.stopAgentSession(toRequestContext(context), { ...readBody(body), deviceId: context.deviceId });
+  }
+
   @Post("app-usage")
   @UseGuards(DeviceCredentialGuard)
   appUsage(@CurrentDeviceContext() context: DeviceRequestContext, @Body() body: unknown) {

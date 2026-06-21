@@ -1,6 +1,16 @@
 import { workMapApiGet } from "./apiClient";
 import type { ApiClientOptions, WorkMapApiUsageSummary } from "./apiTypes";
 
+export function getAgentLiveStatus(options?: ApiClientOptions & { userId?: string }) {
+  const params = new URLSearchParams();
+  if (options?.userId) params.set("userId", options.userId);
+  const query = params.size > 0 ? `?${params.toString()}` : "";
+  return workMapApiGet<{
+    userId: string;
+    agentStatus: WorkMapApiUsageSummary["agentStatus"];
+  }>(`/reports/agent-status${query}`, options);
+}
+
 export function getUsageSummary(options?: ApiClientOptions & {
   userId?: string;
   departmentId?: string;

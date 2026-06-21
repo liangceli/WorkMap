@@ -1,10 +1,10 @@
 "use client";
 
-import { Download, RefreshCw } from "lucide-react";
+import { Activity, AlertTriangle, Download, FileText, Power, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import type { ApiClientOptions, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
-import { getUsageSummary } from "../../lib/api/reportsApi";
+import { getAgentLiveStatus, getUsageSummary } from "../../lib/api/reportsApi";
 import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
@@ -62,6 +62,25 @@ export function ReportSummaryPanel() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    if (!auth || appliedFilters.view === "company") return;
+    let cancelled = false;
+    const refresh = async () => {
+      const userId = appliedFilters.view.startsWith("user:") ? appliedFilters.view.slice(5) : undefined;
+      const result = await getAgentLiveStatus({ ...auth.options, userId });
+      if (!cancelled && result.ok) {
+        setReportState((current) => current.summary
+          ? { ...current, summary: { ...current.summary, agentStatus: result.data.agentStatus }, error: null }
+          : current);
+      }
+    };
+    const timer = window.setInterval(() => void refresh(), 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [auth, appliedFilters]);
+
   const departments = useMemo(() => {
     const values = new Map<string, string>();
     for (const user of users) {
@@ -110,8 +129,8 @@ export function ReportSummaryPanel() {
             <h2 style={styles.panelTitle}>Usage summary filters</h2>
           </div>
           <div style={styles.presetGroup} aria-label="Date presets">
-            {[7, 30, 90].map((days) => (
-              <button key={days} type="button" onClick={() => applyPreset(days)} style={styles.presetButton}>{days} days</button>
+            {[1, 7, 30, 90].map((days) => (
+              <button key={days} type="button" onClick={() => applyPreset(days)} style={styles.presetButton}>{days === 1 ? "Daily" : `${days} days`}</button>
             ))}
           </div>
         </div>
@@ -169,6 +188,9 @@ export function ReportSummaryPanel() {
           <WorkMapButton type="button" onClick={() => summary && exportSummaryCsv(summary, scopeLabel)} disabled={!summary}>
             <Download size={16} aria-hidden /> Export CSV
           </WorkMapButton>
+          <WorkMapButton type="button" onClick={() => summary && exportSummaryTxt(summary, scopeLabel)} disabled={!summary}>
+            <FileText size={16} aria-hidden /> Download TXT
+          </WorkMapButton>
           <span style={styles.rangeText}>{summary ? `${summary.range.from} to ${summary.range.to} (${summary.range.timeZone})` : "UTC reporting dates"}</span>
         </div>
       </section>
@@ -186,9 +208,15 @@ export function ReportSummaryPanel() {
         {reportState.error ? <p role="alert" style={styles.errorText}>{reportState.error}</p> : null}
       </section>
 
+      {summary?.scope === "user" ? <AgentStatusPanel summary={summary} /> : null}
+
       {summary ? <MetricGrid summary={summary} /> : null}
 
       {summary && summary.daily.length > 0 ? <DailyTrend rows={summary.daily} /> : null}
+
+      {summary?.scope === "company" && summary.employeeUsage.length > 0 ? <EmployeeUsageChart rows={summary.employeeUsage} /> : null}
+
+      {summary?.scope === "user" && summary.agentSessions.length > 0 ? <AgentSessionHistory rows={summary.agentSessions} /> : null}
 
       {summary ? (
         <section style={styles.apiPanel}>
@@ -216,6 +244,82 @@ export function ReportSummaryPanel() {
         </section>
       )}
     </div>
+  );
+}
+
+function AgentStatusPanel({ summary }: { summary: WorkMapApiUsageSummary }) {
+  const status = summary.agentStatus;
+  if (!status || status.state === "not_paired") {
+    return (
+      <section style={styles.agentPanel} aria-label="Desktop Agent status">
+        <Power size={20} aria-hidden />
+        <div><p style={styles.panelLabel}>Desktop Agent</p><h2 style={styles.panelTitle}>No paired Agent</h2><p style={styles.panelText}>This employee has no active Windows Agent session.</p></div>
+      </section>
+    );
+  }
+  const online = status.state === "online";
+  const interrupted = status.state === "interrupted";
+  return (
+    <section style={{ ...styles.agentPanel, ...(interrupted ? styles.agentInterrupted : online ? styles.agentOnline : {}) }} aria-label="Desktop Agent status">
+      {interrupted ? <AlertTriangle size={20} aria-hidden /> : online ? <Activity size={20} aria-hidden /> : <Power size={20} aria-hidden />}
+      <div style={styles.agentBody}>
+        <div style={styles.agentHeader}>
+          <div>
+            <p style={styles.panelLabel}>Desktop Agent now</p>
+            <h2 style={styles.panelTitle}>{online ? "Connected" : interrupted ? "Connection interrupted" : "Stopped normally"}</h2>
+          </div>
+          <span style={styles.agentTimestamp}>{status.lastHeartbeatAt ? `Last signal ${formatDateTime(status.lastHeartbeatAt)}` : "No heartbeat"}</span>
+        </div>
+        <div style={styles.currentAppRow}>
+          <span style={styles.currentAppLabel}>Current foreground app</span>
+          <strong style={styles.currentAppName}>{online ? status.currentAppName ?? "No active foreground app" : "Not available"}</strong>
+          <span style={styles.currentAppDuration}>{online && status.currentAppName ? formatDuration(status.currentAppActiveSeconds ?? 0) : ""}</span>
+        </div>
+        <div style={styles.todayUsageRow}>
+          <span>Today across all foreground apps</span>
+          <strong>{formatDuration(status.todayActiveSeconds ?? 0)}</strong>
+        </div>
+        <p style={styles.agentMeta}>{status.hostname ?? "Windows device"} · Session started {status.startedAt ? formatDateTime(status.startedAt) : "unknown"}</p>
+      </div>
+    </section>
+  );
+}
+
+function EmployeeUsageChart({ rows }: { rows: WorkMapApiUsageSummary["employeeUsage"] }) {
+  const maximum = Math.max(1, ...rows.map((row) => row.activeSeconds));
+  return (
+    <section style={styles.trendPanel} aria-label="Company employee app usage">
+      <div><p style={styles.panelLabel}>Company comparison</p><h2 style={styles.panelTitle}>App active time by employee</h2></div>
+      <div style={styles.employeeBars}>
+        {rows.map((row) => (
+          <div key={row.userId} style={styles.employeeBarRow}>
+            <span style={styles.employeeName}>{row.displayName}</span>
+            <div style={styles.employeeBarTrack}><span style={{ ...styles.employeeBarFill, width: `${Math.max(1, row.activeSeconds / maximum * 100)}%` }} /></div>
+            <strong style={styles.employeeDuration}>{formatDuration(row.activeSeconds)}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AgentSessionHistory({ rows }: { rows: WorkMapApiUsageSummary["agentSessions"] }) {
+  return (
+    <section style={styles.trendPanel} aria-label="Desktop Agent session history">
+      <div><p style={styles.panelLabel}>Agent audit</p><h2 style={styles.panelTitle}>Start, stop and interruption history</h2></div>
+      <div style={styles.sessionRows}>
+        {rows.slice(0, 30).map((row) => {
+          const interrupted = row.endReason === "UNEXPECTED_STOP";
+          return (
+            <div key={row.id} style={styles.sessionRow}>
+              <span style={{ ...styles.sessionState, ...(interrupted ? styles.sessionInterrupted : {}) }}>{row.endedAt ? interrupted ? "Interrupted" : "Stopped" : "Running"}</span>
+              <span>Started {formatDateTime(row.startedAt)}</span>
+              <span>{row.endedAt ? `Ended ${formatDateTime(row.endedAt)}` : `Last signal ${formatDateTime(row.lastHeartbeatAt)}`}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -361,6 +465,73 @@ function exportSummaryCsv(summary: WorkMapApiUsageSummary, scopeLabel: string) {
   URL.revokeObjectURL(url);
 }
 
+function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
+  const lines = [
+    "WORKMAP APP USAGE REPORT",
+    `Scope: ${scopeLabel}`,
+    `Period: ${summary.range.from} to ${summary.range.to} (${summary.range.timeZone})`,
+    `Generated: ${new Date().toISOString()}`,
+    "",
+    "SUMMARY",
+    `App active: ${formatDuration(sum(summary.apps, "activeSeconds"))}`,
+    `App idle: ${formatDuration(sum(summary.apps, "idleSeconds"))}`,
+    `Domain active: ${formatDuration(sum(summary.websites, "activeSeconds"))}`,
+    "",
+  ];
+  if (summary.agentStatus) {
+    lines.push(
+      "DESKTOP AGENT STATUS",
+      `State: ${summary.agentStatus.state}`,
+      `Device: ${summary.agentStatus.hostname ?? "Unknown Windows device"}`,
+      `Last signal: ${summary.agentStatus.lastHeartbeatAt ?? "None"}`,
+      `Current foreground app: ${summary.agentStatus.currentAppName ?? "None"}`,
+      `Current app duration: ${formatDuration(summary.agentStatus.currentAppActiveSeconds ?? 0)}`,
+      `Today active across all apps: ${formatDuration(summary.agentStatus.todayActiveSeconds ?? 0)}`,
+      "",
+    );
+  }
+  lines.push("APP TOTALS");
+  if (summary.apps.length === 0) lines.push("No app activity recorded.");
+  for (const row of summary.apps) lines.push(`${row.appName}: ${formatDuration(row.activeSeconds)} active; ${formatDuration(row.idleSeconds)} idle`);
+  lines.push("", "DAILY TOTALS");
+  if (summary.daily.length === 0) lines.push("No daily activity recorded.");
+  for (const row of summary.daily) lines.push(`${row.date}: ${formatDuration(row.appActiveSeconds)} app active`);
+  if (summary.employeeUsage.length > 0) {
+    lines.push("", "EMPLOYEE APP TOTALS");
+    for (const row of summary.employeeUsage) lines.push(`${row.displayName}: ${formatDuration(row.activeSeconds)} active`);
+  }
+  if (summary.appTimeline.length > 0) {
+    lines.push("", "APP ACTIVITY TIMELINE");
+    for (const row of summary.appTimeline) lines.push(`${row.startedAt} -> ${row.endedAt ?? "open"} | ${row.appName} | ${formatDuration(row.durationSeconds)}`);
+  }
+  if (summary.agentSessions.length > 0) {
+    lines.push("", "AGENT SESSION AUDIT");
+    for (const row of summary.agentSessions) lines.push(`${row.startedAt} -> ${row.endedAt ?? "running"} | ${row.endReason ?? "ACTIVE"}`);
+  }
+  lines.push(
+    "",
+    "PRIVACY BOUNDARY",
+    "WorkMap records foreground application product names and duration only. It does not collect window titles, screenshots, screen recordings, keystrokes, clipboard, camera, microphone, file contents, message/email bodies, webpage bodies, form inputs, or passwords.",
+  );
+  downloadText(
+    `workmap-app-usage-${safeFileName(scopeLabel)}-${summary.range.from}-${summary.range.to}.txt`,
+    lines.join("\r\n"),
+  );
+}
+
+function downloadText(fileName: string, content: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function safeFileName(value: string) {
+  return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "report";
+}
+
 function csvCell(value: string | number) {
   const raw = String(value);
   const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
@@ -378,9 +549,17 @@ function formatProductivity(value: string | null) {
 
 function formatDuration(seconds: number) {
   if (!Number.isFinite(seconds) || seconds <= 0) return "0m";
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.round((seconds % 3600) / 60);
-  return hours === 0 ? `${minutes}m` : `${hours}h ${minutes}m`;
+  const wholeSeconds = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(wholeSeconds / 3600);
+  const minutes = Math.floor((wholeSeconds % 3600) / 60);
+  const remainingSeconds = wholeSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
 function formatShortDate(value: string) {
@@ -412,6 +591,18 @@ const styles = {
   filterActions: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" as const },
   rangeText: { color: wm.colors.textMuted, fontSize: "12px", fontWeight: 700 },
   statusPanel: { ...wmStyles.infoNotice, display: "flex", justifyContent: "space-between", alignItems: "start", gap: "16px", flexWrap: "wrap" as const, padding: "16px" },
+  agentPanel: { ...wmStyles.card, padding: "16px", display: "flex", alignItems: "flex-start", gap: "12px", color: wm.colors.textSecondary },
+  agentOnline: { borderColor: wm.colors.successBorder, background: wm.colors.successBg, color: wm.colors.success },
+  agentInterrupted: { borderColor: wm.colors.error, background: wm.colors.errorBg, color: wm.colors.errorText },
+  agentBody: { minWidth: 0, flex: 1 },
+  agentHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" as const },
+  agentTimestamp: { color: wm.colors.textMuted, fontSize: "12px", fontWeight: 700 },
+  currentAppRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))", alignItems: "center", gap: "12px", borderTop: `1px solid ${wm.colors.borderSubtle}`, borderBottom: `1px solid ${wm.colors.borderSubtle}`, padding: "12px 0", marginTop: "4px" },
+  currentAppLabel: { color: wm.colors.textMuted, fontSize: "12px", fontWeight: 800 },
+  currentAppName: { color: wm.colors.text, fontSize: "15px", overflowWrap: "anywhere" as const },
+  currentAppDuration: { color: wm.colors.secondary, fontSize: "16px", fontWeight: 900, whiteSpace: "nowrap" as const },
+  agentMeta: { margin: "10px 0 0", color: wm.colors.textMuted, fontSize: "12px" },
+  todayUsageRow: { display: "flex", justifyContent: "space-between", gap: "12px", paddingTop: "10px", color: wm.colors.textSecondary, fontSize: "13px", fontWeight: 800, flexWrap: "wrap" as const },
   panelLabel: { ...wmStyles.eyebrow, color: wm.colors.infoText, margin: 0 },
   panelTitle: { margin: "0 0 8px", color: wm.colors.text, fontSize: "18px", lineHeight: 1.3 },
   panelText: { margin: 0, color: wm.colors.textSecondary, fontSize: "13px", lineHeight: 1.5, maxWidth: "880px" },
@@ -434,6 +625,16 @@ const styles = {
   appBar: { height: "7px", minWidth: "2px", borderRadius: wm.radius.sm, background: wm.colors.secondary },
   domainBar: { height: "7px", minWidth: "2px", borderRadius: wm.radius.sm, background: wm.colors.focus },
   trendValue: { color: wm.colors.textSecondary, fontSize: "11px", fontWeight: 700, textAlign: "right" as const, whiteSpace: "nowrap" as const },
+  employeeBars: { display: "grid", gap: "10px" },
+  employeeBarRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: "12px", alignItems: "center", minHeight: "30px" },
+  employeeName: { color: wm.colors.text, fontSize: "13px", fontWeight: 800, overflowWrap: "anywhere" as const },
+  employeeBarTrack: { height: "12px", background: wm.colors.surfaceLow, border: `1px solid ${wm.colors.borderSubtle}`, overflow: "hidden", borderRadius: wm.radius.sm },
+  employeeBarFill: { display: "block", height: "100%", minWidth: "2px", background: wm.colors.secondary },
+  employeeDuration: { color: wm.colors.textSecondary, fontSize: "12px", textAlign: "right" as const, whiteSpace: "nowrap" as const },
+  sessionRows: { display: "grid", gap: "8px", maxHeight: "320px", overflowY: "auto" as const },
+  sessionRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: "12px", alignItems: "center", minHeight: "38px", borderTop: `1px solid ${wm.colors.borderSubtle}`, color: wm.colors.textSecondary, fontSize: "12px" },
+  sessionState: { color: wm.colors.success, fontWeight: 900 },
+  sessionInterrupted: { color: wm.colors.errorText },
   apiPanel: { ...wmStyles.card, padding: "16px" },
   apiHeader: { display: "flex", justifyContent: "space-between", alignItems: "start", gap: "12px", marginBottom: "12px" },
   scopePill: { border: `1px solid ${wm.colors.infoBorder}`, borderRadius: wm.radius.full, background: wm.colors.infoBg, color: wm.colors.infoText, padding: "6px 10px", fontSize: "12px", fontWeight: 900, whiteSpace: "nowrap" as const },
