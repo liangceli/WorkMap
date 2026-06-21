@@ -1,5 +1,15 @@
 # Latest QA Handoff
 
+## Current Diagnostic: leo314 App Usage
+
+- CSV evidence: header only; no app/domain rows for the selected UTC date.
+- Initial local evidence: Desktop Agent data/status/config directory was missing.
+- Deployed API evidence: liveness and database readiness pass; protected activity routes are present.
+- Pair/install evidence: one-time pairing completed; DPAPI config, status, and queue files now exist.
+- Runtime evidence: Agent process is live, state is `connected`, deployed heartbeat succeeded, and queue count is zero.
+- Fixed during QA: installer incorrectly copied from the parent package directory and could not find `run-workmap-agent.cmd`; source path is corrected and covered by regression test.
+- Remaining action: produce one real foreground app switch, then confirm the event appears in leo314's UTC date report.
+
 ## Reviewed Implementation
 
 Reviewed Reports navigation filtering, direct-route Employee handling, authenticated role resolution, pop-up reservation timing, Outlook protocol conversion, HTTPS web fallback behavior, invalid scheme rejection, error cleanup, and current-page preservation.

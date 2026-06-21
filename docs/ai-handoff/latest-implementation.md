@@ -1,5 +1,16 @@
 # Latest Implementation Handoff
 
+## Current Diagnostic: Empty App Report
+
+- Owner export for leo314 on 2026-06-21 contains only the CSV header, confirming no summary rows were returned.
+- Initial check found no `%LOCALAPPDATA%\WorkMap\DesktopAgent`, confirming Desktop Agent 0.3.0 had never successfully paired/run here.
+- Deployed Render `/health` and `/health/readiness` return 200 with database `ok`.
+- Deployed `/device-client/heartbeat` and `/device-client/app-usage` routes exist and return 401 without a device credential, as expected.
+- leo314 pairing succeeded for device `902ee3ac-6e4b-447d-add7-bbecfb747c67`; credential is protected by Windows DPAPI.
+- Fixed the Alpha installer source path, rebuilt the package, reinstalled it under `%LOCALAPPDATA%\Programs\WorkMap Desktop Agent`, registered current-user auto-start, and started the Agent.
+- Runtime verification now shows `connected`, a successful deployed heartbeat, zero queued events, and a live Agent process.
+- Remaining manual action: keep a foreground app open for at least five seconds, switch to another app, then refresh the Owner report.
+
 ## Original Task Brief
 
 1. Employee accounts should not see or enter the Reports page.
@@ -14,6 +25,9 @@
 - `workmap/apps/web/components/office/contactLauncher.ts`
 - `workmap/apps/web/test/reports-api.test.ts`
 - `workmap/apps/web/test/contact-launcher.test.ts`
+- `workmap/apps/desktop-agent/scripts/install-workmap-agent.ps1`
+- `workmap/apps/desktop-agent/test/windows-adapter.test.ts`
+- `workmap/apps/desktop-agent/alpha-windows/install-workmap-agent.ps1`
 
 ## Implementation Summary
 

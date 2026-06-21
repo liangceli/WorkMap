@@ -12,12 +12,17 @@ if ($nodeMajor -lt 22) {
   throw "WorkMap Desktop Agent requires Node.js 22 or newer."
 }
 
-$source = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$source = (Resolve-Path $PSScriptRoot).Path
 $target = Join-Path $env:LOCALAPPDATA "Programs\WorkMap Desktop Agent"
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $launcher = Join-Path $target "start-workmap-agent.ps1"
 
 if ($source -ne $target) {
+  $programsRoot = (Resolve-Path (Join-Path $env:LOCALAPPDATA "Programs")).Path
+  $resolvedTarget = Resolve-Path $target -ErrorAction SilentlyContinue
+  if ($resolvedTarget -and $resolvedTarget.Path.StartsWith($programsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Remove-Item -LiteralPath $resolvedTarget.Path -Recurse -Force
+  }
   New-Item -ItemType Directory -Path $target -Force | Out-Null
   Copy-Item -Path (Join-Path $source "*") -Destination $target -Recurse -Force
 }
