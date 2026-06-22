@@ -2,65 +2,53 @@
 
 ## Original Task Brief
 
-Productize the Windows Desktop Agent so an employee pairs once and it starts at every Windows sign-in; collect only foreground application product name and usage intervals, exclude background/minimized and sub-five-second activity, expose Agent interruption to Owner reports, show current/daily/7/30/90-day individual and company visual summaries, and provide TXT downloads.
+Require Desktop Agent pairing before Employee virtual-office entry, replace the ZIP/PowerShell experience with a visual Windows Agent that accepts the one-time code and shows progress/status/privacy information, and fix the production pairing timeout reported during manual testing.
 
 ## Changed Files
 
-- Desktop Agent source, Windows adapter, queue/checkpoint/runtime, tests, installer/uninstaller/setup, Alpha template, and Windows release builder under `workmap/apps/desktop-agent/`.
-- Device session endpoints and persistence in `workmap/apps/api/src/modules/devices/`.
-- UTC activity splitting in `workmap/apps/api/src/modules/activity/activity.service.ts`.
-- Live status, app timeline, Agent sessions, employee comparison in `workmap/apps/api/src/modules/reports/`.
-- Reports and device-setup UI/API types under `workmap/apps/web/`.
-- Prisma schema and `workmap/prisma/migrations/20260621210000_agent_sessions/migration.sql`.
-- `.gitignore` for generated Windows runtime/release artifacts.
+- Desktop GUI, preload boundary, renderer, pairing orchestration, packaging, icon generation, runtime script resolution, tests, and dependencies under `workmap/apps/desktop-agent/`.
+- Employee Device Setup gate in `workmap/apps/web/app/onboarding/device-setup/page.tsx`.
+- Device revocation visibility in `workmap/apps/api/src/modules/devices/devices.service.ts`.
+- `workmap/pnpm-lock.yaml` and generated-build ignore rules.
 
 ## Implementation Summary
 
-- Pairing remains tenant/user/device/client-bound and one-time. The current-user installer registers `WorkMapDesktopAgent` under Windows `HKCU\...\Run`, so later sign-ins start it automatically without re-pairing.
-- Default foreground sampling is one second. Windows `GetForegroundWindow`, `IsWindowVisible`, and `IsIconic` ensure only the visible, non-minimized foreground application is attributed.
-- App name uses Windows executable product metadata, falling back to process name. Window titles, paths, document names, and content are not collected.
-- Segments under five seconds are discarded. Idle time remains separate from active duration. UTC midnight rolls the segment immediately, and API ingestion also splits cross-midnight events deterministically.
-- A five-second local checkpoint recovers the last observed foreground segment after an unclean exit, bounded by its last observation.
-- Agent sessions persist start, heartbeat, graceful stop, inferred unexpected stop, current app, and current app start/observation timestamps. A stale open session is reported as interrupted after 30 seconds; a later start persists the prior unexpected stop.
-- Owner individual reports poll only the lightweight live Agent endpoint every ten seconds. They show connection state, current foreground app duration, and today's total foreground-app time.
-- Individual reports include app totals, daily bars, app activity timeline, and Agent start/stop/interruption history. Company reports include a per-employee app-duration bar comparison.
-- Daily, 7-day, 30-day, and 90-day controls remain. TXT download includes totals, daily totals, detailed app usage intervals, Agent audit, and the privacy boundary; CSV remains available.
-- `release:windows` builds `artifacts/WorkMap-Desktop-Agent-Windows-x64.zip` with a bundled Node runtime. Employees run `setup-workmap-agent.cmd`, enter one code, and the package pairs, installs, and starts the Agent.
-- Device Setup exposes a download URL through `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL`; without that deployment variable it honestly shows that the release download is not configured.
+- Desktop Agent 0.5.0 is an Electron Windows application with a WorkMap-branded pairing window, one-time-code input, staged loading feedback, connected/offline/error status, current foreground app, last heartbeat, queued upload count, auto-start status, tray behavior, and explicit collected/not-collected privacy information.
+- Pairing warms the deployed API through `/health` with a 75-second cold-start allowance before submitting the one-time code with a 30-second timeout. Invalid/expired/used codes receive a safe, actionable message instead of a PowerShell stack trace.
+- Credentials remain protected by current-user Windows DPAPI. Existing foreground tracking, minimized/background exclusion, five-second minimum, heartbeat, offline queue, and interruption reporting are preserved.
+- The NSIS installer runs after installation, creates Start Menu/Desktop shortcuts, and enables Windows-login auto-start after successful pairing. Closing the paired window hides it to the system tray while tracking continues.
+- Device Setup now checks persisted backend devices and only unlocks `Continue to virtual office` for a non-revoked Agent using the 0.5+ `desktop-agent-windows/` version identity. Browser Extension pairing does not unlock the Desktop Agent requirement.
+- No screenshot or window-title capability is present in Agent source, renderer, or scripts.
 
-## Role And Privacy Behavior
+## Role And Access Behavior
 
-- Owner/authorized team-report roles retain existing company/employee report access. Employee Reports navigation/direct-page blocking was preserved. Platform Admin receives no employee activity through these workspace routes.
-- The Agent sends app product name, foreground usage start/end, active/idle flag, device/session metadata, and heartbeat only.
-- It does not collect window titles, full executable paths, screenshots, recordings, keystrokes, clipboard, camera/microphone, files, webpage content, form inputs, passwords, or message/email bodies.
+- Pairing remains bound to the authenticated Employee and tenant that generated the one-time code.
+- Owner report behavior and Platform Admin privacy boundaries were not changed.
+- A revoked device no longer satisfies Employee onboarding completion.
 
 ## Verification
 
-- Prisma generate and schema validation: passed.
-- Local PostgreSQL migration deploy: passed; seven migrations applied, including `20260621210000_agent_sessions`.
-- Desktop Agent typecheck/lint: passed. Tests: 10/10 passed when executed file-by-file because the sandbox blocks the test runner's worker spawn.
-- API typecheck/lint/build: passed. Tests: 9/9 passed, including session lifecycle, tenant boundaries, cross-midnight split, ingestion/report loop, and Platform Admin privacy boundary.
-- Web typecheck/lint/build: passed; 19 routes generated. Tests: 11/11 passed file-by-file.
-- Windows self-contained release: built successfully, about 34 MB; archive contents and bundled-runtime `status` execution verified.
-- `git diff --check`: passed. Focused secret scan: clean.
+- Desktop Agent typecheck/lint: pass; 13 tests pass.
+- Desktop Agent NSIS build: pass; final installer `artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.0.exe`, 91,935,536 bytes, SHA-256 `F3250BBE1E45B245B4122143DE773B710391FF6D7EE1D0461EF821CBDD4BC073`.
+- Final packaged runtime smoke: process stayed running, window visible, ASAR present, and both required external PowerShell resources present.
+- Electron-rendered visual QA: unpaired window rendered nonblank with complete pairing and privacy panels; no incoherent overlap found.
+- Web typecheck/lint/build: pass; 19 routes generated.
+- API typecheck/lint/independent-output build: pass; 9 tests pass. Normal `nest build` output was locked by the already-running local API process, not by a TypeScript error.
+- `git diff --check`: pass. Focused secret scan and screenshot/title-capability scan: clean.
 
 ## Manual QA And External Configuration
 
-- Authenticated visual browser QA was not run: Cognito/Supabase users were deleted and the in-app browser plugin could not initialize in this session.
-- Production Supabase still needs the new migration. Local migration success does not update Supabase.
-- Upload the generated ZIP to a controlled HTTPS release location and set Vercel `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` to that URL.
-- A Windows code-signing certificate and CI signing secret are required before broad employee distribution. The current ZIP is unsigned and may trigger SmartScreen.
-- Deploy API/migration before distributing Agent 0.4.0, then deploy Web.
+- A real production pairing code was not consumed in automated QA. Full install/pair/restart/report verification on a separate Employee computer remains manual.
+- Publish the new EXE under a new GitHub release and update Vercel `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` to its direct download URL, then redeploy API and Web.
+- No database migration is required in this round.
 
 ## Intentionally Not Changed
 
-- Browser domain tracking/extension was not changed in this Desktop Agent round.
-- Cognito, invitation flow, Virtual Office, Notices, and existing tenant/RBAC policy were not redesigned.
-- No production Supabase, Render, Vercel, or release-hosting setting was changed.
+- Foreground tracking rules, Reports aggregation, Cognito, invitations, Browser Extension/domain tracking, Virtual Office, Notices, and database schema were not redesigned.
+- No auto-update channel, MDM deployment, privileged service, or tamper prevention was added.
 
 ## Remaining Risks And Next Step
 
-- Forced process termination cannot transmit an exact final packet after the process is already dead; WorkMap reports interruption from the last ten-second heartbeat and marks it after 30 seconds. This is an inherent bounded estimate, not an exact kill timestamp.
-- The installer is current-user auto-start, not a privileged Windows Service, and has no signed tray UI, auto-update channel, central MDM deployment, or tamper prevention yet.
-- TXT reports are generated on demand from persisted API data; no scheduled pre-generated document archive was added.
-- Next: apply the production migration, upload/sign the ZIP, configure the Web download URL, deploy API/Web, then test on a genuinely separate Windows employee computer.
+- The installer is not Authenticode-signed and can trigger Windows SmartScreen. Obtain a Windows code-signing certificate before broad distribution.
+- Browsers cannot execute a downloaded installer automatically; the Employee must open the downloaded EXE once. The installed Agent then launches automatically and runs at future Windows sign-ins.
+- Next: commit/push, deploy API/Web, publish `desktop-agent-v0.5.0`, update the Vercel download variable, then run the separate-computer pairing checklist.

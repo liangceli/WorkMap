@@ -18,7 +18,7 @@ type NativeObservation = {
 export class WindowsForegroundAdapter {
   constructor(
     private readonly idleThresholdSeconds = 300,
-    private readonly scriptPath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "windows-foreground.ps1"),
+    private readonly scriptPath = resolveAgentScript("windows-foreground.ps1"),
   ) {}
 
   async sample(): Promise<ForegroundSample> {
@@ -32,6 +32,13 @@ export class WindowsForegroundAdapter {
     );
     return minimizeWindowsObservation(JSON.parse(stdout.trim()) as NativeObservation);
   }
+}
+
+function resolveAgentScript(name: string) {
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  return resourcesPath
+    ? resolve(resourcesPath, "agent-scripts", name)
+    : resolve(dirname(fileURLToPath(import.meta.url)), "..", "scripts", name);
 }
 
 export function minimizeWindowsObservation(observation: NativeObservation): ForegroundSample {

@@ -1,0 +1,162 @@
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import { loadAgentConfig } from "../credentialStore.js";
+import { getAgentDataDirectory, readJson } from "../fileStore.js";
+import { pairDesktopAgent, safePairingError, type PairingProgress } from "../pairing.js";
+import { DesktopAgentRuntime } from "../runtime.js";
+import type { AgentStatus } from "../types.js";
+
+const currentDirectory = dirname(fileURLToPath(import.meta.url));
+const rendererDirectory = resolve(currentDirectory, "..", "..", "renderer");
+const isBackgroundLaunch = process.argv.includes("--background");
+const icon = nativeImage.createFromPath(join(rendererDirectory, "workmap-mark.svg"));
+
+let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let runtime: DesktopAgentRuntime | null = null;
+let runtimePromise: Promise<void> | null = null;
+let paired = false;
+let allowQuit = false;
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => showWindow());
+  void app.whenReady().then(startApplication);
+}
+
+async function startApplication() {
+  if (process.env.WORKMAP_AGENT_SKIP_LEGACY_MIGRATION !== "1") await removeLegacyAutoStart();
+  paired = Boolean(await loadAgentConfig());
+  createWindow();
+  createTray();
+  registerIpc();
+
+  if (paired) {
+    configureAutoStart();
+    await startRuntime();
+  }
+
+  if (!isBackgroundLaunch || !paired) showWindow();
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 940,
+    height: 690,
+    minWidth: 760,
+    minHeight: 600,
+    show: false,
+    backgroundColor: "#f3f7f5",
+    icon,
+    title: "WorkMap Desktop Agent",
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: join(rendererDirectory, "preload.cjs"),
+    },
+  });
+
+  void mainWindow.loadFile(join(rendererDirectory, "index.html"));
+  mainWindow.on("close", (event) => {
+    if (allowQuit || !paired) return;
+    event.preventDefault();
+    mainWindow?.hide();
+  });
+  mainWindow.on("closed", () => { mainWindow = null; });
+}
+
+function createTray() {
+  tray = new Tray(icon.resize({ width: 20, height: 20 }));
+  tray.setToolTip("WorkMap Desktop Agent");
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Open WorkMap Agent", click: showWindow },
+    { type: "separator" },
+    { label: "Quit Agent", click: () => void quitAgent() },
+  ]));
+  tray.on("double-click", showWindow);
+}
+
+function registerIpc() {
+  ipcMain.handle("agent:get-state", getUiState);
+  ipcMain.handle("agent:pair", async (event, code: unknown) => {
+    if (typeof code !== "string") throw new Error("Enter a WorkMap pairing code.");
+    const progress = (stage: PairingProgress) => event.sender.send("agent:pair-progress", stage);
+    try {
+      const result = await pairDesktopAgent(code, undefined, progress);
+      paired = true;
+      configureAutoStart();
+      await startRuntime();
+      return result;
+    } catch (error) {
+      throw new Error(safePairingError(error));
+    }
+  });
+  ipcMain.handle("agent:hide", () => mainWindow?.hide());
+  ipcMain.handle("agent:open-workmap", () => shell.openExternal("https://work-map-teal.vercel.app"));
+  ipcMain.handle("agent:quit", quitAgent);
+}
+
+async function getUiState() {
+  const status = await readJson<AgentStatus>(join(getAgentDataDirectory(), "status.json"), {
+    state: paired ? "offline" : "unpaired",
+    queuedEvents: 0,
+  });
+  const config = await loadAgentConfig();
+  paired = Boolean(config);
+  return {
+    paired,
+    status,
+    deviceId: config?.deviceId ?? null,
+    startsWithWindows: app.getLoginItemSettings().openAtLogin,
+    version: app.getVersion(),
+  };
+}
+
+async function startRuntime() {
+  if (runtimePromise) return;
+  const config = await loadAgentConfig();
+  if (!config) return;
+  runtime = new DesktopAgentRuntime(config);
+  runtimePromise = runtime.run()
+    .catch(() => undefined)
+    .finally(() => {
+      runtime = null;
+      runtimePromise = null;
+    });
+}
+
+function configureAutoStart() {
+  if (!app.isPackaged) return;
+  app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true, args: ["--background"] });
+}
+
+function showWindow() {
+  if (!mainWindow) createWindow();
+  mainWindow?.show();
+  mainWindow?.focus();
+}
+
+async function quitAgent() {
+  if (runtime) await runtime.shutdown();
+  allowQuit = true;
+  app.quit();
+}
+
+function removeLegacyAutoStart() {
+  if (process.platform !== "win32") return Promise.resolve();
+  return new Promise<void>((resolvePromise) => {
+    execFile(
+      "reg.exe",
+      ["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "WorkMapDesktopAgent", "/f"],
+      { windowsHide: true },
+      () => resolvePromise(),
+    );
+  });
+}
+
+app.on("before-quit", () => { allowQuit = true; });
+app.on("window-all-closed", () => undefined);

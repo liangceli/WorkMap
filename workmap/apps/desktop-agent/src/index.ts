@@ -1,6 +1,6 @@
-import { exchangePairingCode } from "./apiClient.js";
-import { loadAgentConfig, saveAgentConfig } from "./credentialStore.js";
-import { FileEventQueue, readJson, getAgentDataDirectory, writeAgentStatus, writeTrackingCheckpoint } from "./fileStore.js";
+import { loadAgentConfig } from "./credentialStore.js";
+import { readJson, getAgentDataDirectory } from "./fileStore.js";
+import { pairDesktopAgent } from "./pairing.js";
 import { DesktopAgentRuntime } from "./runtime.js";
 import type { AgentStatus } from "./types.js";
 import { join } from "node:path";
@@ -10,8 +10,6 @@ export * from "./fileStore.js";
 export * from "./trackingState.js";
 export * from "./types.js";
 export * from "./windowsForeground.js";
-
-const AGENT_VERSION = "desktop-agent-windows-alpha/0.4.0";
 
 async function main() {
   const [command = "run"] = process.argv.slice(2);
@@ -36,27 +34,9 @@ async function main() {
 
 async function pair() {
   const code = readArgument("--code");
-  const apiBaseUrl = readArgument("--api").replace(/\/+$/, "");
-  if (!/^https:\/\//i.test(apiBaseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBaseUrl)) {
-    throw new Error("API URL must use HTTPS, except localhost development.");
-  }
-  await writeAgentStatus({ state: "pairing", queuedEvents: 0 });
-  try {
-    const result = await exchangePairingCode(apiBaseUrl, code, AGENT_VERSION);
-    const previous = await loadAgentConfig();
-    if (previous && previous.deviceId !== result.device.id) {
-      const queue = new FileEventQueue();
-      await queue.load();
-      await queue.clear();
-      await writeTrackingCheckpoint(null);
-    }
-    await saveAgentConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, agentVersion: AGENT_VERSION });
-    await writeAgentStatus({ state: "connected", deviceId: result.device.id, queuedEvents: 0 });
-    console.info(`Desktop Agent paired for device ${result.device.id}. Credential stored with Windows DPAPI.`);
-  } catch (error) {
-    await writeAgentStatus({ state: "unpaired", queuedEvents: 0, error: safeError(error) });
-    throw error;
-  }
+  const apiBaseUrl = readArgument("--api");
+  const result = await pairDesktopAgent(code, apiBaseUrl);
+  console.info(`Desktop Agent paired for device ${result.deviceId}. Credential stored with Windows DPAPI.`);
 }
 
 async function showStatus() {

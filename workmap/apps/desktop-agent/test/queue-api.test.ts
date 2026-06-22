@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentApiError, sendAppUsage, sendHeartbeat, startAgentSession, stopAgentSession } from "../src/apiClient.js";
+import { AgentApiError, sendAppUsage, sendHeartbeat, startAgentSession, stopAgentSession, waitForApiReady } from "../src/apiClient.js";
 import { EVENT_QUEUE_CAPACITY, FileEventQueue } from "../src/fileStore.js";
 import type { AgentConfig, AppUsageEvent } from "../src/types.js";
 
@@ -48,6 +48,21 @@ test("API distinguishes auth and network failures", async () => {
   globalThis.fetch = async () => { throw new Error("offline"); };
   await assert.rejects(() => sendHeartbeat(config), (error: unknown) => error instanceof AgentApiError && error.status === undefined);
   globalThis.fetch = originalFetch;
+});
+
+test("pairing readiness warms the deployed API before code exchange", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { url: string; method?: string } | null = null;
+  globalThis.fetch = async (input, init) => {
+    request = { url: String(input), method: init?.method };
+    return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
+  };
+  try {
+    await waitForApiReady(config.apiBaseUrl);
+    assert.deepEqual(request, { url: `${config.apiBaseUrl}/health`, method: "GET" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("persistent queue retries, acknowledges and enforces capacity", async () => {

@@ -37,6 +37,7 @@ export class DevicesService {
       hostname: device.hostname,
       agentVersion: device.agentVersion,
       lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
+      revokedAt: device.revokedAt?.toISOString() ?? null,
       user: device.user,
     }));
   }

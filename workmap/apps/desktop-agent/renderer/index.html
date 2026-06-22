@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WorkMap Desktop Agent</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <img src="workmap-mark.svg" alt="" width="38" height="38" />
+        <div><strong>WorkMap</strong><span>Desktop Agent</span></div>
+      </div>
+      <div id="status-chip" class="status-chip status-neutral"><span></span><b>Checking</b></div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <p class="eyebrow">PRIVATE BY DESIGN</p>
+        <h1 id="page-title">Connect this computer</h1>
+        <p id="page-subtitle">Enter the one-time code shown in your WorkMap device setup page.</p>
+      </section>
+
+      <div class="content-grid">
+        <section class="main-panel">
+          <div id="pair-view">
+            <label for="pair-code">Pairing code</label>
+            <div class="pair-row">
+              <input id="pair-code" inputmode="text" autocomplete="one-time-code" maxlength="9" placeholder="ABCD-2345" aria-describedby="pair-help" />
+              <button id="pair-button" type="button">Connect Agent</button>
+            </div>
+            <p id="pair-help" class="field-help">The code expires after 10 minutes and works only once.</p>
+            <div id="pair-progress" class="progress" hidden>
+              <div class="progress-track"><span></span></div>
+              <strong id="progress-title">Preparing secure connection...</strong>
+              <p id="progress-detail">This can take up to a minute while the WorkMap service wakes up.</p>
+            </div>
+            <div id="pair-error" class="error" role="alert" hidden></div>
+          </div>
+
+          <div id="connected-view" hidden>
+            <div class="success-heading">
+              <div class="success-icon">&#10003;</div>
+              <div><h2>Agent connected</h2><p>Foreground app activity is being summarized securely.</p></div>
+            </div>
+            <dl class="metrics">
+              <div><dt>Current foreground app</dt><dd id="current-app">Waiting for activity</dd></div>
+              <div><dt>Last secure heartbeat</dt><dd id="last-heartbeat">Starting...</dd></div>
+              <div><dt>Pending uploads</dt><dd id="queued-events">0</dd></div>
+              <div><dt>Starts with Windows</dt><dd id="auto-start">Enabled</dd></div>
+            </dl>
+            <div class="connected-actions">
+              <button id="hide-button" class="primary" type="button">Continue in background</button>
+              <button id="open-workmap-button" class="secondary" type="button">Open WorkMap</button>
+            </div>
+            <p class="background-note">Closing this window keeps the Agent running in the system tray.</p>
+          </div>
+        </section>
+
+        <aside class="privacy-panel">
+          <h2>What WorkMap records</h2>
+          <ul class="collected">
+            <li>Foreground application name</li>
+            <li>Active start, end, and duration</li>
+            <li>Agent connection and interruption</li>
+          </ul>
+          <h3>Never collected</h3>
+          <ul class="not-collected">
+            <li>Screenshots or screen recordings</li>
+            <li>Keystrokes or clipboard</li>
+            <li>Files, window titles, or messages</li>
+            <li>Camera or microphone</li>
+          </ul>
+          <p>Background and minimized apps do not count. Activity under five seconds is discarded.</p>
+        </aside>
+      </div>
+    </main>
+
+    <footer><span id="device-label">Not paired</span><span id="version-label"></span></footer>
+    <script src="app.js"></script>
+  </body>
+</html>

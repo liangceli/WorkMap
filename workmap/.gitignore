@@ -14,3 +14,5 @@ apps/desktop-agent/alpha-windows/runtime
 *.log
 .DS_Store
 Thumbs.db
+# Generated Desktop Agent installer resources
+apps/desktop-agent/build/

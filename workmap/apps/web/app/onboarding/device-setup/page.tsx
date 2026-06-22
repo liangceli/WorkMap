@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { createDevicePairingCode, getDevicePairingStatus } from "../../../lib/api/devicesApi";
+import { createDevicePairingCode, getDevicePairingStatus, listDevices } from "../../../lib/api/devicesApi";
 import { getWorkMapApiAuthOptions } from "../../../lib/api/apiAuth";
 import type { WorkMapApiPairingCode, WorkMapApiPairingStatus } from "../../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
@@ -27,6 +27,32 @@ export default function DeviceSetupPage() {
   const [pairingStatus, setPairingStatus] = useState<WorkMapApiPairingStatus["status"] | null>(null);
   const [pairingState, setPairingState] = useState<"idle" | "loading" | "error">("idle");
   const [pairingMessage, setPairingMessage] = useState("");
+  const [hasPairedDesktopAgent, setHasPairedDesktopAgent] = useState(false);
+  const [checkingDesktopAgent, setCheckingDesktopAgent] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkExistingDesktopAgent() {
+      const auth = await getWorkMapApiAuthOptions();
+      if (!auth.available) {
+        if (!cancelled) setCheckingDesktopAgent(false);
+        return;
+      }
+      const result = await listDevices(auth.options);
+      if (!cancelled) {
+        setHasPairedDesktopAgent(
+          result.ok && result.data.some(
+            (device) => !device.revokedAt && device.agentVersion?.startsWith("desktop-agent-windows/"),
+          ),
+        );
+        setCheckingDesktopAgent(false);
+      }
+    }
+
+    void checkExistingDesktopAgent();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!pairing || pairingStatus !== "pending") return;
@@ -43,6 +69,9 @@ export default function DeviceSetupPage() {
       if (cancelled) return;
       if (result.ok) {
         setPairingStatus(result.data.status);
+        if (result.data.status === "paired" && result.data.clientType === "DESKTOP_AGENT") {
+          setHasPairedDesktopAgent(true);
+        }
         if (result.data.status !== "pending") return;
       }
       timer = setTimeout(() => void poll(), 2_000);
@@ -102,16 +131,16 @@ export default function DeviceSetupPage() {
         <section style={styles.pairingPanel}>
           <div>
             <h2 style={styles.cardTitle}>Pair a tracking client</h2>
-            <p style={styles.subtitle}>Install the Windows Agent once, then generate its one-time code. After pairing, it starts automatically at Windows sign-in.</p>
+            <p style={styles.subtitle}>Install the Windows Agent once, then connect it with a one-time code. After pairing, it starts automatically at Windows sign-in.</p>
           </div>
           <ol style={styles.setupSteps}>
-            <li>Download and open the Windows Agent setup package on this employee computer.</li>
-            <li>Generate a Desktop Agent code below and enter it when setup asks.</li>
-            <li>Wait for paired successfully. Future Windows sign-ins start the Agent automatically.</li>
+            <li>Download and open the Windows installer on this employee computer.</li>
+            <li>Generate a Desktop Agent code below and enter it in the Agent window.</li>
+            <li>Wait for the connected confirmation. Future Windows sign-ins start the Agent automatically.</li>
           </ol>
           <div style={styles.actions}>
             {desktopAgentDownloadUrl ? (
-              <a href={desktopAgentDownloadUrl} download style={styles.downloadButton}>Download Windows Agent</a>
+              <a href={desktopAgentDownloadUrl} download style={styles.downloadButton}>Download Windows installer</a>
             ) : (
               <span style={styles.downloadUnavailable}>Windows download pending release configuration</span>
             )}
@@ -135,9 +164,24 @@ export default function DeviceSetupPage() {
             </div>
           ) : null}
           {pairingMessage ? <p style={styles.error}>{pairingMessage}</p> : null}
+          <p style={hasPairedDesktopAgent ? styles.readyMessage : styles.requirementMessage}>
+            {checkingDesktopAgent
+              ? "Checking this employee's Desktop Agent connection..."
+              : hasPairedDesktopAgent
+                ? "Desktop Agent connected. You can continue to the virtual office."
+                : "Download, install, and pair the Desktop Agent to continue."}
+          </p>
         </section>
 
-        <button type="button" onClick={continueToOffice} style={styles.button}>
+        <button
+          type="button"
+          onClick={continueToOffice}
+          disabled={!hasPairedDesktopAgent || checkingDesktopAgent}
+          style={{
+            ...styles.button,
+            ...(!hasPairedDesktopAgent || checkingDesktopAgent ? styles.buttonDisabled : null),
+          }}
+        >
           Continue to virtual office
         </button>
       </section>
@@ -229,6 +273,10 @@ const styles = {
     cursor: "pointer",
     fontWeight: 900,
   },
+  buttonDisabled: {
+    cursor: "not-allowed",
+    opacity: 0.45,
+  },
   pairingPanel: {
     ...wmStyles.card,
     padding: "16px",
@@ -288,5 +336,17 @@ const styles = {
     margin: 0,
     color: wm.colors.error,
     fontSize: "14px",
+  },
+  requirementMessage: {
+    margin: 0,
+    color: wm.colors.textMuted,
+    fontSize: "13px",
+    fontWeight: 700,
+  },
+  readyMessage: {
+    margin: 0,
+    color: wm.colors.success,
+    fontSize: "13px",
+    fontWeight: 800,
   },
 };

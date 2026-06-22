@@ -7,7 +7,7 @@ import type { AgentConfig } from "./types.js";
 
 type StoredConfig = Omit<AgentConfig, "credential"> & { protectedCredential: string };
 
-const scriptPath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "credential-protection.ps1");
+const scriptPath = resolveAgentScript("credential-protection.ps1");
 
 export async function saveAgentConfig(config: AgentConfig, filePath = join(getAgentDataDirectory(), "config.json")) {
   const protectedCredential = await runCredentialScript("Protect", config.credential);
@@ -35,4 +35,11 @@ function runCredentialScript(mode: "Protect" | "Unprotect", input: string) {
     );
     child.stdin?.end(input);
   });
+}
+
+function resolveAgentScript(name: string) {
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  return resourcesPath
+    ? join(resourcesPath, "agent-scripts", name)
+    : resolve(dirname(fileURLToPath(import.meta.url)), "..", "scripts", name);
 }
