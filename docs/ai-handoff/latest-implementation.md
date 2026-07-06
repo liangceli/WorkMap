@@ -537,3 +537,39 @@ Not applicable. This change affects Git tracking only.
   - Publish/build a new Desktop Agent `0.5.2` installer and install it on the Employee computer.
   - Deploy API/Web changes together with the Agent release.
   - Run the planned manual timing matrix: focused app, 50-second no-input idle, two-monitor A/B/C, minimized app, Microsoft Store/UWP, lock/unlock, and Owner/Employee report comparison against stopwatch.
+
+---
+
+## 2026-07-06 Desktop Agent 0.5.2 Installer Artifact
+
+- Original task brief: clarify why `desktop-agent-v0.5.2` is not visible and why the project still appears to have `0.5.1`.
+- Finding:
+  - Desktop Agent source version is `0.5.2` in `workmap/apps/desktop-agent/package.json`.
+  - Desktop Agent pairing version is `desktop-agent-windows/0.5.2` in `workmap/apps/desktop-agent/src/pairing.ts`.
+  - Before this round, the local installer artifact had not been generated; `workmap/artifacts/desktop-agent/` still only contained the previous `0.5.0` and `0.5.1` installers.
+  - `workmap/artifacts/` is ignored by `workmap/.gitignore`, so generated installers do not show as git changes and are not automatically published to GitHub Releases.
+- Changed/generated files:
+  - Generated ignored local artifact: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.2.exe`
+  - Generated ignored local blockmap: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.2.exe.blockmap`
+  - Updated handoff docs only.
+- Artifact details:
+  - Installer path: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.2.exe`
+  - Installer size: 91,936,597 bytes.
+  - SHA-256: `DD5A34F962BF7ADF1F0DE809F01D187632BFA4298B634EACA7E8113793955446`
+  - Authenticode status: `NotSigned`.
+- Verification commands and results:
+  - `corepack pnpm --filter @workmap/desktop-agent release:windows`: passed and generated the NSIS installer.
+  - `Get-Item workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.2.exe`: confirmed file exists.
+  - `Get-FileHash -Algorithm SHA256 ...0.5.2.exe`: produced the SHA-256 above.
+  - `Get-AuthenticodeSignature ...0.5.2.exe`: confirmed `NotSigned`.
+  - `git check-ignore -v ...0.5.2.exe`: confirmed artifact is ignored by `workmap/.gitignore` rule `/artifacts`.
+- Manual QA:
+  - Not run on the Employee computer.
+  - Not uploaded to GitHub Release.
+- What was intentionally not changed:
+  - No Desktop Agent source code changes in this round.
+  - No API/Web/deployment/auth/schema/RBAC changes.
+  - No GitHub Release asset upload and no Vercel environment update.
+- Remaining risks and next steps:
+  - To make the employee download button use this version, create/upload a GitHub Release asset under tag `desktop-agent-v0.5.2`, set `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` to the direct `0.5.2` asset URL, redeploy Web, then reinstall/upgrade the Employee computer.
+  - Because the installer is unsigned, Windows SmartScreen/security warnings remain expected until Authenticode signing is added.

@@ -301,3 +301,44 @@ Not run on the real Employee computer and not visually reviewed in a browser. Au
 ### Pass/Fail Recommendation
 
 Pass for local implementation and automated verification. The next round can proceed to release/deploy/manual QA, but should not mark the timing feature production-accepted until real-device stopwatch QA passes.
+
+---
+
+## 2026-07-06 Desktop Agent 0.5.2 Installer Artifact QA
+
+### Reviewed Implementation
+
+Reviewed the Desktop Agent package version, pairing version, generated local NSIS artifact, blockmap, hash, signature state, and git ignore rule for artifacts.
+
+### Diff Review Summary
+
+- No runtime source code changed in this round.
+- `corepack pnpm --filter @workmap/desktop-agent release:windows` generated local ignored files under `workmap/artifacts/desktop-agent/`.
+- The reason the user could not see `0.5.2` before this round was that the `0.5.2` installer artifact had not yet been built, and artifact output is git-ignored.
+
+### Findings Ordered By Severity
+
+- High: none in the local artifact generation path.
+- Medium release dependency: `WorkMap-Desktop-Agent-Setup-0.5.2.exe` exists locally but still must be uploaded to a GitHub Release and wired into `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL`.
+- Medium signing risk: the installer is `NotSigned`, so Windows warnings are expected.
+- Low documentation/history confusion: older handoff sections correctly refer to prior `0.5.1` work; the latest section now records the current `0.5.2` artifact.
+
+### Test And Verification Status
+
+- Desktop Agent source version: `0.5.2`.
+- Desktop Agent pairing version: `desktop-agent-windows/0.5.2`.
+- `corepack pnpm --filter @workmap/desktop-agent release:windows`: passed.
+- Generated installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.2.exe`.
+- Installer size: 91,936,597 bytes.
+- SHA-256: `DD5A34F962BF7ADF1F0DE809F01D187632BFA4298B634EACA7E8113793955446`.
+- Authenticode: `NotSigned`.
+- `git check-ignore -v`: artifact ignored by `workmap/.gitignore` `/artifacts`.
+- `git diff --check`: passed.
+
+### Manual QA Status
+
+Not run. The artifact was built locally only and was not installed on the Employee computer.
+
+### Risks And Recommendation
+
+Pass for local installer generation. The next round can proceed to GitHub Release upload, Vercel URL update, Web redeploy, Employee reinstall, and stopwatch QA.
