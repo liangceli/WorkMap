@@ -145,6 +145,14 @@ Commit `8719f5d` made browser origin handling explicit for alpha deployment.
 
 `GET /reports/usage-summary?scope=company` returns company aggregate app/domain rows only when `canViewTeamReports()` allows it.
 
+`GET /reports/agent-status` is the lightweight live foreground overlay used by Reports between persisted summary refreshes:
+
+- User scope returns the selected visible user's current Desktop Agent foreground status and activity revision.
+- `scope=company` returns tenant-scoped live foreground app aggregates plus per-employee live active totals; optional `departmentId` keeps the existing department boundary.
+- Only fresh, non-idle, open Agent sessions contribute. Segments shorter than five seconds, minimized/background applications, idle sessions, stopped sessions, and off-tenant sessions do not contribute.
+- `from`/`to` use the same UTC report-range validation as usage summaries.
+- Company scope still requires `canViewTeamReports()`; individual scope still uses `canViewEmployeeActivity()`.
+
 Frontend type:
 
 - `userId: string`
@@ -161,6 +169,7 @@ Current reporting boundary:
 - Off-tenant report targets return safe not-found behavior.
 - Company aggregate summaries do not return raw employee event rows.
 - Summary metadata can include registered devices, active devices in 24 hours, and users with activity rows.
+- `activityRevision` lets the frontend reload persisted summaries only after a completed Desktop Agent event changes, while current open foreground duration is polled through the live overlay.
 
 ## Device Contract
 

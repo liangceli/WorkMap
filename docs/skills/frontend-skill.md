@@ -104,6 +104,7 @@ Pilot readiness API wrappers:
 
 - `lib/api/healthApi.ts` wraps `GET /health`.
 - Reports API types now match backend `/reports/usage-summary` with `apps[]` and `websites[]` rows containing active/idle seconds.
+- Reports polls `/reports/agent-status` every 10 seconds for both selected-user and authorized company views. It overlays only fresh non-idle foreground duration, refreshes persisted summaries when `activityRevision` changes, and never counts minimized/background apps as current active use.
 - `lib/api/tenantOnboardingApi.ts` wraps tenant onboarding status/workspace creation.
 - `lib/api/invitationsApi.ts` wraps invitation list/create/accept.
 - `lib/api/companiesApi.ts` wraps current company summary.

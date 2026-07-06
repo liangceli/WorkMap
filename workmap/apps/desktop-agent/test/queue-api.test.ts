@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentApiError, sendAppUsage, sendHeartbeat, startAgentSession, stopAgentSession, waitForApiReady } from "../src/apiClient.js";
 import { EVENT_QUEUE_CAPACITY, FileEventQueue } from "../src/fileStore.js";
+import { shouldSendHeartbeat } from "../src/runtime.js";
 import type { AgentConfig, AppUsageEvent } from "../src/types.js";
 
 const config: AgentConfig = {
@@ -81,6 +82,12 @@ test("persistent queue retries, acknowledges and enforces capacity", async () =>
     await queue.enqueueMany(Array.from({ length: EVENT_QUEUE_CAPACITY + 5 }, (_, index) => event(index + 10)), 100_000);
     assert.equal(queue.size(), EVENT_QUEUE_CAPACITY);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("an app transition triggers an immediate heartbeat before the next scheduled interval", () => {
+  assert.equal(shouldSendHeartbeat(1, 5_000, 10_000), true);
+  assert.equal(shouldSendHeartbeat(0, 5_000, 10_000), false);
+  assert.equal(shouldSendHeartbeat(0, 10_000, 10_000), true);
 });
 
 function event(index: number): AppUsageEvent {

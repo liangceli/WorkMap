@@ -15,6 +15,7 @@ type SummaryQuery = {
 type ReportScope = "user" | "company";
 type ReportRange = { from: Date; to: Date; fromDate: string; toDate: string };
 type UsageFilter = { companyId: string; userId?: string; userIds?: string[]; range: ReportRange };
+type LiveAppSegment = { userId: string; displayName: string; appName: string; activeSeconds: number };
 
 const DEFAULT_REPORT_DAYS = 30;
 const MAX_REPORT_DAYS = 366;
@@ -52,12 +53,13 @@ export class ReportsService {
     }
 
     const filter = { companyId: context.companyId, userId, range };
-    const [summary, deviceCoverage, agentStatus, agentSessions, appTimeline] = await Promise.all([
+    const [summary, deviceCoverage, agentStatus, agentSessions, appTimeline, activityRevision] = await Promise.all([
       this.getUsageRows(filter),
       this.getDeviceCoverage(filter),
       this.getAgentStatus(filter),
       this.getAgentSessions(filter),
       this.getAppTimeline(filter),
+      this.getActivityRevision(filter),
     ]);
 
     return {
@@ -71,14 +73,47 @@ export class ReportsService {
       agentSessions,
       appTimeline,
       employeeUsage: [],
+      activityRevision,
     };
   }
 
-  async getAgentLiveStatus(context: RequestContext, requestedUserId?: string) {
-    const userId = await this.resolveVisibleReportUserId(context, requestedUserId);
+  async getAgentLiveStatus(context: RequestContext, query: SummaryQuery) {
+    const scope = normalizeReportScope(query.scope);
+    const range = parseReportRange(query.from, query.to);
+    if (scope === "company") {
+      if (query.userId) throw new BadRequestException("userId cannot be combined with company scope.");
+      if (!canViewTeamReports(context)) throw new ForbiddenException("Company reports are not visible to this role.");
+      const userIds = query.departmentId
+        ? await this.resolveDepartmentUserIds(context.companyId, query.departmentId)
+        : undefined;
+      const filter = { companyId: context.companyId, userIds, range };
+      const [segments, activityRevision] = await Promise.all([
+        this.getLiveAppSegments(filter),
+        this.getActivityRevision(filter),
+      ]);
+      return {
+        scope: "company" as const,
+        userId: null,
+        departmentId: query.departmentId ?? null,
+        apps: aggregateLiveApps(segments),
+        employeeUsage: aggregateLiveEmployees(segments),
+        activityRevision,
+      };
+    }
+
+    if (query.departmentId) throw new BadRequestException("departmentId is available only for company scope.");
+    const userId = await this.resolveVisibleReportUserId(context, query.userId);
+    const filter = { companyId: context.companyId, userId, range };
+    const [agentStatus, activityRevision] = await Promise.all([
+      this.getAgentStatus(filter),
+      this.getActivityRevision(filter),
+    ]);
     return {
+      scope: "user" as const,
       userId,
-      agentStatus: await this.getAgentStatus({ companyId: context.companyId, userId }),
+      departmentId: null,
+      agentStatus,
+      activityRevision,
     };
   }
 
@@ -104,10 +139,11 @@ export class ReportsService {
     });
 
     const filter = { companyId: context.companyId, userIds, range };
-    const [summary, deviceCoverage, employeeUsage] = await Promise.all([
+    const [summary, deviceCoverage, employeeUsage, activityRevision] = await Promise.all([
       this.getUsageRows(filter),
       this.getDeviceCoverage(filter),
       this.getEmployeeUsage(filter),
+      this.getActivityRevision(filter),
     ]);
 
     return {
@@ -121,6 +157,7 @@ export class ReportsService {
       agentSessions: [],
       appTimeline: [],
       employeeUsage,
+      activityRevision,
     };
   }
 
@@ -262,6 +299,53 @@ export class ReportsService {
       currentAppActiveSeconds,
       todayActiveSeconds: (todaySummary._sum.activeSeconds ?? 0) + currentAppActiveSeconds,
     };
+  }
+
+  private async getLiveAppSegments(filter: UsageFilter): Promise<LiveAppSegment[]> {
+    const now = Date.now();
+    const rangeEndExclusive = addUtcDays(filter.range.to, 1).getTime();
+    if (now < filter.range.from.getTime() || now >= rangeEndExclusive) return [];
+
+    const sessions = await this.prisma.agentSession.findMany({
+      where: {
+        companyId: filter.companyId,
+        ...identityFilter(filter),
+        endedAt: null,
+        lastHeartbeatAt: { gte: new Date(now - 30_000) },
+        currentAppName: { not: null },
+        currentAppStartedAt: { not: null },
+        currentAppIsIdle: false,
+      },
+      include: { user: { select: { displayName: true } } },
+    });
+
+    return sessions.flatMap((session) => {
+      if (!session.currentAppName || !session.currentAppStartedAt) return [];
+      const segmentStart = Math.max(session.currentAppStartedAt.getTime(), filter.range.from.getTime());
+      const segmentEnd = Math.min(now, session.lastHeartbeatAt.getTime() + 15_000, rangeEndExclusive);
+      const activeSeconds = Math.max(0, Math.round((segmentEnd - segmentStart) / 1000));
+      if (activeSeconds < 5) return [];
+      return [{
+        userId: session.userId,
+        displayName: session.user.displayName,
+        appName: session.currentAppName,
+        activeSeconds,
+      }];
+    });
+  }
+
+  private async getActivityRevision(filter: UsageFilter) {
+    const latest = await this.prisma.activityEvent.aggregate({
+      where: {
+        companyId: filter.companyId,
+        ...identityFilter(filter),
+        source: ActivityEventSource.DESKTOP_AGENT,
+        eventType: ActivityEventType.APP,
+        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+      },
+      _max: { createdAt: true },
+    });
+    return latest._max.createdAt?.toISOString() ?? null;
   }
 
   private async getAgentSessions(filter: UsageFilter) {
@@ -408,6 +492,28 @@ function reportRangeResponse(range: ReportRange) {
 
 function effectiveProductivityLabel(label: string, category: string | null) {
   return label === "UNCATEGORISED" && category ? "PRODUCTIVE" : label;
+}
+
+function aggregateLiveApps(segments: LiveAppSegment[]) {
+  const totals = new Map<string, number>();
+  for (const segment of segments) totals.set(segment.appName, (totals.get(segment.appName) ?? 0) + segment.activeSeconds);
+  return Array.from(totals, ([appName, activeSeconds]) => ({ appName, activeSeconds }))
+    .sort((left, right) => right.activeSeconds - left.activeSeconds || left.appName.localeCompare(right.appName));
+}
+
+function aggregateLiveEmployees(segments: LiveAppSegment[]) {
+  const totals = new Map<string, { userId: string; displayName: string; activeSeconds: number }>();
+  for (const segment of segments) {
+    const current = totals.get(segment.userId) ?? {
+      userId: segment.userId,
+      displayName: segment.displayName,
+      activeSeconds: 0,
+    };
+    current.activeSeconds += segment.activeSeconds;
+    totals.set(segment.userId, current);
+  }
+  return Array.from(totals.values())
+    .sort((left, right) => right.activeSeconds - left.activeSeconds || left.displayName.localeCompare(right.displayName));
 }
 
 function utcDateOnly(date: Date) {

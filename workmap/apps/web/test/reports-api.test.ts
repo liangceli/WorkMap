@@ -32,7 +32,7 @@ test("reports API sends date, department and scope filters", async () => {
   }
 });
 
-test("live Agent polling requests only the selected employee status endpoint", async () => {
+test("live Agent polling sends selected employee and report range", async () => {
   const originalFetch = globalThis.fetch;
   let requestedUrl = "";
   globalThis.fetch = async (input) => {
@@ -47,11 +47,41 @@ test("live Agent polling requests only the selected employee status endpoint", a
       baseUrl: "https://api.workmap.test",
       token: "test-token",
       userId: "11111111-1111-4111-8111-111111111111",
+      scope: "user",
+      from: "2026-06-01",
+      to: "2026-06-21",
     });
     assert.equal(result.ok, true);
     assert.match(requestedUrl, /\/reports\/agent-status/);
     assert.match(requestedUrl, /userId=11111111/);
-    assert.doesNotMatch(requestedUrl, /from=/);
+    assert.match(requestedUrl, /scope=user/);
+    assert.match(requestedUrl, /from=2026-06-01/);
+    assert.match(requestedUrl, /to=2026-06-21/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("company live Agent polling keeps department scope", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = "";
+  globalThis.fetch = async (input) => {
+    requestedUrl = String(input);
+    return new Response(JSON.stringify({ scope: "company", apps: [], employeeUsage: [], activityRevision: null }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  try {
+    const result = await getAgentLiveStatus({
+      baseUrl: "https://api.workmap.test",
+      token: "test-token",
+      scope: "company",
+      departmentId: "66666666-6666-4666-8666-666666666666",
+    });
+    assert.equal(result.ok, true);
+    assert.match(requestedUrl, /scope=company/);
+    assert.match(requestedUrl, /departmentId=66666666/);
   } finally {
     globalThis.fetch = originalFetch;
   }

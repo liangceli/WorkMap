@@ -54,6 +54,7 @@ async function main() {
   testControllerGuards();
   await testDeviceRegistrationHeartbeatAndOwnership();
   await testActivityIngestionAndReportsLoop();
+  await testOwnerSeesLiveForegroundUsageBeforeAppSwitch();
   await testCrossMidnightUsageIsSplitPrecisely();
   await testReportAccessBoundaries();
   await testPlatformAdminAggregateBoundary();
@@ -247,7 +248,11 @@ async function testReportAccessBoundaries() {
     ForbiddenException,
   );
   await assertRejectsWith(
-    () => reports.getAgentLiveStatus(employeeContext, OWNER_ID),
+    () => reports.getAgentLiveStatus(employeeContext, { userId: OWNER_ID }),
+    ForbiddenException,
+  );
+  await assertRejectsWith(
+    () => reports.getAgentLiveStatus(employeeContext, { scope: "company" }),
     ForbiddenException,
   );
   await assertRejectsWith(
@@ -258,6 +263,41 @@ async function testReportAccessBoundaries() {
     () => reports.getUsageSummary(ownerContext, { scope: "company", departmentId: OTHER_DEVICE_ID }),
     NotFoundException,
   );
+}
+
+async function testOwnerSeesLiveForegroundUsageBeforeAppSwitch() {
+  const prisma = new MockPrisma();
+  const reports = new ReportsService(prisma as any, new MockAuditService() as any);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  prisma.agentSessions.push({
+    id: nextId("session"),
+    companyId: COMPANY_ID,
+    userId: EMPLOYEE_ID,
+    deviceId: DEVICE_ID,
+    startedAt: new Date(now.getTime() - 180_000),
+    lastHeartbeatAt: now,
+    endedAt: null,
+    endReason: null,
+    currentAppName: "Microsoft Store",
+    currentAppStartedAt: new Date(now.getTime() - 120_000),
+    currentAppLastObservedAt: now,
+    currentAppIsIdle: false,
+  });
+
+  const live = await reports.getAgentLiveStatus(ownerContext, {
+    scope: "company",
+    from: today,
+    to: today,
+  });
+  assert.equal(live.scope, "company");
+  assert.deepEqual(live.apps, [{ appName: "Microsoft Store", activeSeconds: 120 }]);
+  assert.deepEqual(live.employeeUsage, [{ userId: EMPLOYEE_ID, displayName: "Employee", activeSeconds: 120 }]);
+
+  prisma.agentSessions[0].currentAppIsIdle = true;
+  const idle = await reports.getAgentLiveStatus(ownerContext, { scope: "company", from: today, to: today });
+  assert.deepEqual(idle.apps, []);
+  assert.deepEqual(idle.employeeUsage, []);
 }
 
 async function testCrossMidnightUsageIsSplitPrecisely() {
@@ -354,6 +394,7 @@ class MockPrisma {
   activityEvents: ActivityEventRow[] = [];
   appSummaries: AppSummaryRow[] = [];
   websiteSummaries: WebsiteSummaryRow[] = [];
+  agentSessions: any[] = [];
   platformAuditLogs: unknown[] = [];
 
   device = {
@@ -483,8 +524,12 @@ class MockPrisma {
   };
 
   agentSession = {
-    findFirst: async () => null,
-    findMany: async () => [],
+    findFirst: async ({ where }: any = {}) => this.agentSessions.find((session) => matchesWhere(session, where)) ?? null,
+    findMany: async ({ where, include }: any = {}) => this.agentSessions
+      .filter((session) => matchesWhere(session, where))
+      .map((session) => include?.user
+        ? { ...session, user: { displayName: this.users.find((user) => user.id === session.userId)?.displayName ?? "Employee" } }
+        : session),
   };
 
   department = {
@@ -648,6 +693,9 @@ function matchesWhere(row: Record<string, any>, where: Record<string, any> | und
     }
     if (expected && typeof expected === "object" && "in" in expected) {
       return Array.isArray(expected.in) && expected.in.includes(actual);
+    }
+    if (expected && typeof expected === "object" && "not" in expected) {
+      return actual !== expected.not;
     }
     if (expected && typeof expected === "object" && ("gte" in expected || "lte" in expected || "lt" in expected)) {
       if (!(actual instanceof Date)) return false;

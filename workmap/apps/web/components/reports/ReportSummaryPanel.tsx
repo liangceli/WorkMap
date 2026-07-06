@@ -1,13 +1,14 @@
 "use client";
 
 import { Activity, AlertTriangle, Download, FileText, Power, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
-import type { ApiClientOptions, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
+import type { ApiClientOptions, WorkMapApiReportLiveStatus, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
 import { getAgentLiveStatus, getUsageSummary } from "../../lib/api/reportsApi";
 import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
+import { mergeLiveUsage } from "./liveUsage";
 
 type AuthContext = { options: ApiClientOptions; role: string; userId: string; source: string };
 type ViewFilter = "company" | "me" | `user:${string}`;
@@ -24,6 +25,8 @@ export function ReportSummaryPanel() {
   const [users, setUsers] = useState<WorkMapApiUser[]>([]);
   const [filters, setFilters] = useState<ReportFilters>(() => defaultFilters("me"));
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultFilters("me"));
+  const [liveStatus, setLiveStatus] = useState<WorkMapApiReportLiveStatus | null>(null);
+  const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
     summary: null,
@@ -63,17 +66,33 @@ export function ReportSummaryPanel() {
   }, []);
 
   useEffect(() => {
-    if (!auth || appliedFilters.view === "company") return;
+    activityRevisionRef.current = reportState.summary?.activityRevision;
+  }, [reportState.summary?.activityRevision]);
+
+  useEffect(() => {
+    if (!auth) return;
     let cancelled = false;
     const refresh = async () => {
       const userId = appliedFilters.view.startsWith("user:") ? appliedFilters.view.slice(5) : undefined;
-      const result = await getAgentLiveStatus({ ...auth.options, userId });
-      if (!cancelled && result.ok) {
-        setReportState((current) => current.summary
-          ? { ...current, summary: { ...current.summary, agentStatus: result.data.agentStatus }, error: null }
-          : current);
+      const result = await getAgentLiveStatus({
+        ...auth.options,
+        scope: appliedFilters.view === "company" ? "company" : "user",
+        userId,
+        departmentId: appliedFilters.view === "company" ? appliedFilters.departmentId || undefined : undefined,
+        from: appliedFilters.from,
+        to: appliedFilters.to,
+      });
+      if (cancelled || !result.ok) return;
+      setLiveStatus(result.data);
+      if (result.data.activityRevision !== activityRevisionRef.current) {
+        const summaryResult = await requestSummary(auth, appliedFilters);
+        if (!cancelled && summaryResult.ok) {
+          activityRevisionRef.current = summaryResult.data.activityRevision;
+          applyResult(summaryResult, setReportState);
+        }
       }
     };
+    void refresh();
     const timer = window.setInterval(() => void refresh(), 10_000);
     return () => {
       cancelled = true;
@@ -107,6 +126,7 @@ export function ReportSummaryPanel() {
     }
     setReportState((current) => ({ ...current, loading: true, error: null, statusText: "Refreshing report..." }));
     const result = await requestSummary(auth, filters);
+    setLiveStatus(null);
     setAppliedFilters(filters);
     applyResult(result, setReportState);
   }
@@ -116,7 +136,7 @@ export function ReportSummaryPanel() {
     setFilters((current) => ({ ...current, from: addUtcDays(to, -(days - 1)), to }));
   }
 
-  const summary = reportState.summary;
+  const summary = useMemo(() => mergeLiveUsage(reportState.summary, liveStatus), [reportState.summary, liveStatus]);
   const hasRows = Boolean(summary && (summary.apps.length > 0 || summary.websites.length > 0));
   const scopeLabel = getScopeLabel(summary, selectedUser, departments);
 
@@ -224,7 +244,7 @@ export function ReportSummaryPanel() {
             <div>
               <p style={styles.panelLabel}>API summary</p>
               <h2 style={styles.panelTitle}>{scopeLabel}</h2>
-              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process.</p>
+              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process. App active time counts only the visible foreground application; minimized and background applications are excluded, and idle segments are not added to active time.</p>
             </div>
             <span style={styles.scopePill}>{summary.scope === "company" ? "Company scope" : "User scope"}</span>
           </div>

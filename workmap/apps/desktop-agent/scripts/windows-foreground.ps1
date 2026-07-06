@@ -10,6 +10,7 @@ public static class WorkMapWindowsActivity {
   private struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
 
   [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
@@ -24,7 +25,7 @@ public static class WorkMapWindowsActivity {
     GetWindowThreadProcessId(handle, out processId);
     if (processId == 0) return null;
     try {
-      var process = Process.GetProcessById((int)processId);
+      var process = ResolveApplicationProcess(handle, processId);
       try {
         var version = process.MainModule.FileVersionInfo;
         if (!String.IsNullOrWhiteSpace(version.ProductName)) return version.ProductName;
@@ -32,6 +33,26 @@ public static class WorkMapWindowsActivity {
       } catch {}
       return process.ProcessName;
     } catch { return null; }
+  }
+
+  private static Process ResolveApplicationProcess(IntPtr foregroundWindow, uint foregroundProcessId) {
+    var foregroundProcess = Process.GetProcessById((int)foregroundProcessId);
+    if (!String.Equals(foregroundProcess.ProcessName, "ApplicationFrameHost", StringComparison.OrdinalIgnoreCase)) {
+      return foregroundProcess;
+    }
+
+    const uint GW_CHILD = 5;
+    const uint GW_HWNDNEXT = 2;
+    var child = GetWindow(foregroundWindow, GW_CHILD);
+    while (child != IntPtr.Zero) {
+      uint childProcessId;
+      GetWindowThreadProcessId(child, out childProcessId);
+      if (childProcessId != 0 && childProcessId != foregroundProcessId) {
+        try { return Process.GetProcessById((int)childProcessId); } catch {}
+      }
+      child = GetWindow(child, GW_HWNDNEXT);
+    }
+    return foregroundProcess;
   }
 
   public static double IdleSeconds() {

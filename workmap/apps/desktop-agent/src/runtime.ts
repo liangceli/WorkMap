@@ -52,7 +52,7 @@ export class DesktopAgentRuntime {
             await writeTrackingCheckpoint(this.tracking.checkpoint());
             nextCheckpointAt = now + checkpointInterval;
           }
-          if (now >= nextHeartbeatAt) {
+          if (shouldSendHeartbeat(events.length, now, nextHeartbeatAt)) {
             await this.heartbeat();
             nextHeartbeatAt = now + heartbeatInterval;
           }
@@ -163,3 +163,7 @@ function safeError(error: unknown) {
 }
 
 function delay(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+export function shouldSendHeartbeat(completedEventCount: number, now: number, nextHeartbeatAt: number) {
+  return completedEventCount > 0 || now >= nextHeartbeatAt;
+}

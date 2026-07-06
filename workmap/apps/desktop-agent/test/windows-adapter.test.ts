@@ -25,6 +25,8 @@ test("production PowerShell adapter uses foreground and last-input APIs without 
   assert.match(source, /IsIconic/);
   assert.match(source, /IsWindowVisible/);
   assert.match(source, /ProductName/);
+  assert.match(source, /ApplicationFrameHost/);
+  assert.match(source, /GW_CHILD/);
   assert.doesNotMatch(source, /GetWindowText/);
 });
 

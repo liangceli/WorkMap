@@ -6,7 +6,8 @@ Use these files before starting implementation tasks:
 
 - `project-summary.md` for the stable product and architecture overview.
 - `current-status.md` for latest status, known issues, blockers, and next tasks.
-- Domain skill files for targeted work, such as frontend, backend, API contracts, virtual office, map, movement, interactions, presence, auth, deployment, UI/UX, and QA.
+- Domain skill files for targeted work, such as frontend, backend, API contracts, virtual office, map, movement, interactions, presence, auth, deployment, UI/UX, QA, and the deferred activity-monitoring compliance framework.
+- `activity-monitoring-compliance-skill.md` for the privacy, employee-control, reporting, legal-review, and production-release rules that apply when monitoring work resumes.
 - `decision-log.md` for technical decisions that should survive across chats.
 
 Rules:

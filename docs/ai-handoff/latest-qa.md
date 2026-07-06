@@ -29,3 +29,163 @@ Reviewed the Employee onboarding gate, backend device revocation response, API c
 ## Recommendation
 
 Code and local release gates pass. Proceed to controlled deployment/manual QA, but do not call the Agent broadly production-ready until Authenticode signing and the separate-computer workflow pass.
+
+---
+
+## 2026-07-04 Codex Takeover Review Addendum
+
+### Reviewed Implementation
+
+Reviewed the repository operating guide, all requested `ai-handoff`, `ai-skills`, and `api` documents, mandatory current skill references, repository/package structure, Prisma model inventory, recent commit history, and pre-existing working-tree changes. No runtime implementation was modified.
+
+### Diff Review Summary
+
+- The takeover documentation is limited to `docs/ai-handoff/`.
+- Existing user changes in the compliance framework, skills index, and reference directory were preserved.
+- The new baseline explicitly distinguishes historical proposal/scaffold documents from newer code and handoff evidence.
+
+### Findings By Severity
+
+- High: none introduced by this documentation-only round.
+- Medium: current status/project summary and several API/AI-skill documents are older than the latest Desktop Agent, Agent Session, reports, and extension implementation.
+- Low: the repository has multiple documentation eras; future contributors could misread old “not implemented” statements without the documented source-of-truth order.
+
+### Test And Verification Status
+
+- `git diff --check`: passed for the complete working tree.
+- Scoped secret scan with environment, dependency, build, generated, TypeScript build metadata, and reference-only paths excluded: passed with zero matching files.
+- Runtime typecheck/lint/build/tests: not run because no runtime code changed.
+
+### Manual QA Status
+
+Not run and not required for the takeover documentation itself. Existing external Desktop Agent manual-QA requirements remain open.
+
+### Risks And Recommendation
+
+Pass for project takeover documentation. The next round can proceed. Runtime/release readiness must continue to use its own targeted verification and must not inherit a pass from this documentation review.
+
+---
+
+## 2026-07-04 Desktop Agent Timing Evidence Review
+
+- Reviewed: latest QA/director handoffs, deferred manual-QA checklist, Desktop Agent runtime, tracking state machine, Windows foreground adapter references, and tracking-state tests.
+- Finding: automated timing/state coverage exists, but no repository evidence marks precise real-employee-computer duration comparison as manually passed.
+- Existing automated evidence: app switch duration, idle/resume, lock, short-segment filtering, duplicate sample handling, delayed-sample cap, graceful shutdown flush, persisted-segment recovery, and UTC day rollover.
+- Manual QA: pending on a separate Windows employee computer, including minimized/background exclusion, under-five-second exclusion, live Owner report comparison, graceful stop, and forced interruption.
+- Tests rerun: none; this was a read-only evidence review.
+- Recommendation: do not yet claim real-device duration accuracy. The next round may proceed with a controlled timed manual test.
+
+---
+
+## 2026-07-06 Desktop Agent Foreground Timing And Owner Sync QA
+
+### Reviewed Implementation
+
+Reviewed the Windows foreground adapter, Desktop Agent state/heartbeat ordering, Agent Session persistence, user/company/department report authorization, live foreground aggregation, persisted-summary revision refresh, frontend live-overlay merge, UWP Microsoft Store handling, privacy field boundaries, Alpha output, and NSIS installer.
+
+### Diff Review Summary
+
+- Change is constrained to Desktop Agent foreground application identification/timing, Reports live synchronization, their tests, and relevant handoff/API/frontend skill documentation.
+- No schema migration, auth redesign, RBAC widening, Platform Admin activity access, domain tracking change, or unrelated product change was found.
+- Company live results expose aggregate app duration and per-employee total active duration already allowed by the existing company report boundary; they do not expose window titles, content, or raw hidden/background processes.
+
+### Findings Ordered By Severity
+
+- High: none remaining in automated review.
+- Medium external verification: real Employee Windows computer timing comparison has not yet been run against deployed API/Web with Agent `0.5.1`.
+- Medium release risk: `WorkMap-Desktop-Agent-Setup-0.5.1.exe` is Authenticode `NotSigned`.
+- Low expected latency: visible live totals update on the existing approximately ten-second heartbeat/report poll rather than every rendered second; foreground sampling remains approximately one second.
+- Fixed: continuously focused apps now appear through the live overlay before an app switch finalizes the persisted segment.
+- Fixed: Owner company view now polls live foreground aggregates and refreshes persisted summaries when completed activity changes.
+- Fixed: `ApplicationFrameHost` can resolve its child UWP process for Microsoft Store-style applications without reading titles.
+- Fixed: app switches send an immediate heartbeat so the live segment and completed event stay aligned.
+
+### Test And Verification Status
+
+- `corepack pnpm --filter @workmap/desktop-agent test`: passed, 14/14.
+- Desktop Agent typecheck/lint/build: passed.
+- Desktop Agent `release:windows`: passed; NSIS installer built.
+- `corepack pnpm --filter @workmap/api test`: passed, 9/9.
+- API typecheck/lint/build: passed.
+- `corepack pnpm --filter @workmap/web test`: passed, 14/14.
+- Web typecheck/lint/build: passed; 19 routes generated.
+- Windows foreground adapter direct PowerShell smoke: compiled and executed successfully.
+- `git diff --check`: passed.
+- Scoped secret scan: passed with zero matching files.
+- Privacy capability scan: no prohibited collection implementation found; the single text match was the existing negative privacy disclosure in Reports.
+
+### Manual QA Status
+
+Not run on the real Employee computer. Automated coverage proves state and aggregation rules, not hardware/OS-level duration accuracy in the deployed environment.
+
+### Risks And Recommendation
+
+Code/local release gates pass. Proceed to deploy API/Web and publish/install Agent `0.5.1`, then run the real-device timed matrix. Do not declare the reported Microsoft Store issue fully accepted until Owner and Employee reports are compared against stopwatch results on the target Employee computer. The next round can proceed to deployment/manual QA.
+
+---
+
+## 2026-07-06 UI/UX Pro Max Repository Review
+
+### Reviewed Implementation
+
+Reviewed the external repository's documented design database, recommendation workflow, AI-assistant installation paths, CLI metadata, supported frontend stacks, persisted design-system files, and MIT license. No external code was executed.
+
+### Diff Review Summary
+
+- Local changes are limited to appending this research round to the required handoff files.
+- Pre-existing user changes remain untouched.
+
+### Findings By Severity
+
+- High: none introduced; no package was installed and no runtime code changed.
+- Medium: generated design recommendations are heuristic and should not be treated as proof of accessibility, usability, or brand fit.
+- Low: installation adds skill files to a project or global assistant directory and requires Python 3 for direct search commands, so a temporary trial is preferable before WorkMap adoption.
+
+### Test And Verification Status
+
+- Upstream source/documentation review: completed.
+- Local documentation diff review and `git diff --check`: required before closeout.
+- Runtime typecheck, lint, build, and tests: not run because no runtime files changed.
+
+### Manual QA Status
+
+Not run. The skill was not installed or invoked.
+
+### Risks And Recommendation
+
+Pass for research purposes. The next round can proceed. If WorkMap adopts the skill, first test its generated design system without modifying production UI, then review output against existing components, accessibility requirements, and product constraints.
+
+---
+
+## 2026-07-06 Local UI/UX Assistant Ignore Review
+
+### Reviewed Implementation
+
+Reviewed the installed project-local `.codex/skills/` tree, repository ignore rules, upstream MIT license, and the Apache-2.0 license included with the installed `ui-styling` skill.
+
+### Diff Review Summary
+
+- Added only the root-anchored `/.codex/` rule to `.gitignore` for assistant files.
+- Preserved all unrelated working-tree changes and left `.corepack/` unchanged.
+
+### Findings By Severity
+
+- High: none.
+- Medium: attribution obligations can arise if licensed source, datasets, templates, or substantial portions are copied into distributed WorkMap artifacts; ordinary design assistance alone does not normally trigger an end-user-facing credit requirement.
+- Low: ignored files can still be forced into Git with `git add -f`, so staged-file review remains necessary.
+
+### Test And Verification Status
+
+- `git check-ignore`: passed; `.codex/skills/ui-ux-pro-max/SKILL.md` resolves to the root `/.codex/` rule.
+- Full untracked status review: passed; `.codex/` no longer appears.
+- `git diff --check`: passed.
+- Scoped secret scan: passed with no matching files.
+- Runtime typecheck, lint, build, and tests are not required because application code was not changed by this task.
+
+### Manual QA Status
+
+Not applicable; no UI or runtime behavior changed.
+
+### Risks And Recommendation
+
+Pass once the ignore and diff checks complete. The next round can proceed without adding a public “designed with UI/UX Pro Max” label, subject to preserving license notices if licensed implementation material is redistributed.

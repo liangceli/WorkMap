@@ -297,7 +297,25 @@ export type WorkMapApiUsageSummary = {
     activeSeconds: number;
     idleSeconds: number;
   }>;
+  activityRevision: string | null;
 };
+
+export type WorkMapApiReportLiveStatus =
+  | {
+      scope: "user";
+      userId: string;
+      departmentId: null;
+      agentStatus: WorkMapApiUsageSummary["agentStatus"];
+      activityRevision: string | null;
+    }
+  | {
+      scope: "company";
+      userId: null;
+      departmentId: string | null;
+      apps: Array<{ appName: string; activeSeconds: number }>;
+      employeeUsage: Array<{ userId: string; displayName: string; activeSeconds: number }>;
+      activityRevision: string | null;
+    };
 
 export type WorkMapApiDevice = {
   id: string;

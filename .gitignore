@@ -1,3 +1,4 @@
 .codex_previews/
+/.codex/
 .pnpm-store/
 *.log
