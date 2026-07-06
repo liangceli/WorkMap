@@ -262,7 +262,7 @@ export function CognitoAuthForm({
         </div>
       ) : null}
 
-      <form onSubmit={submit} style={styles.form}>
+      <form className="wm-auth-form" onSubmit={submit} style={styles.form}>
         <AuthField
           label="Email address"
           icon={<Mail size={17} />}

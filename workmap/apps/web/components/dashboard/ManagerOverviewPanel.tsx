@@ -199,7 +199,7 @@ export function ManagerOverviewPanel() {
   );
 
   return (
-    <div style={styles.stack}>
+    <div className="wm-redesign-page wm-dashboard-page" style={styles.stack}>
       <section style={styles.hero}>
         <div>
           <p style={styles.eyebrow}>{journey.eyebrow}</p>

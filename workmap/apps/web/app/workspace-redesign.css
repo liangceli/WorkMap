@@ -1,0 +1,257 @@
+/* Selected WorkMap marketing direction, scoped to the five redesigned product pages. */
+.wm-app-shell-editorial {
+  min-height: 100vh !important;
+  padding: clamp(14px, 2vw, 28px) !important;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(36, 127, 122, 0.09), transparent 30rem),
+    #fffdf8 !important;
+}
+
+.wm-app-shell-editorial .wm-app-top-nav {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 12px 14px !important;
+  border: 0 !important;
+  border-radius: 18px !important;
+  background: #292d4c !important;
+  box-shadow: 0 16px 36px rgba(32, 40, 73, 0.16) !important;
+}
+
+.wm-app-shell-editorial .wm-app-brand,
+.wm-app-shell-editorial .wm-app-brand strong,
+.wm-app-shell-editorial .wm-app-brand span,
+.wm-app-shell-editorial .wm-app-nav-link {
+  color: #fffdf8 !important;
+}
+
+.wm-app-shell-editorial .wm-app-brand > span:first-child {
+  background: #247f7a !important;
+  color: #fff !important;
+}
+
+.wm-app-shell-editorial .wm-app-nav-link {
+  border: 1px solid transparent !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+}
+
+.wm-app-shell-editorial .wm-app-nav-link:hover,
+.wm-app-shell-editorial .wm-app-nav-link[aria-current="page"] {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.wm-app-shell-editorial .wm-app-nav-link[href$="/dashboard"],
+.wm-app-shell-editorial .wm-app-nav-link[href$="/reports"] {
+  color: #9de0d5 !important;
+}
+
+.wm-app-shell-editorial .wm-app-notice {
+  max-width: 1380px;
+  margin: 12px auto 0 !important;
+  border-color: #d7e5dd !important;
+  border-radius: 14px !important;
+  background: #eef4ef !important;
+  color: #344d49 !important;
+}
+
+.wm-app-shell-editorial .wm-app-content {
+  width: min(1280px, 100%) !important;
+  margin: 0 auto !important;
+  padding: clamp(34px, 5vw, 70px) 0 48px !important;
+}
+
+.wm-redesign-page,
+.wm-report-summary,
+.wm-employee-directory,
+.wm-compliance-policy {
+  gap: clamp(18px, 2.5vw, 30px) !important;
+}
+
+.wm-redesign-page .wm-page-header {
+  padding: 0 0 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.wm-redesign-page .wm-page-header h1 {
+  max-width: 780px;
+  color: #202849 !important;
+  font-size: clamp(32px, 4vw, 52px) !important;
+  line-height: 1.05 !important;
+  letter-spacing: -0.035em !important;
+}
+
+.wm-redesign-page .wm-page-header p {
+  max-width: 760px;
+  font-size: 17px !important;
+  line-height: 1.65 !important;
+}
+
+.wm-redesign-page > section,
+.wm-report-summary > section,
+.wm-employee-directory > section,
+.wm-compliance-policy > section,
+.wm-employee-directory > div,
+.wm-report-summary > div,
+.wm-compliance-policy > div {
+  border-color: #e4e7e0 !important;
+  border-radius: 18px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 14px 38px rgba(32, 40, 73, 0.07) !important;
+}
+
+.wm-dashboard-page > section:first-of-type {
+  background: linear-gradient(135deg, #292d4c, #35405f) !important;
+  color: #fffdf8 !important;
+}
+
+.wm-dashboard-page > section:first-of-type h1,
+.wm-dashboard-page > section:first-of-type h2,
+.wm-dashboard-page > section:first-of-type p,
+.wm-dashboard-page > section:first-of-type span,
+.wm-dashboard-page > section:first-of-type strong {
+  color: inherit !important;
+}
+
+.wm-privacy-notice {
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+
+.wm-employees-page .wm-employee-directory {
+  overflow: hidden;
+}
+
+.wm-employees-page table {
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+
+.wm-employees-page tbody tr {
+  background: #fbfcf9;
+}
+
+.wm-reports-page button,
+.wm-employees-page button,
+.wm-compliance-page button,
+.wm-dashboard-page button,
+.wm-dashboard-page a[role="button"] {
+  border-radius: 10px !important;
+}
+
+.wm-login-redesign {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(20px, 4vw, 56px) !important;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(36, 127, 122, 0.17), transparent 32rem),
+    linear-gradient(120deg, #f3f6f1 0 50%, #fffdf8 50% 100%) !important;
+}
+
+.wm-login-redesign::before {
+  position: absolute;
+  top: -110px;
+  right: -90px;
+  width: 320px;
+  height: 320px;
+  border: 1px solid rgba(36, 127, 122, 0.18);
+  border-radius: 50%;
+  content: "";
+}
+
+.wm-login-shell {
+  position: relative;
+  width: min(1120px, 100%) !important;
+  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.8fr) !important;
+  gap: clamp(40px, 7vw, 92px) !important;
+}
+
+.wm-login-copy {
+  align-content: center;
+}
+
+.wm-login-copy h1 {
+  max-width: 700px;
+  color: #202849 !important;
+  font-size: clamp(40px, 5vw, 66px) !important;
+  line-height: 1.02 !important;
+  letter-spacing: -0.045em !important;
+}
+
+.wm-login-copy > div {
+  margin-top: 14px;
+  border-color: #d7e5dd !important;
+  border-radius: 16px !important;
+  background: rgba(238, 244, 239, 0.92) !important;
+}
+
+.wm-login-card {
+  padding: clamp(22px, 3vw, 34px) !important;
+  border-color: #e0e4dc !important;
+  border-radius: 22px !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: 0 26px 70px rgba(32, 40, 73, 0.14) !important;
+}
+
+.wm-auth-form input,
+.wm-auth-form select {
+  min-height: 46px;
+  border-radius: 10px !important;
+}
+
+.wm-auth-form button {
+  min-height: 46px;
+  border-radius: 10px !important;
+}
+
+@media (max-width: 900px) {
+  .wm-app-shell-editorial .wm-app-top-nav {
+    align-items: stretch !important;
+  }
+
+  .wm-app-shell-editorial .wm-app-nav-links {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    padding-bottom: 2px;
+  }
+
+  .wm-app-shell-editorial .wm-app-nav-link {
+    flex: 0 0 auto;
+  }
+
+  .wm-login-shell {
+    grid-template-columns: 1fr !important;
+    gap: 28px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .wm-app-shell-editorial {
+    padding: 10px !important;
+  }
+
+  .wm-app-shell-editorial .wm-app-content {
+    padding-top: 30px !important;
+  }
+
+  .wm-login-redesign {
+    padding: 22px 16px !important;
+    place-items: start center !important;
+  }
+
+  .wm-login-copy h1 {
+    font-size: 38px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wm-app-shell-editorial *,
+  .wm-login-redesign * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

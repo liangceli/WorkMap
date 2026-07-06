@@ -104,7 +104,7 @@ export function CognitoLoginPanel() {
   const canUseCognito = Boolean(cognitoConfig?.configured);
 
   return (
-    <section style={styles.card}>
+    <section className="wm-login-card" style={styles.card}>
       {cognitoSession ? (
         <section style={styles.sessionPanel}>
           <div style={styles.sessionHeading}>

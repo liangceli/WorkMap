@@ -58,7 +58,7 @@ export function EmployeeDirectory({ employees, showProfileLinks = true }: Employ
   }, [department, employees, query, status]);
 
   return (
-    <div style={styles.stack}>
+    <div className="wm-employee-directory" style={styles.stack}>
       <section style={styles.toolbar}>
         <label style={styles.searchLabel}>
           <span style={styles.labelText}>Search</span>

@@ -254,3 +254,16 @@ Not applicable. This change affects Git tracking only.
 
 - Normal use of the assistant to generate design ideas does not ordinarily require a public product credit under the reviewed licenses. If WorkMap later copies or redistributes substantial portions of the assistant's source, data, documentation, or licensed templates, preserve the applicable license and notices and obtain legal review for ambiguous cases.
 - The next round can proceed; review the staged file list before every push as a final safeguard.
+
+---
+
+## 2026-07-06 Desktop Agent 0.5.1 Release Clarification
+
+- Original request: confirm whether the new Desktop Agent must be updated in GitHub Releases.
+- Changed files: this handoff only; no application or deployment state changed.
+- Result: yes. Commit `73b248b` contains the 0.5.1 timing/report fix, and the local NSIS installer exists at `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.1.exe` with the recorded SHA-256.
+- Required external actions: publish a new GitHub Release asset, point Vercel `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` to the direct 0.5.1 asset URL, redeploy Web and API, then reinstall/upgrade the Employee computer before timed QA.
+- Verification: repository history, installer existence, byte size, and SHA-256 were checked; no upload or external configuration was performed.
+- Manual QA: not run.
+- Intentionally unchanged: GitHub, Vercel, Render, employee computers, source code, auth, schema, and RBAC.
+- Remaining risk: the installer is unsigned, and old download URLs or cached 0.5.0 installers will not contain the fix.

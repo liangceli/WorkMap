@@ -12,6 +12,7 @@ import { getUserSetupState, resetUserSetupState, type WorkMapRole } from "../../
 
 type AppShellProps = {
   children: ReactNode;
+  variant?: "default" | "editorial";
 };
 
 type ApiSessionSummary = {
@@ -37,11 +38,11 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: "Office", href: "/virtual-office", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Employees", href: "/employees", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Dashboard", href: "/dashboard", group: "insight", roles: ["MANAGER", "OWNER"] },
   { label: "Reports", href: "/reports", group: "insight", roles: ["MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Compliance", href: "/compliance", group: "insight", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
+  { label: "Office", href: "/virtual-office", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
   { label: "Invites", href: "/onboarding/invite", group: "admin", roles: ["OWNER"] },
   { label: "Integrations", href: "/integrations", group: "admin", roles: ["OWNER", "IT_ADMIN"] },
   { label: "Settings", href: "/settings", group: "admin", roles: ["OWNER", "IT_ADMIN"] },
@@ -50,7 +51,7 @@ const navItems: NavItem[] = [
 
 const APP_SHELL_CACHE_KEY = "workmap.appShellContext";
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, variant = "default" }: AppShellProps) {
   const pathname = usePathname();
   const [cognitoSession, setCognitoSession] = useState<StoredCognitoSession | null>(null);
   const [apiSummary, setApiSummary] = useState<ApiSessionSummary | null>(null);
@@ -178,7 +179,7 @@ export function AppShell({ children }: AppShellProps) {
   };
 
   return (
-    <main className="wm-app-shell" style={styles.page}>
+    <main className={`wm-app-shell${variant === "editorial" ? " wm-app-shell-editorial" : ""}`} style={styles.page}>
       <header className="wm-app-top-nav" style={styles.topNav}>
         <a href="/" className="wm-app-brand" style={styles.brand}>
           <span style={styles.logo}>WM</span>
@@ -194,6 +195,7 @@ export function AppShell({ children }: AppShellProps) {
               key={item.href}
               className="wm-app-nav-link"
               href={item.href}
+              aria-current={isActiveNav(pathname, item.href) ? "page" : undefined}
               style={{
                 ...styles.navLink,
                 ...(isActiveNav(pathname, item.href) ? styles.navLinkActive : {}),

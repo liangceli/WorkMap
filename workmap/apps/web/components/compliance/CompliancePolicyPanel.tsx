@@ -122,7 +122,7 @@ export function CompliancePolicyPanel() {
   };
 
   return (
-    <div style={styles.stack}>
+    <div className="wm-compliance-policy" style={styles.stack}>
       <section style={styles.policyGrid}>
         <PolicyList title="Visible in WorkMap" tone="blue" items={visibleItems} />
         <PolicyList title="Not monitored" tone="green" items={notVisibleItems} />

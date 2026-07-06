@@ -13,7 +13,7 @@ export function WorkMapPrivacyNotice({
   tone?: NoticeTone;
 }) {
   return (
-    <section style={{ ...wmStyles.notice, ...toneStyles[tone] }}>
+    <section className="wm-privacy-notice" style={{ ...wmStyles.notice, ...toneStyles[tone] }}>
       <strong>{title}</strong>
       <span>{children}</span>
     </section>

@@ -8,9 +8,9 @@ import { wmStyles } from "../../lib/theme/workmapTheme";
 
 export default function ReportsPage() {
   return (
-    <AppShell>
+    <AppShell variant="editorial">
       <ReportsAccessGate>
-        <section style={styles.shell}>
+        <section className="wm-redesign-page wm-reports-page" style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="Reports"
           title="Work summaries"

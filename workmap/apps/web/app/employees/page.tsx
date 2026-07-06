@@ -89,8 +89,8 @@ export default function EmployeesPage() {
   const showManagerActions = activeRole === "MANAGER" || activeRole === "OWNER";
 
   return (
-    <AppShell>
-      <section style={styles.shell}>
+    <AppShell variant="editorial">
+      <section className="wm-redesign-page wm-employees-page" style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="People directory"
           title="Employees"

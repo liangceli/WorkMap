@@ -141,7 +141,7 @@ export function ReportSummaryPanel() {
   const scopeLabel = getScopeLabel(summary, selectedUser, departments);
 
   return (
-    <div style={styles.stack}>
+    <div className="wm-report-summary" style={styles.stack}>
       <section style={styles.filterPanel} aria-label="Report filters">
         <div style={styles.filterHeader}>
           <div>

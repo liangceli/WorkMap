@@ -3,9 +3,9 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 export default function LoginPage() {
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
-        <div style={styles.copy}>
+    <main className="wm-login-redesign" style={styles.page}>
+      <section className="wm-login-shell" style={styles.shell}>
+        <div className="wm-login-copy" style={styles.copy}>
           <p style={styles.eyebrow}>WorkMap</p>
           <h1 style={styles.title}>Start with an Owner workspace, then invite your team</h1>
           <p style={styles.subtitle}>

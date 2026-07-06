@@ -32,8 +32,8 @@ export default function CompliancePage() {
   const onboardingMode = Boolean(setupState?.isLoggedIn && !setupState.hasAcknowledgedPolicy);
 
   return (
-    <AppShell>
-      <section style={styles.shell}>
+    <AppShell variant="editorial">
+      <section className="wm-redesign-page wm-compliance-page" style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="Compliance"
           title="Transparency policy"
