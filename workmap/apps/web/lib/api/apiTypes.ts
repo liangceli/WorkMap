@@ -243,6 +243,9 @@ export type WorkMapApiUsageSummary = {
     productivityLabel: string | null;
     activeSeconds: number;
     idleSeconds: number;
+    focusActiveSeconds?: number;
+    focusedIdleSeconds?: number;
+    openRuntimeSeconds?: number;
   }>;
   websites: Array<{
     domain: string;
@@ -276,6 +279,7 @@ export type WorkMapApiUsageSummary = {
     currentAppName?: string | null;
     currentAppStartedAt?: string | null;
     currentAppActiveSeconds?: number;
+    currentAppFocusedIdleSeconds?: number;
     todayActiveSeconds?: number;
   };
   agentSessions: Array<{
@@ -312,8 +316,8 @@ export type WorkMapApiReportLiveStatus =
       scope: "company";
       userId: null;
       departmentId: string | null;
-      apps: Array<{ appName: string; activeSeconds: number }>;
-      employeeUsage: Array<{ userId: string; displayName: string; activeSeconds: number }>;
+      apps: Array<{ appName: string; activeSeconds: number; focusedIdleSeconds?: number }>;
+      employeeUsage: Array<{ userId: string; displayName: string; activeSeconds: number; idleSeconds?: number }>;
       activityRevision: string | null;
     };
 

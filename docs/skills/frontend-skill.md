@@ -103,8 +103,8 @@ Local env behavior:
 Pilot readiness API wrappers:
 
 - `lib/api/healthApi.ts` wraps `GET /health`.
-- Reports API types now match backend `/reports/usage-summary` with `apps[]` and `websites[]` rows containing active/idle seconds.
-- Reports polls `/reports/agent-status` every 10 seconds for both selected-user and authorized company views. It overlays only fresh non-idle foreground duration, refreshes persisted summaries when `activityRevision` changes, and never counts minimized/background apps as current active use.
+- Reports API types now match backend `/reports/usage-summary` with `apps[]` and `websites[]` rows containing active/idle seconds. App rows also support `focusActiveSeconds`, `focusedIdleSeconds`, and `openRuntimeSeconds`.
+- Reports polls `/reports/agent-status` every 10 seconds for both selected-user and authorized company views. It overlays fresh foreground duration as either focus-active or focused-idle time, refreshes persisted summaries when `activityRevision` changes, and never counts minimized/background apps as current active use.
 - `lib/api/tenantOnboardingApi.ts` wraps tenant onboarding status/workspace creation.
 - `lib/api/invitationsApi.ts` wraps invitation list/create/accept.
 - `lib/api/companiesApi.ts` wraps current company summary.
@@ -186,6 +186,7 @@ Dashboard and reports readiness:
 - Reports request a conservative scope based on the resolved backend role: employees use own summaries, OWNER/MANAGER/TEAM_LEAD/HR_ADMIN can request company aggregate summaries, and IT_ADMIN is not automatically given company app/domain summaries by the frontend.
 - Reports should explain sparse pilot data when API rows are empty.
 - Reports should keep Employee own-scope, Owner/Manager aggregate-scope, and alpha data availability explanations visible.
+- Reports app rows must display three clear metrics: `Focus active`, `Focused idle`, and `Open/runtime`. Use distinct visual treatments so Owner/Employee users do not confuse runtime/open time with actual active use.
 - Dashboard and Reports can show tracking coverage metadata such as registered devices, active devices in 24 hours, and users with activity rows.
 - `AppUsageTable.tsx` and `WebsiteUsageTable.tsx` support optional titles so API-backed rows and example rows can be labeled clearly.
 

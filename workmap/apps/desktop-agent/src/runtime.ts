@@ -5,7 +5,9 @@ import type { AgentConfig, AgentStatus } from "./types.js";
 import { WindowsForegroundAdapter } from "./windowsForeground.js";
 
 export class DesktopAgentRuntime {
-  private readonly tracking = new AppTrackingState();
+  private readonly tracking = new AppTrackingState({
+    runtimeSegmentMs: readPositiveNumber("WORKMAP_AGENT_RUNTIME_SEGMENT_MS", 10_000),
+  });
   private readonly adapter: WindowsForegroundAdapter;
   private readonly queue: FileEventQueue;
   private stopped = false;

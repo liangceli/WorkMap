@@ -244,7 +244,7 @@ export function ReportSummaryPanel() {
             <div>
               <p style={styles.panelLabel}>API summary</p>
               <h2 style={styles.panelTitle}>{scopeLabel}</h2>
-              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process. App active time counts only the visible foreground application; minimized and background applications are excluded, and idle segments are not added to active time.</p>
+              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process. App rows now separate focus active, focused idle, and open/runtime time so background or minimized apps are never confused with active use.</p>
             </div>
             <span style={styles.scopePill}>{summary.scope === "company" ? "Company scope" : "User scope"}</span>
           </div>
@@ -293,7 +293,13 @@ function AgentStatusPanel({ summary }: { summary: WorkMapApiUsageSummary }) {
         <div style={styles.currentAppRow}>
           <span style={styles.currentAppLabel}>Current foreground app</span>
           <strong style={styles.currentAppName}>{online ? status.currentAppName ?? "No active foreground app" : "Not available"}</strong>
-          <span style={styles.currentAppDuration}>{online && status.currentAppName ? formatDuration(status.currentAppActiveSeconds ?? 0) : ""}</span>
+          <span style={styles.currentAppDuration}>
+            {online && status.currentAppName
+              ? status.currentAppFocusedIdleSeconds
+                ? `${formatDuration(status.currentAppFocusedIdleSeconds)} focused idle`
+                : `${formatDuration(status.currentAppActiveSeconds ?? 0)} focus active`
+              : ""}
+          </span>
         </div>
         <div style={styles.todayUsageRow}>
           <span>Today across all foreground apps</span>
@@ -346,10 +352,11 @@ function AgentSessionHistory({ rows }: { rows: WorkMapApiUsageSummary["agentSess
 function MetricGrid({ summary }: { summary: WorkMapApiUsageSummary }) {
   const appActive = sum(summary.apps, "activeSeconds");
   const appIdle = sum(summary.apps, "idleSeconds");
+  const appRuntime = summary.apps.reduce((total, row) => total + appOpenRuntime(row), 0);
   const domainActive = sum(summary.websites, "activeSeconds");
   const domainIdle = sum(summary.websites, "idleSeconds");
   const metrics = [
-    { label: "App active", value: formatDuration(appActive), detail: `${formatDuration(appIdle)} app idle` },
+    { label: "App focus active", value: formatDuration(appActive), detail: `${formatDuration(appIdle)} focused idle · ${formatDuration(appRuntime)} open/runtime` },
     { label: "Domain active", value: formatDuration(domainActive), detail: `${formatDuration(domainIdle)} domain idle` },
     { label: "Tracked items", value: `${summary.apps.length} / ${summary.websites.length}`, detail: "App rows / domain rows" },
     {
@@ -404,6 +411,9 @@ type UsageListRow = {
   productivityLabel: string | null;
   activeSeconds: number;
   idleSeconds: number;
+  focusActiveSeconds?: number;
+  focusedIdleSeconds?: number;
+  openRuntimeSeconds?: number;
 };
 
 function SummaryUsageList({ title, rows }: { title: string; rows: UsageListRow[] }) {
@@ -417,12 +427,47 @@ function SummaryUsageList({ title, rows }: { title: string; rows: UsageListRow[]
               <p style={styles.summaryName}>{row.name}</p>
               <p style={styles.summaryCategory}>{row.category ?? formatProductivity(row.productivityLabel)}</p>
             </div>
-            <span style={styles.summaryTime}>{formatDuration(row.activeSeconds)} active</span>
-            <span style={styles.summaryTime}>{formatDuration(row.idleSeconds)} idle</span>
+            {row.openRuntimeSeconds !== undefined || row.focusActiveSeconds !== undefined || row.focusedIdleSeconds !== undefined ? (
+              <div style={styles.appMetricChips} aria-label={`${row.name} app time metrics`}>
+                <MetricChip
+                  label="Focus active"
+                  value={formatDuration(row.focusActiveSeconds ?? row.activeSeconds)}
+                  tone="active"
+                  title="Foreground/focused app with recent input"
+                />
+                <MetricChip
+                  label="Focused idle"
+                  value={formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)}
+                  tone="idle"
+                  title="Foreground/focused app after 30 seconds without input"
+                />
+                <MetricChip
+                  label="Open/runtime"
+                  value={formatDuration(appOpenRuntime(row))}
+                  tone="runtime"
+                  title="App was open or running; not proof of active use"
+                />
+              </div>
+            ) : (
+              <div style={styles.domainMetricChips}>
+                <span style={styles.summaryTime}>{formatDuration(row.activeSeconds)} active</span>
+                <span style={styles.summaryTime}>{formatDuration(row.idleSeconds)} idle</span>
+              </div>
+            )}
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function MetricChip({ label, value, tone, title }: { label: string; value: string; tone: "active" | "idle" | "runtime"; title: string }) {
+  const toneStyle = tone === "active" ? styles.metricChipActive : tone === "idle" ? styles.metricChipIdle : styles.metricChipRuntime;
+  return (
+    <span style={{ ...styles.metricChip, ...toneStyle }} title={title}>
+      <small style={styles.metricChipLabel}>{label}</small>
+      <strong style={styles.metricChipValue}>{value}</strong>
+    </span>
   );
 }
 
@@ -472,9 +517,20 @@ function getScopeLabel(summary: WorkMapApiUsageSummary | null, selectedUser: Wor
 
 function exportSummaryCsv(summary: WorkMapApiUsageSummary, scopeLabel: string) {
   const rows: Array<Array<string | number>> = [
-    ["scope", "source", "item", "category", "productivity", "active_seconds", "idle_seconds", "from", "to"],
-    ...summary.apps.map((row) => [scopeLabel, "app", row.appName, row.category ?? "", row.productivityLabel ?? "", row.activeSeconds, row.idleSeconds, summary.range.from, summary.range.to]),
-    ...summary.websites.map((row) => [scopeLabel, "domain", row.domain, row.category ?? "", row.productivityLabel ?? "", row.activeSeconds, row.idleSeconds, summary.range.from, summary.range.to]),
+    ["scope", "source", "item", "category", "productivity", "focus_active_seconds", "focused_idle_seconds", "open_runtime_seconds", "from", "to"],
+    ...summary.apps.map((row) => [
+      scopeLabel,
+      "app",
+      row.appName,
+      row.category ?? "",
+      row.productivityLabel ?? "",
+      row.focusActiveSeconds ?? row.activeSeconds,
+      row.focusedIdleSeconds ?? row.idleSeconds,
+      appOpenRuntime(row),
+      summary.range.from,
+      summary.range.to,
+    ]),
+    ...summary.websites.map((row) => [scopeLabel, "domain", row.domain, row.category ?? "", row.productivityLabel ?? "", row.activeSeconds, row.idleSeconds, "", summary.range.from, summary.range.to]),
   ];
   const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -493,8 +549,9 @@ function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
     `Generated: ${new Date().toISOString()}`,
     "",
     "SUMMARY",
-    `App active: ${formatDuration(sum(summary.apps, "activeSeconds"))}`,
-    `App idle: ${formatDuration(sum(summary.apps, "idleSeconds"))}`,
+    `App focus active: ${formatDuration(sum(summary.apps, "activeSeconds"))}`,
+    `App focused idle: ${formatDuration(sum(summary.apps, "idleSeconds"))}`,
+    `App open/runtime: ${formatDuration(summary.apps.reduce((total, row) => total + appOpenRuntime(row), 0))}`,
     `Domain active: ${formatDuration(sum(summary.websites, "activeSeconds"))}`,
     "",
   ];
@@ -505,14 +562,17 @@ function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
       `Device: ${summary.agentStatus.hostname ?? "Unknown Windows device"}`,
       `Last signal: ${summary.agentStatus.lastHeartbeatAt ?? "None"}`,
       `Current foreground app: ${summary.agentStatus.currentAppName ?? "None"}`,
-      `Current app duration: ${formatDuration(summary.agentStatus.currentAppActiveSeconds ?? 0)}`,
+      `Current app focus active: ${formatDuration(summary.agentStatus.currentAppActiveSeconds ?? 0)}`,
+      `Current app focused idle: ${formatDuration(summary.agentStatus.currentAppFocusedIdleSeconds ?? 0)}`,
       `Today active across all apps: ${formatDuration(summary.agentStatus.todayActiveSeconds ?? 0)}`,
       "",
     );
   }
   lines.push("APP TOTALS");
   if (summary.apps.length === 0) lines.push("No app activity recorded.");
-  for (const row of summary.apps) lines.push(`${row.appName}: ${formatDuration(row.activeSeconds)} active; ${formatDuration(row.idleSeconds)} idle`);
+  for (const row of summary.apps) {
+    lines.push(`${row.appName}: ${formatDuration(row.focusActiveSeconds ?? row.activeSeconds)} focus active; ${formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)} focused idle; ${formatDuration(appOpenRuntime(row))} open/runtime`);
+  }
   lines.push("", "DAILY TOTALS");
   if (summary.daily.length === 0) lines.push("No daily activity recorded.");
   for (const row of summary.daily) lines.push(`${row.date}: ${formatDuration(row.appActiveSeconds)} app active`);
@@ -557,6 +617,10 @@ function csvCell(value: string | number) {
   const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
   const text = safe.replace(/"/g, '""');
   return `"${text}"`;
+}
+
+function appOpenRuntime(row: { activeSeconds: number; idleSeconds: number; openRuntimeSeconds?: number }) {
+  return Math.max(row.openRuntimeSeconds ?? 0, row.activeSeconds + row.idleSeconds);
 }
 
 function sum(rows: Array<{ activeSeconds: number; idleSeconds: number }>, key: "activeSeconds" | "idleSeconds") {
@@ -658,15 +722,23 @@ const styles = {
   apiPanel: { ...wmStyles.card, padding: "16px" },
   apiHeader: { display: "flex", justifyContent: "space-between", alignItems: "start", gap: "12px", marginBottom: "12px" },
   scopePill: { border: `1px solid ${wm.colors.infoBorder}`, borderRadius: wm.radius.full, background: wm.colors.infoBg, color: wm.colors.infoText, padding: "6px 10px", fontSize: "12px", fontWeight: 900, whiteSpace: "nowrap" as const },
-  summaryGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: "12px" },
+  summaryGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: "12px" },
   summaryCard: { border: `1px solid ${wm.colors.borderSubtle}`, borderRadius: wm.radius.md, background: wm.colors.surfaceLow, padding: "12px", minWidth: 0 },
   summaryTitle: { margin: "0 0 10px", color: wm.colors.text, fontSize: "16px" },
   summaryRows: { display: "grid", gap: "8px" },
-  summaryRow: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", gap: "10px", alignItems: "center", borderTop: `1px solid ${wm.colors.borderSubtle}`, paddingTop: "8px", minHeight: "46px" },
+  summaryRow: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "10px", alignItems: "center", borderTop: `1px solid ${wm.colors.borderSubtle}`, paddingTop: "10px", minHeight: "58px" },
   nameCell: { minWidth: 0 },
   summaryName: { margin: "0 0 3px", color: wm.colors.text, fontSize: "13px", fontWeight: 800, overflowWrap: "anywhere" as const },
   summaryCategory: { margin: 0, color: wm.colors.textMuted, fontSize: "12px" },
   summaryTime: { color: wm.colors.textSecondary, fontSize: "12px", fontWeight: 800, whiteSpace: "nowrap" as const },
+  appMetricChips: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: "8px" },
+  domainMetricChips: { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" as const },
+  metricChip: { display: "grid", gap: "2px", borderWidth: "1px", borderStyle: "solid", borderColor: wm.colors.borderSubtle, borderRadius: wm.radius.md, padding: "8px 9px", minWidth: 0 },
+  metricChipActive: { background: wm.colors.successBg, borderColor: wm.colors.successBorder, color: wm.colors.success },
+  metricChipIdle: { background: wm.colors.warningBg, borderColor: wm.colors.warningBorder, color: wm.colors.warning },
+  metricChipRuntime: { background: wm.colors.infoBg, borderColor: wm.colors.infoBorder, color: wm.colors.infoText },
+  metricChipLabel: { color: "currentColor", fontSize: "10px", fontWeight: 900, letterSpacing: "0.02em", textTransform: "uppercase" as const, opacity: 0.82 },
+  metricChipValue: { color: "currentColor", fontSize: "13px", lineHeight: 1.2, whiteSpace: "nowrap" as const },
   emptyPanel: { ...wmStyles.infoNotice, display: "grid", gap: "6px", padding: "16px" },
   emptyText: { margin: 0, color: wm.colors.textSecondary, fontSize: "13px", lineHeight: 1.45 },
 } as const;

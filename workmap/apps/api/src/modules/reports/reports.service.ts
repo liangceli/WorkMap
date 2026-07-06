@@ -15,7 +15,7 @@ type SummaryQuery = {
 type ReportScope = "user" | "company";
 type ReportRange = { from: Date; to: Date; fromDate: string; toDate: string };
 type UsageFilter = { companyId: string; userId?: string; userIds?: string[]; range: ReportRange };
-type LiveAppSegment = { userId: string; displayName: string; appName: string; activeSeconds: number };
+type LiveAppSegment = { userId: string; displayName: string; appName: string; activeSeconds: number; focusedIdleSeconds: number };
 
 const DEFAULT_REPORT_DAYS = 30;
 const MAX_REPORT_DAYS = 366;
@@ -163,7 +163,7 @@ export class ReportsService {
 
   private async getUsageRows(filter: UsageFilter) {
     const where = summaryWhere(filter);
-    const [appRows, websiteRows, appDailyRows, websiteDailyRows] = await Promise.all([
+    const [appRows, websiteRows, appDailyRows, websiteDailyRows, appRuntimeRows] = await Promise.all([
       this.prisma.appUsageSummary.groupBy({
         by: ["appName", "category", "productivityLabel"],
         where,
@@ -188,6 +188,7 @@ export class ReportsService {
         _sum: { activeSeconds: true, idleSeconds: true },
         orderBy: { date: "asc" },
       }),
+      this.getOpenRuntimeRows(filter),
     ]);
 
     const daily = new Map<string, {
@@ -221,14 +222,46 @@ export class ReportsService {
       daily.set(date, item);
     }
 
-    return {
-      apps: appRows.map((row) => ({
+    const runtimeByApp = new Map<string, number>();
+    for (const row of appRuntimeRows) {
+      if (row.appName) runtimeByApp.set(row.appName, row.openRuntimeSeconds);
+    }
+    const apps = appRows.map((row) => {
+      const focusActiveSeconds = row._sum.activeSeconds ?? 0;
+      const focusedIdleSeconds = row._sum.idleSeconds ?? 0;
+      return {
         appName: row.appName,
         category: row.category,
         productivityLabel: effectiveProductivityLabel(row.productivityLabel, row.category),
-        activeSeconds: row._sum.activeSeconds ?? 0,
-        idleSeconds: row._sum.idleSeconds ?? 0,
-      })),
+        activeSeconds: focusActiveSeconds,
+        idleSeconds: focusedIdleSeconds,
+        focusActiveSeconds,
+        focusedIdleSeconds,
+        openRuntimeSeconds: Math.max(runtimeByApp.get(row.appName) ?? 0, focusActiveSeconds + focusedIdleSeconds),
+      };
+    });
+    const seenApps = new Set(apps.map((row) => row.appName));
+    for (const row of appRuntimeRows) {
+      if (!row.appName || seenApps.has(row.appName)) continue;
+      apps.push({
+        appName: row.appName,
+        category: null,
+        productivityLabel: "UNCATEGORISED",
+        activeSeconds: 0,
+        idleSeconds: 0,
+        focusActiveSeconds: 0,
+        focusedIdleSeconds: 0,
+        openRuntimeSeconds: row.openRuntimeSeconds,
+      });
+    }
+    apps.sort((left, right) =>
+      right.focusActiveSeconds - left.focusActiveSeconds
+      || right.openRuntimeSeconds - left.openRuntimeSeconds
+      || left.appName.localeCompare(right.appName),
+    );
+
+    return {
+      apps,
       websites: websiteRows.map((row) => ({
         domain: row.domain,
         category: row.category,
@@ -238,6 +271,28 @@ export class ReportsService {
       })),
       daily: Array.from(daily.values()).sort((left, right) => left.date.localeCompare(right.date)),
     };
+  }
+
+  private async getOpenRuntimeRows(filter: UsageFilter) {
+    const rows = await this.prisma.activityEvent.groupBy({
+      by: ["appName"],
+      where: {
+        companyId: filter.companyId,
+        ...identityFilter(filter),
+        source: ActivityEventSource.DESKTOP_AGENT,
+        eventType: ActivityEventType.APP,
+        appName: { not: null },
+        isActiveWindow: false,
+        isIdle: false,
+        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+      },
+      _sum: { durationSeconds: true },
+      orderBy: { _sum: { durationSeconds: "desc" } },
+    });
+    return rows.map((row) => ({
+      appName: row.appName,
+      openRuntimeSeconds: row._sum.durationSeconds ?? 0,
+    }));
   }
 
   private async getDeviceCoverage(filter: UsageFilter) {
@@ -275,9 +330,11 @@ export class ReportsService {
     const state = isFresh
       ? "online"
       : session.endReason === "GRACEFUL_SHUTDOWN" ? "stopped" : "interrupted";
-    const currentAppActiveSeconds = isFresh && session.currentAppName && !session.currentAppIsIdle && session.currentAppStartedAt
+    const currentAppDurationSeconds = isFresh && session.currentAppName && session.currentAppStartedAt
       ? Math.max(0, Math.round((Math.min(now, session.lastHeartbeatAt.getTime() + 15_000) - session.currentAppStartedAt.getTime()) / 1000))
       : 0;
+    const currentAppActiveSeconds = !session.currentAppIsIdle ? currentAppDurationSeconds : 0;
+    const currentAppFocusedIdleSeconds = session.currentAppIsIdle ? currentAppDurationSeconds : 0;
     const today = utcDateOnly(new Date());
     const todaySummary = await this.prisma.appUsageSummary.aggregate({
       where: { companyId: filter.companyId, userId: filter.userId, date: today },
@@ -294,9 +351,10 @@ export class ReportsService {
       lastHeartbeatAt: session.lastHeartbeatAt.toISOString(),
       endedAt: session.endedAt?.toISOString() ?? null,
       endReason: session.endReason,
-      currentAppName: isFresh && !session.currentAppIsIdle ? session.currentAppName : null,
-      currentAppStartedAt: isFresh && !session.currentAppIsIdle ? session.currentAppStartedAt?.toISOString() ?? null : null,
+      currentAppName: isFresh ? session.currentAppName : null,
+      currentAppStartedAt: isFresh ? session.currentAppStartedAt?.toISOString() ?? null : null,
       currentAppActiveSeconds,
+      currentAppFocusedIdleSeconds,
       todayActiveSeconds: (todaySummary._sum.activeSeconds ?? 0) + currentAppActiveSeconds,
     };
   }
@@ -314,7 +372,6 @@ export class ReportsService {
         lastHeartbeatAt: { gte: new Date(now - 30_000) },
         currentAppName: { not: null },
         currentAppStartedAt: { not: null },
-        currentAppIsIdle: false,
       },
       include: { user: { select: { displayName: true } } },
     });
@@ -323,13 +380,14 @@ export class ReportsService {
       if (!session.currentAppName || !session.currentAppStartedAt) return [];
       const segmentStart = Math.max(session.currentAppStartedAt.getTime(), filter.range.from.getTime());
       const segmentEnd = Math.min(now, session.lastHeartbeatAt.getTime() + 15_000, rangeEndExclusive);
-      const activeSeconds = Math.max(0, Math.round((segmentEnd - segmentStart) / 1000));
-      if (activeSeconds < 5) return [];
+      const durationSeconds = Math.max(0, Math.round((segmentEnd - segmentStart) / 1000));
+      if (durationSeconds < 5) return [];
       return [{
         userId: session.userId,
         displayName: session.user.displayName,
         appName: session.currentAppName,
-        activeSeconds,
+        activeSeconds: session.currentAppIsIdle ? 0 : durationSeconds,
+        focusedIdleSeconds: session.currentAppIsIdle ? durationSeconds : 0,
       }];
     });
   }
@@ -495,21 +553,28 @@ function effectiveProductivityLabel(label: string, category: string | null) {
 }
 
 function aggregateLiveApps(segments: LiveAppSegment[]) {
-  const totals = new Map<string, number>();
-  for (const segment of segments) totals.set(segment.appName, (totals.get(segment.appName) ?? 0) + segment.activeSeconds);
-  return Array.from(totals, ([appName, activeSeconds]) => ({ appName, activeSeconds }))
-    .sort((left, right) => right.activeSeconds - left.activeSeconds || left.appName.localeCompare(right.appName));
+  const totals = new Map<string, { appName: string; activeSeconds: number; focusedIdleSeconds: number }>();
+  for (const segment of segments) {
+    const current = totals.get(segment.appName) ?? { appName: segment.appName, activeSeconds: 0, focusedIdleSeconds: 0 };
+    current.activeSeconds += segment.activeSeconds;
+    current.focusedIdleSeconds += segment.focusedIdleSeconds;
+    totals.set(segment.appName, current);
+  }
+  return Array.from(totals.values())
+    .sort((left, right) => right.activeSeconds - left.activeSeconds || right.focusedIdleSeconds - left.focusedIdleSeconds || left.appName.localeCompare(right.appName));
 }
 
 function aggregateLiveEmployees(segments: LiveAppSegment[]) {
-  const totals = new Map<string, { userId: string; displayName: string; activeSeconds: number }>();
+  const totals = new Map<string, { userId: string; displayName: string; activeSeconds: number; idleSeconds: number }>();
   for (const segment of segments) {
     const current = totals.get(segment.userId) ?? {
       userId: segment.userId,
       displayName: segment.displayName,
       activeSeconds: 0,
+      idleSeconds: 0,
     };
     current.activeSeconds += segment.activeSeconds;
+    current.idleSeconds += segment.focusedIdleSeconds;
     totals.set(segment.userId, current);
   }
   return Array.from(totals.values())

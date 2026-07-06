@@ -124,6 +124,14 @@ async function testActivityIngestionAndReportsLoop() {
         durationSeconds: 60,
         isIdle: true,
       },
+      {
+        deviceId: DEVICE_ID,
+        appName: "Outlook",
+        startedAt: "2026-06-17T09:06:00.000Z",
+        durationSeconds: 120,
+        isIdle: false,
+        isActiveWindow: false,
+      },
     ],
   });
   const domainResult = await activity.ingestDomainUsage(employeeContext, {
@@ -148,7 +156,7 @@ async function testActivityIngestionAndReportsLoop() {
   });
 
   assert.deepEqual(appResult, {
-    accepted: 2,
+    accepted: 3,
     source: ActivityEventSource.DESKTOP_AGENT,
     eventType: ActivityEventType.APP,
   });
@@ -157,19 +165,22 @@ async function testActivityIngestionAndReportsLoop() {
     source: ActivityEventSource.BROWSER_EXTENSION,
     eventType: ActivityEventType.BROWSER,
   });
-  assert.equal(prisma.activityEvents.length, 4);
+  assert.equal(prisma.activityEvents.length, 5);
   assert.equal(prisma.activityEvents[0]?.companyId, COMPANY_ID);
   assert.equal(prisma.activityEvents[0]?.userId, EMPLOYEE_ID);
-  assert.equal(prisma.activityEvents[2]?.domain, "github.com");
+  assert.equal(prisma.activityEvents[3]?.domain, "github.com");
   assert(!JSON.stringify(prisma.activityEvents).includes("private-path"));
   assert(!JSON.stringify(prisma.activityEvents).includes("secret"));
 
   const ownSummary = await reports.getUsageSummary(employeeContext, { from: "2026-06-17", to: "2026-06-17" });
   assert.equal(ownSummary.scope, "user");
   assert.equal(ownSummary.userId, EMPLOYEE_ID);
-  assert.deepEqual(ownSummary.apps.map((row: any) => [row.appName, row.activeSeconds]), [["Visual Studio Code", 300]]);
+  assert.deepEqual(ownSummary.apps.map((row: any) => [row.appName, row.activeSeconds, row.idleSeconds, row.openRuntimeSeconds]), [
+    ["Visual Studio Code", 300, 60, 360],
+    ["Outlook", 0, 0, 120],
+  ]);
   assert.deepEqual(ownSummary.websites.map((row: any) => [row.domain, row.activeSeconds]), [["github.com", 180]]);
-  assert.equal(ownSummary.apps[0]?.idleSeconds, 60);
+  assert.equal(ownSummary.apps[0]?.focusedIdleSeconds, 60);
   assert.equal(ownSummary.websites[0]?.idleSeconds, 60);
   assert.equal(ownSummary.apps[0]?.productivityLabel, "PRODUCTIVE");
   assert.equal(ownSummary.websites[0]?.productivityLabel, "PRODUCTIVE");
@@ -291,13 +302,13 @@ async function testOwnerSeesLiveForegroundUsageBeforeAppSwitch() {
     to: today,
   });
   assert.equal(live.scope, "company");
-  assert.deepEqual(live.apps, [{ appName: "Microsoft Store", activeSeconds: 120 }]);
-  assert.deepEqual(live.employeeUsage, [{ userId: EMPLOYEE_ID, displayName: "Employee", activeSeconds: 120 }]);
+  assert.deepEqual(live.apps, [{ appName: "Microsoft Store", activeSeconds: 120, focusedIdleSeconds: 0 }]);
+  assert.deepEqual(live.employeeUsage, [{ userId: EMPLOYEE_ID, displayName: "Employee", activeSeconds: 120, idleSeconds: 0 }]);
 
   prisma.agentSessions[0].currentAppIsIdle = true;
   const idle = await reports.getAgentLiveStatus(ownerContext, { scope: "company", from: today, to: today });
-  assert.deepEqual(idle.apps, []);
-  assert.deepEqual(idle.employeeUsage, []);
+  assert.deepEqual(idle.apps, [{ appName: "Microsoft Store", activeSeconds: 0, focusedIdleSeconds: 120 }]);
+  assert.deepEqual(idle.employeeUsage, [{ userId: EMPLOYEE_ID, displayName: "Employee", activeSeconds: 0, idleSeconds: 120 }]);
 }
 
 async function testCrossMidnightUsageIsSplitPrecisely() {
@@ -432,9 +443,11 @@ class MockPrisma {
       this.activityEvents.push(event);
       return event;
     },
-    groupBy: async ({ where }: any) => uniqueBy(this.activityEvents.filter((event) => matchesWhere(event, where)), "userId").map((event) => ({
-      userId: event.userId,
-    })),
+    groupBy: async ({ where, by }: any) => by?.includes("appName")
+      ? groupActivityRuntimeByApp(this.activityEvents.filter((event) => matchesWhere(event, where)))
+      : uniqueBy(this.activityEvents.filter((event) => matchesWhere(event, where)), "userId").map((event) => ({
+        userId: event.userId,
+      })),
     aggregate: async ({ where }: any) => {
       const rows = this.activityEvents.filter((event) => matchesWhere(event, where));
       const latest = rows.reduce<Date | null>((current, row) => maxDate(current, row.createdAt), null);
@@ -755,6 +768,16 @@ function groupUserAppSummaries(rows: AppSummaryRow[]) {
     grouped.set(row.userId, item);
   }
   return Array.from(grouped.values()).sort((left, right) => right._sum.activeSeconds - left._sum.activeSeconds);
+}
+
+function groupActivityRuntimeByApp(rows: ActivityEventRow[]) {
+  const grouped = new Map<string | null, { appName: string | null; _sum: { durationSeconds: number } }>();
+  for (const row of rows) {
+    const item = grouped.get(row.appName) ?? { appName: row.appName, _sum: { durationSeconds: 0 } };
+    item._sum.durationSeconds += row.durationSeconds ?? 0;
+    grouped.set(row.appName, item);
+  }
+  return Array.from(grouped.values()).sort((left, right) => right._sum.durationSeconds - left._sum.durationSeconds);
 }
 
 function groupWebsiteSummaries(rows: WebsiteSummaryRow[], take?: number) {

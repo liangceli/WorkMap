@@ -11,8 +11,8 @@ test("company report includes an employee's still-open foreground Microsoft Stor
     scope: "company",
     userId: null,
     departmentId: null,
-    apps: [{ appName: "Microsoft Store", activeSeconds: 125 }],
-    employeeUsage: [{ userId: "employee-1", displayName: "Employee", activeSeconds: 125 }],
+    apps: [{ appName: "Microsoft Store", activeSeconds: 125, focusedIdleSeconds: 0 }],
+    employeeUsage: [{ userId: "employee-1", displayName: "Employee", activeSeconds: 125, idleSeconds: 0 }],
     activityRevision: null,
   };
 
@@ -24,6 +24,28 @@ test("company report includes an employee's still-open foreground Microsoft Stor
   assert.equal(merged.employeeUsage[0]?.activeSeconds, 185);
   assert.equal(merged.daily[0]?.appActiveSeconds, 185);
   assert.equal(summary.apps.length, 1, "base persisted summary must remain unchanged between live polls");
+});
+
+test("user report merges current focused idle without adding focus active time", () => {
+  const summary = baseSummary("user");
+  const live: WorkMapApiReportLiveStatus = {
+    scope: "user",
+    userId: "employee-1",
+    departmentId: null,
+    agentStatus: {
+      state: "online",
+      currentAppName: "Visual Studio Code",
+      currentAppActiveSeconds: 0,
+      currentAppFocusedIdleSeconds: 45,
+      todayActiveSeconds: 60,
+    },
+    activityRevision: null,
+  };
+
+  const merged = mergeLiveUsage(summary, live)!;
+  assert.equal(merged.apps[0]?.activeSeconds, 60);
+  assert.equal(merged.apps[0]?.idleSeconds, 45);
+  assert.equal(merged.apps[0]?.focusedIdleSeconds, 45);
 });
 
 test("user report excludes idle, minimized or background state from active totals", () => {
@@ -52,7 +74,7 @@ function baseSummary(scope: "user" | "company"): WorkMapApiUsageSummary {
     userId: scope === "user" ? "employee-1" : null,
     departmentId: null,
     range: { from: today, to: today, timeZone: "UTC" },
-    apps: [{ appName: "Visual Studio Code", category: null, productivityLabel: null, activeSeconds: 60, idleSeconds: 0 }],
+    apps: [{ appName: "Visual Studio Code", category: null, productivityLabel: null, activeSeconds: 60, idleSeconds: 0, focusActiveSeconds: 60, focusedIdleSeconds: 0, openRuntimeSeconds: 60 }],
     websites: [],
     daily: [{ date: today, appActiveSeconds: 60, appIdleSeconds: 0, domainActiveSeconds: 0, domainIdleSeconds: 0 }],
     deviceCoverage: { registeredDevices: 1, activeDevices24h: 1, usersWithActivity: 1 },

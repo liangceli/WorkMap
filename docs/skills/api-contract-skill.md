@@ -148,16 +148,24 @@ Commit `8719f5d` made browser origin handling explicit for alpha deployment.
 `GET /reports/agent-status` is the lightweight live foreground overlay used by Reports between persisted summary refreshes:
 
 - User scope returns the selected visible user's current Desktop Agent foreground status and activity revision.
-- `scope=company` returns tenant-scoped live foreground app aggregates plus per-employee live active totals; optional `departmentId` keeps the existing department boundary.
-- Only fresh, non-idle, open Agent sessions contribute. Segments shorter than five seconds, minimized/background applications, idle sessions, stopped sessions, and off-tenant sessions do not contribute.
+- `scope=company` returns tenant-scoped live foreground app aggregates plus per-employee live active/idle totals; optional `departmentId` keeps the existing department boundary.
+- Only fresh, open Agent sessions contribute to the live overlay. Segments shorter than five seconds, stopped sessions, and off-tenant sessions do not contribute. Foreground idle sessions are reported as focused idle, not active use.
 - `from`/`to` use the same UTC report-range validation as usage summaries.
 - Company scope still requires `canViewTeamReports()`; individual scope still uses `canViewEmployeeActivity()`.
 
 Frontend type:
 
 - `userId: string`
-- `apps[]`: `appName`, `category`, `productivityLabel`, `activeSeconds`, `idleSeconds`
+- `apps[]`: `appName`, `category`, `productivityLabel`, `activeSeconds`, `idleSeconds`, optional `focusActiveSeconds`, optional `focusedIdleSeconds`, optional `openRuntimeSeconds`
 - `websites[]`: `domain`, `category`, `productivityLabel`, `activeSeconds`, `idleSeconds`
+
+App timing semantics:
+
+- `focusActiveSeconds` is the primary actual-use metric. It counts only the Windows foreground/focused app while the device has recent input under the idle threshold.
+- `focusedIdleSeconds` counts the foreground/focused app after the idle threshold is reached. It is not active use.
+- `openRuntimeSeconds` is secondary context from Desktop Agent runtime/open-window events. It can include foreground, visible-but-not-focused, and minimized windows, and must not be labeled as active use.
+- Backward-compatible `activeSeconds` maps to `focusActiveSeconds`; backward-compatible `idleSeconds` maps to `focusedIdleSeconds`.
+- Desktop Agent runtime/open-window APP events use `isActiveWindow: false` and `isIdle: false`. The API stores those raw events and uses them for `openRuntimeSeconds`, but does not add them to app active/idle summaries.
 
 Current reporting boundary:
 

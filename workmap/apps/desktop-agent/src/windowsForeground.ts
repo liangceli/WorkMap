@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile);
 type NativeObservation = {
   appName?: unknown;
   processName?: unknown;
+  openApps?: unknown;
   idleSeconds?: unknown;
   locked?: unknown;
   observedAt?: unknown;
@@ -50,6 +51,9 @@ export function minimizeWindowsObservation(observation: NativeObservation): Fore
     appName: typeof observation.appName === "string"
       ? normalizeAppName(observation.appName)
       : typeof observation.processName === "string" ? normalizeAppName(observation.processName) : null,
+    openAppNames: Array.isArray(observation.openApps)
+      ? observation.openApps.flatMap((value) => typeof value === "string" ? [normalizeAppName(value)].filter(Boolean) as string[] : [])
+      : [],
     isIdle: Boolean(observation.locked) || idleSeconds > 0 && Boolean((observation as { idle?: unknown }).idle),
     isLocked: Boolean(observation.locked),
     observedAtMs: Number.isFinite(observedAtMs) ? observedAtMs : Date.now(),

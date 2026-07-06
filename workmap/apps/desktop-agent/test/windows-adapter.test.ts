@@ -6,6 +6,7 @@ import { minimizeWindowsObservation } from "../src/windowsForeground.js";
 test("Windows adapter keeps product name and strips sensitive native fields", () => {
   const sample = minimizeWindowsObservation({
     appName: "  Visual Studio Code  ",
+    openApps: ["  Visual Studio Code  ", "Outlook.exe", "Sensitive App\nName"],
     idleSeconds: 400,
     idle: true,
     locked: false,
@@ -13,6 +14,7 @@ test("Windows adapter keeps product name and strips sensitive native fields", ()
     windowTitle: "Sensitive document title",
   } as never);
   assert.equal(sample.appName, "Visual Studio Code");
+  assert.deepEqual(sample.openAppNames, ["Visual Studio Code", "Outlook", "Sensitive App Name"]);
   assert.equal(sample.isIdle, true);
   assert(!("windowTitle" in sample));
 });
@@ -21,6 +23,7 @@ test("production PowerShell adapter uses foreground and last-input APIs without 
   const source = await readFile(new URL("../scripts/windows-foreground.ps1", import.meta.url), "utf8");
   assert.match(source, /GetForegroundWindow/);
   assert.match(source, /GetLastInputInfo/);
+  assert.match(source, /EnumWindows/);
   assert.match(source, /OpenInputDesktop/);
   assert.match(source, /IsIconic/);
   assert.match(source, /IsWindowVisible/);

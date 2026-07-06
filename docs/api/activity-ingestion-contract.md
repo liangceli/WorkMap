@@ -75,6 +75,8 @@ Allowed:
 Rules:
 
 - `appName` is required.
+- `isActiveWindow: true` means the event is for the foreground/focused app. Non-idle foreground seconds count toward focus-active usage; idle foreground seconds count toward focused-idle usage.
+- `isActiveWindow: false` with `isIdle: false` means the app/window was open or running but was not the focused active window. It may contribute to open/runtime reporting and must not increment active or idle app summaries.
 - Do not accept `windowTitle`.
 - Do not accept document names or content.
 

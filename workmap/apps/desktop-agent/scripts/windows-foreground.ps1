@@ -3,14 +3,18 @@ param([int]$IdleThresholdSeconds = 300)
 $source = @'
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 public static class WorkMapWindowsActivity {
   [StructLayout(LayoutKind.Sequential)]
   private struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
 
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
   [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
@@ -33,6 +37,35 @@ public static class WorkMapWindowsActivity {
       } catch {}
       return process.ProcessName;
     } catch { return null; }
+  }
+
+  public static string[] OpenAppNames() {
+    var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    EnumWindows(delegate(IntPtr handle, IntPtr lParam) {
+      if (handle == IntPtr.Zero || !IsWindowVisible(handle)) return true;
+      uint processId;
+      GetWindowThreadProcessId(handle, out processId);
+      if (processId == 0) return true;
+      try {
+        var process = ResolveApplicationProcess(handle, processId);
+        var appName = AppNameForProcess(process);
+        if (!String.IsNullOrWhiteSpace(appName)) names.Add(appName);
+      } catch {}
+      return true;
+    }, IntPtr.Zero);
+    var result = new string[names.Count];
+    names.CopyTo(result);
+    Array.Sort(result, StringComparer.OrdinalIgnoreCase);
+    return result;
+  }
+
+  private static string AppNameForProcess(Process process) {
+    try {
+      var version = process.MainModule.FileVersionInfo;
+      if (!String.IsNullOrWhiteSpace(version.ProductName)) return version.ProductName;
+      if (!String.IsNullOrWhiteSpace(version.FileDescription)) return version.FileDescription;
+    } catch {}
+    return process.ProcessName;
   }
 
   private static Process ResolveApplicationProcess(IntPtr foregroundWindow, uint foregroundProcessId) {
@@ -79,6 +112,7 @@ $idleSeconds = [WorkMapWindowsActivity]::IdleSeconds()
 $locked = [WorkMapWindowsActivity]::IsLocked() -or $appName -in @('LockApp', 'LogonUI')
 [ordered]@{
   appName = $appName
+  openApps = if ($locked) { @() } else { [WorkMapWindowsActivity]::OpenAppNames() }
   idleSeconds = $idleSeconds
   idle = $idleSeconds -ge $IdleThresholdSeconds
   locked = $locked

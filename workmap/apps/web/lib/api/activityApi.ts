@@ -9,6 +9,7 @@ export type AppUsageEventInput = {
   durationMs?: number;
   durationSeconds?: number;
   isIdle?: boolean;
+  isActiveWindow?: boolean;
 };
 
 export type DomainUsageEventInput = {

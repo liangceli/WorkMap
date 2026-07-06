@@ -7,6 +7,7 @@ export type AgentConfig = {
 
 export type ForegroundSample = {
   appName: string | null;
+  openAppNames?: string[];
   isIdle: boolean;
   isLocked: boolean;
   observedAtMs: number;
@@ -35,6 +36,7 @@ export type AppUsageEvent = {
   endedAt: string;
   durationSeconds: number;
   isIdle: boolean;
+  isActiveWindow: boolean;
 };
 
 export type QueuedEvent = {

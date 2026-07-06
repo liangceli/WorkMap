@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { ActivityEventSource, ActivityEventType, BrowserName } from "@prisma/client";
+import { ActivityEventSource, ActivityEventType, BrowserName, Prisma } from "@prisma/client";
 import type { RequestContext } from "@workmap/auth";
 import { createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -23,6 +23,7 @@ type ParsedEventBase = ParsedTiming & {
   deviceId: string;
   clientEventId: string | null;
   isIdle: boolean;
+  isActiveWindow: boolean;
 };
 
 type ParsedAppUsageEvent = ParsedEventBase & {
@@ -96,13 +97,12 @@ export class ActivityService {
     }
 
     const usageDate = toUtcDateOnly(event.startedAt);
-    const activeSeconds = event.isIdle ? 0 : event.durationSeconds;
-    const idleSeconds = event.isIdle ? event.durationSeconds : 0;
+    const activeSeconds = !event.isIdle && event.isActiveWindow ? event.durationSeconds : 0;
+    const idleSeconds = event.isIdle && event.isActiveWindow ? event.durationSeconds : 0;
     const category = categorizeApp(event.appName);
     const productivityLabel = category ? "PRODUCTIVE" : "UNCATEGORISED";
 
-    try {
-      await this.prisma.$transaction([
+    const operations: Prisma.PrismaPromise<unknown>[] = [
       this.prisma.activityEvent.create({
         data: {
           companyId: context.companyId,
@@ -113,13 +113,20 @@ export class ActivityService {
           eventType: ActivityEventType.APP,
           appName: event.appName,
           isIdle: event.isIdle,
-          isActiveWindow: !event.isIdle,
+          isActiveWindow: event.isActiveWindow,
           startedAt: event.startedAt,
           endedAt: event.endedAt,
           durationSeconds: event.durationSeconds,
         },
       }),
-      this.prisma.appUsageSummary.upsert({
+      this.prisma.device.update({
+        where: { id: event.deviceId },
+        data: { lastSeenAt: new Date() },
+      }),
+    ];
+
+    if (activeSeconds > 0 || idleSeconds > 0) {
+      operations.splice(1, 0, this.prisma.appUsageSummary.upsert({
         where: {
           companyId_userId_date_appName: {
             companyId: context.companyId,
@@ -144,12 +151,11 @@ export class ActivityService {
           activeSeconds,
           idleSeconds,
         },
-      }),
-      this.prisma.device.update({
-        where: { id: event.deviceId },
-        data: { lastSeenAt: new Date() },
-      }),
-      ]);
+      }));
+    }
+
+    try {
+      await this.prisma.$transaction(operations);
     } catch (error) {
       if (event.clientEventId && isPrismaUniqueError(error)) return false;
       throw error;
@@ -242,6 +248,7 @@ export class ActivityService {
               eventType: ActivityEventType.APP,
               appName: event.appName,
               isIdle: event.isIdle,
+              isActiveWindow: event.isActiveWindow,
               startedAt: event.startedAt,
               endedAt: event.endedAt,
               durationSeconds: event.durationSeconds,
@@ -314,6 +321,7 @@ function readCommonEvent(input: Record<string, unknown>): ParsedEventBase {
     deviceId: readRequiredUuid(input.deviceId, "deviceId"),
     clientEventId: readOptionalClientEventId(input.clientEventId),
     isIdle: readBoolean(input.isIdle, false) || readBoolean(input.active, true) === false,
+    isActiveWindow: readBoolean(input.isActiveWindow, true),
     ...readTiming(input),
   };
 }

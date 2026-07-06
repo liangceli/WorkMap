@@ -1,5 +1,26 @@
 # Latest QA Handoff
 
+## 2026-07-06 Keyboard And Mouse Monitoring Boundary Review
+
+- Reviewed: Desktop Agent foreground/idle adapter references, API/Web report privacy copy, handoff docs, and scoped source search across Desktop Agent, API, Web, and shared packages.
+- Finding: no implementation was found for keystroke logging, mouse click logging, mouse movement tracking, keyboard hooks, mouse hooks, `GetAsyncKeyState`, `SetWindowsHookEx`, or `WH_KEYBOARD`-style monitoring.
+- Confirmed implementation boundary: Desktop Agent uses Windows `GetLastInputInfo` only to derive elapsed seconds since the last input for idle detection. It does not expose the key pressed, mouse button, click target, cursor coordinates, typed content, or interaction contents.
+- Tests: source search/review only; no runtime tests were needed because no code changed.
+- Manual QA: not run on the Employee computer.
+- Recommendation: pass for the current privacy-boundary answer. If future idle/input implementation changes, rerun a capability scan before release and preserve the no-keystroke/no-mouse-event collection boundary.
+
+---
+
+## 2026-07-06 Desktop Agent Download URL Verification
+
+- Reviewed: deployed Device Setup HTML, configured GitHub download URL, GitHub Release 0.5.1 asset redirect, and the mixed-version URL currently embedded by Vercel.
+- High finding: deployed URL uses tag `desktop-agent-v0.5.0` with filename `WorkMap-Desktop-Agent-Setup-0.5.1.exe`; it returns HTTP 404.
+- Verified good URL: the same filename under tag `desktop-agent-v0.5.1` returns HTTP 200 and an attachment response.
+- Source finding: the page uses the public build-time `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL`; the cross-origin `download` attribute cannot repair an invalid URL.
+- Tests: external HTTP checks only; no runtime tests were needed because no application code changed.
+- Manual QA: not run on the Employee computer.
+- Recommendation: update the Vercel environment variable, redeploy Web, then copy the link from the deployed button and verify it contains `desktop-agent-v0.5.1` before retrying the Employee download. The next round can proceed after this external configuration fix.
+
 ## Reviewed Implementation
 
 Reviewed the Employee onboarding gate, backend device revocation response, API cold-start pairing flow, Electron IPC/context isolation, DPAPI credential persistence, runtime/tray/auto-start behavior, privacy copy, Electron Builder/NSIS configuration, ASAR resource paths, final executable, and existing foreground tracking regressions.
@@ -189,3 +210,94 @@ Not applicable; no UI or runtime behavior changed.
 ### Risks And Recommendation
 
 Pass once the ignore and diff checks complete. The next round can proceed without adding a public “designed with UI/UX Pro Max” label, subject to preserving license notices if licensed implementation material is redistributed.
+
+---
+
+## 2026-07-06 Owner App Usage Metric Semantics Review
+
+### Reviewed Implementation
+
+Reviewed the current handoff/API/frontend skill notes for Reports and Desktop Agent activity boundaries, plus the prior keyboard/mouse monitoring clarification.
+
+### Diff Review Summary
+
+- Documentation-only update in `docs/ai-handoff/latest-implementation.md`.
+- No Desktop Agent, API, Reports UI, schema, auth, RBAC, deployment, or external configuration changed.
+
+### Findings By Severity
+
+- High: none introduced; no runtime behavior changed.
+- Medium: the requested phrase “total active time including background/minimized” conflicts with the desired product rule that visible-but-not-focused apps should not count as usage while another app is operated.
+- Low: the future implementation should use clear separate labels such as `focus active` and `open/runtime` to avoid Owner report confusion.
+
+### Test And Verification Status
+
+- Conceptual feasibility review: completed.
+- Runtime typecheck, lint, build, and automated tests: not run because no runtime files changed.
+- `git diff --check`: required before closeout.
+
+### Manual QA Status
+
+Not run. This was a product/technical semantics clarification only.
+
+### Risks And Recommendation
+
+Pass for definition alignment. The next implementation round can proceed if it treats foreground-window time as the authoritative `focus active` metric and keeps background/minimized runtime separate from actual usage.
+
+---
+
+## 2026-07-06 App Duration Three-Metric Implementation QA
+
+### Reviewed Implementation
+
+Reviewed the Desktop Agent foreground/runtime event changes, Windows open-window enumeration, API ingestion/report aggregation, live overlay merge behavior, Reports app-row UI chips, tests, and contract/skill documentation updates for the agreed APP timing rules.
+
+### Diff Review Summary
+
+- Scope stayed within APP duration collection, API reporting, Reports UI presentation, related tests, and handoff/contract notes.
+- No schema migration, auth/RBAC, tenant isolation, Platform Admin visibility, domain timing, virtual office, deployment configuration, or unrelated UI surface was intentionally changed.
+- The new contract separates:
+  - `focusActiveSeconds`: foreground/focused app with recent input.
+  - `focusedIdleSeconds`: foreground/focused app after idle threshold.
+  - `openRuntimeSeconds`: app open/window runtime context, not active use.
+- Legacy `activeSeconds` remains a compatibility alias for focus-active, and legacy `idleSeconds` remains a compatibility alias for focused-idle.
+
+### Findings Ordered By Severity
+
+- High: none found in code review or automated verification.
+- Medium manual QA gap: real Employee Windows computer stopwatch testing has not yet been run with Desktop Agent `0.5.2`.
+- Medium release dependency: the employee computer will not produce `openRuntimeSeconds` events until the new Desktop Agent build is published and installed.
+- Medium interpretation risk: `openRuntimeSeconds` is intentionally not proof of active work; UI now labels it separately, but pilot users may still need product copy/training.
+- Low Windows edge risk: runtime enumeration is based on visible top-level Windows windows and process/product names. It should cover foreground, visible-but-not-focused, and minimized windows, but not all hidden background services.
+- Low UI risk: the chip layout was validated by typecheck/build/tests, but no browser screenshot/manual visual pass was run in this round.
+
+### Test And Verification Status
+
+- `corepack pnpm --filter @workmap/desktop-agent test`: passed, 15/15.
+- `corepack pnpm --filter @workmap/api test -- tracking-reports-verification`: passed, 9/9.
+- `corepack pnpm --filter @workmap/web test -- reports-live-usage`: passed, 15/15.
+- `corepack pnpm --filter @workmap/desktop-agent typecheck`: passed.
+- `corepack pnpm --filter @workmap/api typecheck`: passed after transaction operation typing was corrected.
+- `corepack pnpm --filter @workmap/web typecheck`: passed.
+- `corepack pnpm --filter @workmap/desktop-agent lint`: passed.
+- `corepack pnpm --filter @workmap/api lint`: passed.
+- `corepack pnpm --filter @workmap/web lint`: passed.
+- `corepack pnpm --filter @workmap/desktop-agent build`: passed.
+- `corepack pnpm --filter @workmap/api build`: passed.
+- `corepack pnpm --filter @workmap/web build`: passed with the existing Next ESLint plugin warning.
+- Scoped changed-file secret scan: passed, no matching secret patterns found.
+- `git diff --check`: passed.
+
+### Manual QA Status
+
+Not run on the real Employee computer and not visually reviewed in a browser. Automated tests verify the calculation/report merge rules, not OS-level stopwatch accuracy.
+
+### Risks
+
+- New Agent release/deployment is required before Owner reports can show accurate open/runtime rows from employee devices.
+- Historical rows will not gain true runtime data retroactively.
+- Microsoft Store/UWP, multi-monitor focus attribution, minimized-window runtime, and idle threshold behavior still require real Windows validation.
+
+### Pass/Fail Recommendation
+
+Pass for local implementation and automated verification. The next round can proceed to release/deploy/manual QA, but should not mark the timing feature production-accepted until real-device stopwatch QA passes.

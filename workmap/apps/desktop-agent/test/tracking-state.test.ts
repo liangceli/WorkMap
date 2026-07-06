@@ -17,7 +17,8 @@ test("tracks app switches, stable durations, idle, resume and shutdown", () => {
   assert.equal(idleStarted[0]?.appName, "Outlook");
   assert.equal(idleStarted[0]?.durationSeconds, 5);
   assert.equal(idleStarted[0]?.isIdle, false);
-  assert.deepEqual(state.observe({ ...sample("Outlook", 20_000), isIdle: true }, DEVICE_ID), []);
+  const runtimeRolled = state.observe({ ...sample("Outlook", 20_000), isIdle: true }, DEVICE_ID);
+  assert.deepEqual(runtimeRolled.map((event) => [event.appName, event.isActiveWindow, event.durationSeconds]), [["Outlook", false, 10]]);
   const resumed = state.observe(sample("Outlook", 25_000), DEVICE_ID);
   assert.equal(resumed[0]?.durationSeconds, 10);
   assert.equal(resumed[0]?.isIdle, true);
@@ -59,6 +60,23 @@ test("rolls a foreground segment at the UTC day boundary for complete daily repo
   const rolled = state.observe({ ...sample("Outlook", 0), observedAtMs: Date.parse("2026-06-19T00:00:01.000Z") }, DEVICE_ID);
   assert.equal(rolled[0]?.durationSeconds, 11);
   assert.equal(state.currentActivity()?.startedAt, "2026-06-19T00:00:01.000Z");
+});
+
+test("tracks open runtime separately from focused active time", () => {
+  let id = 20;
+  const state = new AppTrackingState({
+    minimumDurationMs: 1_000,
+    runtimeSegmentMs: 10_000,
+    createEventId: () => `00000000-0000-4000-8000-${String(++id).padStart(12, "0")}`,
+  });
+  state.observe({ ...sample("App A", 0), openAppNames: ["App A", "App B"] }, DEVICE_ID);
+  state.observe({ ...sample("App A", 5_000), openAppNames: ["App A", "App B"] }, DEVICE_ID);
+  const events = state.observe({ ...sample("App A", 10_000), openAppNames: ["App A", "App B"] }, DEVICE_ID);
+  assert.deepEqual(events.map((event) => [event.appName, event.isActiveWindow, event.durationSeconds]), [
+    ["App A", false, 10],
+    ["App B", false, 10],
+  ]);
+  assert.equal(state.currentActivity()?.activeSeconds, 10);
 });
 
 function sample(appName: string | null, offset: number) {
