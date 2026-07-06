@@ -4,6 +4,8 @@ import { AppTrackingState, recoverTrackingCheckpoint } from "./trackingState.js"
 import type { AgentConfig, AgentStatus } from "./types.js";
 import { DEFAULT_IDLE_THRESHOLD_SECONDS, WindowsForegroundAdapter } from "./windowsForeground.js";
 
+export const DEFAULT_SAMPLE_INTERVAL_MS = 100;
+
 export class DesktopAgentRuntime {
   private readonly tracking = new AppTrackingState({
     runtimeSegmentMs: readPositiveNumber("WORKMAP_AGENT_RUNTIME_SEGMENT_MS", 10_000),
@@ -36,7 +38,7 @@ export class DesktopAgentRuntime {
     if (recovered) await this.queue.enqueue(recovered);
     await writeTrackingCheckpoint(null);
     await this.updateStatus();
-    const sampleInterval = readPositiveNumber("WORKMAP_AGENT_SAMPLE_INTERVAL_MS", 1_000);
+    const sampleInterval = readPositiveNumber("WORKMAP_AGENT_SAMPLE_INTERVAL_MS", DEFAULT_SAMPLE_INTERVAL_MS);
     const heartbeatInterval = readPositiveNumber("WORKMAP_AGENT_HEARTBEAT_INTERVAL_MS", 10_000);
     const checkpointInterval = readPositiveNumber("WORKMAP_AGENT_CHECKPOINT_INTERVAL_MS", 5_000);
     let nextHeartbeatAt = 0;
@@ -85,6 +87,7 @@ export class DesktopAgentRuntime {
   private async finalize() {
     if (this.finalized) return;
     this.finalized = true;
+    this.adapter.stop();
     for (const event of this.tracking.shutdown(this.config.deviceId, Date.now())) await this.queue.enqueue(event);
     await writeTrackingCheckpoint(null);
     await this.flushQueue();

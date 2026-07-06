@@ -383,3 +383,93 @@ Not run on the separate Employee Windows computer. Required acceptance: after in
 ### Recommendation And Next Round
 
 Automated QA recommendation: pass. The next round can proceed to GitHub Release publication, download-link update, Employee-machine upgrade, and timed manual acceptance. Do not describe the real-device defect as fully accepted until that manual check passes.
+
+---
+
+## 2026-07-06 Windows Generic App Name Review QA
+
+- Reviewed implementation: Windows foreground app-name selection only.
+- Diff review: documentation-only; no runtime code changed.
+- Findings: no high-severity functional defect established from the screenshot. Medium reporting-clarity issue: several Windows processes collapse into the generic `Microsoft Windows Operating System` product name, and existing rows cannot identify which process produced it.
+- Verification: confirmed the adapter preference order is ProductName, FileDescription, then ProcessName.
+- Manual QA: not run.
+- Risk/recommendation: timing remains valid for the foreground surface, but the label is ambiguous. Pass for explanation; a separate scoped naming-normalization change can proceed if requested.
+
+---
+
+## 2026-07-06 Focused Input Without Continued Input Review
+
+- Reviewed implementation: the 30-second idle default from Windows sampling through the runtime adapter.
+- Finding: counting all five no-input minutes as focus active would violate the agreed metric definition. Expected split is approximately 30 seconds focus active, 4 minutes 30 seconds focused idle, and 5 minutes open/runtime, subject to one-second sampling and report polling latency.
+- Verification: source inspection only; no runtime files changed and no automated or real-device tests were run in this clarification round.
+- Remaining risk: a deployed `0.5.2`, a process that was not restarted after upgrade, or a positive environment override can retain a longer threshold.
+- Recommendation: pass for rule consistency; proceed with a real-device `0.5.3` stopwatch check before acceptance.
+
+---
+
+## 2026-07-06 Focused Idle Metric Product Review QA
+
+- Reviewed implementation: current Focus active, Focused idle, and Open/runtime report/API contract.
+- Finding: deleting Focused idle from the model would create an interpretation gap because open/runtime also contains background and minimized time. Merging it into Focus active would be materially inaccurate.
+- Recommendation: retain the metric and optionally simplify only its presentation or rename it to `Foreground, no input`.
+- Verification: source/contract review only; no application files changed and no automated or manual tests run.
+- Risk: hiding the metric without an accessible breakdown can still make Owner totals appear inconsistent; retain it in detail/export surfaces.
+- Pass recommendation: pass for product-direction review. A presentation-only round can proceed if requested.
+
+---
+
+## 2026-07-06 App Metric Visibility Product Review QA
+
+- Reviewed implementation: current three-chip Owner report app-row presentation.
+- Finding: showing Focus active, Focused idle, and Open/runtime with equal visual weight increases ambiguity during the accuracy-validation stage. Open/runtime is especially liable to be misread as work time.
+- Recommendation: show only Focus active in the default row; preserve Focused idle and Open/runtime in the underlying contract and future detail/debug views.
+- Verification: source/UI review only; no application code changed and no automated or manual tests run.
+- Remaining risk: a single visible Focus active number can itself be overinterpreted, so accompanying copy must retain the 30-second recent-input definition and avoid productivity/hours-worked claims.
+- Pass recommendation: pass. A scoped Web presentation change can proceed without changing Desktop Agent, API, schema, or historical data.
+
+---
+
+## 2026-07-06 Desktop Agent Precision And Collapsible App Metrics QA
+
+### Reviewed Implementation
+
+Reviewed the Windows sampler lifecycle, foreground/input transition timestamps, short-segment policy, open-runtime scan continuity, queue/heartbeat implications, API aggregation regression coverage, App card collapsed/expanded rendering, accessibility state, and package/release version.
+
+### Diff Review Summary
+
+- Runtime changes are confined to Desktop Agent app timing/sampling and Reports app-metric presentation.
+- API/schema code did not change; existing three-field contracts remain intact.
+- Existing WorkMap theme/components and Lucide icons were reused.
+- Product Design context/playback workflow confirmed the implementation should match the existing Reports surface with full card interactivity and no broader redesign.
+
+### Findings Ordered By Severity
+
+- Fixed - High: the old five-second minimum silently dropped short foreground/runtime segments, conflicting with immediate counting.
+- Fixed - High: active-to-idle and idle-to-active boundaries previously used the next polling timestamp; they now use timestamps derived from `GetLastInputInfo`.
+- Fixed - Medium: spawning/compiling PowerShell for every observation added roughly 400ms+ native startup overhead; the sampler is now persistent and warmed focus-only observations take about 4.5-5.7ms on the development computer.
+- Fixed - Medium: secondary metrics had equal default visual weight; they now render only when the individual App card is expanded.
+- Remaining - Medium: no real Employee-computer stopwatch, CPU/battery soak, or end-to-end Owner sync acceptance was run.
+- Remaining - Medium: browser visual/click QA could not run because no in-app browser instance was available.
+- Remaining - Low/expected: focus polling, one-second open-app scans, whole-second API storage, network calls, and report polling impose bounded observation/display latency; no polling design can promise literal zero delay.
+- Remaining - Low/expected: Open/runtime preserves the prior visible top-level app-window definition and does not include newly enumerated headless services.
+
+### Test And Verification Status
+
+- Desktop Agent: 22/22 tests passed; typecheck, lint, build, real Windows sampler integration, Alpha copy, and NSIS release build passed.
+- API: 9/9 tests passed; typecheck, lint, and build passed.
+- Web: 17/17 tests passed; typecheck, lint, and production build passed with 19 routes.
+- App card automated coverage verifies Focus active is present when collapsed, Focused idle/Open-runtime are absent when collapsed, and both appear in an expanded render state.
+- Privacy scan remains bounded to app names, open app names, input age/timestamps, lock state, and observation time; prohibited content/title collection was not introduced.
+- Final installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.4.exe`, 91,937,652 bytes, SHA-256 `C44A14DF54DDDFC95F80605A004F7326762B4492859367C36BBF77DB7EC76D28`, Authenticode `NotSigned`.
+- `git diff --check`: passed.
+- Stale timing-default scan, prohibited privacy-capability scan, scoped secret scan, and API-code-unchanged check: passed.
+
+### Manual QA Status
+
+- Development Windows sampler smoke/performance measurement: passed.
+- Separate Employee Windows computer: not run.
+- Real browser visual/keyboard/click inspection: not run due unavailable in-app browser.
+
+### Risks And Recommendation
+
+Pass for scoped implementation and automated QA after final closeout checks. The next round can proceed to deployment/release and real-device acceptance, but should not claim zero-latency or final stopwatch accuracy until that acceptance passes.

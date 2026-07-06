@@ -30,7 +30,7 @@ export class AppTrackingState {
   private readonly createEventId: () => string;
 
   constructor(options: TrackingStateOptions = {}) {
-    this.minimumDurationMs = options.minimumDurationMs ?? 5_000;
+    this.minimumDurationMs = options.minimumDurationMs ?? 1;
     this.maximumSampleGapMs = options.maximumSampleGapMs ?? 15_000;
     this.runtimeSegmentMs = options.runtimeSegmentMs ?? 10_000;
     this.createEventId = options.createEventId ?? randomUUID;
@@ -76,8 +76,10 @@ export class AppTrackingState {
       return completed;
     }
 
-    const foreground = this.finish(deviceId, sample.observedAtMs);
-    this.active = this.start(appName, sample.isIdle, sample.observedAtMs);
+    const transitionAtMs = this.foregroundTransitionAt(sample);
+    const foreground = this.finish(deviceId, transitionAtMs);
+    this.active = this.start(appName, sample.isIdle, transitionAtMs);
+    this.active.lastObservedAtMs = sample.observedAtMs;
     if (foreground) completed.push(foreground);
     completed.push(...this.observeRuntime(sample, deviceId));
     return completed;
@@ -111,7 +113,7 @@ export class AppTrackingState {
 
     const cappedEndMs = Math.min(observedEndMs, segment.lastObservedAtMs + this.maximumSampleGapMs);
     const durationMs = cappedEndMs - segment.startedAtMs;
-    if (!Number.isFinite(durationMs) || durationMs < this.minimumDurationMs) return null;
+    if (!Number.isFinite(durationMs) || durationMs <= 0 || durationMs < this.minimumDurationMs) return null;
 
     return {
       clientEventId: this.createEventId(),
@@ -129,8 +131,24 @@ export class AppTrackingState {
     return { appName, isIdle, startedAtMs: observedAtMs, lastObservedAtMs: observedAtMs };
   }
 
+  private foregroundTransitionAt(sample: ForegroundSample) {
+    if (!this.active) return sample.observedAtMs;
+    const preciseBoundary = sample.isIdle ? sample.idleStartedAtMs : sample.lastInputAtMs;
+    if (typeof preciseBoundary !== "number" || !Number.isFinite(preciseBoundary)) return sample.observedAtMs;
+    return Math.min(sample.observedAtMs, Math.max(this.active.lastObservedAtMs, preciseBoundary));
+  }
+
   private observeRuntime(sample: ForegroundSample, deviceId: string): AppUsageEvent[] {
     const completed: AppUsageEvent[] = [];
+    if (sample.openAppNames === undefined) {
+      if (sample.isLocked) return completed;
+      const foreground = sample.appName ? normalizeAppName(sample.appName) : null;
+      if (!foreground) return completed;
+      const existing = this.runtimeSegments.get(foreground);
+      if (existing) existing.lastObservedAtMs = sample.observedAtMs;
+      else this.runtimeSegments.set(foreground, { appName: foreground, startedAtMs: sample.observedAtMs, lastObservedAtMs: sample.observedAtMs });
+      return completed;
+    }
     const openApps = new Set<string>();
     if (!sample.isLocked) {
       for (const appName of sample.openAppNames ?? []) {
@@ -180,7 +198,7 @@ export class AppTrackingState {
   private finishRuntimeSegment(segment: RuntimeSegment, deviceId: string, observedEndMs: number): AppUsageEvent | null {
     const cappedEndMs = Math.min(observedEndMs, segment.lastObservedAtMs + this.maximumSampleGapMs);
     const durationMs = cappedEndMs - segment.startedAtMs;
-    if (!Number.isFinite(durationMs) || durationMs < this.minimumDurationMs) return null;
+    if (!Number.isFinite(durationMs) || durationMs <= 0 || durationMs < this.minimumDurationMs) return null;
 
     return {
       clientEventId: this.createEventId(),
@@ -203,7 +221,7 @@ export function recoverTrackingCheckpoint(
   if (!checkpoint || checkpoint.isIdle) return null;
   const appName = normalizeAppName(checkpoint.appName);
   const durationMs = checkpoint.lastObservedAtMs - checkpoint.startedAtMs;
-  if (!appName || !Number.isFinite(durationMs) || durationMs < (options.minimumDurationMs ?? 5_000)) return null;
+  if (!appName || !Number.isFinite(durationMs) || durationMs <= 0 || durationMs < (options.minimumDurationMs ?? 1)) return null;
   return {
     clientEventId: (options.createEventId ?? randomUUID)(),
     deviceId,

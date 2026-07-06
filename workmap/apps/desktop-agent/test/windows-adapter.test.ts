@@ -1,14 +1,54 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { DEFAULT_IDLE_THRESHOLD_SECONDS, minimizeWindowsObservation } from "../src/windowsForeground.js";
+import { DEFAULT_SAMPLE_INTERVAL_MS } from "../src/runtime.js";
+import { DEFAULT_IDLE_THRESHOLD_SECONDS, DEFAULT_OPEN_APP_SCAN_INTERVAL_MS, minimizeWindowsObservation, WindowsForegroundAdapter } from "../src/windowsForeground.js";
 
 test("uses the agreed 30-second no-input threshold", async () => {
   const source = await readFile(new URL("../scripts/windows-foreground.ps1", import.meta.url), "utf8");
   const alphaSource = await readFile(new URL("../alpha-windows/scripts/windows-foreground.ps1", import.meta.url), "utf8");
   assert.equal(DEFAULT_IDLE_THRESHOLD_SECONDS, 30);
+  assert.equal(DEFAULT_SAMPLE_INTERVAL_MS, 100);
+  assert.equal(DEFAULT_OPEN_APP_SCAN_INTERVAL_MS, 1_000);
   assert.match(source, /IdleThresholdSeconds = 30/);
   assert.match(alphaSource, /IdleThresholdSeconds = 30/);
+});
+
+test("derives precise last-input and idle-transition timestamps", () => {
+  const sample = minimizeWindowsObservation({
+    appName: "Weixin",
+    openApps: ["Weixin"],
+    idleSeconds: 30.4,
+    locked: false,
+    observedAt: "2026-06-18T00:00:30.400Z",
+  });
+  assert.equal(sample.isIdle, true);
+  assert.equal(sample.lastInputAtMs, Date.parse("2026-06-18T00:00:00.000Z"));
+  assert.equal(sample.idleStartedAtMs, Date.parse("2026-06-18T00:00:30.000Z"));
+});
+
+test("focus-only observations do not invent an empty open-app scan", () => {
+  const sample = minimizeWindowsObservation({
+    appName: "Weixin",
+    openApps: null,
+    idleSeconds: 1,
+    locked: false,
+    observedAt: "2026-06-18T00:00:01.000Z",
+  });
+  assert.equal(sample.openAppNames, undefined);
+});
+
+test("persistent Windows sampler returns consecutive privacy-minimised observations", { skip: process.platform !== "win32" }, async () => {
+  const adapter = new WindowsForegroundAdapter();
+  try {
+    const first = await adapter.sample();
+    const second = await adapter.sample();
+    assert(second.observedAtMs > first.observedAtMs);
+    assert.equal(typeof second.lastInputAtMs, "number");
+    assert(!("windowTitle" in second));
+  } finally {
+    adapter.stop();
+  }
 });
 
 test("Windows adapter keeps product name and strips sensitive native fields", () => {
@@ -38,6 +78,8 @@ test("production PowerShell adapter uses foreground and last-input APIs without 
   assert.match(source, /ProductName/);
   assert.match(source, /ApplicationFrameHost/);
   assert.match(source, /GW_CHILD/);
+  assert.match(source, /\[switch\]\$Interactive/);
+  assert.match(source, /\[Console\]::In\.ReadLine/);
   assert.doesNotMatch(source, /GetWindowText/);
 });
 

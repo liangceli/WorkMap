@@ -11,6 +11,8 @@ export type ForegroundSample = {
   isIdle: boolean;
   isLocked: boolean;
   observedAtMs: number;
+  lastInputAtMs?: number;
+  idleStartedAtMs?: number;
 };
 
 export type CurrentAppActivity = {

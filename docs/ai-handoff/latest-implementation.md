@@ -647,3 +647,142 @@ Not run on the separate Employee Windows computer. A timed real-device check is 
 - `WORKMAP_AGENT_IDLE_SECONDS` can intentionally override the default. A deployed machine with that environment variable set to another positive value will use the override.
 - The installer is unsigned and may trigger Windows SmartScreen.
 - Publish the installer under GitHub Release tag `desktop-agent-v0.5.3`, update `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` to its direct asset URL, redeploy Web if needed, install/upgrade the Employee computer, then perform the timed Weixin test above. The implementation is ready for that release/manual-QA round.
+
+---
+
+## 2026-07-06 Windows Generic App Name Review
+
+- Original task brief: explain why `Microsoft Windows Operating System` frequently appears as the current foreground app.
+- Changed files: handoff documentation only.
+- Finding: the Windows adapter currently prefers `FileVersionInfo.ProductName` over `FileDescription` and `ProcessName`. Multiple Windows shell/system executables expose the generic product name `Microsoft Windows Operating System`, so Report can group File Explorer, desktop/taskbar/Start, and other Windows-owned foreground surfaces under that label.
+- Existing-data boundary: the exact underlying process cannot be recovered from the displayed row because the Agent uploads the selected product name rather than a separate process identity.
+- Role/access behavior: unchanged.
+- Verification: source inspection of `workmap/apps/desktop-agent/scripts/windows-foreground.ps1`; no runtime tests were required because no application code changed.
+- Manual QA: not run.
+- Intentionally not changed: no Desktop Agent naming, timing, API, Web, schema, auth, RBAC, or deployment behavior changed.
+- Remaining risk/next step: the label is technically sourced from Windows metadata but is too broad for useful reporting. If requested, add privacy-safe local process-to-friendly-name resolution for known Windows shell processes, with tests, without collecting titles or content.
+
+---
+
+## 2026-07-06 Focused Input Without Continued Input Clarification
+
+- Original task brief: assess whether Weixin should remain focus active for five minutes after the employee clicks its input box but does not type.
+- Changed files: handoff documentation only.
+- Confirmed rule: the text caret/input-box focus is not evidence of five minutes of active interaction. With Weixin still foreground, the first 30 seconds after the last input remain focus active; subsequent no-input foreground time is focused idle; the full open period remains open/runtime.
+- Current implementation: Desktop Agent `0.5.3` uses the agreed 30-second `GetLastInputInfo` threshold. If a machine reports the full five minutes as focus active, it is likely still running `0.5.2`, has not restarted after upgrade, or has an explicit `WORKMAP_AGENT_IDLE_SECONDS` override.
+- Verification: source review confirmed the shared/runtime/script default is 30 seconds. No runtime code changed and no manual QA was run.
+- Role/access behavior and privacy collection boundaries are unchanged.
+- Next step: install/restart `0.5.3` on the Employee computer and run this exact five-minute stopwatch scenario in Employee and Owner reports.
+
+---
+
+## 2026-07-06 Focused Idle Metric Product Decision Review
+
+- Original task brief: assess the impact of deleting the Focused idle metric.
+- Changed files: handoff documentation only.
+- Recommendation: do not remove `focusedIdleSeconds` from collection, API aggregation, exports, or the report data model. It preserves the distinction between foreground-without-recent-input and background/minimized runtime, explains the gap between focus-active and open/runtime, and supports accuracy QA.
+- UI direction if simplification is desired: keep Focus active as the primary metric; rename Focused idle to a clearer neutral label such as `Foreground, no input` and present it as secondary/expandable detail. Open/runtime remains separate context.
+- Prohibited merge: do not add focused-idle time into Focus active, because that would reintroduce active-time inflation.
+- Verification: reviewed the current report/API metric contract and definitions. No runtime code or UI changed; no automated/manual QA run.
+- Role/access behavior and privacy boundaries are unchanged.
+- Next step: decide whether to retain the current visible three-chip UI or request a scoped presentation-only change that preserves the underlying metric.
+
+---
+
+## 2026-07-06 App Metric Visibility Recommendation
+
+- Original task brief: decide whether the current Owner report should hide Focused idle and total/Open-runtime metrics at this stage.
+- Changed files: handoff documentation only.
+- Recommendation: hide `Focused idle` and `Open/runtime` from the default Owner app-row presentation for the current product stage, leaving `Focus active` as the single primary visible metric.
+- Data boundary: retain `focusedIdleSeconds` and `openRuntimeSeconds` in Desktop Agent collection, API aggregation, internal QA, and a future details/debug surface. This is a presentation-only direction, not deletion or merging.
+- Rationale: the secondary metrics currently add interpretation burden, can make open time look like work time, and distract from validation of the primary recent-input foreground metric.
+- Copy boundary: Focus active must still be described as foreground/focused time with input within 30 seconds, not guaranteed productive work or hours worked.
+- Verification: reviewed the current three-chip app-row UI. No runtime/UI code changed and no automated/manual QA run.
+- Role/access behavior and privacy boundaries are unchanged.
+- Suggested next step: implement a narrowly scoped Web-only change that shows Focus active by default while preserving hidden metrics in the API/data model; optionally add an explicit details affordance later.
+
+---
+
+## 2026-07-06 Desktop Agent Precision And Collapsible App Metrics
+
+### Original Task Brief
+
+Make Focus active the prominent primary metric; hide Focused idle and Open/runtime inside a per-app expandable card; start Focus active immediately when the foreground app has keyboard/mouse input; switch to Focused idle immediately at 30 seconds without input; preserve precise open-to-close runtime across focused, background, and minimized app-window states; and change nothing outside this activity-timing/report presentation boundary.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/src/pairing.ts`
+- `workmap/apps/desktop-agent/src/runtime.ts`
+- `workmap/apps/desktop-agent/src/trackingState.ts`
+- `workmap/apps/desktop-agent/src/types.ts`
+- `workmap/apps/desktop-agent/src/windowsForeground.ts`
+- `workmap/apps/desktop-agent/scripts/windows-foreground.ps1`
+- `workmap/apps/desktop-agent/alpha-windows/scripts/windows-foreground.ps1`
+- `workmap/apps/desktop-agent/test/tracking-state.test.ts`
+- `workmap/apps/desktop-agent/test/windows-adapter.test.ts`
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/test/reports-app-metric-card.test.ts`
+- `workmap/apps/web/tsconfig.tsbuildinfo` (generated by the required typecheck/build)
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+Generated but git-ignored:
+
+- `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.4.exe`
+- `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.4.exe.blockmap`
+
+### Implementation Summary
+
+- Bumped Desktop Agent source and pairing identity to `0.5.4`.
+- Replaced per-sample PowerShell process startup with one persistent request/response sampler. Native code now compiles once per Agent run.
+- Split sampling into fast foreground/input observations and periodic full open-app scans. Default foreground request spacing is 100ms; full open-app enumeration remains once per second so background/minimized runtime is maintained without paying full enumeration cost on every focus sample.
+- Windows measurements on this development computer: first persistent request about 523ms including process startup/native compilation; warmed focus-only requests about 4.5-5.7ms; warmed full open-app request about 90.5ms.
+- `GetLastInputInfo` idle age is converted into privacy-minimised `lastInputAtMs` and exact `idleStartedAtMs`. When the same app crosses the threshold, the state machine uses the true last-input-plus-30-seconds boundary rather than the next polling timestamp. Input resumption similarly uses the derived last-input timestamp.
+- Removed the previous default five-second minimum segment filter. Any positively observed foreground or open-runtime segment is retained; the existing API contract still stores whole seconds.
+- Open/runtime meaning and aggregation remain unchanged. Full scans continue to track detected open app windows across foreground, background, and minimized states; the existing ten-second segment roll is an upload/durability chunk and does not remove time. Focus-only scans preserve background runtime until the next full scan.
+- Reports app rows are now accessible interactive cards. Collapsed cards render only the enlarged green Focus active metric. Clicking the card toggles `aria-expanded` and reveals Focused idle and Open/runtime in the existing amber/blue tones.
+- The top app summary no longer exposes aggregate Focused idle/Open-runtime values by default. A currently idle Agent shows neutral `No recent input` copy instead of a Focused idle duration.
+- Applied the existing WorkMap theme, spacing, radii, typography, and Lucide icon system; no new design system or dependency was introduced.
+
+### Role, Access, And Privacy Behavior
+
+- Owner/Employee report access, tenant scoping, department scoping, and Platform Admin boundaries are unchanged.
+- No keystrokes, mouse coordinates/click targets, window titles, screenshots, content, URLs, clipboard, camera, or microphone data was added.
+- `GetLastInputInfo` still supplies only global elapsed time since the last input. Foreground identity remains the Windows foreground app.
+
+### Verification
+
+- Desktop Agent tests: 22/22 passed, including exact 30-second boundary, exact resume timestamp, sub-five-second segment retention, focus/full-scan runtime continuity, and real Windows persistent-sampler integration.
+- Desktop Agent typecheck, lint, Alpha build, TypeScript build, and Windows NSIS build: passed.
+- API tests: 9/9 passed; API typecheck, lint, and build passed.
+- Web tests: 17/17 passed, including collapsed and expanded App card render states; Web typecheck, lint, and production build passed with 19 routes.
+- Persistent PowerShell timing smoke: passed with privacy-minimised output and no title/content fields.
+- Installer path: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.4.exe`.
+- Installer size: 91,937,652 bytes.
+- Installer SHA-256: `C44A14DF54DDDFC95F80605A004F7326762B4492859367C36BBF77DB7EC76D28`.
+- Authenticode status: `NotSigned`.
+- Packaged-resource inspection confirmed the 30-second threshold, persistent interactive mode, and separated focus/full open-app request contract in the final installer.
+- `git diff --check`: passed.
+- Scoped stale-default, prohibited-capability, and secret scans: passed.
+- API runtime code unchanged check: passed.
+
+### Manual QA
+
+- Real Windows sampler execution: passed on the development computer.
+- Separate Employee-computer stopwatch QA: not run.
+- Browser visual/click QA: not run because the in-app browser runtime reported no available browser instance. Automated server-render tests cover default collapsed and expanded content states, but not final pixels or a real click/focus session.
+
+### Intentionally Not Changed
+
+- No API runtime implementation, Prisma schema/migration, authentication, Cognito, RBAC, tenant isolation, Platform Admin behavior, domain tracking, Virtual Office, deployment configuration, or unrelated page/component changed.
+- No historical usage rewrite.
+- No process-title/content collection and no per-key/per-click monitoring.
+- Existing `docs/references/` content was not touched.
+
+### Remaining Risks And Suggested Next Step
+
+- Polling cannot be mathematically zero-latency. Warm focus observations are requested at roughly 100ms spacing; open-app scans are once per second; API/report totals remain whole-second values and network/UI polling adds display latency.
+- Open/runtime remains the existing visible top-level app-window context. Truly headless services or hidden tray-only processes without a visible top-level window are not newly included because the request explicitly said to keep Open/runtime behavior unchanged.
+- The higher sampling cadence and persistent PowerShell process require a real Employee-computer CPU/battery soak check.
+- Publish/redeploy the Web change, publish the final `0.5.4` installer under `desktop-agent-v0.5.4`, install/restart it on the Employee computer, then run timed focus/input, 30-second idle, resume, app-open/close, minimize/background, and card expand/collapse acceptance checks.

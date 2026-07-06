@@ -1,7 +1,7 @@
 "use client";
 
-import { Activity, AlertTriangle, Download, FileText, Power, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Activity, AlertTriangle, ChevronDown, Download, FileText, Power, RefreshCw } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import type { ApiClientOptions, WorkMapApiReportLiveStatus, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
 import { getAgentLiveStatus, getUsageSummary } from "../../lib/api/reportsApi";
@@ -244,7 +244,7 @@ export function ReportSummaryPanel() {
             <div>
               <p style={styles.panelLabel}>API summary</p>
               <h2 style={styles.panelTitle}>{scopeLabel}</h2>
-              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process. App rows now separate focus active, focused idle, and open/runtime time so background or minimized apps are never confused with active use.</p>
+              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process. App cards highlight focus active; expand a card only when you need its secondary timing context.</p>
             </div>
             <span style={styles.scopePill}>{summary.scope === "company" ? "Company scope" : "User scope"}</span>
           </div>
@@ -296,7 +296,7 @@ function AgentStatusPanel({ summary }: { summary: WorkMapApiUsageSummary }) {
           <span style={styles.currentAppDuration}>
             {online && status.currentAppName
               ? status.currentAppFocusedIdleSeconds
-                ? `${formatDuration(status.currentAppFocusedIdleSeconds)} focused idle`
+                ? "No recent input"
                 : `${formatDuration(status.currentAppActiveSeconds ?? 0)} focus active`
               : ""}
           </span>
@@ -351,12 +351,10 @@ function AgentSessionHistory({ rows }: { rows: WorkMapApiUsageSummary["agentSess
 
 function MetricGrid({ summary }: { summary: WorkMapApiUsageSummary }) {
   const appActive = sum(summary.apps, "activeSeconds");
-  const appIdle = sum(summary.apps, "idleSeconds");
-  const appRuntime = summary.apps.reduce((total, row) => total + appOpenRuntime(row), 0);
   const domainActive = sum(summary.websites, "activeSeconds");
   const domainIdle = sum(summary.websites, "idleSeconds");
   const metrics = [
-    { label: "App focus active", value: formatDuration(appActive), detail: `${formatDuration(appIdle)} focused idle · ${formatDuration(appRuntime)} open/runtime` },
+    { label: "App focus active", value: formatDuration(appActive), detail: "Foreground app with keyboard or mouse input within 30 seconds" },
     { label: "Domain active", value: formatDuration(domainActive), detail: `${formatDuration(domainIdle)} domain idle` },
     { label: "Tracked items", value: `${summary.apps.length} / ${summary.websites.length}`, detail: "App rows / domain rows" },
     {
@@ -405,7 +403,7 @@ function DailyTrend({ rows }: { rows: WorkMapApiUsageSummary["daily"] }) {
   );
 }
 
-type UsageListRow = {
+export type UsageListRow = {
   name: string;
   category: string | null;
   productivityLabel: string | null;
@@ -421,52 +419,85 @@ function SummaryUsageList({ title, rows }: { title: string; rows: UsageListRow[]
     <section style={styles.summaryCard}>
       <h3 style={styles.summaryTitle}>{title}</h3>
       <div style={styles.summaryRows}>
-        {rows.map((row) => (
-          <div key={row.name} style={styles.summaryRow}>
-            <div style={styles.nameCell}>
-              <p style={styles.summaryName}>{row.name}</p>
-              <p style={styles.summaryCategory}>{row.category ?? formatProductivity(row.productivityLabel)}</p>
-            </div>
-            {row.openRuntimeSeconds !== undefined || row.focusActiveSeconds !== undefined || row.focusedIdleSeconds !== undefined ? (
-              <div style={styles.appMetricChips} aria-label={`${row.name} app time metrics`}>
-                <MetricChip
-                  label="Focus active"
-                  value={formatDuration(row.focusActiveSeconds ?? row.activeSeconds)}
-                  tone="active"
-                  title="Foreground/focused app with recent input"
-                />
-                <MetricChip
-                  label="Focused idle"
-                  value={formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)}
-                  tone="idle"
-                  title="Foreground/focused app after 30 seconds without input"
-                />
-                <MetricChip
-                  label="Open/runtime"
-                  value={formatDuration(appOpenRuntime(row))}
-                  tone="runtime"
-                  title="App was open or running; not proof of active use"
-                />
+        {rows.map((row) => {
+          const isAppRow = row.openRuntimeSeconds !== undefined || row.focusActiveSeconds !== undefined || row.focusedIdleSeconds !== undefined;
+          return isAppRow ? (
+            <AppUsageMetricCard key={row.name} row={row} />
+          ) : (
+            <div key={row.name} style={styles.summaryRow}>
+              <div style={styles.nameCell}>
+                <p style={styles.summaryName}>{row.name}</p>
+                <p style={styles.summaryCategory}>{row.category ?? formatProductivity(row.productivityLabel)}</p>
               </div>
-            ) : (
               <div style={styles.domainMetricChips}>
                 <span style={styles.summaryTime}>{formatDuration(row.activeSeconds)} active</span>
                 <span style={styles.summaryTime}>{formatDuration(row.idleSeconds)} idle</span>
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
 }
 
-function MetricChip({ label, value, tone, title }: { label: string; value: string; tone: "active" | "idle" | "runtime"; title: string }) {
+export function AppUsageMetricCard({ row, initiallyExpanded = false }: { row: UsageListRow; initiallyExpanded?: boolean }) {
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+  const focusActive = formatDuration(row.focusActiveSeconds ?? row.activeSeconds);
+  return (
+    <article style={styles.appMetricCard}>
+      <button
+        type="button"
+        style={styles.appMetricToggle}
+        aria-expanded={expanded}
+        aria-label={`${row.name}, ${focusActive} focus active. ${expanded ? "Hide" : "Show"} secondary time metrics`}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span style={styles.nameCell}>
+          <span style={styles.summaryName}>{row.name}</span>
+          <span style={styles.summaryCategory}>{row.category ?? formatProductivity(row.productivityLabel)}</span>
+        </span>
+        <span style={styles.appPrimaryMetric}>
+          <MetricChip
+            label="Focus active"
+            value={focusActive}
+            tone="active"
+            title="Foreground/focused app with recent keyboard or mouse input"
+            prominent
+          />
+          <ChevronDown
+            aria-hidden="true"
+            size={18}
+            style={{ ...styles.appMetricChevron, transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+          />
+        </span>
+      </button>
+      {expanded ? (
+        <div style={styles.appSecondaryMetrics} aria-label={`${row.name} secondary app time metrics`}>
+          <MetricChip
+            label="Focused idle"
+            value={formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)}
+            tone="idle"
+            title="Foreground/focused app after 30 seconds without keyboard or mouse input"
+          />
+          <MetricChip
+            label="Open/runtime"
+            value={formatDuration(appOpenRuntime(row))}
+            tone="runtime"
+            title="App was open or running; not proof of active use"
+          />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function MetricChip({ label, value, tone, title, prominent = false }: { label: string; value: string; tone: "active" | "idle" | "runtime"; title: string; prominent?: boolean }) {
   const toneStyle = tone === "active" ? styles.metricChipActive : tone === "idle" ? styles.metricChipIdle : styles.metricChipRuntime;
   return (
-    <span style={{ ...styles.metricChip, ...toneStyle }} title={title}>
+    <span style={{ ...styles.metricChip, ...toneStyle, ...(prominent ? styles.metricChipProminent : {}) }} title={title}>
       <small style={styles.metricChipLabel}>{label}</small>
-      <strong style={styles.metricChipValue}>{value}</strong>
+      <strong style={{ ...styles.metricChipValue, ...(prominent ? styles.metricChipValueProminent : {}) }}>{value}</strong>
     </span>
   );
 }
@@ -727,18 +758,24 @@ const styles = {
   summaryTitle: { margin: "0 0 10px", color: wm.colors.text, fontSize: "16px" },
   summaryRows: { display: "grid", gap: "8px" },
   summaryRow: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "10px", alignItems: "center", borderTop: `1px solid ${wm.colors.borderSubtle}`, paddingTop: "10px", minHeight: "58px" },
-  nameCell: { minWidth: 0 },
-  summaryName: { margin: "0 0 3px", color: wm.colors.text, fontSize: "13px", fontWeight: 800, overflowWrap: "anywhere" as const },
-  summaryCategory: { margin: 0, color: wm.colors.textMuted, fontSize: "12px" },
+  appMetricCard: { border: `1px solid ${wm.colors.borderSubtle}`, borderRadius: wm.radius.md, background: wm.colors.surface, overflow: "hidden", minWidth: 0 },
+  appMetricToggle: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" as const, border: 0, background: "transparent", color: wm.colors.text, padding: "10px", textAlign: "left" as const, font: "inherit", cursor: "pointer" },
+  appPrimaryMetric: { display: "flex", alignItems: "center", gap: "8px", marginLeft: "auto" },
+  appMetricChevron: { flex: "0 0 auto", color: wm.colors.textMuted, transition: "transform 160ms ease" },
+  appSecondaryMetrics: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", borderTop: `1px solid ${wm.colors.borderSubtle}`, background: wm.colors.surfaceLow, padding: "10px" },
+  nameCell: { display: "grid", gap: "3px", minWidth: 0 },
+  summaryName: { display: "block", margin: "0 0 3px", color: wm.colors.text, fontSize: "13px", fontWeight: 800, overflowWrap: "anywhere" as const },
+  summaryCategory: { display: "block", margin: 0, color: wm.colors.textMuted, fontSize: "12px" },
   summaryTime: { color: wm.colors.textSecondary, fontSize: "12px", fontWeight: 800, whiteSpace: "nowrap" as const },
-  appMetricChips: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: "8px" },
   domainMetricChips: { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" as const },
   metricChip: { display: "grid", gap: "2px", borderWidth: "1px", borderStyle: "solid", borderColor: wm.colors.borderSubtle, borderRadius: wm.radius.md, padding: "8px 9px", minWidth: 0 },
+  metricChipProminent: { minWidth: "142px", padding: "9px 11px", boxShadow: "0 1px 2px rgba(25, 165, 100, 0.10)" },
   metricChipActive: { background: wm.colors.successBg, borderColor: wm.colors.successBorder, color: wm.colors.success },
   metricChipIdle: { background: wm.colors.warningBg, borderColor: wm.colors.warningBorder, color: wm.colors.warning },
   metricChipRuntime: { background: wm.colors.infoBg, borderColor: wm.colors.infoBorder, color: wm.colors.infoText },
   metricChipLabel: { color: "currentColor", fontSize: "10px", fontWeight: 900, letterSpacing: "0.02em", textTransform: "uppercase" as const, opacity: 0.82 },
   metricChipValue: { color: "currentColor", fontSize: "13px", lineHeight: 1.2, whiteSpace: "nowrap" as const },
+  metricChipValueProminent: { fontSize: "16px" },
   emptyPanel: { ...wmStyles.infoNotice, display: "grid", gap: "6px", padding: "16px" },
   emptyText: { margin: 0, color: wm.colors.textSecondary, fontSize: "13px", lineHeight: 1.45 },
 } as const;

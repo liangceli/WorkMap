@@ -1,4 +1,7 @@
-param([int]$IdleThresholdSeconds = 30)
+param(
+  [int]$IdleThresholdSeconds = 30,
+  [switch]$Interactive
+)
 
 $source = @'
 using System;
@@ -107,14 +110,26 @@ public static class WorkMapWindowsActivity {
 '@
 
 Add-Type -TypeDefinition $source -ErrorAction Stop
-$appName = [WorkMapWindowsActivity]::AppName()
-$idleSeconds = [WorkMapWindowsActivity]::IdleSeconds()
-$locked = [WorkMapWindowsActivity]::IsLocked() -or $appName -in @('LockApp', 'LogonUI')
-[ordered]@{
-  appName = $appName
-  openApps = if ($locked) { @() } else { [WorkMapWindowsActivity]::OpenAppNames() }
-  idleSeconds = $idleSeconds
-  idle = $idleSeconds -ge $IdleThresholdSeconds
-  locked = $locked
-  observedAt = [DateTime]::UtcNow.ToString('o')
-} | ConvertTo-Json -Compress
+
+function Get-WorkMapObservation([bool]$IncludeOpenApps) {
+  $appName = [WorkMapWindowsActivity]::AppName()
+  $idleSeconds = [WorkMapWindowsActivity]::IdleSeconds()
+  $locked = [WorkMapWindowsActivity]::IsLocked() -or $appName -in @('LockApp', 'LogonUI')
+  [ordered]@{
+    appName = $appName
+    openApps = if ($locked) { @() } elseif ($IncludeOpenApps) { [WorkMapWindowsActivity]::OpenAppNames() } else { $null }
+    idleSeconds = $idleSeconds
+    idle = $idleSeconds -ge $IdleThresholdSeconds
+    locked = $locked
+    observedAt = [DateTime]::UtcNow.ToString('o')
+  } | ConvertTo-Json -Compress
+}
+
+if ($Interactive) {
+  while (($request = [Console]::In.ReadLine()) -ne $null) {
+    [Console]::Out.WriteLine((Get-WorkMapObservation ($request -eq 'full')))
+    [Console]::Out.Flush()
+  }
+} else {
+  Get-WorkMapObservation $true
+}
