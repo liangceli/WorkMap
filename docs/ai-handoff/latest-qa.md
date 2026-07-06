@@ -342,3 +342,44 @@ Not run. The artifact was built locally only and was not installed on the Employ
 ### Risks And Recommendation
 
 Pass for local installer generation. The next round can proceed to GitHub Release upload, Vercel URL update, Web redeploy, Employee reinstall, and stopwatch QA.
+
+---
+
+## 2026-07-06 Focused Idle 30-Second Threshold Fix QA
+
+### Reviewed Implementation
+
+Reviewed the Desktop Agent idle-threshold configuration from the runtime constructor through the Windows PowerShell sampler, the tracking state transition, device heartbeat/event upload, API live/persisted aggregation, and Web report merge/display behavior.
+
+### Diff Review Summary
+
+- The defect was isolated to the Desktop Agent's 300-second default; API and Web already handled focused-idle values correctly.
+- The patch is scoped to the idle default, its packaged script copies, a focused regression test, and the release/client version bump.
+- No unrelated product code, permissions, schema, or deployment configuration was changed.
+
+### Findings Ordered By Severity
+
+- Fixed - High: all production defaults used five minutes instead of the agreed 30 seconds, causing several minutes of no-input foreground time to remain focus active and focused idle to stay zero.
+- Remaining - Medium: Employee-computer behavior is not proven until the generated `0.5.3` installer is installed and a timed test is observed in both Employee and Owner reports.
+- Remaining - Medium: previously collected `0.5.2` totals cannot be reliably reconstructed into correct focus-active/focused-idle values.
+- Remaining - Low: the installer is Authenticode `NotSigned`, so Windows SmartScreen may warn.
+- Remaining - Low: an explicit positive `WORKMAP_AGENT_IDLE_SECONDS` environment override supersedes the corrected default by design.
+
+### Test And Verification Status
+
+- Desktop Agent tests: passed, 16/16.
+- Desktop Agent typecheck, lint, Alpha build, TypeScript build, and Windows NSIS release build: passed.
+- API tests: passed, 9/9.
+- Web tests: passed, 15/15.
+- Packaged PowerShell resource inspection: passed; default is 30 seconds.
+- Windows foreground/idle sampling smoke: passed.
+- Installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.3.exe`, 91,936,628 bytes, SHA-256 `71C79439588D4884004BBFC49CC5A5570104F14250F5584FB53849146C5E0C91`, Authenticode `NotSigned`.
+- Final diff/secret checks are recorded at round closeout.
+
+### Manual QA Status
+
+Not run on the separate Employee Windows computer. Required acceptance: after installing `0.5.3`, keep Weixin foreground, stop input for more than 30 seconds, verify focus active stops growing at the transition, and verify focused idle/open runtime continue in both Employee and authorized Owner views.
+
+### Recommendation And Next Round
+
+Automated QA recommendation: pass. The next round can proceed to GitHub Release publication, download-link update, Employee-machine upgrade, and timed manual acceptance. Do not describe the real-device defect as fully accepted until that manual check passes.

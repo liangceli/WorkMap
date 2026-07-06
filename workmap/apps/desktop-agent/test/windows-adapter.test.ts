@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { minimizeWindowsObservation } from "../src/windowsForeground.js";
+import { DEFAULT_IDLE_THRESHOLD_SECONDS, minimizeWindowsObservation } from "../src/windowsForeground.js";
+
+test("uses the agreed 30-second no-input threshold", async () => {
+  const source = await readFile(new URL("../scripts/windows-foreground.ps1", import.meta.url), "utf8");
+  const alphaSource = await readFile(new URL("../alpha-windows/scripts/windows-foreground.ps1", import.meta.url), "utf8");
+  assert.equal(DEFAULT_IDLE_THRESHOLD_SECONDS, 30);
+  assert.match(source, /IdleThresholdSeconds = 30/);
+  assert.match(alphaSource, /IdleThresholdSeconds = 30/);
+});
 
 test("Windows adapter keeps product name and strips sensitive native fields", () => {
   const sample = minimizeWindowsObservation({

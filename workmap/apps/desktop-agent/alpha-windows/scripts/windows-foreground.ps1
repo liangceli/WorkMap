@@ -1,4 +1,4 @@
-param([int]$IdleThresholdSeconds = 300)
+param([int]$IdleThresholdSeconds = 30)
 
 $source = @'
 using System;

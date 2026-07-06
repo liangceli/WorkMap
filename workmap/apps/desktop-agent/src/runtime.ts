@@ -2,7 +2,7 @@ import { AgentApiError, sendAppUsage, sendHeartbeat, startAgentSession, stopAgen
 import { FileEventQueue, readTrackingCheckpoint, writeAgentStatus, writeTrackingCheckpoint } from "./fileStore.js";
 import { AppTrackingState, recoverTrackingCheckpoint } from "./trackingState.js";
 import type { AgentConfig, AgentStatus } from "./types.js";
-import { WindowsForegroundAdapter } from "./windowsForeground.js";
+import { DEFAULT_IDLE_THRESHOLD_SECONDS, WindowsForegroundAdapter } from "./windowsForeground.js";
 
 export class DesktopAgentRuntime {
   private readonly tracking = new AppTrackingState({
@@ -20,7 +20,7 @@ export class DesktopAgentRuntime {
     private readonly config: AgentConfig,
     options: { adapter?: WindowsForegroundAdapter; queue?: FileEventQueue } = {},
   ) {
-    this.adapter = options.adapter ?? new WindowsForegroundAdapter(readPositiveNumber("WORKMAP_AGENT_IDLE_SECONDS", 300));
+    this.adapter = options.adapter ?? new WindowsForegroundAdapter(readPositiveNumber("WORKMAP_AGENT_IDLE_SECONDS", DEFAULT_IDLE_THRESHOLD_SECONDS));
     this.queue = options.queue ?? new FileEventQueue();
     this.status = { state: "connected", deviceId: config.deviceId, queuedEvents: 0 };
   }

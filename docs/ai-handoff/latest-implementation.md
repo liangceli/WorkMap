@@ -572,4 +572,78 @@ Not applicable. This change affects Git tracking only.
   - No GitHub Release asset upload and no Vercel environment update.
 - Remaining risks and next steps:
   - To make the employee download button use this version, create/upload a GitHub Release asset under tag `desktop-agent-v0.5.2`, set `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` to the direct `0.5.2` asset URL, redeploy Web, then reinstall/upgrade the Employee computer.
-  - Because the installer is unsigned, Windows SmartScreen/security warnings remain expected until Authenticode signing is added.
+
+---
+
+## 2026-07-06 Focused Idle 30-Second Threshold Fix
+
+### Original Task Brief
+
+Investigate why Weixin showed several minutes of focus active/open runtime but zero focused idle after being left open without employee input, and fix only the application-duration calculation area.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/src/windowsForeground.ts`
+- `workmap/apps/desktop-agent/src/runtime.ts`
+- `workmap/apps/desktop-agent/scripts/windows-foreground.ps1`
+- `workmap/apps/desktop-agent/alpha-windows/scripts/windows-foreground.ps1`
+- `workmap/apps/desktop-agent/test/windows-adapter.test.ts`
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/src/pairing.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+Generated but git-ignored release artifacts:
+
+- `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.3.exe`
+- `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.3.exe.blockmap`
+
+### Implementation Summary
+
+- Root cause: the Windows foreground adapter, runtime fallback, and PowerShell scripts still used a 300-second/five-minute idle threshold. This contradicted the agreed 30-second rule, so an app left focused for only a few minutes continued to be reported as focus active and showed zero focused idle.
+- Added one shared TypeScript default, `DEFAULT_IDLE_THRESHOLD_SECONDS = 30`, and made both the adapter and runtime fallback use it.
+- Updated the production and Alpha Windows sampling scripts to default to 30 seconds.
+- Added a regression test that fixes the TypeScript, production-script, and Alpha-script threshold contract at 30 seconds.
+- Bumped the Desktop Agent and pairing client version from `0.5.2` to `0.5.3` so the corrected binary cannot be confused with the previously built five-minute-threshold installer.
+- No API or Web runtime change was required: their existing aggregation/live-overlay logic already preserves a current focused-idle segment and displays it separately.
+
+### Key Behavior And Role/Access Impact
+
+- While an app remains the Windows foreground app, global `GetLastInputInfo` inactivity reaching 30 seconds now moves that foreground segment from focus active to focused idle.
+- Time after that transition increases focused idle and open/runtime, but does not increase focus active. New keyboard or mouse input returns the current foreground app to focus active.
+- Background and minimized apps still do not gain focus active or focused idle; they can contribute only to clearly labeled open/runtime context while detected as open.
+- Owner/Employee report permissions, tenant isolation, report scope, and Platform Admin privacy boundaries are unchanged.
+- No keystrokes, mouse events, window titles, screenshots, or content are collected; only the OS-provided elapsed time since the last input is read.
+
+### Verification
+
+- `pnpm --filter @workmap/desktop-agent test`: passed, 16/16.
+- `pnpm --filter @workmap/desktop-agent typecheck`: passed.
+- `pnpm --filter @workmap/desktop-agent lint`: passed.
+- `pnpm --filter @workmap/desktop-agent build`: passed.
+- `pnpm --filter @workmap/api test`: passed, 9/9, including live focused-idle aggregation.
+- `pnpm --filter @workmap/web test`: passed, 15/15, including current focused-idle report merging.
+- `pnpm --filter @workmap/desktop-agent release:windows`: passed and generated the `0.5.3` NSIS installer.
+- Packaged-resource inspection confirmed `IdleThresholdSeconds = 30` inside `win-unpacked/resources/agent-scripts/windows-foreground.ps1`.
+- Windows PowerShell foreground/idle adapter smoke: passed with a valid privacy-minimised observation.
+- Installer size: 91,936,628 bytes.
+- Installer SHA-256: `71C79439588D4884004BBFC49CC5A5570104F14250F5584FB53849146C5E0C91`.
+- Authenticode status: `NotSigned`.
+
+### Manual QA
+
+Not run on the separate Employee Windows computer. A timed real-device check is still required after installing `0.5.3`: keep Weixin focused, stop input for more than 30 seconds, and confirm focus active stops increasing while focused idle and open/runtime continue increasing in both Employee and Owner reports.
+
+### Intentionally Not Changed
+
+- No API, Web UI, Prisma schema/migration, auth, RBAC, tenant scope, Platform Admin, domain tracking, Virtual Office, or deployment behavior changed.
+- No broader activity calculation or historical data rewrite was added.
+- The existing untracked `docs/references/` directory was not touched.
+- The installer was not uploaded to GitHub Release, the public download URL was not changed, and the Employee computer was not upgraded.
+
+### Remaining Risks And Suggested Next Step
+
+- Existing data collected by `0.5.2` with the five-minute threshold cannot be reliably reclassified after the fact; the correction applies once `0.5.3` is running.
+- `WORKMAP_AGENT_IDLE_SECONDS` can intentionally override the default. A deployed machine with that environment variable set to another positive value will use the override.
+- The installer is unsigned and may trigger Windows SmartScreen.
+- Publish the installer under GitHub Release tag `desktop-agent-v0.5.3`, update `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` to its direct asset URL, redeploy Web if needed, install/upgrade the Employee computer, then perform the timed Weixin test above. The implementation is ready for that release/manual-QA round.

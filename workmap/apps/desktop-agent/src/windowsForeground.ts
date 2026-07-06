@@ -7,6 +7,8 @@ import type { ForegroundSample } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
+export const DEFAULT_IDLE_THRESHOLD_SECONDS = 30;
+
 type NativeObservation = {
   appName?: unknown;
   processName?: unknown;
@@ -18,7 +20,7 @@ type NativeObservation = {
 
 export class WindowsForegroundAdapter {
   constructor(
-    private readonly idleThresholdSeconds = 300,
+    private readonly idleThresholdSeconds = DEFAULT_IDLE_THRESHOLD_SECONDS,
     private readonly scriptPath = resolveAgentScript("windows-foreground.ps1"),
   ) {}
 
