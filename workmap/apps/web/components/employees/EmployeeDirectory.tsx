@@ -8,16 +8,18 @@ import { PresenceBadge } from "../office/PresenceBadge";
 import { WorkMapEmptyState } from "../ui/WorkMapEmptyState";
 import { getUserSetupState } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { WorkMapLoader } from "../ui/WorkMapLoader";
 
 type EmployeeDirectoryProps = {
   employees: DashboardEmployee[];
   showProfileLinks?: boolean;
+  loading?: boolean;
 };
 
 type VisibilityMode = "manager" | "employee";
 type StatusFilter = "all" | UserPresenceStatus;
 
-export function EmployeeDirectory({ employees, showProfileLinks = true }: EmployeeDirectoryProps) {
+export function EmployeeDirectory({ employees, showProfileLinks = true, loading = false }: EmployeeDirectoryProps) {
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -114,6 +116,7 @@ export function EmployeeDirectory({ employees, showProfileLinks = true }: Employ
         )}
       </section>
 
+      {loading ? <WorkMapLoader label="Loading employees" /> : <>
       <section style={styles.summaryBar}>
         <span>{filteredEmployees.length} people shown</span>
         <span>{employees.filter((employee) => employee.status !== "offline").length} online or recently active</span>
@@ -182,6 +185,7 @@ export function EmployeeDirectory({ employees, showProfileLinks = true }: Employ
           ))
         )}
       </section>
+      </>}
     </div>
   );
 }

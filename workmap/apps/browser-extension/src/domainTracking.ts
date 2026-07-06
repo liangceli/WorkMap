@@ -1,6 +1,7 @@
 export type DomainSession = {
   domain: string;
   isIdle: boolean;
+  isActiveWindow?: boolean;
   startedAt: number;
   lastObservedAt?: number;
   clientEventId?: string;
@@ -15,14 +16,13 @@ export type DomainUsageEvent = {
   endedAt: string;
   durationSeconds: number;
   isIdle: boolean;
+  isActiveWindow: boolean;
 };
 
-export const MIN_DOMAIN_SESSION_MS = 5000;
+export const MIN_DOMAIN_SESSION_MS = 0;
 
 export function readDomainFromUrl(url: string | undefined) {
-  if (!url) {
-    return null;
-  }
+  if (!url) return null;
 
   try {
     const parsed = new URL(url);
@@ -43,10 +43,7 @@ export function createDomainUsageEvent(
 ): DomainUsageEvent | null {
   const safeEndMs = Math.min(endedAtMs, (session.lastObservedAt ?? endedAtMs) + maximumSampleGapMs);
   const durationMs = safeEndMs - session.startedAt;
-
-  if (durationMs < minimumSessionMs) {
-    return null;
-  }
+  if (!Number.isFinite(durationMs) || durationMs <= minimumSessionMs) return null;
 
   return {
     clientEventId: session.clientEventId ?? crypto.randomUUID(),
@@ -57,5 +54,6 @@ export function createDomainUsageEvent(
     endedAt: new Date(safeEndMs).toISOString(),
     durationSeconds: Math.max(1, Math.round(durationMs / 1000)),
     isIdle: session.isIdle,
+    isActiveWindow: session.isActiveWindow !== false,
   };
 }

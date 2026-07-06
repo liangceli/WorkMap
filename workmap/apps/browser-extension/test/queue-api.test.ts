@@ -39,5 +39,6 @@ function event(index: number): DomainUsageEvent {
     endedAt: "2026-06-18T00:00:05.000Z",
     durationSeconds: 5,
     isIdle: false,
+    isActiveWindow: true,
   };
 }

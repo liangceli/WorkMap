@@ -13,6 +13,7 @@ test("company report includes an employee's still-open foreground Microsoft Stor
     departmentId: null,
     apps: [{ appName: "Microsoft Store", activeSeconds: 125, focusedIdleSeconds: 0 }],
     employeeUsage: [{ userId: "employee-1", displayName: "Employee", activeSeconds: 125, idleSeconds: 0 }],
+    browserExtensionCoverage: [],
     activityRevision: null,
   };
 
@@ -39,6 +40,7 @@ test("user report merges current focused idle without adding focus active time",
       currentAppFocusedIdleSeconds: 45,
       todayActiveSeconds: 60,
     },
+    browserExtensionCoverage: [],
     activityRevision: null,
   };
 
@@ -60,6 +62,7 @@ test("user report excludes idle, minimized or background state from active total
       currentAppActiveSeconds: 0,
       todayActiveSeconds: 60,
     },
+    browserExtensionCoverage: [],
     activityRevision: null,
   };
 
@@ -78,6 +81,7 @@ function baseSummary(scope: "user" | "company"): WorkMapApiUsageSummary {
     websites: [],
     daily: [{ date: today, appActiveSeconds: 60, appIdleSeconds: 0, domainActiveSeconds: 0, domainIdleSeconds: 0 }],
     deviceCoverage: { registeredDevices: 1, activeDevices24h: 1, usersWithActivity: 1 },
+    browserExtensionCoverage: [],
     agentStatus: null,
     agentSessions: [],
     appTimeline: [],

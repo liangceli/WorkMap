@@ -1,8 +1,10 @@
 import { exchangePairingCode } from "./extensionApi.js";
+import { ensureDomainContentScriptRegistered } from "./contentRegistration.js";
 import { readStoredState, savePairedConfig, writeStoredState } from "./extensionStorage.js";
 
 declare const chrome: {
   permissions: { request(permissions: { origins: string[] }, callback: (allowed: boolean) => void): void };
+  runtime: { sendMessage(message: Record<string, unknown>, callback?: () => void): void; lastError?: unknown };
 };
 
 const form = document.querySelector<HTMLFormElement>("#pair-form")!;
@@ -22,16 +24,18 @@ async function pair() {
   if (!code) return show("Enter the short-lived pairing code from WorkMap.", true);
   setDisabled(true);
   try {
-    if (!await requestApiPermission(apiBaseUrl)) throw new Error("API origin permission was not granted.");
+    if (!await requestTrackingPermission(apiBaseUrl)) throw new Error("Website tracking permission was not granted.");
+    await ensureDomainContentScriptRegistered(true);
     await writeStoredState({ workmapStatus: { state: "pairing", queuedEvents: 0 } });
     await refreshStatus();
     const result = await exchangePairingCode(apiBaseUrl, code, browserSelect.value);
     await savePairedConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, browserName: browserSelect.value });
     await writeStoredState({
       workmapStatus: { state: "connected", queuedEvents: 0 },
-      workmapTracker: { active: null },
+      workmapTracker: { version: 2, focus: null, focusTabId: null, lastInputAt: null, openTabs: {}, runtimeByDomain: {} },
       workmapQueue: [],
     });
+    chrome.runtime.sendMessage({ type: "workmap:extension-paired" }, () => void chrome.runtime.lastError);
     codeInput.value = "";
     show("Paired. Domain tracking will start while the browser is active.", false);
     await refreshStatus();
@@ -58,7 +62,7 @@ function setDisabled(value: boolean) { for (const element of Array.from(form.ele
 function isAllowedApiUrl(value: string) { return /^https:\/\//i.test(value) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value); }
 function inferBrowser() { return navigator.userAgent.includes("Edg/") ? "EDGE" : "CHROME"; }
 
-async function requestApiPermission(apiBaseUrl: string) {
+async function requestTrackingPermission(apiBaseUrl: string) {
   const origin = `${new URL(apiBaseUrl).origin}/*`;
-  return new Promise<boolean>((resolve) => chrome.permissions.request({ origins: [origin] }, resolve));
+  return new Promise<boolean>((resolve) => chrome.permissions.request({ origins: Array.from(new Set([origin, "https://*/*", "http://*/*"])) }, resolve));
 }

@@ -6,10 +6,12 @@ export function mergeLiveUsage(
   summary: WorkMapApiUsageSummary | null,
   liveStatus: WorkMapApiReportLiveStatus | null,
 ): WorkMapApiUsageSummary | null {
-  if (!summary || !liveStatus || summary.scope !== liveStatus.scope || !rangeIncludesUtcToday(summary)) return summary;
+  if (!summary || !liveStatus || summary.scope !== liveStatus.scope) return summary;
+  const summaryWithCoverage = { ...summary, browserExtensionCoverage: liveStatus.browserExtensionCoverage };
+  if (!rangeIncludesUtcToday(summary)) return summaryWithCoverage;
   if (summary.scope === "company" && liveStatus.scope === "company") {
     if ((summary.departmentId ?? null) !== (liveStatus.departmentId ?? null)) return summary;
-    return mergeSegments(summary, liveStatus.apps, liveStatus.employeeUsage);
+    return mergeSegments(summaryWithCoverage, liveStatus.apps, liveStatus.employeeUsage);
   }
   if (summary.scope === "user" && liveStatus.scope === "user" && summary.userId === liveStatus.userId) {
     const status = liveStatus.agentStatus;
@@ -18,7 +20,7 @@ export function mergeLiveUsage(
     const apps = status?.currentAppName && Math.max(currentActiveSeconds, currentIdleSeconds) >= MINIMUM_LIVE_DURATION_SECONDS
       ? [{ appName: status.currentAppName, activeSeconds: currentActiveSeconds, focusedIdleSeconds: currentIdleSeconds }]
       : [];
-    return { ...mergeSegments(summary, apps, []), agentStatus: status };
+    return { ...mergeSegments(summaryWithCoverage, apps, []), agentStatus: status };
   }
   return summary;
 }

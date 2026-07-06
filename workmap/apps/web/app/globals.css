@@ -26,9 +26,9 @@
   --wm-shadow-card: 0 1px 2px rgba(16, 32, 51, 0.05), 0 12px 28px rgba(16, 32, 51, 0.06);
   --wm-shadow-elevated: 0 1px 2px rgba(16, 32, 51, 0.06), 0 22px 54px rgba(16, 32, 51, 0.12);
   --wm-shell-inline: 24px;
-  --wm-shell-block: 24px;
-  --wm-font-body: "Graphik Web", Graphik, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --wm-font-display: "Graphik Web Semibold", "Graphik Web", Graphik, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --wm-shell-block: 112px;
+  --wm-font-body: "Arial Narrow", "Aptos Narrow", "Roboto Condensed", Inter, ui-sans-serif, system-ui, sans-serif;
+  --wm-font-display: "Arial Narrow", "Aptos Narrow", "Roboto Condensed", Inter, ui-sans-serif, system-ui, sans-serif;
   color-scheme: light;
 }
 
@@ -56,7 +56,8 @@ h5,
 h6 {
   color: var(--wm-text-heading);
   font-family: var(--wm-font-display);
-  letter-spacing: 0;
+  letter-spacing: -0.015em;
+  font-stretch: condensed;
 }
 
 p,
@@ -120,14 +121,14 @@ a {
 @media (max-width: 900px) {
   :root {
     --wm-shell-inline: 18px;
-    --wm-shell-block: 18px;
+    --wm-shell-block: 158px;
   }
 }
 
 @media (max-width: 640px) {
   :root {
     --wm-shell-inline: 14px;
-    --wm-shell-block: 14px;
+    --wm-shell-block: 270px;
   }
 
   body {
@@ -176,6 +177,74 @@ a {
 
 .wm-app-brand:hover {
   color: var(--wm-primary);
+}
+
+.wm-app-top-nav {
+  position: fixed !important;
+  z-index: 80;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border-width: 0 0 1px !important;
+  border-radius: 0 !important;
+  padding-inline: max(24px, calc((100vw - 1440px) / 2 + 16px)) !important;
+  box-shadow: 0 8px 24px rgba(16, 32, 51, 0.08) !important;
+}
+
+.wm-loader {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  color: var(--wm-text-secondary);
+}
+
+.wm-loader-full-page {
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  min-height: 100vh;
+  background: rgba(255, 253, 248, 0.96);
+  backdrop-filter: blur(10px);
+}
+
+.wm-loader-section {
+  min-height: 260px;
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius-xl);
+  background: rgba(255, 253, 248, 0.72);
+}
+
+.wm-loader-mark {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: var(--wm-secondary);
+  color: white;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 16px 36px rgba(36, 127, 122, 0.22);
+  animation: wm-logo-spin 950ms cubic-bezier(0.55, 0.1, 0.45, 0.9) infinite;
+}
+
+.wm-loader-label {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+@keyframes wm-logo-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wm-loader-mark { animation: wm-logo-pulse 1.2s ease-in-out infinite alternate; }
+  @keyframes wm-logo-pulse { to { opacity: 0.55; } }
 }
 
 @media (max-width: 720px) {

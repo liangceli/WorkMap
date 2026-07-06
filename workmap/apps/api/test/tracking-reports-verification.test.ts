@@ -6,6 +6,7 @@ import {
   ActivityEventSource,
   ActivityEventType,
   BrowserName,
+  DeviceClientType,
   DeviceOS,
   ProductivityLabel,
   UserRole,
@@ -53,6 +54,7 @@ const platformContext: PlatformRequestContext = {
 async function main() {
   testControllerGuards();
   await testDeviceRegistrationHeartbeatAndOwnership();
+  await testBrowserExtensionCoverageLossAndRestore();
   await testActivityIngestionAndReportsLoop();
   await testOwnerSeesLiveForegroundUsageBeforeAppSwitch();
   await testCrossMidnightUsageIsSplitPrecisely();
@@ -152,6 +154,24 @@ async function testActivityIngestionAndReportsLoop() {
         durationSeconds: 60,
         isIdle: true,
       },
+      {
+        deviceId: DEVICE_ID,
+        domain: "github.com",
+        browserName: "CHROME",
+        startedAt: "2026-06-17T09:04:00.000Z",
+        durationSeconds: 600,
+        isIdle: false,
+        isActiveWindow: false,
+      },
+      {
+        deviceId: DEVICE_ID,
+        domain: "github.com",
+        browserName: "EDGE",
+        startedAt: "2026-06-17T09:06:00.000Z",
+        durationSeconds: 60,
+        isIdle: false,
+        isActiveWindow: true,
+      },
     ],
   });
 
@@ -161,14 +181,15 @@ async function testActivityIngestionAndReportsLoop() {
     eventType: ActivityEventType.APP,
   });
   assert.deepEqual(domainResult, {
-    accepted: 2,
+    accepted: 4,
     source: ActivityEventSource.BROWSER_EXTENSION,
     eventType: ActivityEventType.BROWSER,
   });
-  assert.equal(prisma.activityEvents.length, 5);
+  assert.equal(prisma.activityEvents.length, 7);
   assert.equal(prisma.activityEvents[0]?.companyId, COMPANY_ID);
   assert.equal(prisma.activityEvents[0]?.userId, EMPLOYEE_ID);
   assert.equal(prisma.activityEvents[3]?.domain, "github.com");
+  assert.equal(prisma.activityEvents[5]?.isActiveWindow, false);
   assert(!JSON.stringify(prisma.activityEvents).includes("private-path"));
   assert(!JSON.stringify(prisma.activityEvents).includes("secret"));
 
@@ -179,7 +200,9 @@ async function testActivityIngestionAndReportsLoop() {
     ["Visual Studio Code", 300, 60, 360],
     ["Outlook", 0, 0, 120],
   ]);
-  assert.deepEqual(ownSummary.websites.map((row: any) => [row.domain, row.activeSeconds]), [["github.com", 180]]);
+  assert.deepEqual(ownSummary.websites.map((row: any) => [row.domain, row.activeSeconds, row.focusedIdleSeconds, row.openRuntimeSeconds]), [
+    ["github.com", 180, 60, 600],
+  ]);
   assert.equal(ownSummary.apps[0]?.focusedIdleSeconds, 60);
   assert.equal(ownSummary.websites[0]?.idleSeconds, 60);
   assert.equal(ownSummary.apps[0]?.productivityLabel, "PRODUCTIVE");
@@ -274,6 +297,32 @@ async function testReportAccessBoundaries() {
     () => reports.getUsageSummary(ownerContext, { scope: "company", departmentId: OTHER_DEVICE_ID }),
     NotFoundException,
   );
+}
+
+async function testBrowserExtensionCoverageLossAndRestore() {
+  const prisma = new MockPrisma();
+  const devices = new DevicesService(prisma as any);
+  const reports = new ReportsService(prisma as any, new MockAuditService() as any);
+  await devices.registerDevice(employeeContext, {
+    deviceId: DEVICE_ID,
+    os: "UNKNOWN",
+    hostname: "CHROME",
+    agentVersion: "browser-extension-mv3/0.4.0",
+  });
+  const previousSignal = new Date(Date.now() - 100_000);
+  prisma.devices[0]!.lastSeenAt = previousSignal;
+
+  await devices.recordHeartbeat(employeeContext, { deviceId: DEVICE_ID, agentVersion: "browser-extension-mv3/0.4.0" }, DeviceClientType.BROWSER_EXTENSION);
+  const outage = prisma.activityEvents.find((event) => event.eventType === ActivityEventType.HEARTBEAT);
+  assert(outage);
+  assert.equal(outage.startedAt.getTime(), previousSignal.getTime() + 90_000);
+  assert(outage.endedAt);
+
+  const summary = await reports.getUsageSummary(employeeContext, {});
+  assert.equal(summary.browserExtensionCoverage[0]?.state, "connected");
+  assert.equal(summary.browserExtensionCoverage[0]?.browserName, "CHROME");
+  assert.equal(summary.browserExtensionCoverage[0]?.coverageLostDetectedAt, outage.startedAt.toISOString());
+  assert.equal(summary.browserExtensionCoverage[0]?.coverageRestoredAt, outage.endedAt.toISOString());
 }
 
 async function testOwnerSeesLiveForegroundUsageBeforeAppSwitch() {
@@ -411,6 +460,11 @@ class MockPrisma {
   device = {
     findUnique: async ({ where }: any) => this.devices.find((device) => device.id === where.id) ?? null,
     findFirst: async ({ where }: any) => this.devices.find((device) => matchesWhere(device, where)) ?? null,
+    findMany: async ({ where, include }: any = {}) => this.devices
+      .filter((device) => matchesWhere(device, where))
+      .map((device) => include?.user
+        ? { ...device, user: { displayName: this.users.find((user) => user.id === device.userId)?.displayName ?? "Employee" } }
+        : device),
     create: async ({ data }: any) => {
       const device = toDeviceRow({ id: data.id ?? nextId("device"), ...data });
       this.devices.push(device);

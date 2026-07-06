@@ -253,6 +253,9 @@ export type WorkMapApiUsageSummary = {
     productivityLabel: string | null;
     activeSeconds: number;
     idleSeconds: number;
+    focusActiveSeconds?: number;
+    focusedIdleSeconds?: number;
+    openRuntimeSeconds?: number;
   }>;
   daily: Array<{
     date: string;
@@ -266,6 +269,18 @@ export type WorkMapApiUsageSummary = {
     activeDevices24h: number;
     usersWithActivity: number;
   };
+  browserExtensionCoverage: Array<{
+    deviceId: string;
+    userId: string;
+    displayName: string;
+    browserName: "CHROME" | "EDGE" | "UNKNOWN";
+    version: string | null;
+    state: "connected" | "signal_lost";
+    enabledAt: string;
+    lastSignalAt: string | null;
+    coverageLostDetectedAt: string | null;
+    coverageRestoredAt: string | null;
+  }>;
   agentStatus: null | {
     state: "not_paired" | "online" | "stopped" | "interrupted";
     sessionId?: string;
@@ -310,6 +325,7 @@ export type WorkMapApiReportLiveStatus =
       userId: string;
       departmentId: null;
       agentStatus: WorkMapApiUsageSummary["agentStatus"];
+      browserExtensionCoverage: WorkMapApiUsageSummary["browserExtensionCoverage"];
       activityRevision: string | null;
     }
   | {
@@ -318,6 +334,7 @@ export type WorkMapApiReportLiveStatus =
       departmentId: string | null;
       apps: Array<{ appName: string; activeSeconds: number; focusedIdleSeconds?: number }>;
       employeeUsage: Array<{ userId: string; displayName: string; activeSeconds: number; idleSeconds?: number }>;
+      browserExtensionCoverage: WorkMapApiUsageSummary["browserExtensionCoverage"];
       activityRevision: string | null;
     };
 

@@ -10,13 +10,13 @@ export function exchangePairingCode(apiBaseUrl: string, code: string, browserNam
     code,
     clientType: "BROWSER_EXTENSION",
     os: "UNKNOWN",
-    agentVersion: "browser-extension-mv3/0.2.0",
+    agentVersion: "browser-extension-mv3/0.4.0",
     hostname: browserName,
   });
 }
 
 export function sendExtensionHeartbeat(config: ExtensionConfig) {
-  return requestJson(config.apiBaseUrl, "/device-client/heartbeat", config.credential, { agentVersion: "browser-extension-mv3/0.3.0" });
+  return requestJson(config.apiBaseUrl, "/device-client/heartbeat", config.credential, { agentVersion: "browser-extension-mv3/0.4.0" });
 }
 
 export function sendDomainUsage(config: ExtensionConfig, events: DomainUsageEvent[]) {

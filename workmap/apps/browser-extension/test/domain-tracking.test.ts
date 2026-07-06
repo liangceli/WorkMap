@@ -13,7 +13,7 @@ test("extracts hostname only and ignores non-web schemes", () => {
   assert.equal(readDomainFromUrl(undefined), null);
 });
 
-test("creates minimized stable event and filters short slices", () => {
+test("creates privacy-minimised stable events and retains short observed slices", () => {
   const event = createDomainUsageEvent(
     {
       domain: "github.com",
@@ -21,6 +21,7 @@ test("creates minimized stable event and filters short slices", () => {
       startedAt: Date.parse("2026-06-17T09:00:00.000Z"),
       lastObservedAt: Date.parse("2026-06-17T09:05:00.000Z"),
       clientEventId: "00000000-0000-4000-8000-000000000001",
+      isActiveWindow: true,
     },
     Date.parse("2026-06-17T09:05:00.000Z"),
     DEVICE_ID,
@@ -35,8 +36,9 @@ test("creates minimized stable event and filters short slices", () => {
     endedAt: "2026-06-17T09:05:00.000Z",
     durationSeconds: 300,
     isIdle: true,
+    isActiveWindow: true,
   });
   const serialized = JSON.stringify(event);
   for (const forbidden of ["url", "title", "content", "query", "fragment"]) assert(!serialized.toLowerCase().includes(`"${forbidden}`));
-  assert.equal(createDomainUsageEvent({ domain: "github.com", isIdle: false, startedAt: 0 }, 3_000, DEVICE_ID, "CHROME"), null);
+  assert.equal(createDomainUsageEvent({ domain: "github.com", isIdle: false, isActiveWindow: false, startedAt: 0 }, 3_000, DEVICE_ID, "CHROME")?.durationSeconds, 3);
 });

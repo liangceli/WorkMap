@@ -21,6 +21,7 @@ export type DomainUsageEventInput = {
   durationMs?: number;
   durationSeconds?: number;
   isIdle?: boolean;
+  isActiveWindow?: boolean;
 };
 
 export function submitAppUsage(events: AppUsageEventInput | AppUsageEventInput[], options?: ApiClientOptions) {

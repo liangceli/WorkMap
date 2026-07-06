@@ -9,6 +9,7 @@ import { getWorkMapPlatformApiAuthOptions } from "../../lib/api/platformAuth";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { getUserSetupState, resetUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
+import { WorkMapLoader } from "../ui/WorkMapLoader";
 
 type AppShellProps = {
   children: ReactNode;
@@ -57,6 +58,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
   const [apiSummary, setApiSummary] = useState<ApiSessionSummary | null>(null);
   const [platformSummary, setPlatformSummary] = useState<PlatformSessionSummary | null>(null);
   const [cachedRole, setCachedRole] = useState<WorkMapRole | null>(null);
+  const [shellLoading, setShellLoading] = useState(true);
   const activeRole = apiSummary?.role ? toWorkflowRole(apiSummary.role) : cachedRole;
 
   useLayoutEffect(() => {
@@ -92,6 +94,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
       const auth = await getWorkMapApiAuthOptions();
 
       if (!auth.available) {
+        setShellLoading(false);
         return;
       }
 
@@ -101,6 +104,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
       ]);
 
       if (cancelled || !companyResult.ok || !userResult.ok) {
+        if (!cancelled) setShellLoading(false);
         return;
       }
 
@@ -113,6 +117,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
       setApiSummary(summary);
       setCachedRole(toWorkflowRole(summary.role));
       updateAppShellCache(session?.claims.sub, { apiSummary: summary });
+      setShellLoading(false);
     }
 
     void loadApiSummary();
@@ -140,21 +145,15 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     ? "Platform Admin"
     : cognitoSession
     ? apiSummary?.role
-      ? `Cognito / ${formatRole(apiSummary.role)}`
+      ? formatRole(apiSummary.role)
       : activeRole
-      ? `Cognito / ${formatRole(activeRole)}`
-      : "Cognito / mapping"
+      ? formatRole(activeRole)
+      : "Workspace member"
     : apiSummary?.role
       ? formatRole(apiSummary.role)
       : activeRole
         ? formatRole(activeRole)
         : "Sign in needed";
-  const sessionSource = platformSummary
-    ? "Platform admin session"
-    : cognitoSession
-    ? "Cognito session"
-    : "No session";
-
   const contextLabel = platformSummary
     ? "Platform context"
     : apiSummary?.companyName
@@ -180,6 +179,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
 
   return (
     <main className={`wm-app-shell${variant === "editorial" ? " wm-app-shell-editorial" : ""}`} style={styles.page}>
+      {shellLoading ? <WorkMapLoader fullPage label="Opening your workspace" /> : null}
       <header className="wm-app-top-nav" style={styles.topNav}>
         <a href="/" className="wm-app-brand" style={styles.brand}>
           <span style={styles.logo}>WM</span>
@@ -224,24 +224,6 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
           ) : null}
         </div>
       </header>
-
-      <section className="wm-app-notice" style={styles.notice}>
-        <strong>{sessionSource}</strong>
-        <span>
-          {platformSummary
-            ? `${platformSummary.userName} (${platformSummary.email}) has platform admin access via ${platformSummary.source}. Tenant data shown here is privacy-safe metadata only.`
-            : cognitoSession
-            ? apiSummary
-              ? `${apiSummary.userName} is in ${apiSummary.companyName} as ${formatRole(apiSummary.role)} via ${apiSummary.source}.`
-              : `${cognitoSession.claims.email ?? cognitoSession.claims.sub} is using a Cognito bearer token. WorkMap user/company/role mapping is resolved by the backend.`
-            : "Sign in before using shared workspace data so API requests use the intended Cognito-backed user context."}
-        </span>
-        {!cognitoSession ? (
-          <a href="/login" style={styles.noticeLink}>
-            Sign in
-          </a>
-        ) : null}
-      </section>
 
       <section className="wm-app-content" style={styles.content}>{children}</section>
     </main>

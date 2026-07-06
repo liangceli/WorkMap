@@ -170,8 +170,8 @@ export class ActivityService {
     }
 
     const usageDate = toUtcDateOnly(event.startedAt);
-    const activeSeconds = event.isIdle ? 0 : event.durationSeconds;
-    const idleSeconds = event.isIdle ? event.durationSeconds : 0;
+    const activeSeconds = !event.isIdle && event.isActiveWindow ? event.durationSeconds : 0;
+    const idleSeconds = event.isIdle && event.isActiveWindow ? event.durationSeconds : 0;
     const category = categorizeDomain(event.domain);
     const productivityLabel = category ? "PRODUCTIVE" : "UNCATEGORISED";
 
@@ -188,7 +188,7 @@ export class ActivityService {
           browserName: event.browserName,
           domain: event.domain,
           isIdle: event.isIdle,
-          isActiveWindow: !event.isIdle,
+          isActiveWindow: event.isActiveWindow,
           startedAt: event.startedAt,
           endedAt: event.endedAt,
           durationSeconds: event.durationSeconds,

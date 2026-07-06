@@ -2,17 +2,40 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("MV3 runtime listens to tab, window, idle and alarm lifecycle", async () => {
+test("MV3 runtime listens to page activity and complete tab/window lifecycle", async () => {
   const source = await readFile(new URL("../src/background.ts", import.meta.url), "utf8");
-  for (const marker of ["tabs.onActivated", "tabs.onUpdated", "windows.onFocusChanged", "windows.getLastFocused", "idle.onStateChanged", "alarms.onAlarm", "runtime.onStartup"]) assert(source.includes(marker));
+  for (const marker of [
+    "runtime.onMessage",
+    "tabs.onActivated",
+    "tabs.onCreated",
+    "tabs.onUpdated",
+    "tabs.onRemoved",
+    "tabs.onReplaced",
+    "windows.onFocusChanged",
+    "idle.onStateChanged",
+    "alarms.onAlarm",
+    "runtime.onStartup",
+  ]) assert(source.includes(marker), `missing ${marker}`);
   assert(!source.includes("setInterval("));
 });
 
-test("manifest requests only tracking/runtime permissions and no content access", async () => {
+test("content script reports only trusted activity timestamps including wheel", async () => {
+  const source = await readFile(new URL("../src/contentScript.ts", import.meta.url), "utf8");
+  for (const marker of ["event.isTrusted", '"wheel"', '"keydown"', '"pointermove"', '"touchstart"', "activityAt", "lastInputAt"]) {
+    assert(source.includes(marker), `missing ${marker}`);
+  }
+  for (const forbidden of ["event.key", "clientX", "clientY", "event.target", "textContent", "innerText", "document.title", "location.href"]) {
+    assert(!source.includes(forbidden), `content script must not collect ${forbidden}`);
+  }
+});
+
+test("manifest uses optional web host access and the minimum content injection capability", async () => {
   const manifest = JSON.parse(await readFile(new URL("../manifest.json", import.meta.url), "utf8"));
-  assert.deepEqual(manifest.permissions.sort(), ["alarms", "idle", "storage", "tabs"]);
+  assert.deepEqual(manifest.permissions.sort(), ["alarms", "idle", "scripting", "storage", "tabs"]);
   assert.equal(manifest.content_scripts, undefined);
-  assert.deepEqual(manifest.optional_host_permissions.sort(), ["http://127.0.0.1/*", "http://localhost/*", "https://*/*"]);
+  assert.deepEqual(manifest.optional_host_permissions.sort(), ["http://*/*", "https://*/*"]);
   assert.equal(manifest.host_permissions, undefined);
-  for (const forbidden of ["clipboardRead", "clipboardWrite", "history", "downloads", "webRequest", "camera", "microphone"]) assert(!manifest.permissions.includes(forbidden));
+  for (const forbidden of ["clipboardRead", "clipboardWrite", "history", "downloads", "webRequest", "camera", "microphone"]) {
+    assert(!manifest.permissions.includes(forbidden));
+  }
 });

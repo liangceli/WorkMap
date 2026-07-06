@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { EmployeeDirectory } from "../../components/employees/EmployeeDirectory";
 import { WorkMapButton } from "../../components/ui/WorkMapButton";
 import { WorkMapPageHeader } from "../../components/ui/WorkMapPageHeader";
-import { WorkMapPrivacyNotice } from "../../components/ui/WorkMapPrivacyNotice";
 import { AppShell } from "../../components/layout/AppShell";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import type { WorkMapApiUser } from "../../lib/api/apiTypes";
@@ -103,13 +102,11 @@ export default function EmployeesPage() {
           }
         />
 
-        <WorkMapPrivacyNotice title={directoryState.source === "api" ? "Backend directory" : "Directory unavailable"}>
-          {directoryState.loading
-            ? "Checking whether this browser has an authenticated WorkMap API context."
-            : directoryState.statusText}
-        </WorkMapPrivacyNotice>
-
-        <EmployeeDirectory employees={directoryState.employees} showProfileLinks={directoryState.source !== "api"} />
+        <EmployeeDirectory
+          employees={directoryState.employees}
+          showProfileLinks={directoryState.source !== "api"}
+          loading={directoryState.loading}
+        />
       </section>
     </AppShell>
   );
@@ -125,7 +122,7 @@ function toDirectoryEmployee(user: WorkMapApiUser): DashboardEmployee {
     role: user.jobTitle || formatRole(user.role) || "Team member",
     department: readDepartmentName(user.department),
     status,
-    localTime: "Backend directory",
+    localTime: "Team directory",
     avatar: backendAvatar ?? defaultLayeredAvatarConfig,
     activeTime: "API scoped",
     idleTime: "Contact view",

@@ -1,5 +1,58 @@
 # Latest Implementation Handoff
 
+## 2026-07-06 Frontend Loading, Fixed Navigation, Typography, And Developer-Copy Pass
+
+### Original Task Brief
+
+Add a rotating-logo full-page loading overlay, add a section loader while Employees data loads, pin the main menu to the top edge, replace broad heavy typography with a taller condensed style, and hide developer-facing Cognito/frontend/backend status text. Change frontend presentation only.
+
+### Changed Files
+
+- `workmap/apps/web/app/loading.tsx`
+- `workmap/apps/web/app/globals.css`
+- `workmap/apps/web/app/employees/page.tsx`
+- `workmap/apps/web/components/ui/WorkMapLoader.tsx`
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/components/employees/EmployeeDirectory.tsx`
+- `design-qa.md`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added an accessible reusable WorkMap loading treatment for route-level full-screen loading and Employees section loading.
+- Connected both loaders to existing route/session/directory loading lifecycles without artificial delays.
+- Fixed the main application navigation to the viewport top and added responsive content offsets.
+- Applied a condensed system-font stack and tighter display typography.
+- Removed the global Cognito/API session diagnostic notice, simplified the role badge, removed the Employees backend-directory notice, and replaced the visible backend-directory row label with user-facing wording.
+
+### Role And Access Behavior
+
+No role, authentication, API, tenant, or RBAC behavior changed. Existing role-based navigation filtering and logout behavior remain intact.
+
+### Verification
+
+- `corepack pnpm --filter @workmap/web typecheck`: passed.
+- `corepack pnpm --filter @workmap/web lint`: passed, with the existing Next.js ESLint-plugin warning.
+- `corepack pnpm --filter @workmap/web build`: passed; 19 routes generated.
+- Browser screenshot comparison: blocked because no in-app browser instance was available.
+
+### Manual QA
+
+Not run. Confirm fixed-nav spacing, responsive menu height, font fallback, and both loading states in the user's browser.
+
+### Intentionally Not Changed
+
+- No backend, API contract, database, auth, Cognito implementation, RBAC, tenant isolation, reports calculation, tracking, or Virtual Office behavior changed.
+- No artificial request delay or new dependency was added.
+
+### Remaining Risks And Suggested Next Step
+
+- Condensed typography depends on installed system fonts and may fall back to Inter/system sans on some devices.
+- Visual QA remains required in the authenticated browser, especially at desktop, tablet, and mobile widths.
+
+---
+
 ## Original Task Brief
 
 Preserve the agreed activity-monitoring principles as a durable framework for later WorkMap optimization, while keeping current development focused on completing core product functionality.
@@ -786,3 +839,239 @@ Generated but git-ignored:
 - Open/runtime remains the existing visible top-level app-window context. Truly headless services or hidden tray-only processes without a visible top-level window are not newly included because the request explicitly said to keep Open/runtime behavior unchanged.
 - The higher sampling cadence and persistent PowerShell process require a real Employee-computer CPU/battery soak check.
 - Publish/redeploy the Web change, publish the final `0.5.4` installer under `desktop-agent-v0.5.4`, install/restart it on the Employee computer, then run timed focus/input, 30-second idle, resume, app-open/close, minimize/background, and card expand/collapse acceptance checks.
+
+---
+
+## 2026-07-06 Browser Domain Tracking Feasibility And Proposed Workflow
+
+### Original Task Brief
+
+Assess, but do not implement yet, a Chrome/Edge MV3 extension that measures per-domain Focus active, Focused idle, and Open/runtime like Desktop Agent app metrics, including two simultaneously visible tabs where only the domain actually receiving keyboard/mouse activity should gain Focus active time.
+
+### Changed Files
+
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Current Project Finding
+
+- `apps/browser-extension` already provides an MV3 Alpha scaffold with pairing, protected credential storage, offline queue/retry, hostname-only minimization, active-tab/window events, `chrome.idle`, periodic checkpoints, and domain API upload.
+- Current implementation is not sufficient for the requested rule: it uses the selected tab in the last-focused browser window plus a global 60-second Chrome idle state. It has no content script and therefore cannot prove that input occurred inside a particular domain page.
+- Current domain state also retains the old five-second minimum and has only active/idle summary behavior. It does not yet implement a separate domain Open/runtime contract or the same collapsed three-metric presentation used for apps.
+
+### Feasibility Decision
+
+- Precise attribution is feasible for ordinary permitted HTTP/HTTPS pages only if WorkMap adds a privacy-minimised content script.
+- The content script would listen only for the occurrence/timestamp of input activity, throttled and capture-phase, such as keyboard, pointer, wheel, and touch activity. It must never inspect or transmit key values, text, mouse coordinates, target elements, form fields, page content, titles, paths, queries, or fragments.
+- Without a content script, WorkMap can only infer from selected tab, focused browser window, and global machine idle. That fallback cannot accurately distinguish which of two visible/split pages received input and should not be described as precise domain use.
+
+### Proposed Metrics
+
+- `Domain Focus active`: the top-level domain for the tab that actually reports a recent page input signal, while its browser window/tab context remains eligible. Start from the input timestamp; continue until another domain receives input, the page/window becomes ineligible, or 30 seconds pass without another page input.
+- `Domain Focused idle`: after the last-interacted eligible domain reaches exactly 30 seconds without another page input, move that domain from Focus active to Focused idle. Resume Focus active at the next page input timestamp.
+- `Domain Open/runtime`: wall-clock time during which at least one tab for the domain is open, across selected, unselected, background, and split-view states. Recommended aggregation is union/de-duplicated per browser: three `example.com` tabs open for five minutes produce five minutes, not fifteen.
+- Browser UI input such as address bar, bookmarks, downloads, DevTools, or extension UI is not attributed to a domain.
+
+### Proposed Two-Tab Behavior
+
+- Separate browser windows side by side: the content script in the page that receives the event sends an activity pulse; service worker verifies the sender tab and top-level hostname, then moves Focus active to that domain.
+- Chrome Split View/two visible tabs: both may remain visible, but only the page receiving the actual content-script input pulse gains Focus active. The other visible tab gains only Open/runtime.
+- After 30 seconds with no page input, only the most recently interacted eligible domain becomes Focused idle; other visible/open domains remain Open/runtime only.
+- Passive reading/video with no input becomes Focused idle after 30 seconds under the user's existing rule. This is telemetry, not proof that no work occurred.
+
+### Proposed Technical Workflow
+
+1. Permission/onboarding: request explicit HTTP/HTTPS host access and add the MV3 `scripting` capability; register an isolated-world content script only after permission/employee notice acceptance.
+2. Page signal: inject at document start where allowed, including matching frames when needed. Send only a throttled `{ activityAt }` pulse through `chrome.runtime.sendMessage`; do not send page-derived domain or content.
+3. Trusted attribution: service worker obtains `sender.tab.id/windowId`, resolves the top-level tab URL itself, immediately reduces it to `hostname`, and discards the full URL.
+4. Eligibility: combine content activity with browser window focus, tab state/visibility context, navigation/removal events, lock state, and Chrome Split View metadata where available.
+5. State machine: persist per-tab hostname/open state plus the current last-interacted domain and exact timestamps. Use transition timestamps, not one-second counters, so MV3 service-worker suspension does not lose duration.
+6. 30-second boundary: schedule/reconcile the exact `lastDomainInputAt + 30 seconds` transition. If an alarm or service worker wake is late, backdate the event boundary to the exact timestamp.
+7. Domain runtime: maintain reference counts/sets of open tab IDs by hostname; begin when the first tab opens/navigates to the hostname and end when the final tab closes/navigates away.
+8. Durability: store state in `chrome.storage` because MV3 service-worker globals can be discarded; keep the existing bounded offline queue, retry/backoff, stable event IDs, and restart reconciliation.
+9. API/report: add `isActiveWindow` semantics to domain events so runtime-only rows do not inflate active/idle summaries; derive/expose `focusActiveSeconds`, `focusedIdleSeconds`, and `openRuntimeSeconds` for domains without broad auth/RBAC changes.
+10. Reports UI: reuse the app card interaction: Domain Focus active prominent by default; expand per-domain card for Focused idle and Open/runtime.
+11. Verification: timed normal-tab, two-window, Chrome Split View, iframe editor, navigation, duplicate-domain tabs, background/minimize, 30-second idle/resume, lock, service-worker suspension, offline/retry, browser restart, and Chrome/Edge parity matrices.
+
+### Platform And Privacy Limits
+
+- Content scripts require granted matching host access. `chrome://`, `edge://`, browser New Tab/internal settings, browser stores, and other protected/non-HTTP(S) surfaces cannot be treated as ordinary instrumented domains.
+- Cross-origin frame activity requires matching frame permissions/injection; proposed reporting should attribute it to the top-level tab domain unless product requirements later choose frame-domain reporting.
+- Chrome MV3 service workers can terminate after inactivity, so all timing state must be persisted and reconstructed; no permanent in-memory timer assumption.
+- Chrome exposes Split View metadata only in newer versions; activity pulses remain the primary attribution source and Chrome/Edge version testing is required.
+- Edge documents Chrome extension APIs/manifest keys as broadly code-compatible, but both browsers still require separate sideload/store QA and packaging.
+
+### Verification And Sources
+
+- Repository/source review only; no runtime, manifest, API, schema, or UI code changed and no automated/manual test was run.
+- Official Chrome Tabs documentation: active means active in its window and does not necessarily mean the window is focused; Split View IDs are available in newer Chrome versions.
+- Official Chrome Windows documentation: `onFocusChanged` identifies the currently focused browser window or `WINDOW_ID_NONE`.
+- Official Chrome content-script documentation: scripts run in isolated worlds, can use DOM events and runtime messaging, require match/host permissions, and support all-frame injection.
+- Official Chrome idle documentation: idle is machine-wide time since input, not per-domain input attribution.
+- Official Chrome service-worker documentation: MV3 workers may terminate after inactivity and global variables must not be relied upon for durable state.
+- Official Microsoft Edge documentation: Chrome extension APIs and manifest keys are generally code-compatible, subject to supported-API review and Edge-specific testing.
+
+### Intentionally Not Changed
+
+- No browser-extension, Desktop Agent, API, schema, report, auth, RBAC, tenant, deployment, or permission behavior changed.
+- No content script or broader host permission was added before product/privacy decisions are confirmed.
+- Existing untracked `docs/references/` was not touched.
+
+### Decisions Required Before Implementation
+
+- Confirm that WorkMap may observe only the occurrence/timestamp of page-level keyboard/mouse/pointer/wheel/touch activity, while permanently prohibiting values, coordinates, targets, content, titles, and full URLs. Without this, precise split-tab attribution is impossible.
+- Confirm recommended Open/runtime de-duplication: one or more tabs of the same domain count wall-clock time once per browser, not once per tab.
+- Confirm passive reading/video policy: after 30 seconds without page input, the last-interacted domain is Focused idle even if the employee may still be reading/watching.
+
+---
+
+## 2026-07-06 Browser Domain Tracking Product Decisions Confirmed
+
+- Original task brief: confirm privacy-minimised page input signals, same-domain multi-tab aggregation, and whether mouse-wheel scrolling counts as domain interaction. No implementation was requested yet.
+- Changed files: handoff documentation only.
+- Confirmed privacy boundary: content scripts may report only that a trusted page-level keyboard/mouse/pointer/wheel/touch interaction occurred and its timestamp. Key values, typed text, scroll direction/distance, pointer coordinates, target elements, form fields, page content, page titles, and full URLs remain permanently prohibited.
+- Confirmed same-domain aggregation: multiple tabs for the same hostname are one domain activity identity. Focus active, Focused idle, and Open/runtime use interval union/de-duplicated wall-clock time; simultaneous or overlapping activity never multiplies by tab count.
+- Confirmed wheel behavior: a real user-generated `wheel` event inside an eligible page, including common touchpad two-finger scrolling, counts as page interaction and refreshes that domain's last-activity timestamp. The event must be trusted (`event.isTrusted`); script-driven/automatic scrolling does not count.
+- Same-domain example: three `github.com` tabs open for five minutes produce at most five minutes Open/runtime. If interaction moves among those tabs, `github.com` remains one continuous domain Focus active interval where eligible; overlapping input cannot exceed one second of domain Focus active per wall-clock second.
+- Focused idle rule remains pending explicit confirmation only for the passive reading/video interpretation: after 30 seconds without any trusted interaction in eligible tabs of that domain, the last-interacted domain becomes Focused idle even if the person may still be reading or watching.
+- Verification: documentation/product-rule review only; no extension, API, manifest, schema, or Reports code changed and no tests/manual QA were run.
+- Role/access/privacy behavior: unchanged.
+- Next step: once the passive reading/video rule is confirmed, implementation can begin under the already scoped Browser Extension + domain API/report plan.
+
+---
+
+## 2026-07-06 Browser Domain User-Story Coverage Review
+
+### Original Task Brief
+
+Review whether the proposed Chrome/Edge domain-duration plan fully covers seven expected user stories: immediate trusted keyboard/mouse/wheel activity, multiple visible pages and domains, same-domain de-duplication, immediate runtime stop on final-tab close, Owner visibility when the extension is disabled/enabled/removed, Reports parity with App monitoring, and an exact 30-second no-input transition to Focused idle. Identify missing cases before implementation.
+
+### Changed Files
+
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Review Outcome
+
+- The plan covers the core timing model, but it is not yet honest to call it perfect without tightening focus ownership and extension-health semantics.
+- Confirmed: trusted mouse-wheel/touchpad scrolling counts as domain interaction.
+- Confirmed by this user story: passive reading or video playback with no trusted page input for 30 seconds becomes Focused idle; media playback alone does not refresh activity.
+- Recommended focus invariant: only one different domain owns Focus active at an instant within one browser context. A trusted input on domain B ends domain A's Focus active interval at that same timestamp and starts B immediately. If A and B are alternated, each receives its own non-overlapping intervals. Counting both for the entire 30-second freshness window would inflate Focus active above real wall-clock focus time and conflict with App-monitoring semantics.
+- Same-hostname tabs are one identity. Moving input among three `github.com` tabs does not create a transition or multiply any metric.
+- Each hostname has one de-duplicated Open/runtime interval set: first eligible tab opens/navigates in -> start; intermediate duplicate tabs -> no increment; final eligible tab closes/navigates away -> stop immediately when the browser event is delivered.
+- Normal final-tab close/navigation can stop runtime immediately through tab lifecycle events. Forced browser termination, operating-system crash, power loss, or offline removal cannot provide an exact close timestamp; recovery must cap at the last durable observation/checkpoint and label the gap honestly.
+- Owner Reports should reuse App cards: Domain Focus active is the prominent collapsed metric; Domain Focused idle and Domain Open/runtime appear on expansion, with the same colors/labels and existing Owner/Employee/RBAC boundaries.
+
+### Extension Disable, Enable, And Remove Boundary
+
+- Enable/re-enable time can be recorded accurately when the extension service worker starts and completes its first authenticated heartbeat.
+- The extension cannot reliably report its own exact disable time after the browser has stopped executing it. A missing heartbeat proves only that WorkMap lost the signal; it cannot distinguish disable, uninstall, browser exit, computer sleep/offline, network failure, profile deletion, or a crash.
+- A browser uninstall URL can provide a best-effort removal callback, but it is not a guaranteed authenticated delivery path and cannot cover offline/profile-wipe cases. It must not contain a reusable device credential.
+- The honest Owner contract should therefore show `Last extension signal`, `Coverage lost/detected at`, `Coverage restored at`, and a reason such as `Extension unavailable or browser offline`. Exact disable/remove attribution requires an independent observer such as enterprise browser management or a separately authorised Desktop Agent/native companion.
+
+### Missing Scenarios Added To The Plan
+
+- Top-level navigation from hostname A to B in the same tab; same-hostname SPA/path/query changes must not create a new domain or collect the URL path.
+- Browser UI focus: address bar, bookmarks, downloads, DevTools, extension pages, browser settings, stores, PDF/internal pages, and New Tab must not be attributed to the previously focused domain. Page blur/focus plus tab/window events should end/reconcile focus promptly where browser APIs expose it.
+- Cross-origin iframe input should be attributed to the top-level tab hostname; inaccessible or unpermitted frames remain a declared coverage gap.
+- Host permission denied/revoked, per-site extension access disabled, incognito behavior, multiple browser profiles, and protected pages must appear as coverage limitations rather than zero usage.
+- Chrome and Edge, multiple windows, supported split view, minimized/background tabs, browser/device sleep-lock-wake, service-worker suspension, browser restart, offline queue/retry, duplicated delivery, clock skew, UTC day rollover, and rapid sub-second tab/navigation changes require explicit tests.
+- Hostname grouping must remain explicit: `www.example.com` and `app.example.com` are different identities unless a later product decision adopts registrable-domain grouping.
+- Chrome and Edge running simultaneously can produce cross-browser overlap. Local same-browser de-duplication is straightforward; cross-browser user-level de-duplication requires API interval reconciliation and must be included if the product promise is one logical domain total across browsers.
+- Owner live display needs a bounded freshness contract. The current one-minute MV3 alarm/report persistence path is not immediate enough; implementation should send transition events immediately, persist every boundary, and use privacy-minimised current-domain heartbeat/checkpoint data for live overlay without treating heartbeat as user interaction.
+
+### Role, Access, And Privacy Behavior
+
+- No runtime behavior changed. Future Owner visibility remains tenant/RBAC scoped and Employee own-report access remains unchanged.
+- Approved page signals remain limited to trusted interaction occurrence and timestamp. No key value, typed text, pointer coordinate, scroll direction/distance, target element, form field, title, path/query/fragment, page content, screenshot, clipboard, camera, microphone, email, or private-message content is approved.
+
+### Verification And Manual QA
+
+- Repository/source and product-rule review only.
+- No extension, API, schema, Reports, auth, RBAC, deployment, or permission code changed; no automated or manual runtime test was run.
+- `git diff --check` and a scoped secret scan are required at closeout.
+
+### Intentionally Not Changed
+
+- No Browser Extension implementation began in this review round.
+- No broader host permission, content script, API contract, Prisma migration, report UI, Desktop Agent, deployment, or external browser-management integration was added.
+- Existing untracked `docs/references/` was not touched.
+
+### Remaining Decisions And Suggested Next Step
+
+- Confirm the recommended non-overlap rule for different domains: interaction transfers Focus active ownership at the exact event timestamp rather than allowing several different domains to accrue Focus active concurrently for 30 seconds.
+- Confirm whether the same hostname opened simultaneously in Chrome and Edge must also be de-duplicated into one Owner total; recommended answer is yes at report aggregation level.
+- Accept that standard self-installed Chrome/Edge extensions can provide exact re-enable observation and bounded signal-loss detection, but not guaranteed exact self-disable/uninstall time or cause. If exact attribution is mandatory, explicitly authorise an independent Desktop Agent/native or enterprise-management scope.
+- After these points are accepted, implement only Browser Extension domain timing, its domain API/report contract, and matching Reports cards, followed by the full Chrome/Edge acceptance matrix.
+
+---
+
+## 2026-07-06 Browser Domain Tracking 0.4.0 Implementation
+
+### Original Task Brief
+
+Implement the confirmed Browser Extension rules without unrelated changes: trusted keyboard/mouse/wheel/touch activity starts domain Focus active immediately; different domains transfer one focus owner without overlapping; same-domain tabs and Chrome/Edge overlap are de-duplicated; 30 seconds without domain input changes to Focused idle; Open/runtime spans first eligible tab open through final same-domain tab close; Owner Reports mirror App cards; and extension disable/remove is represented honestly through bounded signal-loss detection and recovery observation.
+
+### Changed Files
+
+- Browser Extension manifest/package/options, service worker, content registration/content script, tracking state/event contract, API client, generated `alpha-unpacked` manifest/options, and targeted tests under `workmap/apps/browser-extension/`.
+- Domain ingestion, browser-extension heartbeat coverage recording, Reports interval aggregation/live coverage, and tracking/report verification under `workmap/apps/api/`.
+- Reports domain API types, live merge, domain cards, extension coverage panel, export fields, and targeted tests under `workmap/apps/web/`.
+- `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`.
+
+### Implementation Summary
+
+- Bumped the Browser Extension package/manifest and pairing/heartbeat identity to `0.4.0`.
+- Added optional HTTP/HTTPS host access plus the minimum MV3 `scripting` capability. Pairing explicitly requests website access, registers one isolated-world all-frame content script, and injects it into already-open permitted pages; pairing then triggers immediate open-tab reconciliation.
+- The content script handles trusted `keydown`, `pointerdown`, focused `pointermove`, `wheel`, `touchstart`, and `touchmove` events. It sends only activity/boundary timestamps. It never sends event values, typed text, coordinates, scroll direction/distance, DOM targets, page-derived domains, titles, paths, queries, fragments, content, or form data.
+- A trailing 250ms activity pulse preserves the latest real input timestamp without flooding MV3 messaging. A page-side 30-second boundary message plus persisted timestamp reconciliation backdates delayed worker wake-ups to exact `lastInputAt + 30 seconds`.
+- Replaced selected-tab/global-idle tracking with a persistent version-2 domain state machine. It stores the single focused domain/tab, last input timestamp, open tab-to-hostname map, and one runtime session per hostname.
+- Different-domain interaction ends the previous Focus active/Focused idle interval at the new event timestamp. Same-domain tab changes do not multiply or restart the logical domain metric.
+- Open/runtime starts when the first eligible tab for a hostname is observed and ends on final-tab close/navigation. Background, unselected, and minimized tabs remain open/runtime; focus/idle stops on page blur, tab activation away, browser window focus loss, lock, navigation, or tab removal.
+- Normal tab create/update/remove/replace events reconcile immediately. Ten-second visible-page checkpoints, a 30-second MV3 alarm fallback, stable event IDs, persisted state, capped offline queue, and retry/backoff preserve bounded durability.
+- Domain events now carry the existing `isActiveWindow` semantic used by App monitoring: focus active is `!isIdle && isActiveWindow`, focused idle is `isIdle && isActiveWindow`, and runtime is `!isIdle && !isActiveWindow`. Runtime no longer inflates active/idle summaries. No Prisma migration was required.
+- Reports computes domain metrics from raw timestamp intervals and unions overlap per hostname, so duplicate same-domain tabs and concurrent Chrome/Edge intervals count once. Legacy focused-idle browser events remain readable. Domain daily totals use the same de-duplicated interval calculation.
+- Extension heartbeats more than 90 seconds after the prior signal record a Browser Extension coverage-loss/recovery interval using the existing `ActivityEventType.HEARTBEAT`. Current coverage is derived from the latest device signal. No exact disable/remove cause is claimed.
+- Reports polls current extension coverage with the existing ten-second live-status loop. It shows Connected or Signal lost, employee/browser, last signal, coverage-lost detection, and restored observation with explicit browser/offline/network ambiguity.
+- Domain rows now use the same accessible collapsed card as Apps: prominent green Focus active; expanded amber Focused idle and blue Open/runtime. CSV/TXT exports include all three domain fields.
+- The `ui-styling` accessibility guidance was applied through semantic buttons, existing global focus indicators, `aria-expanded`, specific accessible labels, and existing WorkMap tokens; no UI dependency or broader redesign was added.
+
+### Role, Access, And Privacy Behavior
+
+- Existing Employee own-report and Owner/Manager/Team Lead/HR Admin report permissions, company/department/user scoping, audit logging, tenant isolation, and Platform Admin privacy boundaries are unchanged.
+- Company coverage rows are produced only inside the same existing report scope; individual report access continues to use `resolveVisibleReportUserId`.
+- Hostnames remain exact lowercase hostnames. Full URLs and page-derived content are not stored or sent.
+- Employees can still disable/remove the extension. Owner Reports show signal-loss detection and recovery, not an invented exact click time or cause.
+
+### Verification
+
+- Browser Extension: 13/13 tests passed; typecheck, lint, and Alpha unpacked build passed.
+- API: 9/9 tests passed; typecheck, lint, and build passed. Coverage includes runtime exclusion from active, exact three-metric reporting, Chrome/Edge same-domain interval union, and coverage loss/recovery.
+- Web: 19/19 tests passed; typecheck, lint, and production build passed with 19 routes. Coverage includes collapsed/expanded domain card behavior.
+- Final unpacked output contains `dist/contentScript.js`, `dist/contentRegistration.js`, the updated service worker/state modules, manifest `0.4.0`, and optional `http://*/*`/`https://*/*` permissions.
+- `git diff --check`: passed at final handoff closeout.
+- Privacy payload scan found no key-value, coordinate, DOM-target, title, full-URL, or page-content collection in the content script/build output.
+- Scoped secret scan: passed with no matching files.
+
+### Manual QA
+
+- Real Chrome load-unpacked, Edge load-unpacked, timed multi-tab interaction, disable/re-enable, and Owner/Employee end-to-end comparison were not run in this environment.
+- In-app browser visual/click QA was attempted through the required Browser skill, but the current session exposed no available browser instance.
+- Automated SSR tests verify domain cards' collapsed and expanded content, but do not substitute for final pixel/keyboard/browser-extension acceptance.
+
+### Intentionally Not Changed
+
+- No Desktop Agent file or timing rule changed.
+- No Prisma schema/migration, Cognito/auth architecture, RBAC capability, tenant boundary, Platform Admin surface, Virtual Office, deployment configuration, retention, categorisation rule, or unrelated page was changed.
+- No base-domain/public-suffix grouping was added; `mail.google.com` and `docs.google.com` remain separate hostnames.
+- No enterprise browser management, native messaging host, forced installation, or exact self-disable/uninstall claim was added.
+- Existing unrelated Employees/loading/design QA changes and `docs/references/` were not touched.
+
+### Remaining Risks And Suggested Next Step
+
+- Standard self-installed extensions cannot prove an exact Disable/Remove action. Current Owner status detects missing signal after 90 seconds and labels the cause honestly.
+- Normal tab close/navigation has an immediate browser lifecycle event. Browser crash, power loss, profile deletion, or offline forced termination lacks a final event; persisted checkpoints and the two-minute stale-sample cap bound rather than eliminate that uncertainty.
+- Protected/internal pages, browser UI, denied/revoked host access, inaccessible frames, and Incognito without explicit extension access remain coverage gaps.
+- Calculation begins at exact observed timestamps, but persisted API values/display remain whole seconds; active checkpoints, upload/network time, and the existing ten-second Reports poll bound Owner display freshness.
+- Load `workmap/apps/browser-extension/alpha-unpacked` separately in current Chrome and Edge, pair it to the deployed/current API, then run the agreed timed matrix: normal interaction, wheel/touchpad, different-domain transfer, three same-domain tabs, Chrome+Edge overlap, 30-second idle/resume, navigation/final close, minimize/background, permission denial, lock/sleep, offline retry, worker/browser restart, disable/re-enable/remove, and Owner/Employee card comparison.
+- The code and automated checks can proceed to that manual acceptance round; do not describe store distribution or production accuracy as passed yet.

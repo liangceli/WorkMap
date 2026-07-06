@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, AlertTriangle, ChevronDown, Download, FileText, Power, RefreshCw } from "lucide-react";
+import { Activity, AlertTriangle, ChevronDown, Download, FileText, Globe2, Power, RefreshCw } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import type { ApiClientOptions, WorkMapApiReportLiveStatus, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
@@ -230,6 +230,8 @@ export function ReportSummaryPanel() {
 
       {summary?.scope === "user" ? <AgentStatusPanel summary={summary} /> : null}
 
+      {summary && summary.browserExtensionCoverage.length > 0 ? <BrowserExtensionCoveragePanel rows={summary.browserExtensionCoverage} /> : null}
+
       {summary ? <MetricGrid summary={summary} /> : null}
 
       {summary && summary.daily.length > 0 ? <DailyTrend rows={summary.daily} /> : null}
@@ -244,14 +246,14 @@ export function ReportSummaryPanel() {
             <div>
               <p style={styles.panelLabel}>API summary</p>
               <h2 style={styles.panelTitle}>{scopeLabel}</h2>
-              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process. App cards highlight focus active; expand a card only when you need its secondary timing context.</p>
+              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process. Every card highlights focus active; expand it only when you need focused idle and open/runtime context.</p>
             </div>
             <span style={styles.scopePill}>{summary.scope === "company" ? "Company scope" : "User scope"}</span>
           </div>
           {hasRows ? (
             <div style={styles.summaryGrid}>
-              <SummaryUsageList title="Apps" rows={summary.apps.map((row) => ({ name: row.appName, ...row }))} />
-              <SummaryUsageList title="Domains" rows={summary.websites.map((row) => ({ name: row.domain, ...row }))} />
+              <SummaryUsageList title="Apps" kind="app" rows={summary.apps.map((row) => ({ name: row.appName, ...row }))} />
+              <SummaryUsageList title="Domains" kind="domain" rows={summary.websites.map((row) => ({ name: row.domain, ...row }))} />
             </div>
           ) : (
             <p style={styles.emptyText}>No usage rows exist for this scope and date range.</p>
@@ -311,6 +313,40 @@ function AgentStatusPanel({ summary }: { summary: WorkMapApiUsageSummary }) {
   );
 }
 
+function BrowserExtensionCoveragePanel({ rows }: { rows: WorkMapApiUsageSummary["browserExtensionCoverage"] }) {
+  return (
+    <section style={styles.trendPanel} aria-label="Browser extension coverage">
+      <div style={styles.trendHeader}>
+        <div>
+          <p style={styles.panelLabel}>Browser extension coverage</p>
+          <h2 style={styles.panelTitle}>Chrome and Edge tracking signal</h2>
+          <p style={styles.panelText}>Signal loss is detected 90 seconds after the last heartbeat. It may mean the extension is disabled or removed, or that the browser, computer, or network is unavailable.</p>
+        </div>
+        <Globe2 size={20} aria-hidden />
+      </div>
+      <div style={styles.sessionRows}>
+        {rows.map((row) => {
+          const connected = row.state === "connected";
+          return (
+            <div key={row.deviceId} style={styles.sessionRow}>
+              <span style={{ ...styles.sessionState, ...(!connected ? styles.sessionInterrupted : {}) }}>{connected ? "Connected" : "Signal lost"}</span>
+              <span>{row.displayName} · {formatBrowserName(row.browserName)}</span>
+              <span>{row.lastSignalAt ? `Last signal ${formatDateTime(row.lastSignalAt)}` : `Enabled observed ${formatDateTime(row.enabledAt)}`}</span>
+              <span>
+                {!connected && row.coverageLostDetectedAt
+                  ? `Coverage lost detected ${formatDateTime(row.coverageLostDetectedAt)}`
+                  : row.coverageRestoredAt
+                    ? `Coverage restored ${formatDateTime(row.coverageRestoredAt)}`
+                    : `Enabled observed ${formatDateTime(row.enabledAt)}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function EmployeeUsageChart({ rows }: { rows: WorkMapApiUsageSummary["employeeUsage"] }) {
   const maximum = Math.max(1, ...rows.map((row) => row.activeSeconds));
   return (
@@ -355,7 +391,7 @@ function MetricGrid({ summary }: { summary: WorkMapApiUsageSummary }) {
   const domainIdle = sum(summary.websites, "idleSeconds");
   const metrics = [
     { label: "App focus active", value: formatDuration(appActive), detail: "Foreground app with keyboard or mouse input within 30 seconds" },
-    { label: "Domain active", value: formatDuration(domainActive), detail: `${formatDuration(domainIdle)} domain idle` },
+    { label: "Domain focus active", value: formatDuration(domainActive), detail: `${formatDuration(domainIdle)} focused idle` },
     { label: "Tracked items", value: `${summary.apps.length} / ${summary.websites.length}`, detail: "App rows / domain rows" },
     {
       label: "Devices active",
@@ -414,43 +450,38 @@ export type UsageListRow = {
   openRuntimeSeconds?: number;
 };
 
-function SummaryUsageList({ title, rows }: { title: string; rows: UsageListRow[] }) {
+function SummaryUsageList({ title, kind, rows }: { title: string; kind: "app" | "domain"; rows: UsageListRow[] }) {
   return (
     <section style={styles.summaryCard}>
       <h3 style={styles.summaryTitle}>{title}</h3>
       <div style={styles.summaryRows}>
-        {rows.map((row) => {
-          const isAppRow = row.openRuntimeSeconds !== undefined || row.focusActiveSeconds !== undefined || row.focusedIdleSeconds !== undefined;
-          return isAppRow ? (
-            <AppUsageMetricCard key={row.name} row={row} />
-          ) : (
-            <div key={row.name} style={styles.summaryRow}>
-              <div style={styles.nameCell}>
-                <p style={styles.summaryName}>{row.name}</p>
-                <p style={styles.summaryCategory}>{row.category ?? formatProductivity(row.productivityLabel)}</p>
-              </div>
-              <div style={styles.domainMetricChips}>
-                <span style={styles.summaryTime}>{formatDuration(row.activeSeconds)} active</span>
-                <span style={styles.summaryTime}>{formatDuration(row.idleSeconds)} idle</span>
-              </div>
-            </div>
-          );
-        })}
+        {rows.map((row) => kind === "app"
+          ? <AppUsageMetricCard key={row.name} row={row} />
+          : <DomainUsageMetricCard key={row.name} row={row} />)}
       </div>
     </section>
   );
 }
 
 export function AppUsageMetricCard({ row, initiallyExpanded = false }: { row: UsageListRow; initiallyExpanded?: boolean }) {
+  return <UsageMetricCard row={row} kind="app" initiallyExpanded={initiallyExpanded} />;
+}
+
+export function DomainUsageMetricCard({ row, initiallyExpanded = false }: { row: UsageListRow; initiallyExpanded?: boolean }) {
+  return <UsageMetricCard row={row} kind="domain" initiallyExpanded={initiallyExpanded} />;
+}
+
+function UsageMetricCard({ row, kind, initiallyExpanded }: { row: UsageListRow; kind: "app" | "domain"; initiallyExpanded: boolean }) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const focusActive = formatDuration(row.focusActiveSeconds ?? row.activeSeconds);
+  const itemLabel = kind === "app" ? "app" : "domain";
   return (
     <article style={styles.appMetricCard}>
       <button
         type="button"
         style={styles.appMetricToggle}
         aria-expanded={expanded}
-        aria-label={`${row.name}, ${focusActive} focus active. ${expanded ? "Hide" : "Show"} secondary time metrics`}
+        aria-label={`${row.name}, ${focusActive} focus active. ${expanded ? "Hide" : "Show"} secondary ${itemLabel} time metrics`}
         onClick={() => setExpanded((current) => !current)}
       >
         <span style={styles.nameCell}>
@@ -462,7 +493,7 @@ export function AppUsageMetricCard({ row, initiallyExpanded = false }: { row: Us
             label="Focus active"
             value={focusActive}
             tone="active"
-            title="Foreground/focused app with recent keyboard or mouse input"
+            title={kind === "app" ? "Foreground/focused app with recent keyboard or mouse input" : "Focused domain receiving trusted keyboard, mouse, wheel, or touch input"}
             prominent
           />
           <ChevronDown
@@ -473,18 +504,18 @@ export function AppUsageMetricCard({ row, initiallyExpanded = false }: { row: Us
         </span>
       </button>
       {expanded ? (
-        <div style={styles.appSecondaryMetrics} aria-label={`${row.name} secondary app time metrics`}>
+        <div style={styles.appSecondaryMetrics} aria-label={`${row.name} secondary ${itemLabel} time metrics`}>
           <MetricChip
             label="Focused idle"
             value={formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)}
             tone="idle"
-            title="Foreground/focused app after 30 seconds without keyboard or mouse input"
+            title={`Focused ${itemLabel} after 30 seconds without keyboard, mouse, wheel, or touch input`}
           />
           <MetricChip
             label="Open/runtime"
-            value={formatDuration(appOpenRuntime(row))}
+            value={formatDuration(openRuntime(row))}
             tone="runtime"
-            title="App was open or running; not proof of active use"
+            title={kind === "app" ? "App was open or running; not proof of active use" : "At least one tab for this domain was open; duplicate tabs are counted once"}
           />
         </div>
       ) : null}
@@ -557,11 +588,22 @@ function exportSummaryCsv(summary: WorkMapApiUsageSummary, scopeLabel: string) {
       row.productivityLabel ?? "",
       row.focusActiveSeconds ?? row.activeSeconds,
       row.focusedIdleSeconds ?? row.idleSeconds,
-      appOpenRuntime(row),
+      openRuntime(row),
       summary.range.from,
       summary.range.to,
     ]),
-    ...summary.websites.map((row) => [scopeLabel, "domain", row.domain, row.category ?? "", row.productivityLabel ?? "", row.activeSeconds, row.idleSeconds, "", summary.range.from, summary.range.to]),
+    ...summary.websites.map((row) => [
+      scopeLabel,
+      "domain",
+      row.domain,
+      row.category ?? "",
+      row.productivityLabel ?? "",
+      row.focusActiveSeconds ?? row.activeSeconds,
+      row.focusedIdleSeconds ?? row.idleSeconds,
+      openRuntime(row),
+      summary.range.from,
+      summary.range.to,
+    ]),
   ];
   const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -582,8 +624,10 @@ function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
     "SUMMARY",
     `App focus active: ${formatDuration(sum(summary.apps, "activeSeconds"))}`,
     `App focused idle: ${formatDuration(sum(summary.apps, "idleSeconds"))}`,
-    `App open/runtime: ${formatDuration(summary.apps.reduce((total, row) => total + appOpenRuntime(row), 0))}`,
-    `Domain active: ${formatDuration(sum(summary.websites, "activeSeconds"))}`,
+    `App open/runtime: ${formatDuration(summary.apps.reduce((total, row) => total + openRuntime(row), 0))}`,
+    `Domain focus active: ${formatDuration(sum(summary.websites, "activeSeconds"))}`,
+    `Domain focused idle: ${formatDuration(sum(summary.websites, "idleSeconds"))}`,
+    `Domain open/runtime: ${formatDuration(summary.websites.reduce((total, row) => total + openRuntime(row), 0))}`,
     "",
   ];
   if (summary.agentStatus) {
@@ -602,7 +646,12 @@ function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
   lines.push("APP TOTALS");
   if (summary.apps.length === 0) lines.push("No app activity recorded.");
   for (const row of summary.apps) {
-    lines.push(`${row.appName}: ${formatDuration(row.focusActiveSeconds ?? row.activeSeconds)} focus active; ${formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)} focused idle; ${formatDuration(appOpenRuntime(row))} open/runtime`);
+    lines.push(`${row.appName}: ${formatDuration(row.focusActiveSeconds ?? row.activeSeconds)} focus active; ${formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)} focused idle; ${formatDuration(openRuntime(row))} open/runtime`);
+  }
+  lines.push("", "DOMAIN TOTALS");
+  if (summary.websites.length === 0) lines.push("No domain activity recorded.");
+  for (const row of summary.websites) {
+    lines.push(`${row.domain}: ${formatDuration(row.focusActiveSeconds ?? row.activeSeconds)} focus active; ${formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)} focused idle; ${formatDuration(openRuntime(row))} open/runtime`);
   }
   lines.push("", "DAILY TOTALS");
   if (summary.daily.length === 0) lines.push("No daily activity recorded.");
@@ -650,7 +699,7 @@ function csvCell(value: string | number) {
   return `"${text}"`;
 }
 
-function appOpenRuntime(row: { activeSeconds: number; idleSeconds: number; openRuntimeSeconds?: number }) {
+function openRuntime(row: { activeSeconds: number; idleSeconds: number; openRuntimeSeconds?: number }) {
   return Math.max(row.openRuntimeSeconds ?? 0, row.activeSeconds + row.idleSeconds);
 }
 
@@ -660,6 +709,10 @@ function sum(rows: Array<{ activeSeconds: number; idleSeconds: number }>, key: "
 
 function formatProductivity(value: string | null) {
   return value ? value.toLowerCase().replace(/_/g, " ") : "Uncategorised";
+}
+
+function formatBrowserName(value: "CHROME" | "EDGE" | "UNKNOWN") {
+  return value === "EDGE" ? "Microsoft Edge" : value === "CHROME" ? "Google Chrome" : "Browser extension";
 }
 
 function formatDuration(seconds: number) {

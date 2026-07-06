@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { ActivityEventSource, ActivityEventType } from "@prisma/client";
 import { canViewEmployeeActivity, canViewOwnReports, canViewTeamReports, type RequestContext } from "@workmap/auth";
 import { AuditService } from "../audit/audit.service.js";
+import { BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS } from "../devices/devices.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 
 type SummaryQuery = {
@@ -16,6 +17,8 @@ type ReportScope = "user" | "company";
 type ReportRange = { from: Date; to: Date; fromDate: string; toDate: string };
 type UsageFilter = { companyId: string; userId?: string; userIds?: string[]; range: ReportRange };
 type LiveAppSegment = { userId: string; displayName: string; appName: string; activeSeconds: number; focusedIdleSeconds: number };
+type UsageInterval = { startedAt: Date; endedAt: Date };
+type DomainMetricTotals = { focusActiveSeconds: number; focusedIdleSeconds: number; openRuntimeSeconds: number };
 
 const DEFAULT_REPORT_DAYS = 30;
 const MAX_REPORT_DAYS = 366;
@@ -53,9 +56,10 @@ export class ReportsService {
     }
 
     const filter = { companyId: context.companyId, userId, range };
-    const [summary, deviceCoverage, agentStatus, agentSessions, appTimeline, activityRevision] = await Promise.all([
+    const [summary, deviceCoverage, browserExtensionCoverage, agentStatus, agentSessions, appTimeline, activityRevision] = await Promise.all([
       this.getUsageRows(filter),
       this.getDeviceCoverage(filter),
+      this.getBrowserExtensionCoverage(filter),
       this.getAgentStatus(filter),
       this.getAgentSessions(filter),
       this.getAppTimeline(filter),
@@ -69,6 +73,7 @@ export class ReportsService {
       range: reportRangeResponse(range),
       ...summary,
       deviceCoverage,
+      browserExtensionCoverage,
       agentStatus,
       agentSessions,
       appTimeline,
@@ -87,8 +92,9 @@ export class ReportsService {
         ? await this.resolveDepartmentUserIds(context.companyId, query.departmentId)
         : undefined;
       const filter = { companyId: context.companyId, userIds, range };
-      const [segments, activityRevision] = await Promise.all([
+      const [segments, browserExtensionCoverage, activityRevision] = await Promise.all([
         this.getLiveAppSegments(filter),
+        this.getBrowserExtensionCoverage(filter),
         this.getActivityRevision(filter),
       ]);
       return {
@@ -97,6 +103,7 @@ export class ReportsService {
         departmentId: query.departmentId ?? null,
         apps: aggregateLiveApps(segments),
         employeeUsage: aggregateLiveEmployees(segments),
+        browserExtensionCoverage,
         activityRevision,
       };
     }
@@ -104,8 +111,9 @@ export class ReportsService {
     if (query.departmentId) throw new BadRequestException("departmentId is available only for company scope.");
     const userId = await this.resolveVisibleReportUserId(context, query.userId);
     const filter = { companyId: context.companyId, userId, range };
-    const [agentStatus, activityRevision] = await Promise.all([
+    const [agentStatus, browserExtensionCoverage, activityRevision] = await Promise.all([
       this.getAgentStatus(filter),
+      this.getBrowserExtensionCoverage(filter),
       this.getActivityRevision(filter),
     ]);
     return {
@@ -113,6 +121,7 @@ export class ReportsService {
       userId,
       departmentId: null,
       agentStatus,
+      browserExtensionCoverage,
       activityRevision,
     };
   }
@@ -139,9 +148,10 @@ export class ReportsService {
     });
 
     const filter = { companyId: context.companyId, userIds, range };
-    const [summary, deviceCoverage, employeeUsage, activityRevision] = await Promise.all([
+    const [summary, deviceCoverage, browserExtensionCoverage, employeeUsage, activityRevision] = await Promise.all([
       this.getUsageRows(filter),
       this.getDeviceCoverage(filter),
+      this.getBrowserExtensionCoverage(filter),
       this.getEmployeeUsage(filter),
       this.getActivityRevision(filter),
     ]);
@@ -153,6 +163,7 @@ export class ReportsService {
       range: reportRangeResponse(range),
       ...summary,
       deviceCoverage,
+      browserExtensionCoverage,
       agentStatus: null,
       agentSessions: [],
       appTimeline: [],
@@ -163,7 +174,7 @@ export class ReportsService {
 
   private async getUsageRows(filter: UsageFilter) {
     const where = summaryWhere(filter);
-    const [appRows, websiteRows, appDailyRows, websiteDailyRows, appRuntimeRows] = await Promise.all([
+    const [appRows, websiteRows, appDailyRows, appRuntimeRows, domainMetrics] = await Promise.all([
       this.prisma.appUsageSummary.groupBy({
         by: ["appName", "category", "productivityLabel"],
         where,
@@ -182,13 +193,8 @@ export class ReportsService {
         _sum: { activeSeconds: true, idleSeconds: true },
         orderBy: { date: "asc" },
       }),
-      this.prisma.websiteUsageSummary.groupBy({
-        by: ["date"],
-        where,
-        _sum: { activeSeconds: true, idleSeconds: true },
-        orderBy: { date: "asc" },
-      }),
       this.getOpenRuntimeRows(filter),
+      this.getDomainMetricRows(filter),
     ]);
 
     const daily = new Map<string, {
@@ -208,8 +214,8 @@ export class ReportsService {
         domainIdleSeconds: 0,
       });
     }
-    for (const row of websiteDailyRows) {
-      const date = toDateOnly(row.date);
+    for (const row of domainMetrics.daily) {
+      const date = row.date;
       const item = daily.get(date) ?? {
         date,
         appActiveSeconds: 0,
@@ -217,8 +223,8 @@ export class ReportsService {
         domainActiveSeconds: 0,
         domainIdleSeconds: 0,
       };
-      item.domainActiveSeconds = row._sum?.activeSeconds ?? 0;
-      item.domainIdleSeconds = row._sum?.idleSeconds ?? 0;
+      item.domainActiveSeconds = row.activeSeconds;
+      item.domainIdleSeconds = row.idleSeconds;
       daily.set(date, item);
     }
 
@@ -260,17 +266,60 @@ export class ReportsService {
       || left.appName.localeCompare(right.appName),
     );
 
+    const websiteMetadata = new Map(websiteRows.map((row) => [row.domain, row]));
+    const websites = Array.from(new Set([...websiteMetadata.keys(), ...domainMetrics.byDomain.keys()]), (domain) => {
+      const metadata = websiteMetadata.get(domain);
+      const metrics = domainMetrics.byDomain.get(domain);
+      const focusActiveSeconds = metrics?.focusActiveSeconds ?? metadata?._sum.activeSeconds ?? 0;
+      const focusedIdleSeconds = metrics?.focusedIdleSeconds ?? metadata?._sum.idleSeconds ?? 0;
+      return {
+        domain,
+        category: metadata?.category ?? null,
+        productivityLabel: effectiveProductivityLabel(metadata?.productivityLabel ?? "UNCATEGORISED", metadata?.category ?? null),
+        activeSeconds: focusActiveSeconds,
+        idleSeconds: focusedIdleSeconds,
+        focusActiveSeconds,
+        focusedIdleSeconds,
+        openRuntimeSeconds: Math.max(metrics?.openRuntimeSeconds ?? 0, focusActiveSeconds + focusedIdleSeconds),
+      };
+    }).sort((left, right) =>
+      right.focusActiveSeconds - left.focusActiveSeconds
+      || right.openRuntimeSeconds - left.openRuntimeSeconds
+      || left.domain.localeCompare(right.domain));
+
     return {
       apps,
-      websites: websiteRows.map((row) => ({
-        domain: row.domain,
-        category: row.category,
-        productivityLabel: effectiveProductivityLabel(row.productivityLabel, row.category),
-        activeSeconds: row._sum.activeSeconds ?? 0,
-        idleSeconds: row._sum.idleSeconds ?? 0,
-      })),
+      websites,
       daily: Array.from(daily.values()).sort((left, right) => left.date.localeCompare(right.date)),
     };
+  }
+
+  private async getDomainMetricRows(filter: UsageFilter) {
+    const events = await this.prisma.activityEvent.findMany({
+      where: {
+        companyId: filter.companyId,
+        ...identityFilter(filter),
+        source: ActivityEventSource.BROWSER_EXTENSION,
+        eventType: ActivityEventType.BROWSER,
+        domain: { not: null },
+        endedAt: { not: null },
+        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+      },
+      select: {
+        domain: true,
+        isIdle: true,
+        isActiveWindow: true,
+        startedAt: true,
+        endedAt: true,
+      },
+    });
+    return summarizeDomainIntervals(events.flatMap((event) => event.domain && event.endedAt ? [{
+      domain: event.domain,
+      isIdle: event.isIdle,
+      isActiveWindow: event.isActiveWindow,
+      startedAt: event.startedAt,
+      endedAt: event.endedAt,
+    }] : []));
   }
 
   private async getOpenRuntimeRows(filter: UsageFilter) {
@@ -313,6 +362,47 @@ export class ReportsService {
     ]);
 
     return { registeredDevices, activeDevices24h, usersWithActivity: usersWithActivity.length };
+  }
+
+  private async getBrowserExtensionCoverage(filter: UsageFilter) {
+    const devices = await this.prisma.device.findMany({
+      where: { companyId: filter.companyId, ...identityFilter(filter), revokedAt: null },
+      include: { user: { select: { displayName: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const extensionDevices = devices.filter((device) => device.agentVersion?.startsWith("browser-extension-mv3/") === true);
+    if (extensionDevices.length === 0) return [];
+    const outages = await this.prisma.activityEvent.findMany({
+      where: {
+        companyId: filter.companyId,
+        source: ActivityEventSource.BROWSER_EXTENSION,
+        eventType: ActivityEventType.HEARTBEAT,
+        deviceId: { in: extensionDevices.map((device) => device.id) },
+      },
+      orderBy: { endedAt: "desc" },
+    });
+    const latestOutageByDevice = new Map<string, typeof outages[number]>();
+    for (const outage of outages) if (!latestOutageByDevice.has(outage.deviceId)) latestOutageByDevice.set(outage.deviceId, outage);
+    const now = Date.now();
+    return extensionDevices.map((device) => {
+      const outage = latestOutageByDevice.get(device.id);
+      const lastSignalAt = device.lastSeenAt;
+      const connected = Boolean(lastSignalAt && now - lastSignalAt.getTime() <= BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS);
+      return {
+        deviceId: device.id,
+        userId: device.userId,
+        displayName: device.user.displayName,
+        browserName: device.hostname === "EDGE" ? "EDGE" : device.hostname === "CHROME" ? "CHROME" : "UNKNOWN",
+        version: device.agentVersion,
+        state: connected ? "connected" as const : "signal_lost" as const,
+        enabledAt: device.createdAt.toISOString(),
+        lastSignalAt: lastSignalAt?.toISOString() ?? null,
+        coverageLostDetectedAt: connected
+          ? outage?.startedAt.toISOString() ?? null
+          : lastSignalAt ? new Date(lastSignalAt.getTime() + BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS).toISOString() : device.createdAt.toISOString(),
+        coverageRestoredAt: outage?.endedAt?.toISOString() ?? null,
+      };
+    });
   }
 
   private async getAgentStatus(filter: Pick<UsageFilter, "companyId" | "userId">) {
@@ -550,6 +640,74 @@ function reportRangeResponse(range: ReportRange) {
 
 function effectiveProductivityLabel(label: string, category: string | null) {
   return label === "UNCATEGORISED" && category ? "PRODUCTIVE" : label;
+}
+
+function summarizeDomainIntervals(events: Array<{
+  domain: string;
+  isIdle: boolean;
+  isActiveWindow: boolean;
+  startedAt: Date;
+  endedAt: Date;
+}>) {
+  type IntervalBuckets = { active: UsageInterval[]; idle: UsageInterval[]; runtime: UsageInterval[] };
+  const byDomainIntervals = new Map<string, IntervalBuckets>();
+  const byDateDomain = new Map<string, Map<string, Pick<IntervalBuckets, "active" | "idle">>>();
+
+  for (const event of events) {
+    if (event.endedAt <= event.startedAt) continue;
+    const buckets = byDomainIntervals.get(event.domain) ?? { active: [], idle: [], runtime: [] };
+    const interval = { startedAt: event.startedAt, endedAt: event.endedAt };
+    if (event.isIdle) buckets.idle.push(interval);
+    else if (event.isActiveWindow) buckets.active.push(interval);
+    else buckets.runtime.push(interval);
+    byDomainIntervals.set(event.domain, buckets);
+
+    if (event.isIdle || event.isActiveWindow) {
+      const date = toDateOnly(event.startedAt);
+      const domains = byDateDomain.get(date) ?? new Map<string, Pick<IntervalBuckets, "active" | "idle">>();
+      const dailyBuckets = domains.get(event.domain) ?? { active: [], idle: [] };
+      (event.isIdle ? dailyBuckets.idle : dailyBuckets.active).push(interval);
+      domains.set(event.domain, dailyBuckets);
+      byDateDomain.set(date, domains);
+    }
+  }
+
+  const byDomain = new Map<string, DomainMetricTotals>();
+  for (const [domain, buckets] of byDomainIntervals) {
+    byDomain.set(domain, {
+      focusActiveSeconds: unionDurationSeconds(buckets.active),
+      focusedIdleSeconds: unionDurationSeconds(buckets.idle),
+      openRuntimeSeconds: unionDurationSeconds(buckets.runtime),
+    });
+  }
+
+  const daily = Array.from(byDateDomain, ([date, domains]) => ({
+    date,
+    activeSeconds: Array.from(domains.values()).reduce((total, buckets) => total + unionDurationSeconds(buckets.active), 0),
+    idleSeconds: Array.from(domains.values()).reduce((total, buckets) => total + unionDurationSeconds(buckets.idle), 0),
+  })).sort((left, right) => left.date.localeCompare(right.date));
+
+  return { byDomain, daily };
+}
+
+function unionDurationSeconds(intervals: UsageInterval[]) {
+  if (intervals.length === 0) return 0;
+  const ordered = [...intervals].sort((left, right) => left.startedAt.getTime() - right.startedAt.getTime());
+  let totalMs = 0;
+  let start = ordered[0]!.startedAt.getTime();
+  let end = ordered[0]!.endedAt.getTime();
+  for (const interval of ordered.slice(1)) {
+    const nextStart = interval.startedAt.getTime();
+    const nextEnd = interval.endedAt.getTime();
+    if (nextStart <= end) end = Math.max(end, nextEnd);
+    else {
+      totalMs += end - start;
+      start = nextStart;
+      end = nextEnd;
+    }
+  }
+  totalMs += end - start;
+  return Math.max(0, Math.round(totalMs / 1000));
 }
 
 function aggregateLiveApps(segments: LiveAppSegment[]) {

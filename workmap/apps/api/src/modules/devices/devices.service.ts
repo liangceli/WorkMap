@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { AgentSessionEndReason, DeviceOS } from "@prisma/client";
+import { ActivityEventSource, ActivityEventType, AgentSessionEndReason, DeviceClientType, DeviceOS } from "@prisma/client";
 import { canViewDeviceHealth, type RequestContext } from "@workmap/auth";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -7,6 +7,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const DEVICE_OS_VALUES = new Set<string>(Object.values(DeviceOS));
 const MAX_HOSTNAME_LENGTH = 120;
 const MAX_AGENT_VERSION_LENGTH = 80;
+export const BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS = 90_000;
 
 @Injectable()
 export class DevicesService {
@@ -73,7 +74,7 @@ export class DevicesService {
     return toDeviceRegistrationResponse(device);
   }
 
-  async recordHeartbeat(context: RequestContext, input: unknown) {
+  async recordHeartbeat(context: RequestContext, input: unknown, clientType?: DeviceClientType) {
     const body = readObject(input, "Device heartbeat body must be an object.");
     const deviceId = readRequiredUuid(body.deviceId, "deviceId");
     const device = await this.prisma.device.findFirst({
@@ -89,13 +90,37 @@ export class DevicesService {
       throw new ForbiddenException("Device is not registered for this WorkMap user and tenant.");
     }
 
+    const heartbeatAt = new Date();
+    const previousLastSeenAt = device.lastSeenAt;
     const updatedDevice = await this.prisma.device.update({
       where: { id: device.id },
       data: {
-        lastSeenAt: new Date(),
+        lastSeenAt: heartbeatAt,
         agentVersion: sanitizeOptionalText(body.agentVersion, MAX_AGENT_VERSION_LENGTH) ?? device.agentVersion,
       },
     });
+
+    if (
+      clientType === DeviceClientType.BROWSER_EXTENSION
+      && previousLastSeenAt
+      && heartbeatAt.getTime() - previousLastSeenAt.getTime() > BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS
+    ) {
+      const coverageLostAt = new Date(previousLastSeenAt.getTime() + BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS);
+      await this.prisma.activityEvent.create({
+        data: {
+          companyId: context.companyId,
+          userId: context.userId,
+          deviceId,
+          source: ActivityEventSource.BROWSER_EXTENSION,
+          eventType: ActivityEventType.HEARTBEAT,
+          isIdle: false,
+          isActiveWindow: false,
+          startedAt: coverageLostAt,
+          endedAt: heartbeatAt,
+          durationSeconds: Math.max(1, Math.round((heartbeatAt.getTime() - coverageLostAt.getTime()) / 1000)),
+        },
+      });
+    }
 
     const sessionId = readOptionalUuid(body.sessionId, "sessionId");
     if (sessionId) {

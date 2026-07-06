@@ -29,7 +29,7 @@ export class DeviceClientController {
   @Post("heartbeat")
   @UseGuards(DeviceCredentialGuard)
   heartbeat(@CurrentDeviceContext() context: DeviceRequestContext, @Body() body: unknown) {
-    return this.devices.recordHeartbeat(toRequestContext(context), { ...readBody(body), deviceId: context.deviceId });
+    return this.devices.recordHeartbeat(toRequestContext(context), { ...readBody(body), deviceId: context.deviceId }, context.clientType);
   }
 
   @Post("session/start")
