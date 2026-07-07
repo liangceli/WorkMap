@@ -123,12 +123,12 @@ export function CompliancePolicyPanel() {
 
   return (
     <div className="wm-compliance-policy" style={styles.stack}>
-      <section style={styles.policyGrid}>
+      <section className="wm-compliance-card-grid" style={styles.policyGrid}>
         <PolicyList title="Visible in WorkMap" tone="blue" items={visibleItems} />
         <PolicyList title="Not monitored" tone="green" items={notVisibleItems} />
       </section>
 
-      <section style={styles.explanationGrid}>
+      <section className="wm-compliance-card-grid" style={styles.explanationGrid}>
         <TrustCard
           title="Why this data exists"
           text="WorkMap uses presence, app/domain duration summaries, device heartbeat, and acknowledgement timestamps to help a tenant understand workspace setup and transparent activity coverage."

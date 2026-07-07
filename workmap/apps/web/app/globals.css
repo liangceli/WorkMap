@@ -334,6 +334,12 @@ a {
   color: var(--wm-primary) !important;
 }
 
+.wm-office-navigation-link:hover,
+.wm-office-navigation-link:focus-visible {
+  background: var(--wm-surface-low) !important;
+  color: var(--wm-secondary) !important;
+}
+
 @media (max-width: 1180px) {
   .wm-office-area-pill {
     left: 260px !important;
@@ -428,6 +434,13 @@ a {
 
 @media (max-width: 640px) {
   .wm-office-top-brand {
+    right: 14px !important;
+    width: auto !important;
+  }
+
+  .wm-office-navigation-menu {
+    top: 84px !important;
+    left: 14px !important;
     right: 14px !important;
     width: auto !important;
   }

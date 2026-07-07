@@ -1,5 +1,204 @@
 # Latest Implementation Handoff
 
+## 2026-07-07 Hard Redirect For Missing Cognito Session
+
+### Original Task Brief
+
+When WorkMap is not logged in, protected project routes must not remain visible with “Sign in needed” or other fallback content. They must replace the current route with `/`, where the user can choose to sign in again.
+
+### Changed Files
+
+- `workmap/apps/web/lib/auth/cognitoRedirect.ts`
+- `workmap/apps/web/lib/api/apiClient.ts`
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/app/virtual-office/page.tsx`
+- `workmap/apps/web/app/onboarding/avatar/page.tsx`
+- `workmap/apps/web/app/onboarding/company/page.tsx`
+- `workmap/apps/web/app/onboarding/device-setup/page.tsx`
+- `workmap/apps/web/test/cognito-protected-redirect.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added one client-side missing-session redirect helper. It checks the refreshed stored Cognito session and uses `window.location.replace("/")`, so the protected route is removed from browser history rather than left behind the login landing page.
+- `/`, `/login`, `/login/callback`, and `/invite/:token` remain public and never enter this redirect path.
+- AppShell now keeps protected children completely unrendered behind the full-page access loader until authentication resolves. If restoration confirms there is no session, it clears stale shell/workflow state and replaces the route with `/` instead of ending loading and showing the project shell.
+- Logout now clears Cognito/workflow/shell state and immediately replaces the protected page with `/`.
+- The shared Cognito API client redirects when a previously authenticated page can no longer obtain a token after refresh, covering final refresh-token expiry while a page is already open.
+- Standalone protected routes outside AppShell—Virtual Office, Owner company onboarding, Avatar onboarding, and Device Setup—use the same rule and do not render their protected content before authentication resolves.
+- A valid Cognito session with a backend mapping/access error is not falsely treated as logged out. Virtual Office retains a distinct “Workspace access unavailable” state for that authenticated-but-blocked case.
+
+### Role And Access Behavior
+
+- The redirect applies equally to Owner, Manager, Employee, IT Admin, and Platform Admin when no Cognito session exists.
+- No role capability, tenant scope, Reports permission, invitation authorization, Platform Admin authorization, or backend guard changed.
+
+### Verification And Manual QA
+
+- Web tests passed 22/22, including protected-route root replacement and public-route non-redirect cases.
+- Web typecheck passed.
+- Web lint passed after fixing the new test's unused parameter.
+- Web production build passed with 19 routes.
+- Manual signed-out navigation QA was not run because no browser instance was available in this environment.
+
+### Intentionally Not Changed
+
+- No Cognito lifetime/refresh policy, login UI, root landing page, invite acceptance flow, backend authentication, API schema, RBAC, tenant isolation, Desktop Agent, Browser Extension, tracking, or Reports calculation changed.
+- Existing unrelated working-tree changes and `docs/references/` were preserved.
+
+### Remaining Risks And Suggested Next Step
+
+- Final deployed QA should sign out from Dashboard, directly open each protected URL while signed out, and let a signed-in session reach final refresh-token failure to confirm all paths land on `/` without protected-content flash.
+- The scoped implementation and automated checks pass; the project can proceed to that deployed authentication-boundary QA.
+
+---
+
+## 2026-07-07 Compliance Card-Gap Background Integration
+
+- Original task: remove the white background visible in the gaps between adjacent Compliance cards so the spacing blends naturally into the page.
+- Changed files: `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx`, `workmap/apps/web/app/workspace-redesign.css`, and handoff documentation.
+- Implementation: added one scoped class to the two layout-only Compliance grids and overrode the broad editorial card treatment on those containers to transparent background, zero border/radius, and no shadow. The five actual content cards keep their existing background, border, radius, spacing, and shadow.
+- Product Design/UI styling impact: the supplied screenshot was treated as a scoped annotation; no redesign, new component, asset, typography, color, or interaction was introduced.
+- Verification: Web typecheck, lint, and production build passed; 19 routes generated. `git diff --check` and the scoped secret scan passed at final closeout.
+- Manual QA: in-app browser discovery returned no available browser instance, so authenticated screenshot verification was not run.
+- Intentionally unchanged: card content, grid gap size, responsive columns, Compliance behavior, acknowledgement flow, auth, API, RBAC, schema, and other pages.
+- Remaining risk: final visual confirmation should refresh `/compliance` at desktop and mobile widths. The scoped implementation is ready for that visual check and the next round can proceed.
+
+---
+
+## 2026-07-07 Browser Extension 0.4.0 Test-Readiness Review
+
+- Original task: confirm whether the Browser Extension is developed enough to begin testing.
+- Changed files: handoff documentation only; no extension runtime code changed. The existing generated Alpha output was rebuilt and remained source-equivalent.
+- Result: yes, local Chrome/Edge manual testing can begin using `workmap/apps/browser-extension/alpha-unpacked`.
+- Current implementation: MV3 `0.4.0`, optional HTTP/HTTPS site access, trusted keyboard/pointer/wheel/touch activity timestamps, single-domain focus ownership, exact 30-second Focused idle transition, same-domain tab de-duplication, Open/runtime lifecycle, encrypted device credential, offline queue/retry, and API/Reports integration.
+- Verification: extension tests passed 13/13; typecheck, lint, and Alpha build passed.
+- Manual QA: not yet run in real Chrome/Edge or against a paired Employee/Owner deployed environment.
+- Intentionally unchanged: no extension logic, API, schema, Reports, auth, RBAC, Desktop Agent, deployment, or browser-store publication changed.
+- Remaining risk: protected/internal pages, denied site access, Incognito, iframe/browser-version differences, offline/crash timing, and extension disable/remove detection still need real-browser acceptance. This is a load-unpacked Alpha, not a Chrome Web Store/Edge Add-ons release.
+- Next step: load the unpacked folder separately in Chrome and Edge, pair it, then run the agreed timed domain matrix and compare Owner Reports. The project can proceed to that manual test round.
+
+---
+
+## 2026-07-07 Cognito Idle Session Renewal
+
+### Original Task Brief
+
+Find why Owner/Manager accounts left open for a while show an expired Cognito session on return, and make normal signed-in sessions remain usable instead of requiring a new login after the short-lived token expires.
+
+### Changed Files
+
+- `workmap/apps/web/lib/auth/cognitoSession.ts`
+- `workmap/apps/web/lib/auth/cognitoUserPoolAuth.ts`
+- `workmap/apps/web/lib/api/apiTypes.ts`
+- `workmap/apps/web/lib/api/apiClient.ts`
+- `workmap/apps/web/lib/api/apiAuth.ts`
+- `workmap/apps/web/lib/api/platformAuth.ts`
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/components/office/useVirtualOfficeRealtime.ts`
+- `workmap/apps/web/app/onboarding/company/page.tsx`
+- `workmap/apps/web/test/cognito-session-refresh.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Root cause: WorkMap persisted only the short-lived Cognito ID/access tokens in its own session record. `getCognitoSession()` deleted that record close to token expiry, while normal page/API flows never asked Amplify to restore/refresh the session. Hosted UI token exchange also discarded its returned refresh token. Components that stayed mounted retained the original token indefinitely.
+- Hosted UI sessions now retain the refresh token and renew ID/access tokens through Cognito's `refresh_token` grant before an expired token is used. A refresh response must remain `Bearer` and match the stored Cognito subject.
+- Direct User Pool username/password sessions now restore through Amplify `fetchAuthSession`, which uses Amplify's persisted refresh session. Refresh work is single-flight so concurrent page requests do not create a refresh storm.
+- Cognito API options carry an internal auth-source marker. The shared API client resolves the current token for each request and performs at most one forced refresh/retry after a 401, including long-mounted Reports, Dashboard, Employee, Platform Admin, and Virtual Office API consumers.
+- Virtual Office WebSocket connect/reconnect obtains the current Cognito token instead of reusing the token captured when the page first mounted.
+- AppShell updates its local Cognito state after restoration. Owner company onboarding also restores before loading profile data or submitting workspace creation.
+- Explicit logout still clears the WorkMap session and Amplify session. Renewal lasts only while Cognito's configured refresh token remains valid and has not been revoked; this change does not create an unlimited or security-bypassing session.
+
+### Role And Access Behavior
+
+- Owner, Manager, Employee, and Platform Admin authentication lifecycle uses the same renewal path where Cognito API auth is used.
+- No role capability, Reports scope, tenant isolation, invitation authorization, or Platform Admin boundary changed.
+
+### Verification And Manual QA
+
+- `corepack pnpm --filter @workmap/web test`: passed, 20/20 tests. The new regression test starts with an expired stored ID token and a stale cached API option, confirms one Cognito refresh request, confirms the API receives the renewed ID token, and confirms the retained refresh token is not discarded.
+- `corepack pnpm --filter @workmap/web typecheck`: passed.
+- `corepack pnpm --filter @workmap/web lint`: passed; existing Next.js ESLint-plugin detection warning remains informational.
+- `corepack pnpm --filter @workmap/web build`: passed; 19 routes generated.
+- Real deployed Cognito idle/wake testing was not run because this environment has no authorised production account/session. Automated local session/token behavior passed.
+
+### Intentionally Not Changed
+
+- No Cognito User Pool/App Client policy, refresh-token validity period, MFA, password policy, hosted domain, environment value, backend authentication verifier, RBAC, schema, API contract, Desktop Agent, Browser Extension, Reports calculation, or UI design changed.
+- Concurrent unrelated typography/navigation work and untracked `docs/references/` were not modified by this task.
+
+### Remaining Risks And Suggested Next Step
+
+- A user must sign in again after the Cognito refresh token expires, is revoked, the account is disabled, or Cognito rejects renewal. “Keep logged in” cannot safely mean bypassing that final Cognito boundary.
+- Deploy the Web change, sign in as one Owner and one Manager, leave each tab beyond the configured ID-token lifetime, then return and verify Dashboard, Reports, and Virtual Office reconnect without an expired-session notice. Also verify explicit Logout still requires a new login.
+- The scoped implementation and automated QA pass; the project can proceed to deployed idle/wake acceptance.
+
+---
+
+## 2026-07-07 Virtual Office Workspace Routing Menu
+
+### Original Task Brief
+
+Make the currently inactive Virtual Office brand control in the upper-left corner open a routing menu for Dashboard, Reports, and other existing workspace pages. Change frontend routing only and do not alter anything else.
+
+### Changed Files
+
+- `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx`
+- `workmap/apps/web/app/globals.css`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Converted the static Virtual Office brand surface into an accessible menu button.
+- Added Next.js links to Dashboard, Reports, Employees, and Compliance.
+- Added open/close chevron feedback, outside-click dismissal, Escape-key dismissal, hover/focus treatment, and mobile menu positioning.
+
+### Role And Access Behavior
+
+No authentication, role, RBAC, tenant, or route-guard behavior changed. Destination pages continue to enforce their existing access behavior.
+
+### Verification
+
+- `corepack pnpm --filter @workmap/web typecheck`: passed.
+- `corepack pnpm --filter @workmap/web lint`: passed with the existing Next.js ESLint-plugin warning.
+- `corepack pnpm --filter @workmap/web build`: passed; 19 routes generated.
+- `git diff --check`: required at closeout.
+
+### Manual QA
+
+Not run. Verify the menu in an authenticated Virtual Office session and follow each destination link.
+
+### Intentionally Not Changed
+
+- No map, movement, presence, realtime, polling, search, people panel, backend, API, auth, data model, or other Virtual Office behavior changed.
+
+### Remaining Risks And Suggested Next Step
+
+- Dashboard remains subject to its existing role access behavior; the routing menu does not bypass route permissions.
+- Manually verify desktop/mobile menu placement and each route in the authenticated browser.
+
+---
+
+## 2026-07-07 Manager Reports Access Review
+
+- Original task: confirm whether the current `MANAGER` role can view Reports.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only.
+- Result: yes. `MANAGER` has `viewOwnReports`, `viewTeamReports`, and `viewEmployeeActivity` in `packages/auth`.
+- Frontend behavior: AppShell exposes `/reports` to Manager; Reports does not redirect Manager; the report panel defaults Manager to company scope, loads the same-tenant employee directory, and allows company, department-filtered, own, or selected-employee views.
+- Backend behavior: company summaries/live status require `canViewTeamReports()`, and selected-employee reports require `canViewEmployeeActivity()`. Manager satisfies both. Same-tenant lookup and report audit logging remain enforced.
+- Important current boundary: Manager is not automatically restricted to an assigned department/team. With no department filter, Manager can request the whole tenant/company aggregate and can select any same-company employee. Department filtering is optional UI/API filtering, not a Manager scope restriction.
+- Employee behavior is separate: the current frontend hides/redirects Employee Reports even though the auth capability table still contains `viewOwnReports` for Employee.
+- Verification: source review of role capabilities, AppShell navigation/normalization, Reports access gate/default scope, and ReportsService authorization checks. No runtime test was rerun because no code changed.
+- Manual QA: not run.
+- Intentionally unchanged: no RBAC, auth, Reports, API, UI, schema, tenant, or Platform Admin behavior changed; `docs/references/` was not touched.
+- Next step: no change is required if full-company Manager reporting is intended. If Managers should see only assigned departments/direct reports, that needs a separate explicit RBAC/data-scope implementation round.
+
+---
+
 ## 2026-07-07 Global Typography Width And Weight Correction
 
 - Original task: replace the overly thin, condensed typography with the wider, heavier modern sans-serif style shown in the supplied navigation and hero references.

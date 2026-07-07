@@ -7,6 +7,7 @@ export type ApiResult<T> =
 export type ApiClientOptions = {
   token?: string;
   baseUrl?: string;
+  authSource?: "cognito";
 };
 
 export type WorkMapApiHealth = {

@@ -14,7 +14,10 @@ import {
 } from "aws-amplify/auth";
 import {
   clearCognitoSession,
+  getCognitoApiAuthOptions,
+  getCognitoSession,
   getCognitoUserPoolConfigStatus,
+  refreshHostedCognitoSession,
   storeCognitoTokenSession,
   type StoredCognitoSession,
 } from "./cognitoSession";
@@ -47,6 +50,7 @@ export type CognitoAuthOperation =
   | "unknown";
 
 let configuredSignature = "";
+let sessionRestorePromise: Promise<StoredCognitoSession | null> | null = null;
 
 export function configureCognitoUserPoolClient() {
   const status = getCognitoUserPoolConfigStatus();
@@ -162,10 +166,37 @@ export async function signOutCognitoAccount() {
   }
 }
 
-export async function restoreCognitoAccountSession() {
+export async function restoreCognitoAccountSession(forceRefresh = false) {
+  const current = getCognitoSession();
+  if (current && !forceRefresh) return current;
+  if (sessionRestorePromise) return sessionRestorePromise;
+
+  sessionRestorePromise = restoreCognitoAccountSessionOnce(forceRefresh).finally(() => {
+    sessionRestorePromise = null;
+  });
+  return sessionRestorePromise;
+}
+
+export async function getFreshCognitoApiAuthOptions(forceRefresh = false) {
+  const current = getCognitoApiAuthOptions();
+  if (current.available && !forceRefresh) return current;
+  const restored = await restoreCognitoAccountSession(forceRefresh);
+  if (!restored) return { available: false as const, reason: "Cognito session expired. Sign in again." };
+  return getCognitoApiAuthOptions();
+}
+
+async function restoreCognitoAccountSessionOnce(forceRefresh: boolean) {
+  try {
+    const hostedSession = await refreshHostedCognitoSession(forceRefresh);
+    if (hostedSession) return hostedSession;
+  } catch {
+    clearCognitoSession();
+    return null;
+  }
+
   try {
     configureCognitoUserPoolClient();
-    return await readAmplifySession(false);
+    return await readAmplifySession(forceRefresh);
   } catch {
     clearCognitoSession();
     return null;

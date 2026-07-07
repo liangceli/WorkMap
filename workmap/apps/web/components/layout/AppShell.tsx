@@ -7,6 +7,7 @@ import { getCurrentCompany } from "../../lib/api/companiesApi";
 import { getCurrentUser } from "../../lib/api/authApi";
 import { getWorkMapPlatformApiAuthOptions } from "../../lib/api/platformAuth";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { redirectToRootForMissingCognitoSession } from "../../lib/auth/cognitoRedirect";
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { getUserSetupState, resetUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
@@ -94,9 +95,16 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
       const auth = await getWorkMapApiAuthOptions();
 
       if (!auth.available) {
+        if (cancelled) return;
+        if (redirectToRootForMissingCognitoSession()) {
+          resetUserSetupState();
+          clearAppShellCache();
+          return;
+        }
         setShellLoading(false);
         return;
       }
+      if (!cancelled) setCognitoSession(getCognitoSession());
 
       const [companyResult, userResult] = await Promise.all([
         getCurrentCompany(auth.options),
@@ -143,24 +151,18 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
 
   const roleLabel = platformSummary
     ? "Platform Admin"
-    : cognitoSession
-    ? apiSummary?.role
-      ? formatRole(apiSummary.role)
-      : activeRole
-      ? formatRole(activeRole)
-      : "Workspace member"
     : apiSummary?.role
       ? formatRole(apiSummary.role)
       : activeRole
-        ? formatRole(activeRole)
-        : "Sign in needed";
+      ? formatRole(activeRole)
+      : "Workspace member";
   const contextLabel = platformSummary
     ? "Platform context"
     : apiSummary?.companyName
         ? apiSummary.companyName
         : cognitoSession
           ? "Workspace mapping pending"
-          : "No workspace session";
+          : "Workspace context";
 
   const logout = async () => {
     try {
@@ -175,11 +177,15 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     setCognitoSession(null);
     setApiSummary(null);
     setPlatformSummary(null);
+    redirectToRootForMissingCognitoSession();
   };
+
+  if (shellLoading) {
+    return <WorkMapLoader fullPage label="Opening your workspace" />;
+  }
 
   return (
     <main className={`wm-app-shell${variant === "editorial" ? " wm-app-shell-editorial" : ""}`} style={styles.page}>
-      {shellLoading ? <WorkMapLoader fullPage label="Opening your workspace" /> : null}
       <header className="wm-app-top-nav" style={styles.topNav}>
         <a href="/" className="wm-app-brand" style={styles.brand}>
           <span style={styles.logo}>WM</span>

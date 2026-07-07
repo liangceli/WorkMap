@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LayeredAvatarPreview } from "../../../components/avatar/LayeredAvatarPreview";
+import { WorkMapLoader } from "../../../components/ui/WorkMapLoader";
 import {
   avatarLayersByType,
   defaultLayeredAvatarConfig,
@@ -16,6 +17,7 @@ import { updateCurrentUserProfile } from "../../../lib/api/usersApi";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { decodeLayeredAvatarId, encodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { sanitizeDisplayName } from "../../../lib/auth/displayName";
+import { redirectToRootForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
@@ -33,6 +35,7 @@ export default function AvatarOnboardingPage() {
   const [displayName, setDisplayName] = useState("");
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [apiAuth, setApiAuth] = useState<Extract<WorkMapApiAuthResult, { available: true }> | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
   const [profileStatus, setProfileStatus] = useState("Enter the name teammates should see in WorkMap.");
   const assetsAvailable = avatarLayersByType.body.length > 0;
   const selectedNames = useMemo(() => getSelectedNames(config), [config]);
@@ -48,11 +51,14 @@ export default function AvatarOnboardingPage() {
       }
 
       if (!auth.available) {
+        if (redirectToRootForMissingCognitoSession()) return;
+        setAuthResolved(true);
         setProfileStatus("Enter the name teammates should see in WorkMap.");
         return;
       }
 
       setApiAuth(auth);
+      setAuthResolved(true);
       const currentUser = await getCurrentUser(auth.options);
 
       if (cancelled) {
@@ -119,6 +125,10 @@ export default function AvatarOnboardingPage() {
     const nextState = updateUserSetupState({ hasAvatar: true });
     router.push(getNextRouteForUser(nextState));
   };
+
+  if (!authResolved) {
+    return <WorkMapLoader fullPage label="Checking account access" />;
+  }
 
   return (
     <main style={styles.page}>

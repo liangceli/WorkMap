@@ -1,6 +1,6 @@
 "use client";
 
-import { getCognitoApiAuthOptions } from "../auth/cognitoSession";
+import { getFreshCognitoApiAuthOptions } from "../auth/cognitoUserPoolAuth";
 import { getAuthContext } from "./authApi";
 import type { ApiClientOptions } from "./apiTypes";
 
@@ -17,7 +17,7 @@ export type WorkMapApiAuthResult =
   | { available: false; reason: string };
 
 export async function getWorkMapApiAuthOptions(): Promise<WorkMapApiAuthResult> {
-  const cognitoSession = getCognitoApiAuthOptions();
+  const cognitoSession = await getFreshCognitoApiAuthOptions();
 
   if (cognitoSession.available) {
     const contextResult = await getAuthContext(cognitoSession.options);

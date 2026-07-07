@@ -79,23 +79,38 @@ export function useVirtualOfficeRealtime({
       return undefined;
     }
 
-    const realtimeUrl = getVirtualOfficeRealtimeUrl(apiOptions);
-
-    if (!realtimeUrl) {
-      setConnectionState("fallback");
-      return undefined;
-    }
-
     let cancelled = false;
     let reconnectAttempt = 0;
     let reconnectTimeout: number | undefined;
 
-    const connect = () => {
+    const connect = async () => {
       if (cancelled) {
         return;
       }
 
       setConnectionState(reconnectAttempt === 0 ? "connecting" : "reconnecting");
+      let connectionOptions = apiOptions;
+
+      if (apiOptions.authSource === "cognito") {
+        const { restoreCognitoAccountSession } = await import("../../lib/auth/cognitoUserPoolAuth");
+        const session = await restoreCognitoAccountSession(false);
+
+        if (cancelled) return;
+        if (!session) {
+          setConnectionState("error");
+          onErrorRef.current?.("Cognito session expired. Sign in again.");
+          return;
+        }
+
+        connectionOptions = { ...apiOptions, token: session.idToken || session.accessToken };
+      }
+
+      const realtimeUrl = getVirtualOfficeRealtimeUrl(connectionOptions);
+      if (!realtimeUrl) {
+        setConnectionState("fallback");
+        return;
+      }
+
       const socket = new WebSocket(realtimeUrl);
       socketRef.current = socket;
 
@@ -166,7 +181,7 @@ export function useVirtualOfficeRealtime({
 
         reconnectAttempt += 1;
         setConnectionState(reconnectAttempt === 1 ? "error" : "reconnecting");
-        reconnectTimeout = window.setTimeout(connect, Math.min(4000, 900 + reconnectAttempt * 600));
+        reconnectTimeout = window.setTimeout(() => void connect(), Math.min(4000, 900 + reconnectAttempt * 600));
       });
 
       socket.addEventListener("error", () => {
@@ -176,7 +191,7 @@ export function useVirtualOfficeRealtime({
       });
     };
 
-    connect();
+    void connect();
 
     return () => {
       cancelled = true;
@@ -195,7 +210,7 @@ export function useVirtualOfficeRealtime({
         socket?.close();
       }
     };
-  }, [apiOptions?.baseUrl, apiOptions?.token, currentUserId, officeMapId]);
+  }, [apiOptions?.authSource, apiOptions?.baseUrl, apiOptions?.token, currentUserId, officeMapId]);
 
   const sendMovement = useCallback((position: VirtualOfficeRealtimeMovePayload) => {
     const socket = socketRef.current;

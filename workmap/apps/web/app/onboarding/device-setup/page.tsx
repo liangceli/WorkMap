@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { WorkMapLoader } from "../../../components/ui/WorkMapLoader";
 import { createDevicePairingCode, getDevicePairingStatus, listDevices } from "../../../lib/api/devicesApi";
 import { getWorkMapApiAuthOptions } from "../../../lib/api/apiAuth";
+import { redirectToRootForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
 import type { WorkMapApiPairingCode, WorkMapApiPairingStatus } from "../../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
@@ -36,6 +38,7 @@ export default function DeviceSetupPage() {
     async function checkExistingDesktopAgent() {
       const auth = await getWorkMapApiAuthOptions();
       if (!auth.available) {
+        if (redirectToRootForMissingCognitoSession()) return;
         if (!cancelled) setCheckingDesktopAgent(false);
         return;
       }
@@ -64,7 +67,11 @@ export default function DeviceSetupPage() {
         return;
       }
       const auth = await getWorkMapApiAuthOptions();
-      if (!auth.available || cancelled) return;
+      if (!auth.available) {
+        if (!cancelled) redirectToRootForMissingCognitoSession();
+        return;
+      }
+      if (cancelled) return;
       const result = await getDevicePairingStatus(pairing.id, auth.options);
       if (cancelled) return;
       if (result.ok) {
@@ -88,6 +95,7 @@ export default function DeviceSetupPage() {
     setPairingMessage("");
     const auth = await getWorkMapApiAuthOptions();
     if (!auth.available) {
+      if (redirectToRootForMissingCognitoSession()) return;
       setPairingState("error");
       setPairingMessage(auth.reason);
       return;
@@ -107,6 +115,10 @@ export default function DeviceSetupPage() {
     const nextState = updateUserSetupState({ hasCompletedDeviceSetup: true }, "EMPLOYEE");
     router.push(getNextRouteForUser(nextState));
   };
+
+  if (checkingDesktopAgent) {
+    return <WorkMapLoader fullPage label="Checking account access" />;
+  }
 
   return (
     <main style={styles.page}>

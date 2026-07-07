@@ -1,6 +1,8 @@
 "use client";
 
 import type { UserPresenceStatus } from "@workmap/shared-types";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { wm } from "../../lib/theme/workmapTheme";
 import { OfficeIcon } from "./OfficeIcons";
 import { labelStatus, statusColors } from "./presence";
@@ -24,19 +26,62 @@ export function VirtualOfficeTopBar({
   onSearch,
 }: VirtualOfficeTopBarProps) {
   const connection = connectionCopy(realtimeState, presenceSource, remoteCount);
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!navigationOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!navigationRef.current?.contains(event.target as Node)) {
+        setNavigationOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavigationOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [navigationOpen]);
 
   return (
     <>
-      <header className="wm-office-top-brand" style={styles.workspacePill}>
-        <div style={styles.logo} aria-hidden="true">
-          WM
-        </div>
-        <div style={styles.titleWrap}>
-          <span style={styles.title}>Virtual Office</span>
-          <span style={styles.caption}>Live team presence</span>
-        </div>
-        <span style={styles.chevron}><OfficeIcon name="chevronDown" size={18} /></span>
-      </header>
+      <div ref={navigationRef} style={styles.navigationRoot}>
+        <button
+          type="button"
+          className="wm-office-top-brand"
+          style={styles.workspacePill}
+          aria-haspopup="menu"
+          aria-expanded={navigationOpen}
+          aria-controls="virtual-office-navigation"
+          onClick={() => setNavigationOpen((open) => !open)}
+        >
+          <div style={styles.logo} aria-hidden="true">WM</div>
+          <div style={styles.titleWrap}>
+            <span style={styles.title}>Virtual Office</span>
+            <span style={styles.caption}>Live team presence</span>
+          </div>
+          <span style={{ ...styles.chevron, transform: navigationOpen ? "rotate(180deg)" : "none" }}>
+            <OfficeIcon name="chevronDown" size={18} />
+          </span>
+        </button>
+
+        {navigationOpen ? (
+          <nav id="virtual-office-navigation" className="wm-office-navigation-menu" role="menu" aria-label="Workspace pages" style={styles.navigationMenu}>
+            {workspaceRoutes.map((route) => (
+              <Link className="wm-office-navigation-link" key={route.href} href={route.href} role="menuitem" style={styles.navigationLink} onClick={() => setNavigationOpen(false)}>
+                <span style={styles.navigationLabel}>{route.label}</span>
+                <span style={styles.navigationDescription}>{route.description}</span>
+              </Link>
+            ))}
+          </nav>
+        ) : null}
+      </div>
 
       <button type="button" className="wm-office-area-pill" onClick={onSearch} style={styles.areaPill} aria-label="Find people, rooms, or actions">
         <span style={styles.areaIcon}><OfficeIcon name="room" size={22} /></span>
@@ -70,6 +115,13 @@ export function VirtualOfficeTopBar({
     </>
   );
 }
+
+const workspaceRoutes = [
+  { label: "Dashboard", description: "Workspace overview", href: "/dashboard" },
+  { label: "Reports", description: "Activity and work insights", href: "/reports" },
+  { label: "Employees", description: "People directory", href: "/employees" },
+  { label: "Compliance", description: "Privacy and policy", href: "/compliance" },
+] as const;
 
 function connectionCopy(
   realtimeState: VirtualOfficeRealtimeState,
@@ -108,6 +160,9 @@ function connectionCopy(
 }
 
 const styles = {
+  navigationRoot: {
+    display: "contents",
+  },
   workspacePill: {
     position: "absolute" as const,
     top: "22px",
@@ -123,6 +178,10 @@ const styles = {
     background: "rgba(255, 253, 248, 0.9)",
     boxShadow: wm.shadow.elevated,
     backdropFilter: "blur(20px)",
+    color: wm.colors.text,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    textAlign: "left" as const,
   },
   logo: {
     display: "grid",
@@ -157,6 +216,39 @@ const styles = {
     display: "grid",
     placeItems: "center",
     color: wm.colors.textSecondary,
+    transition: "transform 160ms ease",
+  },
+  navigationMenu: {
+    position: "absolute" as const,
+    top: "106px",
+    left: "22px",
+    zIndex: 30,
+    display: "grid",
+    width: "280px",
+    overflow: "hidden",
+    padding: "8px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.xl,
+    background: "rgba(255, 253, 248, 0.98)",
+    boxShadow: wm.shadow.elevated,
+    backdropFilter: "blur(20px)",
+  },
+  navigationLink: {
+    display: "grid",
+    gap: "2px",
+    padding: "11px 12px",
+    borderRadius: wm.radius.md,
+    color: wm.colors.text,
+    textDecoration: "none",
+  },
+  navigationLabel: {
+    fontSize: "14px",
+    fontWeight: 800,
+  },
+  navigationDescription: {
+    color: wm.colors.textMuted,
+    fontSize: "12px",
+    fontWeight: 600,
   },
   areaPill: {
     position: "absolute" as const,

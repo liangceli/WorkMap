@@ -2,10 +2,12 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 import { OfficeMap } from "../../components/office/OfficeMap";
+import { WorkMapLoader } from "../../components/ui/WorkMapLoader";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
+import { redirectToRootForMissingCognitoSession } from "../../lib/auth/cognitoRedirect";
 import { getCognitoSession } from "../../lib/auth/cognitoSession";
-import { getUserSetupState } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import { getUserSetupState } from "../../lib/workflow/workflowState";
 
 type GateState =
   | { status: "checking" }
@@ -32,7 +34,9 @@ export default function VirtualOfficePage() {
       }
 
       if (!auth.available) {
-        setGate({ status: "blocked", reason: auth.reason });
+        if (!redirectToRootForMissingCognitoSession()) {
+          setGate({ status: "blocked", reason: auth.reason });
+        }
         return;
       }
 
@@ -50,25 +54,20 @@ export default function VirtualOfficePage() {
     return <OfficeMap />;
   }
 
-  return (
-    <main style={styles.page}>
-      <section style={styles.card}>
-        <p style={styles.eyebrow}>Virtual Office</p>
-        <h1 style={styles.title}>{gate.status === "checking" ? "Checking workspace access" : "Sign in required"}</h1>
-        <p style={styles.text}>
-          {gate.status === "checking"
-            ? "WorkMap is resolving your Cognito workspace role before opening the office."
-            : `The virtual office requires a Cognito-backed workspace user. ${gate.reason}`}
-        </p>
-        {gate.status === "blocked" ? (
-          <div style={styles.actions}>
-            <a href="/login" style={styles.primaryLink}>Sign in</a>
-            <a href="/" style={styles.secondaryLink}>Back to start</a>
-          </div>
-        ) : null}
-      </section>
-    </main>
-  );
+  if (gate.status === "blocked") {
+    return (
+      <main style={styles.page}>
+        <section style={styles.card}>
+          <p style={styles.eyebrow}>Virtual Office</p>
+          <h1 style={styles.title}>Workspace access unavailable</h1>
+          <p style={styles.text}>{gate.reason}</p>
+          <a href="/" style={styles.primaryLink}>Return to WorkMap</a>
+        </section>
+      </main>
+    );
+  }
+
+  return <WorkMapLoader fullPage label="Checking workspace access" />;
 }
 
 const styles = {
@@ -88,33 +87,8 @@ const styles = {
     gap: "12px",
     padding: "22px",
   },
-  eyebrow: {
-    ...wmStyles.eyebrow,
-    margin: 0,
-  },
-  title: {
-    margin: 0,
-    color: wm.colors.textHeading,
-    fontSize: "30px",
-    lineHeight: 1.2,
-  },
-  text: {
-    margin: 0,
-    color: wm.colors.textSecondary,
-    fontSize: "14px",
-    lineHeight: 1.5,
-  },
-  actions: {
-    display: "flex",
-    gap: "10px",
-    flexWrap: "wrap" as const,
-  },
-  primaryLink: {
-    ...wmStyles.primaryButton,
-    padding: "11px 14px",
-  },
-  secondaryLink: {
-    ...wmStyles.secondaryButton,
-    padding: "11px 14px",
-  },
+  eyebrow: { ...wmStyles.eyebrow, margin: 0 },
+  title: { margin: 0, color: wm.colors.textHeading, fontSize: "30px", lineHeight: 1.2 },
+  text: { margin: 0, color: wm.colors.textSecondary, fontSize: "14px", lineHeight: 1.5 },
+  primaryLink: { ...wmStyles.primaryButton, justifySelf: "start", padding: "11px 14px" },
 };

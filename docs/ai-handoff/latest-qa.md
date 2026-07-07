@@ -1,5 +1,129 @@
 # Latest QA Handoff
 
+## 2026-07-07 Hard Redirect For Missing Cognito Session QA
+
+### Reviewed Implementation
+
+Reviewed AppShell startup/logout, custom Cognito restoration, shared API token failure, standalone protected onboarding/office routes, public root/login/callback/invite routes, stale shell/workflow state, and authenticated backend-mapping failure behavior.
+
+### Findings Ordered By Severity
+
+- Fixed - High: AppShell previously set loading false after missing authentication, leaving navigation, protected children, and a “Sign in needed” role badge visible.
+- Fixed - High: Virtual Office previously showed a protected-route “Sign in required” card instead of returning to the login landing route.
+- Fixed - High: a mounted page that finally lost refresh capability could receive API 401/fallback content without leaving the protected route.
+- Fixed - Medium: standalone Company/Avatar/Device Setup routes rendered protected content while authentication was still unresolved.
+- Preserved: an existing Cognito session with backend mapping or role-access failure remains distinguishable from a missing login and is not incorrectly redirected as logged out.
+
+### Test And Verification Status
+
+- Web tests: passed 22/22. New coverage confirms protected routes replace to `/`, while `/`, `/login`, `/login/callback`, and invitation links remain public.
+- Web typecheck: passed.
+- Web lint: passed.
+- Web production build: passed; 19 routes generated.
+- `git diff --check`, forbidden fallback-copy scan, and scoped secret scan passed at final closeout.
+
+### Manual QA, Risks, And Recommendation
+
+- Manual browser QA was not run in this environment.
+- Remaining acceptance: signed-out direct navigation, explicit Logout, cross-tab/final refresh-token loss, and browser Back behavior on the deployed app.
+- Pass for scoped implementation and automated QA; proceed to deployed authentication-boundary testing.
+
+---
+
+## 2026-07-07 Compliance Card-Gap Background QA
+
+- Reviewed: screenshot target, Compliance grid/component structure, editorial CSS override order, card inheritance, and responsive grid behavior.
+- Finding: the visible white strips came from the two direct-child grid containers being styled as white cards by a broad redesign selector, not from the grid `gap` itself.
+- Fix review: only layout containers are transparentized; nested content cards remain unchanged. No functional or accessibility behavior changed.
+- Verification: Web typecheck, lint, and production build passed; 19 routes generated. `git diff --check` and the scoped secret scan passed at final closeout.
+- Manual QA: not run because no in-app browser instance was available. Desktop/mobile `/compliance` refresh remains the visual acceptance step.
+- Recommendation: pass for scoped code verification; proceed to visual confirmation.
+
+---
+
+## 2026-07-07 Browser Extension 0.4.0 Test-Readiness QA
+
+- Reviewed: package/manifest version, unpacked output, content script/background/state/API modules, prior implementation handoff, and current automated checks.
+- Finding: the `alpha-unpacked` directory is complete enough for Chrome and Edge load-unpacked manual testing.
+- Verification: 13/13 extension tests passed; typecheck, lint, and build passed.
+- Manual QA: not run. No claim is made yet for real permission prompts, pairing, timed multi-tab behavior, cross-browser de-duplication, Owner Report synchronization, disable/re-enable visibility, or store distribution.
+- Risks: this remains an Alpha MV3 unpacked build; real browser/platform gaps require the documented acceptance matrix.
+- Recommendation: pass to manual Chrome/Edge testing. Do not proceed to store/production claims until Employee/Owner timed acceptance passes.
+
+---
+
+## 2026-07-07 Cognito Idle Session Renewal QA
+
+### Reviewed Implementation
+
+Reviewed custom Cognito storage/expiry handling, Hosted UI token exchange, Amplify User Pool restoration, shared API authentication, 401 behavior, AppShell startup, cached API consumers, Virtual Office reconnect, company onboarding, logout, and unchanged role boundaries.
+
+### Diff Review And Findings By Severity
+
+- Fixed - High: short-lived ID/access token expiry previously deleted WorkMap's session and produced a false final “session expired” state even when Cognito/Amplify could still refresh the account session.
+- Fixed - High: Hosted UI refresh tokens were discarded after authorization-code exchange, making Hosted UI sessions non-renewable in the custom session layer.
+- Fixed - High: long-mounted components retained the login-time token. The shared client now resolves a current token per Cognito request and retries once after 401; WebSocket reconnect also resolves a current token.
+- Fixed - Medium: concurrent expired-session requests could independently attempt recovery. Restoration is now single-flight.
+- Fixed - Medium: AppShell and Owner onboarding now consume the restored session rather than treating short-token expiry as logout.
+- Security finding: subject matching, explicit logout clearing, Cognito refresh-token expiry/revocation, backend authorization, tenant isolation, and RBAC remain enforced. No perpetual local bypass was introduced.
+- Remaining - Medium: deployed idle/wake behavior still needs real Owner/Manager acceptance beyond the configured short-token lifetime.
+
+### Test And Verification Status
+
+- Web tests: passed 20/20, including the new expired-token/stale-client renewal regression.
+- Web typecheck: passed.
+- Web lint: passed, with only the existing Next.js ESLint-plugin detection warning.
+- Web production build: passed; 19 routes generated.
+- `git diff --check`: passed at final closeout (line-ending warnings only).
+- Scoped real-secret scan: passed at final closeout; only explicit fake test tokens were present.
+
+### Manual QA, Risks, And Recommendation
+
+- Manual deployed Cognito QA was not run; no authorised production session was used.
+- Expected final boundary: Cognito can still require login when the refresh token expires/is revoked or the account is disabled. That is correct security behavior, not the original short-token bug.
+- Pass for scoped implementation and automated QA. Proceed to deployment and Owner/Manager idle/wake testing; do not claim deployed persistence until that test passes.
+
+---
+
+## 2026-07-07 Virtual Office Routing Menu QA
+
+### Reviewed Implementation
+
+The upper-left Virtual Office brand control now opens a frontend routing menu to existing workspace pages.
+
+### Findings
+
+- No P0/P1/P2 code finding after typecheck, lint, and production build.
+- Existing route authorization remains unchanged and is not bypassed.
+- Manual interaction QA is still needed in an authenticated office session.
+
+### Verification Status
+
+- Web typecheck: passed.
+- Web lint: passed with existing Next.js plugin warning.
+- Web production build: passed; 19 routes generated.
+
+### Manual QA Status
+
+Not run. Check toggle, outside click, Escape, keyboard focus, all four links, and mobile positioning.
+
+### Recommendation
+
+Pass for code verification. The next round can proceed after a short authenticated browser smoke of the new menu.
+
+---
+
+## 2026-07-07 Manager Reports Access QA
+
+- Reviewed: Manager capability map, AppShell Reports navigation, Reports access gate/default scope, company/live authorization, individual employee authorization, tenant lookup, and audit behavior.
+- Finding: Manager can view Reports, company aggregates, optional department-filtered aggregates, own report, and selected same-company employee reports.
+- Security boundary: cross-tenant target lookup remains blocked/not found; sensitive company and individual report reads remain audit logged.
+- Product-scope caveat: Manager access is tenant-wide unless a department filter is explicitly selected; it is not automatically limited to an assigned team/department.
+- Verification: source review only; no code changed and no automated/manual runtime test was run.
+- Recommendation: pass if tenant-wide Manager reporting is intended. Otherwise, do not treat the current optional department filter as authorization; implement server-side Manager scope restriction in a dedicated round.
+
+---
+
 ## 2026-07-07 Global Typography Correction QA
 
 - Reviewed implementation: global body/display font stack changed from condensed fonts to normal-width Inter/Segoe UI/Helvetica fallbacks; heading stretch removed and weight strengthened.

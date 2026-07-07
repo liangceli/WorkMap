@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { WorkMapLoader } from "../../../components/ui/WorkMapLoader";
 import { createOwnerWorkspace } from "../../../lib/api/tenantOnboardingApi";
 import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { deriveDisplayNameFromCognito, sanitizeDisplayName } from "../../../lib/auth/displayName";
-import { getCognitoApiAuthOptions } from "../../../lib/auth/cognitoSession";
+import { redirectToRootForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
+import { getFreshCognitoApiAuthOptions } from "../../../lib/auth/cognitoUserPoolAuth";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getDefaultSetupState, saveUserSetupState, type WorkMapRole } from "../../../lib/workflow/workflowState";
 
@@ -17,20 +19,33 @@ export default function CompanyOnboardingPage() {
   const [displayName, setDisplayName] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [authResolved, setAuthResolved] = useState(false);
 
   useEffect(() => {
-    const cognitoAuth = getCognitoApiAuthOptions();
+    let cancelled = false;
 
-    if (cognitoAuth.available) {
-      setDisplayName(deriveDisplayNameFromCognito(cognitoAuth.session));
-    }
+    void getFreshCognitoApiAuthOptions().then((cognitoAuth) => {
+      if (!cognitoAuth.available && !cancelled) {
+        redirectToRootForMissingCognitoSession();
+        return;
+      }
+      if (!cancelled && cognitoAuth.available) {
+        setDisplayName(deriveDisplayNameFromCognito(cognitoAuth.session));
+        setAuthResolved(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const createWorkspace = async () => {
-    const cognitoAuth = getCognitoApiAuthOptions();
+    const cognitoAuth = await getFreshCognitoApiAuthOptions();
     const confirmedDisplayName = sanitizeDisplayName(displayName);
 
     if (!cognitoAuth.available) {
+      if (redirectToRootForMissingCognitoSession()) return;
       setStatus("Owner workspace creation requires Cognito sign-up. Return to /login and create an Owner account first.");
       return;
     }
@@ -62,6 +77,10 @@ export default function CompanyOnboardingPage() {
     saveUserSetupState(nextState);
     router.push(backendAvatar ? result.data.onboarding.nextRoute : "/onboarding/avatar");
   };
+
+  if (!authResolved) {
+    return <WorkMapLoader fullPage label="Checking account access" />;
+  }
 
   return (
     <main style={styles.page}>

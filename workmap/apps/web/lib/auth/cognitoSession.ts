@@ -9,6 +9,7 @@ const DEFAULT_COGNITO_SCOPE = "openid email profile";
 export type StoredCognitoSession = {
   accessToken: string;
   idToken: string;
+  refreshToken?: string;
   tokenType: "Bearer";
   expiresAt: string;
   claims: {
@@ -55,6 +56,7 @@ type CognitoTransaction = {
 type CognitoTokenResponse = {
   access_token?: string;
   id_token?: string;
+  refresh_token?: string;
   token_type?: string;
   expires_in?: number;
 };
@@ -154,8 +156,13 @@ export function getCognitoSession(): StoredCognitoSession | null {
     }
 
     const parsed = JSON.parse(raw);
-    if (!isStoredCognitoSession(parsed) || isExpired(parsed.expiresAt)) {
+    if (!isStoredCognitoSession(parsed)) {
       clearCognitoSession();
+      return null;
+    }
+
+    if (isExpired(parsed.expiresAt)) {
+      if (!parsed.refreshToken) clearCognitoSession();
       return null;
     }
 
@@ -176,7 +183,7 @@ export function getCognitoApiAuthOptions():
 
   return {
     available: true,
-    options: { token: session.idToken || session.accessToken },
+    options: { token: session.idToken || session.accessToken, authSource: "cognito" },
     session,
     cognitoSub: session.claims.sub,
     email: session.claims.email,
@@ -281,20 +288,12 @@ export async function completeCognitoRedirect(currentUrl?: string):
     return { ok: false, error: "Cognito ID token nonce did not match the sign-in request." };
   }
 
-  const expiresAt = new Date(((claims.exp ?? Math.floor(Date.now() / 1000) + (tokenResponse.expires_in ?? 3600))) * 1000).toISOString();
-  const session: StoredCognitoSession = {
-    accessToken: tokenResponse.access_token,
-    idToken: tokenResponse.id_token,
-    tokenType: "Bearer",
-    expiresAt,
-    claims: {
-      sub: claims.sub,
-      email: claims.email,
-      displayName: claims.name,
-      username: claims["cognito:username"],
-      tokenUse: claims.token_use,
-    },
-  };
+  const session = createStoredSession(
+    tokenResponse.access_token,
+    tokenResponse.id_token,
+    tokenResponse.refresh_token,
+    tokenResponse.expires_in,
+  );
 
   saveCognitoSession(session);
   clearTransaction();
@@ -311,28 +310,49 @@ export function clearCognitoSession() {
   clearTransaction();
 }
 
-export function storeCognitoTokenSession(accessToken: string, idToken: string) {
-  const claims = decodeJwtPayload<CognitoIdTokenClaims>(idToken);
+export function storeCognitoTokenSession(accessToken: string, idToken: string, refreshToken?: string) {
+  const session = createStoredSession(accessToken, idToken, refreshToken);
 
-  if (!claims.sub) {
-    throw new Error("Cognito ID token did not include a subject.");
+  saveCognitoSession(session);
+  return session;
+}
+
+export async function refreshHostedCognitoSession(forceRefresh = false) {
+  const current = getCognitoSession();
+  if (current && !forceRefresh) return current;
+
+  const stored = readStoredCognitoSession();
+  if (!stored?.refreshToken) return null;
+  const status = getCognitoConfigStatus();
+  if (!status.configured) return null;
+
+  const body = new URLSearchParams({
+    client_id: status.config.appClientId,
+    grant_type: "refresh_token",
+    refresh_token: stored.refreshToken,
+  });
+  const response = await fetch(`${status.config.domain}/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!response.ok) throw new Error(`Cognito session refresh failed with ${response.status}.`);
+
+  const tokenResponse = (await response.json()) as CognitoTokenResponse;
+  if (!tokenResponse.access_token || !tokenResponse.id_token || tokenResponse.token_type !== "Bearer") {
+    throw new Error("Cognito refresh response was incomplete.");
+  }
+  const claims = decodeJwtPayload<CognitoIdTokenClaims>(tokenResponse.id_token);
+  if (!claims.sub || claims.sub !== stored.claims.sub) {
+    throw new Error("Cognito refresh identity did not match the stored session.");
   }
 
-  const expiresAt = new Date((claims.exp ?? Math.floor(Date.now() / 1000) + 3600) * 1000).toISOString();
-  const session: StoredCognitoSession = {
-    accessToken,
-    idToken,
-    tokenType: "Bearer",
-    expiresAt,
-    claims: {
-      sub: claims.sub,
-      email: claims.email,
-      displayName: claims.name,
-      username: claims["cognito:username"],
-      tokenUse: claims.token_use,
-    },
-  };
-
+  const session = createStoredSession(
+    tokenResponse.access_token,
+    tokenResponse.id_token,
+    tokenResponse.refresh_token ?? stored.refreshToken,
+    tokenResponse.expires_in,
+  );
   saveCognitoSession(session);
   return session;
 }
@@ -354,6 +374,37 @@ export function getCognitoLogoutUrl() {
 
 function saveCognitoSession(session: StoredCognitoSession) {
   window.localStorage.setItem(COGNITO_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+function readStoredCognitoSession() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(COGNITO_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return isStoredCognitoSession(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function createStoredSession(accessToken: string, idToken: string, refreshToken?: string, expiresIn?: number): StoredCognitoSession {
+  const claims = decodeJwtPayload<CognitoIdTokenClaims>(idToken);
+  if (!claims.sub) throw new Error("Cognito ID token did not include a subject.");
+  return {
+    accessToken,
+    idToken,
+    refreshToken,
+    tokenType: "Bearer",
+    expiresAt: new Date((claims.exp ?? Math.floor(Date.now() / 1000) + (expiresIn ?? 3600)) * 1000).toISOString(),
+    claims: {
+      sub: claims.sub,
+      email: claims.email,
+      displayName: claims.name,
+      username: claims["cognito:username"],
+      tokenUse: claims.token_use,
+    },
+  };
 }
 
 async function createTransaction(): Promise<CognitoTransaction> {
@@ -447,6 +498,7 @@ function isStoredCognitoSession(value: unknown): value is StoredCognitoSession {
     isObject(value) &&
     typeof value.accessToken === "string" &&
     typeof value.idToken === "string" &&
+    (value.refreshToken === undefined || typeof value.refreshToken === "string") &&
     value.tokenType === "Bearer" &&
     typeof value.expiresAt === "string" &&
     isObject(value.claims) &&
