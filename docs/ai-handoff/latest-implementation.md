@@ -1,5 +1,243 @@
 # Latest Implementation Handoff
 
+## 2026-07-07 Browser Extension Alpha ZIP Release Preparation
+
+- Original task: guide the selected manual Browser Extension path through ZIP preparation, release URL configuration, and Web redeployment.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`. A generated ignored artifact was created at `workmap/artifacts/WorkMap-Browser-Extension-0.4.0.zip`; no runtime source changed in this round.
+- Build/package result: rebuilt `@workmap/browser-extension` 0.4.0 and compressed the contents of `apps/browser-extension/alpha-unpacked` rather than its parent directory. The ZIP root directly contains `manifest.json`, `options.html`, `options.css`, and `dist/*`, which is required for Load unpacked after extraction.
+- Artifact: `C:\Users\lilia\WorkMap\workmap\artifacts\WorkMap-Browser-Extension-0.4.0.zip`.
+- SHA-256: `AD85B9E8B3FB6839D3DF2BB8AC4F745CCE8E0CF50C7176865C8BA37FCB7D628F`.
+- External publication status: not published. This environment has neither GitHub CLI nor Vercel CLI available, and creating a public Release/production deployment requires authenticated external action.
+- Recommended GitHub release: tag `browser-extension-v0.4.0`, title `WorkMap Browser Extension 0.4.0 Alpha`, and upload the generated ZIP. For the current origin, the expected public asset URL is `https://github.com/liangceli/WorkMap/releases/download/browser-extension-v0.4.0/WorkMap-Browser-Extension-0.4.0.zip` after successful publication.
+- Privacy/release note: label the release Alpha/manual Developer mode testing; do not describe it as store-approved, managed, or production-ready.
+- Deployment sequence: publish and verify the ZIP URL; set Vercel `NEXT_PUBLIC_WORKMAP_BROWSER_EXTENSION_URL` for the intended environments; ensure the Device Setup source changes are committed/pushed to the deployment branch; trigger a new Web build because `NEXT_PUBLIC_*` is embedded at build time; verify Employee download/extract/Load unpacked/pairing and Owner coverage.
+- Runtime, role, access, auth, schema, API, domain timing, and reporting behavior: unchanged.
+- Verification: Browser Extension build passed; ZIP entry listing and SHA-256 were inspected; `git diff --check` and scoped secret scan passed.
+- Manual QA: ZIP was not uploaded or installed in Chrome/Edge, and Web was not redeployed.
+- Remaining risk: a private GitHub repository/release URL will not be anonymously downloadable by Employees; if the repository is private, use an authenticated WorkMap download endpoint or suitable public artifact host instead of the expected GitHub URL.
+- Suggested next step: Owner uploads the prepared artifact to the named GitHub Release and confirms the asset opens without GitHub authentication; then configure Vercel and redeploy.
+
+---
+
+## 2026-07-07 Manual Browser Extension Employee Setup Implementation
+
+- Original task: choose the first non-store distribution option now: Employee manual ZIP download, Developer mode Load unpacked installation, and WorkMap pairing.
+- Changed files: `workmap/apps/web/app/onboarding/device-setup/page.tsx`, `workmap/.env.example`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`.
+- Implementation: Device Setup now presents separate Desktop Agent and Browser Extension Alpha panels instead of combining their actions. The extension panel contains the controlled-test boundary, Chrome/Edge Developer mode instructions, permanent-folder warning, permission/pairing steps, and manual update/Reload warning.
+- Download configuration: added `NEXT_PUBLIC_WORKMAP_BROWSER_EXTENSION_URL`. When configured, Employees see `Download extension ZIP`; when absent, the page honestly shows that the ZIP release configuration is pending. No URL was hardcoded and no generated archive was committed.
+- Pairing/status: the existing `BROWSER_EXTENSION` one-time-code flow remains unchanged. Device Setup now detects an existing non-revoked `browser-extension-mv3/*` device and shows a distinct paired state; a newly completed Browser Extension pairing updates that state immediately.
+- Onboarding boundary: Desktop Agent remains required to continue to the virtual office. Browser Extension remains optional for navigation but explicitly must be paired before domain monitoring begins.
+- Runtime boundary: domain timing, heartbeat, coverage thresholds, API, auth, schema, roles, tenant isolation, and reporting calculations were not changed.
+- Verification: `corepack pnpm --filter @workmap/web typecheck`, `lint`, and `build` passed; Browser Extension tests passed 13/13 and its build passed. The initial sandboxed commands could not read the installed TypeScript executable (`EPERM`), so the same checks were rerun successfully with approved sandbox escalation.
+- Manual QA: not run in a real Chrome/Edge Employee profile because no deployed ZIP URL/local authenticated Web session was supplied.
+- Remaining deployment action: package the built `apps/browser-extension/alpha-unpacked` contents as a ZIP whose root contains `manifest.json`, publish it at a stable HTTPS download URL, set `NEXT_PUBLIC_WORKMAP_BROWSER_EXTENSION_URL` in the deployed Web environment, and redeploy Web.
+- Remaining risk: manual Alpha installs can be disabled/removed and do not auto-update; Employees must preserve the extracted directory and manually replace/reload future versions.
+- Suggested next step: publish the 0.4.0 Alpha ZIP and perform end-to-end Employee Chrome and Edge install/pair/restart/update/remove QA, then confirm Owner connected/signal-lost recovery behavior.
+
+---
+
+## 2026-07-07 Non-Store Browser Extension User And Owner Workflow Review
+
+- Original task: describe the Employee first-setup/daily-use workflow and Owner visibility when WorkMap does not publish the Browser Extension through Chrome Web Store or Microsoft Edge Add-ons.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only. No runtime behavior changed.
+- Supported paths: (1) manual unpacked installation for a small pilot/development group, or (2) organization-managed external installation through browser enterprise policy. A normal WorkMap webpage cannot silently install a non-store Chrome extension on unmanaged Windows/macOS devices.
+- Manual-pilot first setup: Employee downloads the approved WorkMap extension ZIP, extracts it to a permanent folder, opens `chrome://extensions` or `edge://extensions`, enables Developer mode, selects Load unpacked, grants the requested site access, creates a Browser Extension pairing code in WorkMap Device Setup, and enters it in the extension options page. WorkMap then shows the pairing as connected after the extension exchanges the code and starts heartbeats.
+- Manual-pilot daily use: opening the browser starts the paired MV3 extension; permitted domain timing is queued/uploaded and heartbeat freshness drives coverage. The Employee can inspect, disable, reload, or remove it. Moving/deleting the unpacked folder, browser cleanup, profile changes, or developer-mode controls can break coverage.
+- Manual-pilot updates: WorkMap must distribute a new package; the Employee/IT must replace the files in the same controlled location and reload/reinstall the extension. The current local Alpha package has no managed self-update delivery workflow, so version drift is a material operational risk.
+- Enterprise-managed first setup: customer IT hosts/packages the approved extension and update metadata where supported, configures Chrome/Edge enterprise installation policies (for example through Group Policy/Intune/browser management), and assigns it to employee browsers. Installation can be automatic; the Employee then reviews the WorkMap disclosure and completes the existing one-time pairing step unless IT provisioning is separately designed.
+- Enterprise-managed daily use: browser policy maintains installation and can prevent disable/removal when force-installed; managed update policy can roll out signed versions. This produces the cleanest non-public-store experience but requires customer IT administration and a dedicated signing, stable-ID, hosting, update, rollback, and support process that WorkMap does not currently provide.
+- Owner view for both paths: unchanged. Owner/allowed Manager sees extension coverage based on heartbeat freshness and domain summaries after upload. After the final successful signal, an open report normally changes to `signal_lost` after the existing 90-second freshness threshold plus up to the report polling interval. Recovery changes it back to connected.
+- Owner limitation: heartbeat loss cannot identify whether the Employee disabled/removed the extension, closed the entire browser, shut down/slept, lost network, changed profile, or encountered a runtime failure. Closing only a browser window may leave a background browser process and heartbeat running. Manual installation also cannot guarantee compliance or current version.
+- Recommendation: use unpacked loading only for the present controlled pilot. For production without public store listing, choose enterprise-managed deployment and accept the customer-IT prerequisite; for ordinary unmanaged employee computers, store distribution remains the reliable self-service route.
+- Role/access/privacy behavior: unchanged. Existing Employee pairing, tenant isolation, Owner/Manager boundaries, hostname-only collection, and reporting calculations were not modified.
+- Verification: reviewed current pairing/options/heartbeat implementation and official Chrome distribution plus Edge sideload/external-distribution documentation. No automated tests were run because no runtime code changed.
+- Manual QA: not run; unpacked install/update/remove and managed policy deployment were not exercised on a real employee device.
+- Remaining risks: current Alpha package/version delivery is not a production updater; extension identity, signing, policy templates, hosted updates, rollback, and fleet version visibility require a separate implementation round.
+- Suggested next step: continue local unpacked testing now, while deciding whether target customers can supply managed browsers. That decision determines enterprise deployment versus store self-service.
+
+---
+
+## 2026-07-07 Browser Extension Store Publication Effort Review
+
+- Original task: assess whether publishing the WorkMap Browser Extension to the Chrome Web Store and Microsoft Edge Add-ons is difficult.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only. No extension, Web, API, auth, schema, deployment, or reporting behavior changed.
+- Assessment: moderate one-time release work rather than a rebuild. The current extension is already Manifest V3 and the Chromium implementation can largely be reused for Chrome and Edge, but each store requires its own developer account, listing, submission, and review.
+- Current readiness gap: the local package is still named `WorkMap Domain Tracking Alpha` at version `0.4.0` and is not yet a store-ready product listing. Store icons/screenshots/promotional assets, final listing copy, public privacy-policy/support links, test instructions, release packaging, and stable store IDs/URLs still need to be completed.
+- Highest review risk: the extension uses `tabs`, `idle`, `scripting`, and optional broad HTTP/HTTPS host access for domain timing. Each permission must be demonstrably necessary, minimally scoped, and clearly justified; hostname/timing collection and employee-monitoring behavior must match the store disclosures and public privacy policy exactly.
+- Recommended release sequence: prepare and privately/tester-publish Chrome first, resolve review findings, then reuse the validated Chromium package and disclosures for a separate Edge Add-ons submission. After stable listing URLs/IDs exist, implement the Employee Device Setup store buttons and pairing handoff.
+- Effort estimate: if WorkMap's final privacy policy and brand assets are available, allow roughly 1-3 focused engineering/content days for the first store-ready submission and cross-browser checks; external review and any reviewer questions are additional, store-controlled calendar time. Edge should require less incremental implementation effort but still has an independent certification cycle.
+- Role/access/privacy behavior: unchanged. Owner/Manager reporting, Employee controls, tenant isolation, and the existing hostname-only privacy boundary were not modified.
+- Verification: reviewed the current manifest and official Chrome Web Store account, publishing, privacy, listing, and distribution requirements plus official Microsoft Edge Add-ons submission requirements. Runtime tests were not run because no runtime code changed.
+- Manual QA: not run; real store upload, reviewer test credentials, install/update/remove, and production pairing remain untested.
+- Remaining risk: store approval is not guaranteed, especially if permission explanations, public privacy language, or observed behavior diverge. Review duration cannot be controlled by WorkMap.
+- Suggested next step: create the company-owned Chrome/Edge publisher accounts and approve the final privacy policy/brand assets, then perform a dedicated store-readiness implementation round.
+
+---
+
+## 2026-07-07 Browser Extension Employee Control And Owner Coverage Review
+
+- Original task: confirm whether Employees can view/disable the extension and whether Owner status updates when the Employee closes the browser.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only. No runtime behavior changed.
+- Employee control: a normal Chrome Web Store or Edge Add-ons self-service installation lets the Employee view extension details, requested permissions, version, site-access settings, enable/disable toggle, and Remove action through the browser extension manager. Enterprise-managed force installation can restrict disable/remove through administrator policy.
+- Current heartbeat behavior: WorkMap targets a ten-second heartbeat interval, uses a 30-second MV3 alarm/checkpoint fallback, and persists state so normal service-worker suspension does not itself imply coverage loss.
+- Owner state: the API treats a Browser Extension as `connected` while its last signal is no more than 90 seconds old; after that it returns `signal_lost`. Reports polls live status every ten seconds and replaces the displayed extension coverage from that response, so an open Owner report normally changes within roughly 90–100 seconds after the final heartbeat, excluding network/API delay.
+- Browser-close boundary: closing one browser window is not proof that the browser process stopped. Other windows, profiles, or allowed background browser execution may keep the extension heartbeat alive. Only loss of the extension execution/network signal results in `signal_lost`.
+- Cause boundary: disable, uninstall, full browser exit, computer shutdown/sleep, browser/profile crash, permission/runtime failure, and network loss all stop or delay heartbeats. The extension cannot execute after disable/remove to report an exact final action, so Owner sees an honest signal-loss state rather than a claimed exact cause.
+- Recovery: browser/extension startup initializes the tracker and forces reconciliation/heartbeat. Reports then returns to Connected on its next poll. If the signal gap exceeded 90 seconds, the backend records a coverage-loss interval from `lastSignal + 90 seconds` through the recovery heartbeat.
+- Short interruption: if the browser/extension resumes within 90 seconds, Owner may never see Signal lost; this is intentional thresholding rather than instant browser-window telemetry.
+- Verification: source review of MV3 startup/alarm/heartbeat, API 90-second coverage computation, live Reports ten-second polling/coverage merge, automated coverage-loss tests, and official Chrome/Edge extension-management documentation. No automated test rerun because code did not change.
+- Role/access/privacy behavior: unchanged. Owner/Manager coverage visibility remains RBAC/tenant-scoped; no new browsing content or exact employee action is collected.
+- Manual QA: real disable/remove/full-exit/background-process/re-enable timing was not run.
+- Recommended next step: keep self-service installations user-controllable and label Owner status `Connected` / `Signal lost or browser unavailable`; separately offer enterprise force-install for customers that require disable prevention.
+
+---
+
+## 2026-07-07 Employee Self-Service Extension Setup Feasibility
+
+- Original task: determine whether Browser Extension installation/configuration can be employee self-service inside WorkMap, similar to Desktop Agent setup.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only. No runtime implementation was requested or changed.
+- Feasibility: yes for a WorkMap-guided self-service flow, but not for silent installation from the website. Chrome/Edge retain the native install and permission confirmation boundary.
+- Recommended Employee flow: WorkMap Device Setup detects Chrome/Edge; shows the matching official store button; employee confirms Add extension and requested site access in the browser; WorkMap generates a short-lived pairing code; the installed extension exchanges that code for its device credential; Device Setup polls the existing pairing status and shows Connected.
+- Current reusable pieces: Employee-authenticated pairing-code creation, device-scoped credential exchange, optional host permission prompt, browser selection, paired status, heartbeat, revocation, and Owner coverage reporting already exist.
+- Missing implementation: Chrome Web Store and Microsoft Edge Add-ons listings/stable extension IDs, Web environment/config for store URLs, Employee install buttons/instructions, installed-state handshake, and final install/update/remove QA.
+- Optional later improvement: a narrowly allowlisted `externally_connectable` manifest entry can let the deployed WorkMap origin send the one-time pairing code to the installed extension. Current manifest does not expose this. It must accept only approved WorkMap HTTPS origins and must never accept/reveal persistent device credentials.
+- Distribution boundary: Chrome documents that unpacked extensions are for development; direct user installation requires Chrome Web Store hosting/signing. Windows/macOS self-hosting is available only in managed enterprise environments. Edge recommends Microsoft Edge Add-ons for normal users and enterprise policy for managed deployment.
+- Alternative enterprise flow: company IT force-installs the extension through Chrome/Edge management policy; employee then only signs into WorkMap, reviews transparency/permissions, and pairs/activates the assigned browser client.
+- Role/access/privacy behavior: unchanged. Employee pairing remains device-scoped and tenant-bound; Owner/Manager visibility and existing privacy payload restrictions remain unchanged.
+- Verification: repository/source review plus current official Chrome distribution, Chrome external messaging, and Microsoft Edge extension distribution documentation. No tests were run because runtime code did not change.
+- Manual QA: not run.
+- Recommended next step: choose public/private store self-service versus enterprise managed installation. For normal Employee self-service, implement the store-first Device Setup flow after the extension listings and stable IDs exist.
+
+---
+
+## 2026-07-07 Employee Browser Extension Installation Review
+
+- Original task: explain how an Employee account currently installs the WorkMap Browser Extension.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only. No runtime code changed.
+- Current Employee UI: `/onboarding/device-setup` explains the Browser Extension and provides `Pair Browser Extension`, which creates a short-lived one-time pairing code and reports paired/expired status.
+- Current distribution gap: the Employee page has no extension download, Chrome Web Store link, Edge Add-ons link, packaged CRX/MSIX, or managed-install action. The extension exists only as the local MV3 `workmap/apps/browser-extension/alpha-unpacked` directory.
+- Current Alpha installation: an administrator/developer must deliver the unpacked directory to the Employee; the Employee enables Developer mode at `chrome://extensions` or `edge://extensions`, selects Load unpacked, and chooses that directory. The folder must remain on disk.
+- Pairing after installation: Employee opens Extension details/options, confirms the API URL and browser type, enters the code generated from WorkMap Device Setup, approves HTTP/HTTPS site access, and waits for `Paired | connected` status.
+- Update behavior: this unpacked build has no browser-store auto-update. A new build must be redistributed and the extension reloaded/replaced manually.
+- Privacy/permission behavior: pairing requests optional HTTP/HTTPS site access required for page interaction timing. Protected browser pages remain unavailable.
+- Role/access behavior: the pairing code is Employee-authenticated and API-scoped; Owner/Manager report permissions and tenant boundaries are unchanged.
+- Verification: source review of Device Setup, options/pairing code, manifest permissions, and distribution search. No automated test rerun because runtime code was unchanged.
+- Manual QA: no Employee installation was run.
+- Intentionally unchanged: no Web install UI, manifest, store listing, packaging, pairing, API, Reports, auth/RBAC, deployment, or tracking behavior changed.
+- Remaining risk/next step: the current path is suitable only for controlled Alpha testers. A normal Employee experience requires publishing to Chrome Web Store and Edge Add-ons (or enterprise managed deployment), adding official install links/instructions to Device Setup, and then validating install/update/remove flows.
+
+---
+
+## 2026-07-07 Reports Default And Persistent Filters
+
+### Original Task Brief
+
+Make Work summaries open by default on the current local calendar day, with Report view set to Company aggregate and Department set to All departments. Preserve changed filter values across page navigation and browser reload, and apply the same filters to both App usage time and Domain usage time.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/components/reports/reportFilters.ts`
+- `workmap/apps/web/test/reports-filter-persistence.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Replaced the old 30-day default range with `from = local today` and `to = local today`. Local calendar components are used rather than UTC `toISOString()` so Australian/other non-UTC users do not open on the previous/next UTC date.
+- Owner, Manager, Team Lead, and HR Admin continue to default to Company aggregate; its default department is the existing empty value representing All departments. Roles without company-report permission safely default to My activity.
+- Added a user-scoped local-storage preference (`workmap.reportFilters.<userId>`) containing Report view, Department, From, and To. Draft changes persist after each filter update, and Apply filters persists immediately as well.
+- Initialization now resolves the authenticated role and allowed employee/department directory first, restores that user's saved filter when valid, and uses the restored filter for the initial summary request. Navigation away/back and full reload therefore restore both the controls and the applied report.
+- Stored company/employee selections that the current role or current directory no longer permits fall back to the role-appropriate default. Removed departments fall back to All departments; corrupt, future, or reversed date ranges fall back to today's default.
+- Storage failure is non-fatal; Reports remains usable with in-memory filters.
+- Apps and Domains still come from the same `getUsageSummary` response and the same live-status request, both parameterized by one `appliedFilters` object. Scope, department, employee, From, and To therefore apply identically to App usage and Domain usage.
+
+### Role And Access Behavior
+
+- Existing report capabilities are unchanged. Company aggregate remains available only to existing authorized roles; Employee direct Reports access and backend RBAC/tenant enforcement are unchanged.
+- Preferences are isolated by authenticated WorkMap user ID so two users sharing one browser do not inherit each other's report scope.
+
+### Verification And Manual QA
+
+- Web tests passed 25/25. New tests cover local-day/default-company/all-departments initialization, persistence across remount/reload, per-user isolation, and role-safe fallback.
+- Existing reports API tests still confirm scope, department, employee, From, and To query parameters.
+- Web typecheck, lint, and production build passed; 19 routes generated.
+- Manual browser navigation/reload QA was not run in this environment.
+
+### Intentionally Not Changed
+
+- No Reports API contract, app/domain calculation, live polling cadence, export format, database/schema, RBAC, tenant isolation, authentication, Desktop Agent, Browser Extension, or report-card design changed.
+- Existing unrelated handoff changes and `docs/references/` were preserved.
+
+### Remaining Risks And Suggested Next Step
+
+- Local storage is browser/profile-specific and intentionally does not sync filter preferences across different computers or browsers.
+- Final manual QA should set a non-default employee/department/date range, apply it, navigate to Dashboard and back, reload Reports, and confirm both Apps and Domains retain exactly the same range/scope.
+- The scoped implementation and automated checks pass; the project can proceed to that Reports persistence acceptance test.
+
+---
+
+## 2026-07-07 Browser Extension 0.4.0 Manual Test Guide Review
+
+- Original task: explain the current Browser Extension maturity, what can be used now, and how to test it.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only. No extension, API, Reports, or deployment code changed.
+- Current result: the local MV3 Alpha is ready for Chrome and Edge load-unpacked testing from `workmap/apps/browser-extension/alpha-unpacked`.
+- Usable flow: optional HTTP/HTTPS site permission; Employee one-time pairing; encrypted device credential; exact-hostname tracking; trusted keyboard/pointer/wheel/touch activity; immediate focus-owner transfer; 30-second Focused idle boundary; first-tab-to-final-tab Open/runtime; same-hostname tab de-duplication; persisted offline queue/retry; API ingestion; Owner/Manager domain cards; and 90-second extension signal-loss detection/recovery display.
+- Report presentation: Focus active is the primary collapsed metric; Focused idle and Open/runtime are shown after expansion. Same-hostname overlap is unioned rather than multiplied, including Chrome/Edge overlap in report aggregation.
+- Privacy boundary: the extension sends hostname and timing/state boundaries only. It does not collect key values, typed text, pointer coordinates, target elements, titles, full URLs, paths/queries/fragments, page/form/password content, screenshots, clipboard, camera, microphone, email bodies, or private messages.
+- Verification: Browser Extension tests passed 13/13; typecheck, lint, and Alpha build passed. Rebuild left no source-equivalent extension diff.
+- Manual QA: not run in real Chrome or Edge in this round. Online API/Web deployment parity was not verified.
+- Intentionally unchanged: no manifest permission, tracking logic, API/schema, Reports, auth/RBAC, tenant boundary, Desktop Agent, deployment, or store package changed.
+- Remaining risks: protected browser pages, denied/revoked host permission, Incognito, inaccessible frames, browser/profile crash, offline final-tab closure, and exact disable/remove cause remain documented limitations. The extension is not published through Chrome Web Store or Edge Add-ons.
+- Recommended test: load the unpacked build separately in Chrome and Edge, pair through Employee Device Setup, run the timed focus/idle/runtime/de-duplication/disable matrix, and compare the same employee in Owner Reports. The project can proceed to this manual Alpha acceptance round.
+
+---
+
+## 2026-07-07 Desktop Agent Shutdown And Windows Sign-In Lifecycle Review
+
+### Original Task Brief
+
+Confirm what the current Desktop Agent does when an employee shuts down the computer and whether it starts automatically the next working day.
+
+### Changed Files
+
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Current Behavior
+
+- Closing the Electron window does not quit a paired Agent. The close event is prevented and the window hides to the system tray, so tracking continues.
+- Choosing `Quit Agent` from the tray calls `runtime.shutdown()`, finalizes the current focus/runtime segments, persists/flushes the queue, attempts to stop the backend Agent session, then quits Electron.
+- A Windows shutdown/logoff terminates the Agent process. The current Electron main process does not register Windows `query-session-end`/`session-end` handling that explicitly waits for `runtime.shutdown()`. Therefore an OS shutdown must not be described as a guaranteed graceful final upload.
+- Runtime durability mitigates an unclean stop: tracking state is checkpointed about every five seconds, queued events are persisted, and the next Agent start recovers the saved segment with bounded timing rather than silently losing the whole work period.
+- After a packaged Agent is successfully paired, it calls Electron `app.setLoginItemSettings({ openAtLogin: true, ... args: ["--background"] })`. On the next Windows user sign-in, the installed Agent starts automatically in background/tray mode and resumes tracking.
+- Auto-start begins after that Windows account signs in, not at machine boot before login. It does not activate before pairing, and Windows Startup Apps being manually disabled, uninstall, missing credentials, or installation failure can prevent it.
+- The legacy Alpha PowerShell installer also creates a current-user `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry. The current GUI Agent removes that legacy entry and uses Electron's packaged login-item mechanism after pairing.
+
+### Role And Access Behavior
+
+- This lifecycle is device/user-session behavior for a paired Employee Agent. Owner/Manager report permissions, tenant isolation, credentials, and API authorization are unchanged.
+
+### Verification And Manual QA
+
+- Desktop Agent tests passed 22/22, including graceful tracking shutdown, persisted-segment recovery after an unclean stop, persistent queue behavior, and Windows Alpha install-script auto-start coverage.
+- Desktop Agent typecheck and lint passed.
+- Source review confirmed tray-close, tray-quit, runtime finalization, five-second checkpointing, packaged login-item configuration, background argument handling, and legacy Run-key migration.
+- A real Employee-computer Windows shutdown/reboot/sign-in cycle was not run in this round. The packaged GUI auto-start and OS-shutdown delivery timing remain manual acceptance items.
+
+### Intentionally Not Changed
+
+- No Desktop Agent runtime, Electron lifecycle, installer, startup setting, tracking calculation, API, report, credential, auth, RBAC, or deployment code changed.
+- Existing unrelated working-tree state and `docs/references/` were untouched.
+
+### Remaining Risks And Suggested Next Step
+
+- The main gap is explicit OS shutdown handling: abrupt shutdown can leave the final few seconds represented only by the latest checkpoint and recovered on next start, rather than a confirmed shutdown upload/session-stop event.
+- On a paired Employee Windows computer, verify: close-window continues in tray; tray Quit stops; shutdown while an app is focused; boot/sign-in auto-starts hidden; Reports recover the final pre-shutdown interval without duplication; and Windows Startup Apps shows WorkMap enabled.
+- The current code is suitable for that lifecycle QA, but automatic start and final shutdown accuracy should not be called production-verified until the real reboot test passes.
+
+---
+
 ## 2026-07-07 Hard Redirect For Missing Cognito Session
 
 ### Original Task Brief

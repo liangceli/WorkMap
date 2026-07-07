@@ -9,10 +9,16 @@ import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
 import { mergeLiveUsage } from "./liveUsage";
+import {
+  defaultReportFilters,
+  localToday,
+  persistReportFilters,
+  restoreReportFilters,
+  type ReportFilters,
+  type ViewFilter,
+} from "./reportFilters";
 
 type AuthContext = { options: ApiClientOptions; role: string; userId: string; source: string };
-type ViewFilter = "company" | "me" | `user:${string}`;
-type ReportFilters = { view: ViewFilter; departmentId: string; from: string; to: string };
 type ReportState = {
   loading: boolean;
   summary: WorkMapApiUsageSummary | null;
@@ -23,8 +29,8 @@ type ReportState = {
 export function ReportSummaryPanel() {
   const [auth, setAuth] = useState<AuthContext | null>(null);
   const [users, setUsers] = useState<WorkMapApiUser[]>([]);
-  const [filters, setFilters] = useState<ReportFilters>(() => defaultFilters("me"));
-  const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultFilters("me"));
+  const [filters, setFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
+  const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [liveStatus, setLiveStatus] = useState<WorkMapApiReportLiveStatus | null>(null);
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const [reportState, setReportState] = useState<ReportState>({
@@ -50,15 +56,24 @@ export function ReportSummaryPanel() {
         userId: authResult.userId,
         source: authResult.source,
       };
-      const initialFilters = defaultFilters(canRequestCompanySummary(context.role) ? "company" : "me");
-      const directoryResult = canRequestCompanySummary(context.role) ? await listUsers(context.options) : null;
+      const canViewCompany = canRequestCompanySummary(context.role);
+      const fallbackFilters = defaultReportFilters(canViewCompany ? "company" : "me");
+      const directoryResult = canViewCompany ? await listUsers(context.options) : null;
+      const directoryUsers = directoryResult?.ok ? directoryResult.data : [];
+      const initialFilters = restoreReportFilters(context.userId, fallbackFilters, {
+        canViewCompany,
+        userIds: directoryUsers.map((user) => user.id),
+        departmentIds: directoryResult?.ok
+          ? directoryUsers.flatMap((user) => user.department && typeof user.department !== "string" ? [user.department.id] : [])
+          : undefined,
+      });
       const result = await requestSummary(context, initialFilters);
       if (cancelled) return;
 
       setAuth(context);
       setFilters(initialFilters);
       setAppliedFilters(initialFilters);
-      if (directoryResult?.ok) setUsers(directoryResult.data);
+      if (directoryResult?.ok) setUsers(directoryUsers);
       applyResult(result, setReportState);
     }
     void initialize();
@@ -68,6 +83,10 @@ export function ReportSummaryPanel() {
   useEffect(() => {
     activityRevisionRef.current = reportState.summary?.activityRevision;
   }, [reportState.summary?.activityRevision]);
+
+  useEffect(() => {
+    if (auth) persistReportFilters(auth.userId, filters);
+  }, [auth, filters]);
 
   useEffect(() => {
     if (!auth) return;
@@ -126,13 +145,14 @@ export function ReportSummaryPanel() {
     }
     setReportState((current) => ({ ...current, loading: true, error: null, statusText: "Refreshing report..." }));
     const result = await requestSummary(auth, filters);
+    persistReportFilters(auth.userId, filters);
     setLiveStatus(null);
     setAppliedFilters(filters);
     applyResult(result, setReportState);
   }
 
   function applyPreset(days: number) {
-    const to = utcToday();
+    const to = localToday();
     setFilters((current) => ({ ...current, from: addUtcDays(to, -(days - 1)), to }));
   }
 
@@ -197,7 +217,7 @@ export function ReportSummaryPanel() {
           </label>
           <label style={styles.field}>
             <span style={styles.fieldLabel}>To</span>
-            <input required type="date" value={filters.to} min={filters.from} max={utcToday()} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} style={styles.input} />
+            <input required type="date" value={filters.to} min={filters.from} max={localToday()} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} style={styles.input} />
           </label>
         </div>
 
@@ -561,11 +581,6 @@ function applyResult(
   });
 }
 
-function defaultFilters(view: ViewFilter): ReportFilters {
-  const to = utcToday();
-  return { view, departmentId: "", from: addUtcDays(to, -29), to };
-}
-
 function canRequestCompanySummary(role: string) {
   return role === "OWNER" || role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN";
 }
@@ -732,10 +747,6 @@ function formatDateTime(value: string) {
 
 function formatShortDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`).toLocaleDateString([], { month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-function utcToday() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function addUtcDays(value: string, days: number) {

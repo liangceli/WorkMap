@@ -1,5 +1,166 @@
 # Latest QA Handoff
 
+## 2026-07-07 Browser Extension Alpha ZIP Release Preparation QA
+
+- Reviewed: fresh Browser Extension 0.4.0 build, generated ZIP structure, artifact naming, checksum, expected GitHub Release URL, and required Vercel build-time environment configuration.
+- Verification passed: extension build; ZIP root contains `manifest.json` and required UI/dist assets; SHA-256 recorded as `AD85B9E8B3FB6839D3DF2BB8AC4F745CCE8E0CF50C7176865C8BA37FCB7D628F`; `git diff --check`; scoped secret scan.
+- Manual QA: not run. GitHub publication, anonymous asset download, Vercel environment update/redeployment, Employee Chrome/Edge install/pairing, and Owner coverage verification remain pending.
+- Findings: no package-structure blocker. External authenticated publication is the current gate; private repository visibility would prevent a normal anonymous Employee download.
+- Recommendation: pass for local release preparation. Do not claim deployment complete until the asset URL and newly built Web deployment are verified.
+- Next round can proceed after the GitHub Release asset is uploaded or an alternative stable HTTPS artifact URL is supplied.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+---
+
+## 2026-07-07 Manual Browser Extension Employee Setup QA
+
+- Reviewed implementation: separated Device Setup panels, configurable Browser Extension ZIP download, Chrome/Edge manual instructions, one-time pairing action, existing-device detection, and paired-state feedback.
+- Diff review: changes remain within Employee Device Setup/configuration and handoff documentation. Desktop Agent gating and Browser Extension monitoring/API/reporting logic are unchanged.
+- Findings ordered by severity: no blocking or high-severity code findings. Deployment remains incomplete until a correctly rooted Alpha ZIP is published and `NEXT_PUBLIC_WORKMAP_BROWSER_EXTENSION_URL` is configured during the Web build.
+- Verification passed: Web typecheck, lint, and production build; Browser Extension 13/13 automated tests and build; `git diff --check`; scoped secret scan.
+- Verification environment note: direct sandbox execution hit an environment `EPERM` while Node read TypeScript; approved out-of-sandbox reruns passed.
+- Manual QA: not run. Real Chrome/Edge Developer mode install, ZIP extraction, permissions, pairing, browser restart, manual update/Reload, disable/remove, and Owner coverage transitions remain to be exercised.
+- Risks: unpacked extension directory movement/removal breaks the client; Employee-controlled disable/remove and manual version drift are expected constraints of the selected Alpha path.
+- Recommendation: pass for implementation, with release configuration still required. The next round can proceed to ZIP publication and real Employee/Owner end-to-end QA.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+---
+
+## 2026-07-07 Non-Store Browser Extension Workflow Review QA
+
+- Reviewed: current Employee pairing/options flow, extension startup/heartbeat behavior, Owner coverage semantics, manual unpacked installation, and enterprise-managed external distribution boundaries.
+- Finding: manual unpacked loading is viable for controlled Alpha testing but is not a production self-service distribution channel. It requires Developer mode, a permanent local folder, manual permission/pairing steps, and manual update/reload operations.
+- Finding: enterprise-managed deployment can provide automatic installation and managed updates, but requires customer IT/browser management plus stable signing/ID, hosting, update, rollback, and support infrastructure not currently implemented by WorkMap.
+- Owner finding: current Owner/Manager view remains heartbeat-based. It can show connected versus signal lost and domain summaries, but cannot truthfully distinguish disable, removal, browser exit, sleep, offline state, profile change, or failure.
+- Verification: source and official browser documentation review only. No runtime code changed, so automated tests and real browser/manual QA were not run.
+- Risks: unmanaged users can disable/remove the unpacked extension and remain on old versions; closing a browser window does not necessarily end the browser process; current Alpha packaging is not a managed updater.
+- Recommendation: pass for workflow assessment. Proceed with unpacked installation only for a small pilot; production should use either an official store or a deliberately implemented enterprise-managed channel.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+---
+
+## 2026-07-07 Browser Extension Store Publication Effort Review QA
+
+- Reviewed: current MV3 manifest/version/name/permissions and official Chrome Web Store and Microsoft Edge Add-ons publication requirements.
+- Finding: publication is feasible and does not require rebuilding the tracking engine. It does require two publisher/listing workflows, store assets, privacy/data-use disclosures, permission justifications, packaging, cross-browser QA, and independent reviews.
+- Important finding: `tabs`, `idle`, `scripting`, and optional broad host access are the principal review surface. The store declarations, public privacy policy, and actual hostname/timing behavior must remain consistent.
+- Verification: documentation and manifest review only. No runtime code changed, so extension/web/API automated tests and manual browser QA were not run.
+- Risks: approval and review time are external; the current Alpha name/package and absent production listing assets/URLs are not ready for immediate public submission.
+- Recommendation: pass as a feasibility/effort assessment. The next round can proceed with a scoped store-readiness implementation after publisher ownership, privacy policy, and brand assets are decided.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+---
+
+## 2026-07-07 Browser Extension Employee Control And Owner Coverage QA
+
+- Reviewed: Chrome/Edge employee extension controls, managed-install distinction, MV3 service-worker/alarm lifecycle, WorkMap heartbeat schedule, 90-second API signal-loss threshold, Reports ten-second polling, recovery interval recording, and current Owner copy.
+- Confirmed: normal self-service users can inspect, disable, re-enable, remove, and change site access for the extension. Enterprise policy may remove some of those controls.
+- Confirmed: Owner coverage updates from heartbeat freshness, not from a direct browser-close event. Expected visible transition is about 90–100 seconds after the last successful signal while Reports is open.
+- Important boundary: a closed window may leave the browser/background process running; disable/remove/browser exit/offline/sleep are indistinguishable from heartbeat loss alone.
+- Confirmed recovery: the next startup/re-enable heartbeat restores Connected and records an outage interval when the gap exceeded 90 seconds.
+- Verification: source/official-documentation review; existing API coverage-loss test asserts the exact 90-second boundary. No code changed and no tests/manual runtime QA were run this round.
+- Recommendation: pass for current honest coverage semantics. Do not label the state as exact Disable or Browser closed without an independent managed/native observer.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+---
+
+## 2026-07-07 Employee Self-Service Extension Setup Feasibility QA
+
+- Reviewed: current Employee Device Setup, pairing API/status, extension options/permissions/manifest, lack of store links and `externally_connectable`, and official Chrome/Edge distribution boundaries.
+- Finding: a Desktop-Agent-like WorkMap setup wizard is feasible, but a normal website cannot silently install the extension. Browser-native store installation and permission confirmation remain mandatory for self-service users.
+- Recommended architecture: browser-specific official store link → native install confirmation → short-lived WorkMap pairing → connected status. Optional WorkMap-to-extension message passing requires a stable store ID and tightly restricted `externally_connectable` origin allowlist.
+- Security boundary: do not put a persistent device credential in a URL, page storage, query string, or external message. Only the existing short-lived one-time code may cross the WorkMap-to-extension boundary.
+- Distribution finding: unpacked loading remains Alpha/development only. Normal Chrome users require Chrome Web Store; Edge users should use Edge Add-ons; managed organizations may use enterprise force-install policies.
+- Verification: source/architecture review and official browser documentation only. No runtime code or tests changed.
+- Recommendation: pass for feasibility. Proceed only after choosing store self-service or enterprise-managed distribution, then implement and manually verify install/update/remove/pairing flows.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+---
+
+## 2026-07-07 Employee Browser Extension Installation QA
+
+- Reviewed: Employee Device Setup, Browser Extension pairing control/status, MV3 options page, manifest permissions, Alpha unpacked output, and repository/store-link search.
+- Finding - High product gap: the Employee account can generate a pairing code but cannot obtain/install the extension from WorkMap. No Chrome Web Store or Edge Add-ons distribution exists.
+- Current test-only path: administrator supplies `alpha-unpacked`; Employee uses browser Developer mode and Load unpacked, then pairs through Extension options.
+- Operational risk: unpacked installation is technical, requires the directory to remain available, exposes Developer mode warnings, and has no automatic updates. It must not be presented as a production Employee installation flow.
+- Verification: source review only; no runtime code changed and no automated/manual install test was run.
+- Recommendation: pass only for controlled Alpha installation. Before broader rollout, implement store/enterprise distribution plus Employee-facing install links and end-to-end installation QA.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+---
+
+## 2026-07-07 Reports Default And Persistent Filters QA
+
+### Reviewed Implementation
+
+Reviewed Reports initialization, local-vs-UTC current date, role default scope, department default, user/department option restoration, local-storage isolation, Apply/preset behavior, initial summary request, live polling, Apps/Domains rendering, exports, and unchanged API authorization.
+
+### Findings Ordered By Severity
+
+- Fixed - High: default range previously opened on the last 30 days rather than the current day.
+- Fixed - High: all filter values previously existed only in component memory and were lost after navigation or reload.
+- Fixed - Medium: UTC `toISOString()` could select a different calendar day from the employee's local date around timezone boundaries.
+- Fixed - Medium: saved filters now validate against the current role and directory instead of restoring an unauthorized/removed employee or department.
+- Confirmed: Apps and Domains are generated from the same summary response and one applied filter object; no separate or stale domain filter path exists.
+- Preserved: roles without company-summary permission still fall back to My activity, and backend RBAC/tenant scoping remains authoritative.
+
+### Test And Verification Status
+
+- Web tests: passed 25/25, including three new filter default/persistence/isolation/authorization cases.
+- Web typecheck: passed.
+- Web lint: passed.
+- Web production build: passed; 19 routes generated.
+- Manual browser QA: not run.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+### Risks And Recommendation
+
+- Preferences are intentionally local to one browser profile and are not cross-device settings.
+- Pass for scoped implementation and automated QA. Proceed to navigation/reload acceptance with one Owner/Manager and compare the App and Domain sections under the restored filter.
+
+---
+
+## 2026-07-07 Browser Extension 0.4.0 Manual Test Guide QA
+
+- Reviewed: current manifest/package/unpacked output, permission and pairing screen, device credential storage, trusted page-activity contract, domain state machine, upload queue, API ingestion, report metrics, cross-browser interval union, and extension coverage panel.
+- Finding: implementation is ready for local manual Chrome/Edge testing, but not yet store- or production-verified.
+- Verification: Browser Extension tests passed 13/13; typecheck, lint, and build passed.
+- Manual QA: not run. Real permission prompts, Employee pairing, multi-tab/window timing, Chrome/Edge overlap, idle transition, final-tab closure, offline recovery, disable/re-enable, and Owner Reports comparison remain to be executed.
+- Deployment risk: the unpacked extension can be tested locally now, but an online end-to-end test requires the deployed API and Web to contain the matching 0.4.0 domain ingestion/report implementation.
+- Recommendation: pass to manual Alpha acceptance; do not claim browser-store or production completion until the timed Employee/Owner matrix passes.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+---
+
+## 2026-07-07 Desktop Agent Shutdown And Auto-Start QA
+
+### Reviewed Implementation
+
+Reviewed Electron window/tray lifecycle, paired startup configuration, runtime shutdown/finalization, queue/checkpoint recovery, CLI signal handling, current NSIS settings, legacy Alpha installer Run key, and existing automated coverage.
+
+### Findings Ordered By Severity
+
+- Expected: closing the GUI window hides a paired Agent to tray; it does not stop monitoring.
+- Confirmed: tray `Quit Agent` awaits graceful runtime shutdown before Electron quits.
+- Confirmed: a paired packaged Agent registers itself to start at the next Windows user sign-in with the `--background` argument.
+- Medium: OS shutdown/logoff has no explicit Electron `query-session-end`/`session-end` shutdown hook. Windows will terminate the process, but a final synchronous upload/session-stop is not guaranteed.
+- Mitigated: five-second tracking checkpoints, persistent event queue, and unclean-stop recovery bound the shutdown gap and restore saved activity on next launch.
+- Remaining: real NSIS install, Windows shutdown, reboot, sign-in, hidden auto-start, tray presence, and Owner report reconciliation have not been manually verified on the Employee computer.
+
+### Test And Verification Status
+
+- Desktop Agent tests: passed 22/22.
+- Desktop Agent typecheck: passed.
+- Desktop Agent lint: passed.
+- Manual lifecycle QA: not run.
+- `git diff --check` and scoped secret scan passed at final closeout.
+
+### Recommendation
+
+Pass for source behavior and automated durability coverage. Proceed to a real paired Windows shutdown/reboot lifecycle test before claiming production-grade graceful shutdown or auto-start behavior.
+
+---
+
 ## 2026-07-07 Hard Redirect For Missing Cognito Session QA
 
 ### Reviewed Implementation

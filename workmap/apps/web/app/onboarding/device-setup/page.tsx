@@ -24,12 +24,14 @@ const notCollectedItems = [
 
 export default function DeviceSetupPage() {
   const desktopAgentDownloadUrl = process.env.NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL?.trim();
+  const browserExtensionDownloadUrl = process.env.NEXT_PUBLIC_WORKMAP_BROWSER_EXTENSION_URL?.trim();
   const router = useRouter();
   const [pairing, setPairing] = useState<WorkMapApiPairingCode | null>(null);
   const [pairingStatus, setPairingStatus] = useState<WorkMapApiPairingStatus["status"] | null>(null);
   const [pairingState, setPairingState] = useState<"idle" | "loading" | "error">("idle");
   const [pairingMessage, setPairingMessage] = useState("");
   const [hasPairedDesktopAgent, setHasPairedDesktopAgent] = useState(false);
+  const [hasPairedBrowserExtension, setHasPairedBrowserExtension] = useState(false);
   const [checkingDesktopAgent, setCheckingDesktopAgent] = useState(true);
 
   useEffect(() => {
@@ -47,6 +49,11 @@ export default function DeviceSetupPage() {
         setHasPairedDesktopAgent(
           result.ok && result.data.some(
             (device) => !device.revokedAt && device.agentVersion?.startsWith("desktop-agent-windows/"),
+          ),
+        );
+        setHasPairedBrowserExtension(
+          result.ok && result.data.some(
+            (device) => !device.revokedAt && device.agentVersion?.startsWith("browser-extension-mv3/"),
           ),
         );
         setCheckingDesktopAgent(false);
@@ -78,6 +85,9 @@ export default function DeviceSetupPage() {
         setPairingStatus(result.data.status);
         if (result.data.status === "paired" && result.data.clientType === "DESKTOP_AGENT") {
           setHasPairedDesktopAgent(true);
+        }
+        if (result.data.status === "paired" && result.data.clientType === "BROWSER_EXTENSION") {
+          setHasPairedBrowserExtension(true);
         }
         if (result.data.status !== "pending") return;
       }
@@ -142,7 +152,8 @@ export default function DeviceSetupPage() {
 
         <section style={styles.pairingPanel}>
           <div>
-            <h2 style={styles.cardTitle}>Pair a tracking client</h2>
+            <p style={styles.panelEyebrow}>Windows application monitoring</p>
+            <h2 style={styles.cardTitle}>Desktop Agent</h2>
             <p style={styles.subtitle}>Install the Windows Agent once, then connect it with a one-time code. After pairing, it starts automatically at Windows sign-in.</p>
           </div>
           <ol style={styles.setupSteps}>
@@ -159,11 +170,45 @@ export default function DeviceSetupPage() {
             <button type="button" onClick={() => void createPairing("DESKTOP_AGENT")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
               Generate Agent code
             </button>
+          </div>
+          <p style={hasPairedDesktopAgent ? styles.readyMessage : styles.requirementMessage}>
+            {hasPairedDesktopAgent
+              ? "Desktop Agent connected."
+              : "Download, install, and pair the Desktop Agent to continue."}
+          </p>
+        </section>
+
+        <section style={styles.pairingPanel}>
+          <div>
+            <p style={styles.panelEyebrow}>Browser domain monitoring - Alpha</p>
+            <h2 style={styles.cardTitle}>Browser Extension manual setup</h2>
+            <p style={styles.subtitle}>Use this Developer mode installation only for the current controlled Chrome or Edge test.</p>
+          </div>
+          <ol style={styles.setupSteps}>
+            <li>Download the ZIP, extract it to a permanent folder, and do not move or delete that folder.</li>
+            <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code>, enable Developer mode, then choose Load unpacked and select the extracted folder.</li>
+            <li>Open the extension details and allow site access, then generate a code below and enter it on the extension Options page.</li>
+            <li>Keep the extension enabled. Future Alpha updates require replacing the files and selecting Reload on the extensions page.</li>
+          </ol>
+          <div style={styles.actions}>
+            {browserExtensionDownloadUrl ? (
+              <a href={browserExtensionDownloadUrl} download style={styles.downloadButton}>Download extension ZIP</a>
+            ) : (
+              <span style={styles.downloadUnavailable}>Extension ZIP pending release configuration</span>
+            )}
             <button type="button" onClick={() => void createPairing("BROWSER_EXTENSION")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
-              Pair Browser Extension
+              Generate Extension code
             </button>
           </div>
-          {pairing ? (
+          <p style={hasPairedBrowserExtension ? styles.readyMessage : styles.requirementMessage}>
+            {hasPairedBrowserExtension
+              ? "Browser Extension paired. Keep Developer mode and the extension enabled during the Alpha test."
+              : "The Browser Extension is optional for continuing, but it must be paired before domain monitoring starts."}
+          </p>
+        </section>
+
+        {pairing ? (
+          <section style={styles.pairingResult} aria-live="polite">
             <div style={styles.codeBox}>
               {pairingStatus === "pending" ? <strong style={styles.code}>{pairing.code}</strong> : null}
               <span>
@@ -174,16 +219,9 @@ export default function DeviceSetupPage() {
                     : `${pairing.clientType === "DESKTOP_AGENT" ? "Desktop Agent" : "Browser Extension"} code expires ${new Date(pairing.expiresAt).toLocaleTimeString()}.`}
               </span>
             </div>
-          ) : null}
-          {pairingMessage ? <p style={styles.error}>{pairingMessage}</p> : null}
-          <p style={hasPairedDesktopAgent ? styles.readyMessage : styles.requirementMessage}>
-            {checkingDesktopAgent
-              ? "Checking this employee's Desktop Agent connection..."
-              : hasPairedDesktopAgent
-                ? "Desktop Agent connected. You can continue to the virtual office."
-                : "Download, install, and pair the Desktop Agent to continue."}
-          </p>
-        </section>
+            {pairingMessage ? <p style={styles.error}>{pairingMessage}</p> : null}
+          </section>
+        ) : pairingMessage ? <p style={styles.error}>{pairingMessage}</p> : null}
 
         <button
           type="button"
@@ -299,6 +337,17 @@ const styles = {
     display: "flex",
     flexWrap: "wrap" as const,
     gap: "10px",
+  },
+  panelEyebrow: {
+    margin: "0 0 4px",
+    color: wm.colors.secondary,
+    fontSize: "11px",
+    fontWeight: 900,
+    textTransform: "uppercase" as const,
+  },
+  pairingResult: {
+    display: "grid",
+    gap: "8px",
   },
   setupSteps: {
     margin: 0,
