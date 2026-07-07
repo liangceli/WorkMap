@@ -1,5 +1,75 @@
 # Latest Implementation Handoff
 
+## 2026-07-07 Global Typography Width And Weight Correction
+
+- Original task: replace the overly thin, condensed typography with the wider, heavier modern sans-serif style shown in the supplied navigation and hero references.
+- Changed files: `workmap/apps/web/app/globals.css` and this handoff.
+- Implementation: removed the Arial Narrow/Aptos Narrow/Roboto Condensed stack and condensed font stretching; restored a normal-width Inter/Segoe UI/Helvetica system stack and strengthened heading weight.
+- Behavior: typography only. Layout logic, navigation behavior, loading, auth, API, RBAC, and backend were not changed.
+- Verification: frontend production build and `git diff --check` are required for closeout.
+- Manual QA: not run yet.
+- Remaining risk: exact glyph shape varies slightly by operating-system font availability; Windows will normally render Segoe UI when Inter is not installed.
+
+---
+
+## 2026-07-07 Top Navigation Square-Corner Follow-up
+
+- Original task: remove the rounded outer corners from the fixed application menu shown in the supplied screenshot.
+- Changed files: `workmap/apps/web/app/workspace-redesign.css` and this handoff.
+- Implementation: changed the later-loaded editorial navigation override from an 18px radius to zero. Internal navigation items, role pill, logout button, layout, behavior, auth, API, and backend were not changed.
+- Verification: CSS diff review and `git diff --check`; no runtime behavior changed.
+- Manual QA: not run. Refresh an editorial route such as Employees and confirm the dark bar is square at both outer edges.
+- Remaining risk: browser cache may briefly retain the old stylesheet until a hard refresh.
+
+---
+
+## 2026-07-07 Desktop Agent 0.5.3 Download Diagnosis
+
+### Original Task Brief
+
+Determine why an Employee account opened through an invite link downloads Desktop Agent `0.5.3` instead of the locally current `0.5.4`.
+
+### Changed Files
+
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Finding
+
+- The invite flow does not choose an installer version. All authenticated Employee users reach the same `app/onboarding/device-setup/page.tsx` download button.
+- That button reads `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL`, which is embedded into the Web build/deployment.
+- The deployed Device Setup HTML at `https://work-map-teal.vercel.app/onboarding/device-setup` currently contains the direct URL `https://github.com/liangceli/WorkMap/releases/download/desktop-agent-v0.5.3/WorkMap-Desktop-Agent-Setup-0.5.3.exe`.
+- The public GitHub repository currently has Desktop Agent Releases `0.5.1`, `0.5.2`, and `0.5.3`; no `desktop-agent-v0.5.4` Release or `0.5.4` asset exists there.
+- Local source and artifacts are already `0.5.4`, including `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.4.exe`. The mismatch is therefore external release/deployment state, not invite-account behavior or source version drift.
+
+### Role And Access Behavior
+
+No role/access behavior changed. Invite-created Employees and other authorized users use the same deployment-configured installer URL.
+
+### Verification
+
+- Repository search confirmed the Device Setup page reads only `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` and does not contain an account- or invite-specific version branch.
+- Deployed Device Setup HTTP request returned 200 and exposed the `desktop-agent-v0.5.3` / `0.5.3.exe` URL.
+- GitHub public Releases API showed `desktop-agent-v0.5.3` as the latest Desktop Agent release asset and no `desktop-agent-v0.5.4` release.
+- Local source reports package `0.5.4` and pairing identity `desktop-agent-windows/0.5.4`; the local `0.5.4` installer exists.
+
+### Manual QA
+
+No Employee-computer download/install was run. This was a source, deployed-page, and public-release diagnosis.
+
+### Intentionally Not Changed
+
+- No source code, Vercel environment variable, Vercel deployment, GitHub Release, installer asset, Employee account, auth, RBAC, API, schema, or Desktop Agent runtime changed.
+- Existing `docs/references/` was not touched.
+
+### Remaining Risk And Suggested Next Step
+
+- Upload `WorkMap-Desktop-Agent-Setup-0.5.4.exe` under GitHub Release tag `desktop-agent-v0.5.4`.
+- Set Vercel `NEXT_PUBLIC_WORKMAP_DESKTOP_AGENT_URL` to the direct `0.5.4` asset URL and redeploy Web; changing a build-time public environment variable without redeployment will leave the old `0.5.3` URL in the deployed bundle.
+- After redeployment, inspect the deployed button URL and download/install on the Employee computer before claiming the upgrade is live.
+
+---
+
 ## 2026-07-06 Frontend Loading, Fixed Navigation, Typography, And Developer-Copy Pass
 
 ### Original Task Brief

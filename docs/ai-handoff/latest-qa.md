@@ -1,5 +1,52 @@
 # Latest QA Handoff
 
+## 2026-07-07 Global Typography Correction QA
+
+- Reviewed implementation: global body/display font stack changed from condensed fonts to normal-width Inter/Segoe UI/Helvetica fallbacks; heading stretch removed and weight strengthened.
+- Findings: no build or type validation failure; no functional code changed.
+- Verification: `corepack pnpm --filter @workmap/web build` passed with 19 routes; `git diff --check` passed with line-ending warnings only.
+- Manual QA: not run.
+- Risk: exact rendering varies slightly if Inter is not installed, with Segoe UI used on typical Windows systems.
+- Recommendation: pass for this scoped typography correction; the next round can proceed after visual confirmation.
+
+---
+
+## 2026-07-07 Top Navigation Square-Corner QA
+
+- Reviewed implementation: editorial fixed-navigation outer radius changed from 18px to 0.
+- Findings: no code-level issue; the later-loaded redesign stylesheet was the source overriding the global square-corner rule.
+- Verification: `corepack pnpm --filter @workmap/web build` passed with 19 routes; `git diff --check` passed with line-ending warnings only.
+- Manual QA: not run.
+- Risk: cached CSS may require a hard refresh.
+- Recommendation: pass for this scoped CSS change; the next round can proceed.
+
+---
+
+## 2026-07-07 Desktop Agent 0.5.3 Download Diagnosis QA
+
+### Reviewed Implementation
+
+Reviewed the Employee Device Setup source, deployed Device Setup HTML, current local Desktop Agent source/artifacts, and public GitHub Desktop Agent Releases.
+
+### Findings Ordered By Severity
+
+- High - External release/deployment mismatch: local Agent is `0.5.4`, but GitHub Releases currently stop at `0.5.3` and the deployed Vercel build embeds the direct `0.5.3` asset URL.
+- Not a role bug: the invite-created Employee account does not select a different version; the same build-time URL is used for all users on Device Setup.
+- No source-version bug: package metadata, pairing identity, and the local installer are all `0.5.4`.
+
+### Verification And Manual QA Status
+
+- Deployed page: HTTP 200; embedded installer URL is `desktop-agent-v0.5.3/WorkMap-Desktop-Agent-Setup-0.5.3.exe`.
+- GitHub Releases API: latest Desktop Agent tag/asset is `desktop-agent-v0.5.3`; no `0.5.4` release was returned.
+- Local artifact/source inspection: `0.5.4` confirmed.
+- No runtime tests were run because no code changed. No Employee-computer manual download/install was run.
+
+### Recommendation
+
+Diagnosis passes. The next round can proceed with the explicitly authorized external release steps: publish the `0.5.4` GitHub asset, update the Vercel download environment variable, redeploy Web, then verify the deployed link and Employee download. Until then, `0.5.3` is the expected deployed result.
+
+---
+
 ## 2026-07-06 Frontend Loading And Navigation QA
 
 ### Reviewed Implementation
