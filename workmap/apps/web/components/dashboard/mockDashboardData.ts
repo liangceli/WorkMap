@@ -1,4 +1,5 @@
 import type { UserPresenceStatus } from "@workmap/shared-types";
+import type { DeviceActivityStatus } from "../../lib/people/peopleStatus";
 import { avatarLayersByType, type LayeredAvatarConfig } from "../../lib/avatar/avatarLayerAssets";
 
 export type DashboardEmployee = {
@@ -15,6 +16,7 @@ export type DashboardEmployee = {
   topApp: string;
   topDomain: string;
   deviceHealth?: "online" | "delayed" | "offline";
+  deviceStatus?: DeviceActivityStatus;
 };
 
 export type UsageMetric = {

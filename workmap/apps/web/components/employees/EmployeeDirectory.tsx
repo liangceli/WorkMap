@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { UserPresenceStatus } from "@workmap/shared-types";
 import { EmployeeAvatar } from "../dashboard/EmployeeAvatar";
+import { EmployeeStatusStack } from "../dashboard/EmployeeStatusStack";
 import type { DashboardEmployee } from "../dashboard/mockDashboardData";
-import { PresenceBadge } from "../office/PresenceBadge";
 import { WorkMapEmptyState } from "../ui/WorkMapEmptyState";
 import { getUserSetupState } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
@@ -160,8 +160,7 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
               </div>
 
               <div style={styles.statusCell}>
-                <PresenceBadge status={employee.status} />
-                <span style={getDeviceStyle(employee.deviceHealth)}>{formatDeviceHealth(employee.deviceHealth)}</span>
+                <EmployeeStatusStack virtualStatus={employee.status} deviceStatus={employee.deviceStatus} />
               </div>
 
               <div style={styles.actions}>
@@ -198,30 +197,6 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
       </>}
     </div>
   );
-}
-
-function formatDeviceHealth(health?: DashboardEmployee["deviceHealth"]) {
-  if (health === "delayed") {
-    return "Device delayed";
-  }
-
-  if (health === "offline") {
-    return "Device offline";
-  }
-
-  return "Device online";
-}
-
-function getDeviceStyle(health?: DashboardEmployee["deviceHealth"]) {
-  const color = health === "offline" ? wm.colors.textMuted : health === "delayed" ? wm.colors.warning : wm.colors.success;
-
-  return {
-    ...styles.deviceHealth,
-    color,
-    borderColor:
-      health === "offline" ? wm.colors.borderStrong : health === "delayed" ? wm.colors.warningBorder : wm.colors.successBorder,
-    background: health === "offline" ? wm.colors.appBackground : health === "delayed" ? wm.colors.warningBg : wm.colors.successBg,
-  };
 }
 
 function employeeMatchesRoleFilter(employee: DashboardEmployee, filter: RoleFilter) {
@@ -363,13 +338,6 @@ const styles = {
     display: "grid",
     justifyItems: "start",
     gap: "8px",
-  },
-  deviceHealth: {
-    border: "1px solid",
-    borderRadius: "999px",
-    padding: "4px 8px",
-    fontSize: "12px",
-    fontWeight: 700,
   },
   actions: {
     display: "grid",

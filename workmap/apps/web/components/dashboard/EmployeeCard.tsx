@@ -1,5 +1,5 @@
-import { PresenceBadge } from "../office/PresenceBadge";
 import { EmployeeAvatar } from "./EmployeeAvatar";
+import { EmployeeStatusStack } from "./EmployeeStatusStack";
 import type { DashboardEmployee } from "./mockDashboardData";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
@@ -20,7 +20,7 @@ export function EmployeeCard({ employee }: EmployeeCardProps) {
           </p>
         </div>
       </div>
-      <PresenceBadge status={employee.status} />
+      <EmployeeStatusStack virtualStatus={employee.status} deviceStatus={employee.deviceStatus} />
       <dl style={styles.stats}>
         <div>
           <dt style={styles.statLabel}>Active</dt>

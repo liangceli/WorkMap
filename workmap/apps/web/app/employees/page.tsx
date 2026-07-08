@@ -6,12 +6,22 @@ import { WorkMapButton } from "../../components/ui/WorkMapButton";
 import { WorkMapPageHeader } from "../../components/ui/WorkMapPageHeader";
 import { AppShell } from "../../components/layout/AppShell";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
-import type { WorkMapApiDevice, WorkMapApiReportLiveStatus, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
+import type { WorkMapApiPlayerPosition, WorkMapApiUser } from "../../lib/api/apiTypes";
 import { listDevices } from "../../lib/api/devicesApi";
 import { getAgentLiveStatus, getUsageSummary } from "../../lib/api/reportsApi";
 import { listUsers } from "../../lib/api/usersApi";
+import { getVirtualOfficeMap, listVirtualOfficePositions } from "../../lib/api/virtualOfficeApi";
 import { decodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { defaultLayeredAvatarConfig } from "../../lib/avatar/avatarLayerAssets";
+import { statusFromFreshness } from "../../components/office/presence";
+import {
+  aggregateEmployeeActivityByUser,
+  buildDeviceHealthByUser,
+  deriveDeviceActivityStatus,
+  deriveDeviceHealth,
+  type AggregatedEmployeeActivity,
+  type DeviceHealth,
+} from "../../lib/people/peopleStatus";
 import { wmStyles } from "../../lib/theme/workmapTheme";
 import { getUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 import type { DashboardEmployee } from "../../components/dashboard/mockDashboardData";
@@ -60,7 +70,7 @@ export default function EmployeesPage() {
 
       const today = toUtcDateOnly(new Date());
       const canLoadCompanyReports = canRequestCompanyReports(auth.role);
-      const [result, devicesResult, usageSummaryResult, liveStatusResult] = await Promise.all([
+      const [result, devicesResult, usageSummaryResult, liveStatusResult, officeMapResult] = await Promise.all([
         listUsers(auth.options),
         listDevices(auth.options),
         canLoadCompanyReports
@@ -69,7 +79,10 @@ export default function EmployeesPage() {
         canLoadCompanyReports
           ? getAgentLiveStatus({ ...auth.options, scope: "company", from: today, to: today })
           : Promise.resolve(null),
+        getVirtualOfficeMap(auth.options),
       ]);
+
+      const positionsResult = officeMapResult.ok ? await listVirtualOfficePositions(officeMapResult.data.id, auth.options) : null;
 
       if (cancelled) {
         return;
@@ -88,14 +101,29 @@ export default function EmployeesPage() {
       const usageSummary = usageSummaryResult?.ok ? usageSummaryResult.data : null;
       const liveStatus = liveStatusResult?.ok && liveStatusResult.data.scope === "company" ? liveStatusResult.data : null;
       const devices = devicesResult.ok ? devicesResult.data : [];
-      const aggregated = aggregateDirectoryActivity(usageSummary, liveStatus, devices);
+      const activityByUser = aggregateEmployeeActivityByUser(usageSummary, liveStatus);
+      const deviceHealthByUser = buildDeviceHealthByUser(devices, usageSummary, liveStatus);
+      const virtualStatusByUser = buildVirtualStatusByUser(positionsResult?.ok ? positionsResult.data : []);
       const reportsLoaded = Boolean(usageSummary || liveStatus);
 
       setDirectoryState({
         loading: false,
         source: "api",
-        employees: result.data.map((user) => toDirectoryEmployee(user, aggregated.byUser.get(user.id), aggregated.deviceHealthByUser.get(user.id), reportsLoaded)),
-        statusText: buildStatusText(result.data.length, canLoadCompanyReports, usageSummaryResult, liveStatusResult, devicesResult.ok),
+        employees: result.data.map((user) => toDirectoryEmployee(
+          user,
+          activityByUser.get(user.id),
+          deviceHealthByUser.get(user.id),
+          virtualStatusByUser.get(user.id),
+          reportsLoaded,
+        )),
+        statusText: buildStatusText(
+          result.data.length,
+          canLoadCompanyReports,
+          usageSummaryResult,
+          liveStatusResult,
+          devicesResult.ok,
+          positionsResult?.ok === true,
+        ),
       });
     }
 
@@ -134,24 +162,16 @@ export default function EmployeesPage() {
   );
 }
 
-type AggregatedEmployeeActivity = {
-  activeSeconds: number;
-  idleSeconds: number;
-  topApp: string | null;
-  topDomain: string | null;
-};
-
-type BrowserCoverage = WorkMapApiUsageSummary["browserExtensionCoverage"][number];
-type DeviceHealth = NonNullable<DashboardEmployee["deviceHealth"]>;
-
 function toDirectoryEmployee(
   user: WorkMapApiUser,
   activity: AggregatedEmployeeActivity | undefined,
   deviceHealth: DeviceHealth | undefined,
+  virtualStatus: WorkMapApiPlayerPosition["status"] | undefined,
   reportsLoaded: boolean,
 ): DashboardEmployee {
   const hasActivity = Boolean(activity && activity.activeSeconds + activity.idleSeconds > 0);
-  const status = user.status && (user.status !== "offline" || !hasActivity) ? user.status : hasActivity ? "available" : "offline";
+  const status = virtualStatus ?? (user.status && (user.status !== "offline" || !hasActivity) ? user.status : hasActivity ? "available" : "offline");
+  const resolvedDeviceHealth = deriveDeviceHealth(activity, deviceHealth);
   const backendAvatar = decodeLayeredAvatarId(user.avatarId);
 
   return {
@@ -167,100 +187,13 @@ function toDirectoryEmployee(
     idleTime: activity ? formatDuration(activity.idleSeconds) : reportsLoaded ? "0m" : "Report unavailable",
     topApp: activity?.topApp ?? (reportsLoaded ? "No app data" : "Report unavailable"),
     topDomain: activity?.topDomain ?? (reportsLoaded ? "No domain data" : "Report unavailable"),
-    deviceHealth: deriveDeviceHealth(activity, deviceHealth),
+    deviceHealth: resolvedDeviceHealth,
+    deviceStatus: deriveDeviceActivityStatus(activity, resolvedDeviceHealth),
   };
 }
 
-function aggregateDirectoryActivity(
-  usageSummary: WorkMapApiUsageSummary | null,
-  liveStatus: Extract<WorkMapApiReportLiveStatus, { scope: "company" }> | null,
-  devices: WorkMapApiDevice[],
-) {
-  const byUser = new Map<string, AggregatedEmployeeActivity>();
-  const deviceHealthByUser = new Map<string, DeviceHealth>();
-
-  for (const device of devices) {
-    const userId = device.user?.id;
-    if (!userId || device.revokedAt || isBrowserExtensionDevice(device)) {
-      continue;
-    }
-    mergeDeviceHealth(deviceHealthByUser, userId, healthFromLastSignal(device.lastSeenAt));
-  }
-
-  for (const coverage of usageSummary?.browserExtensionCoverage ?? []) {
-    mergeDeviceHealth(deviceHealthByUser, coverage.userId, healthFromBrowserCoverage(coverage));
-  }
-  for (const coverage of liveStatus?.browserExtensionCoverage ?? []) {
-    mergeDeviceHealth(deviceHealthByUser, coverage.userId, healthFromBrowserCoverage(coverage));
-  }
-
-  for (const row of usageSummary?.employeeUsage ?? []) {
-    byUser.set(row.userId, {
-      activeSeconds: row.activeSeconds,
-      idleSeconds: row.idleSeconds,
-      topApp: row.topApp ?? null,
-      topDomain: row.topDomain ?? null,
-    });
-  }
-
-  for (const row of liveStatus?.employeeUsage ?? []) {
-    const current = byUser.get(row.userId) ?? { activeSeconds: 0, idleSeconds: 0, topApp: null, topDomain: null };
-    current.activeSeconds += row.activeSeconds;
-    current.idleSeconds += row.idleSeconds ?? 0;
-    current.topApp = row.topApp ?? current.topApp;
-    current.topDomain = row.topDomain ?? current.topDomain;
-    byUser.set(row.userId, current);
-  }
-
-  return { byUser, deviceHealthByUser };
-}
-
-function deriveDeviceHealth(activity: AggregatedEmployeeActivity | undefined, deviceHealth: DeviceHealth | undefined) {
-  if (activity && activity.activeSeconds + activity.idleSeconds > 0) {
-    return "online";
-  }
-
-  return deviceHealth ?? "offline";
-}
-
-function isBrowserExtensionDevice(device: WorkMapApiDevice) {
-  return device.agentVersion?.startsWith("browser-extension-mv3/") === true;
-}
-
-function healthFromBrowserCoverage(coverage: BrowserCoverage): DeviceHealth {
-  return coverage.state === "connected" ? "online" : "delayed";
-}
-
-function healthFromLastSignal(lastSeenAt: string | null): DeviceHealth {
-  if (!lastSeenAt) {
-    return "offline";
-  }
-
-  const signalAgeMs = Date.now() - Date.parse(lastSeenAt);
-  if (!Number.isFinite(signalAgeMs)) {
-    return "offline";
-  }
-
-  if (signalAgeMs <= 30_000) {
-    return "online";
-  }
-
-  if (signalAgeMs <= 120_000) {
-    return "delayed";
-  }
-
-  return "offline";
-}
-
-function mergeDeviceHealth(target: Map<string, DeviceHealth>, userId: string, next: DeviceHealth) {
-  const current = target.get(userId);
-  if (!current || healthRank(next) > healthRank(current)) {
-    target.set(userId, next);
-  }
-}
-
-function healthRank(health: DeviceHealth) {
-  return health === "online" ? 2 : health === "delayed" ? 1 : 0;
+function buildVirtualStatusByUser(positions: WorkMapApiPlayerPosition[]) {
+  return new Map(positions.map((position) => [position.userId, statusFromFreshness(position.status, position.updatedAt)]));
 }
 
 function formatDuration(totalSeconds: number) {
@@ -281,15 +214,16 @@ function buildStatusText(
   usageSummaryResult: Awaited<ReturnType<typeof getUsageSummary>> | null,
   liveStatusResult: Awaited<ReturnType<typeof getAgentLiveStatus>> | null,
   devicesLoaded: boolean,
+  positionsLoaded: boolean,
 ) {
   if (!canLoadCompanyReports) {
-    return `${userCount} same-workspace users loaded from GET /users${devicesLoaded ? " + /devices" : ""}. Activity summaries require manager report access.`;
+    return `${userCount} same-workspace users loaded from GET /users${devicesLoaded ? " + /devices" : ""}${positionsLoaded ? " + virtual-office positions" : ""}. Activity summaries require manager report access.`;
   }
 
   const summaryLoaded = usageSummaryResult?.ok === true;
   const liveLoaded = liveStatusResult?.ok === true;
   if (summaryLoaded && liveLoaded) {
-    return `${userCount} users aggregated from /users${devicesLoaded ? " + /devices" : ""} + today's company reports.`;
+    return `${userCount} users aggregated from /users${devicesLoaded ? " + /devices" : ""}${positionsLoaded ? " + virtual-office positions" : ""} + today's company reports.`;
   }
 
   const errors = [

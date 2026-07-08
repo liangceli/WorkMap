@@ -1,5 +1,18 @@
 # Latest QA Handoff
 
+## 2026-07-08 Employees And Dashboard Split Presence/Device Status QA
+
+- Reviewed implementation: shared people-status aggregation helper, `/employees` API row mapping, Employee Directory status cell, Dashboard "People in the office" cards, Manager overview data loading, and shared `DashboardEmployee` shape.
+- Diff review summary: the UI now separates virtual-office presence from device/report activity. Virtual map status is sourced from virtual-office positions with existing freshness logic; device activity status is sourced from reports/live usage plus visible Desktop Agent and Browser Extension device signals.
+- Findings ordered by severity: no blocking diff-level finding in the scoped files. Existing blocker outside this change: `workmap/apps/web/lib/api/authApi.ts` currently begins with NUL/invalid characters, which prevents full Web typecheck, lint, and build from parsing the app.
+- Test/verification status: targeted ESLint on changed files passed. TypeScript `transpileModule` syntax check for the changed source files passed. `git diff --check` passed with LF-to-CRLF working-copy warnings. Scoped secret scan returned no matches.
+- Verification blocked/limited: `pnpm --filter @workmap/web typecheck` did not reach scripts because pnpm attempted a workspace install and aborted in non-interactive mode. Direct `tsc --noEmit --incremental false`, full `eslint .`, and `next build` all failed on the pre-existing `lib/api/authApi.ts` invalid-character/NUL corruption before they could validate the full app.
+- Manual QA status: not run. Required checks: view `/employees` Manager and Employee filtered lists and verify two badges per row; verify the Status filter still follows virtual-map presence; view `/dashboard` "People in the office" and confirm each card shows both virtual-map and device/report status.
+- Risks: the local app cannot complete full build verification until `authApi.ts` is restored. Device status labels depend on available report/live/device data; if a role lacks company reporting or a person has no signal, dashboard cards may correctly show `No report signal`.
+- Recommendation: pass for scoped diff review and targeted checks. Do not treat this as deployment-ready until the existing `authApi.ts` corruption is fixed and full Web typecheck/lint/build plus browser QA pass.
+
+---
+
 ## 2026-07-08 Desktop Agent Stale Connected Status Fix QA
 
 - Reviewed implementation: Desktop Agent runtime initial status, Electron runtime startup failure handling, renderer heartbeat-freshness health derivation, local timestamp display, and GUI release tests.

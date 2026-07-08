@@ -8,9 +8,19 @@ import { UsageSummaryCard } from "./UsageSummaryCard";
 import { WebsiteUsageTable } from "./WebsiteUsageTable";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { getCompliancePolicy } from "../../lib/api/complianceApi";
+import { listDevices } from "../../lib/api/devicesApi";
 import { getApiHealth } from "../../lib/api/healthApi";
-import { getUsageSummary } from "../../lib/api/reportsApi";
-import type { WorkMapApiPlayerPosition, WorkMapApiUsageSummary } from "../../lib/api/apiTypes";
+import { getAgentLiveStatus, getUsageSummary } from "../../lib/api/reportsApi";
+import type { WorkMapApiDevice, WorkMapApiPlayerPosition, WorkMapApiReportLiveStatus, WorkMapApiUsageSummary } from "../../lib/api/apiTypes";
+import { statusFromFreshness } from "../office/presence";
+import {
+  aggregateEmployeeActivityByUser,
+  buildDeviceHealthByUser,
+  deriveDeviceActivityStatus,
+  deriveDeviceHealth,
+  type DeviceActivityStatus,
+} from "../../lib/people/peopleStatus";
+import { decodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { defaultLayeredAvatarConfig } from "../../lib/avatar/avatarLayerAssets";
 import { getVirtualOfficeMap, listVirtualOfficePositions } from "../../lib/api/virtualOfficeApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
@@ -27,6 +37,8 @@ type DashboardState = {
   policyVersion: string | null;
   complianceText: string;
   usageSummary: WorkMapApiUsageSummary | null;
+  liveStatus: Extract<WorkMapApiReportLiveStatus, { scope: "company" }> | null;
+  devices: WorkMapApiDevice[];
   statusText: string;
   errors: string[];
 };
@@ -42,6 +54,8 @@ const initialDashboardState: DashboardState = {
   policyVersion: null,
   complianceText: "Checking policy status...",
   usageSummary: null,
+  liveStatus: null,
+  devices: [],
   statusText: "Checking workspace signals...",
   errors: [],
 };
@@ -73,14 +87,19 @@ export function ManagerOverviewPanel() {
       let policyVersion: string | null = null;
       let complianceText = "Sign in with Cognito to load backend policy status.";
       let usageSummary: WorkMapApiUsageSummary | null = null;
+      let liveStatus: Extract<WorkMapApiReportLiveStatus, { scope: "company" }> | null = null;
+      let devices: WorkMapApiDevice[] = [];
 
       if (auth.available) {
         authSource = auth.source;
         role = auth.role ?? null;
-        const [mapResult, policyResult, usageResult] = await Promise.all([
+        const canLoadCompanyReports = canRequestCompanySummary(auth.role);
+        const [mapResult, policyResult, usageResult, liveStatusResult, devicesResult] = await Promise.all([
           getVirtualOfficeMap(auth.options),
           getCompliancePolicy(auth.options),
-          getUsageSummary({ ...auth.options, scope: canRequestCompanySummary(auth.role) ? "company" : "user" }),
+          getUsageSummary({ ...auth.options, scope: canLoadCompanyReports ? "company" : "user" }),
+          canLoadCompanyReports ? getAgentLiveStatus({ ...auth.options, scope: "company" }) : Promise.resolve(null),
+          listDevices(auth.options),
         ]);
 
         if (mapResult.ok) {
@@ -109,6 +128,18 @@ export function ManagerOverviewPanel() {
         } else {
           errors.push(`Reports summary: ${usageResult.error}`);
         }
+
+        if (liveStatusResult?.ok && liveStatusResult.data.scope === "company") {
+          liveStatus = liveStatusResult.data;
+        } else if (liveStatusResult && !liveStatusResult.ok) {
+          errors.push(`Live report status: ${liveStatusResult.error}`);
+        }
+
+        if (devicesResult.ok) {
+          devices = devicesResult.data;
+        } else {
+          errors.push(`Devices: ${devicesResult.error}`);
+        }
       } else {
         errors.push(auth.reason);
       }
@@ -128,6 +159,8 @@ export function ManagerOverviewPanel() {
         policyVersion,
         complianceText,
         usageSummary,
+        liveStatus,
+        devices,
         statusText: auth.available
           ? `Using ${formatAuthSource(auth.source)} for workspace dashboard data.`
           : "No backend API auth is available yet. Sign in before reviewing workspace data.",
@@ -144,13 +177,22 @@ export function ManagerOverviewPanel() {
 
   const presenceCounts = useMemo(() => countPresence(dashboardState.positions), [dashboardState.positions]);
   const usageRows = useMemo(() => buildUsageRows(dashboardState.usageSummary), [dashboardState.usageSummary]);
+  const deviceStatusByUser = useMemo(
+    () => buildDeviceStatusByUser(dashboardState.usageSummary, dashboardState.liveStatus, dashboardState.devices),
+    [dashboardState.devices, dashboardState.liveStatus, dashboardState.usageSummary],
+  );
   const journey = useMemo(() => getDashboardJourney(dashboardState.role), [dashboardState.role]);
   const people = useMemo(
     () =>
       dashboardState.positions.length > 0
-        ? dashboardState.positions.map((position, index) => toDashboardEmployee(position, index, dashboardState.roomNames))
+        ? dashboardState.positions.map((position, index) => toDashboardEmployee(
+          position,
+          index,
+          dashboardState.roomNames,
+          deviceStatusByUser.get(position.userId),
+        ))
         : [],
-    [dashboardState.positions, dashboardState.roomNames],
+    [dashboardState.positions, dashboardState.roomNames, deviceStatusByUser],
   );
 
   const metrics = useMemo<UsageMetric[]>(
@@ -296,9 +338,10 @@ export function ManagerOverviewPanel() {
 function countPresence(positions: WorkMapApiPlayerPosition[]) {
   return positions.reduce(
     (counts, position) => {
-      if (position.status === "idle") {
+      const status = statusFromFreshness(position.status, position.updatedAt);
+      if (status === "idle") {
         counts.idle += 1;
-      } else if (position.status === "offline") {
+      } else if (status === "offline") {
         counts.offline += 1;
       } else {
         counts.active += 1;
@@ -314,23 +357,44 @@ function toDashboardEmployee(
   position: WorkMapApiPlayerPosition,
   _index: number,
   roomNames: Record<string, string>,
+  deviceStatus: DeviceActivityStatus | undefined,
 ): DashboardEmployee {
   const roomName = position.roomId ? roomNames[position.roomId] : null;
+  const virtualStatus = statusFromFreshness(position.status, position.updatedAt);
 
   return {
     id: position.userId,
     name: position.displayName,
     role: "Team member",
     department: roomName ?? "Office area",
-    status: position.status,
+    status: virtualStatus,
     localTime: formatTimestamp(position.updatedAt),
-    avatar: defaultLayeredAvatarConfig,
-    activeTime: statusLabel(position.status),
+    avatar: decodeLayeredAvatarId(position.avatarId) ?? defaultLayeredAvatarConfig,
+    activeTime: statusLabel(virtualStatus),
     idleTime: formatFreshness(position.updatedAt),
     topApp: "Reports API",
     topDomain: "Domain summary",
-    deviceHealth: position.status === "offline" ? "offline" : "online",
+    deviceStatus: deviceStatus ?? "no_report",
   };
+}
+
+function buildDeviceStatusByUser(
+  usageSummary: WorkMapApiUsageSummary | null,
+  liveStatus: Extract<WorkMapApiReportLiveStatus, { scope: "company" }> | null,
+  devices: WorkMapApiDevice[],
+) {
+  const activityByUser = aggregateEmployeeActivityByUser(usageSummary?.scope === "company" ? usageSummary : null, liveStatus);
+  const healthByUser = buildDeviceHealthByUser(devices, usageSummary?.scope === "company" ? usageSummary : null, liveStatus);
+  const statuses = new Map<string, DeviceActivityStatus>();
+  const userIds = new Set([...activityByUser.keys(), ...healthByUser.keys()]);
+
+  for (const userId of userIds) {
+    const activity = activityByUser.get(userId);
+    const health = deriveDeviceHealth(activity, healthByUser.get(userId));
+    statuses.set(userId, deriveDeviceActivityStatus(activity, health));
+  }
+
+  return statuses;
 }
 
 function buildUsageRows(summary: WorkMapApiUsageSummary | null): { fromApi: boolean; apps: UsageRow[]; websites: UsageRow[] } {
