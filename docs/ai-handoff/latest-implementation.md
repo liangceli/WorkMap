@@ -1,5 +1,38 @@
 # Latest Implementation Handoff
 
+## 2026-07-08 Virtual Office Offline Movement Animation Fix
+
+- Original task: explain why Sunny can show as `Offline` after leaving the virtual map but still appear to be running, and fix that behavior.
+- Changed files: `workmap/apps/web/components/office/presence.ts`, `workmap/apps/web/components/office/useVirtualOfficeData.ts`, `workmap/apps/web/components/office/OfficeMap.tsx`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`.
+- Root cause: virtual-office freshness logic could convert an old REST position to `offline`, but the same player object still preserved the last persisted `isMoving=true`. Canvas rendering uses `player.isMoving` for bobbing/walking frames, so stale/offline players could keep animating.
+- Implementation summary: added `canAnimatePresenceMovement()` so `idle` and `offline` statuses cannot drive movement animation. REST-derived remote players now suppress `isMoving` after freshness normalization, and realtime players are also normalized during render-list merge.
+- Behavior change: a remote teammate whose virtual-map status is `Idle` or `Offline` can still show at their last known position, but their avatar no longer uses walking/running animation frames.
+- Role/access behavior: no auth, RBAC, tenant isolation, backend API, Desktop Agent, Browser Extension, report aggregation, or persisted position schema changed.
+- Verification: targeted ESLint passed for `presence.ts`, `useVirtualOfficeData.ts`, and `OfficeMap.tsx`. TypeScript `transpileModule` syntax check passed for the same three files. `git diff --check` passed with LF-to-CRLF warnings. Scoped secret scan returned no matches.
+- Verification blocked/limited: `pnpm --filter @workmap/web typecheck` did not reach the package script because pnpm attempted a workspace install and aborted in non-interactive mode with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`. Direct Web `tsc --noEmit --incremental false`, full `npm run lint`, and `npm run build` are blocked by the pre-existing `workmap/apps/web/lib/api/authApi.ts` NUL/invalid-character parse error.
+- Manual QA: not run in browser. Required check: open `/virtual-office` with another user leaving the map or with an aged position; confirm the status bubble can become `Offline` while the avatar stands still instead of running.
+- Intentionally not changed: offline users are not removed from the map; this round only stops stale/offline movement animation. No leave-room persistence or backend freshness calculation was changed.
+- Remaining risks: full Web build remains blocked until `authApi.ts` is restored. A browser smoke test is still needed to confirm the animation frame visibly stops in the deployed UI.
+- Suggested next step: restore `authApi.ts`, rerun full Web typecheck/lint/build, then browser-test `/virtual-office` with a second account leaving and rejoining the map.
+
+---
+
+## 2026-07-08 Employees Split Status Filters
+
+- Original task: update the `/employees` page toolbar filters to match the new two-status model shown in each employee row: Virtual map status and Device status.
+- Changed files: `workmap/apps/web/components/employees/EmployeeDirectory.tsx`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`.
+- Implementation summary: replaced the single `Status` filter with two independent dropdowns: `Virtual map` filters `employee.status`, while `Device status` filters `employee.deviceStatus` with `no_report` fallback. Both filters combine with existing Search, Department, and Manager/Employee role filters.
+- UI behavior: virtual-map dropdown labels use the same presence labels as the virtual office (`Available`, `Busy`, `Focus`, `Idle`, `Offline`, etc.). Device dropdown labels reuse the shared report/device labels (`Focus active`, `Focused idle`, `Open/runtime`, `Signal delayed`, `Device offline`, `No report signal`).
+- Summary behavior: the count text now clarifies that online/recently-active count is based on the virtual-map status, and active virtual/device filters are echoed in the summary bar.
+- Role/access behavior: no API, auth, RBAC, tenant, report, Desktop Agent, or Browser Extension behavior changed. This is frontend filtering/presentation only.
+- Verification: targeted ESLint on `components/employees/EmployeeDirectory.tsx` passed. TypeScript `transpileModule` syntax check for `EmployeeDirectory.tsx` passed. `pnpm --filter @workmap/web typecheck` was attempted but did not reach the package script because pnpm attempted a workspace install and aborted in non-interactive mode with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`. Direct Web `tsc --noEmit --incremental false` was attempted and is still blocked by the existing `workmap/apps/web/lib/api/authApi.ts` NUL/invalid-character parse error. `git diff --check` passed with LF-to-CRLF warnings. Scoped secret scan returned no matches.
+- Manual QA: not run in a browser. Required check: open `/employees`, verify `Virtual map` and `Device status` dropdowns appear, and confirm each dropdown independently filters the visible Manager/Employee list according to the two badges in the Status column.
+- Intentionally not changed: no Dashboard filter was added, no status derivation logic changed, no report metrics changed, and no backend/device/session behavior changed.
+- Remaining risks: full Web typecheck/build remains blocked until `workmap/apps/web/lib/api/authApi.ts` is restored from corruption.
+- Suggested next step: repair/restore `authApi.ts`, rerun full Web typecheck/lint/build, then browser-test `/employees` filters against real device/report rows.
+
+---
+
 ## 2026-07-08 Employees And Dashboard Split Presence/Device Status
 
 - Original task: update `/employees` Manager and Employee directory rows, plus `/dashboard` "People in the office" cards, so every person shows two separate statuses: the Virtual Office/virtual map presence status, and the Desktop Agent/Reports-derived device activity status (`Focus active`, `Focused idle`, `Open/runtime`, etc.).

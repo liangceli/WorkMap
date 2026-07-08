@@ -1,5 +1,31 @@
 # Latest QA Handoff
 
+## 2026-07-08 Virtual Office Offline Movement Animation Fix QA
+
+- Reviewed implementation: virtual-office presence freshness helper, REST position-to-remote-player mapping, realtime remote-player render merge, and canvas animation dependency on `player.isMoving`.
+- Diff review summary: added a single movement-animation guard for `idle`/`offline` presence. REST positions now normalize freshness before deciding whether `isMoving` may remain true; realtime render merge applies the same guard defensively.
+- Findings ordered by severity: no blocking diff-level finding. Existing blocker outside this change remains `workmap/apps/web/lib/api/authApi.ts`, which contains NUL/invalid characters and prevents full Web parsing/build.
+- Test/verification status: targeted ESLint passed for `presence.ts`, `useVirtualOfficeData.ts`, and `OfficeMap.tsx`. TypeScript `transpileModule` syntax check passed for those files. `git diff --check` passed with LF-to-CRLF warnings. Scoped secret scan returned no matches.
+- Verification blocked/limited: `pnpm --filter @workmap/web typecheck` aborted before package scripts because pnpm attempted a workspace install in non-interactive mode. Direct Web `tsc`, full Web ESLint, and Next build failed on the pre-existing `apps/web/lib/api/authApi.ts` invalid-character/NUL corruption.
+- Manual QA status: not run. Required browser check: view `/virtual-office` from one account while another account exits and becomes stale/offline; confirm the offline avatar no longer bobs or walks.
+- Risks: this fix intentionally leaves offline avatars at their last known map position. If product expectation is to hide users after leaving, that requires a separate behavior decision and likely backend/realtime presence handling.
+- Recommendation: pass for scoped diff review and targeted checks. Next round can proceed, but deployment readiness still requires repairing `authApi.ts` and running full Web verification.
+
+---
+
+## 2026-07-08 Employees Split Status Filters QA
+
+- Reviewed implementation: `/employees` toolbar state, dropdown option generation, combined filter predicate, summary bar text, and empty-state copy in `EmployeeDirectory.tsx`.
+- Diff review summary: the previous single Status dropdown now becomes two independent filters. `Virtual map` uses the virtual-office presence status, while `Device status` uses the new report/device activity status with `No report signal` fallback for missing values.
+- Findings ordered by severity: no blocking diff-level finding. Existing blocker outside this change remains `workmap/apps/web/lib/api/authApi.ts`, which contains NUL/invalid characters and prevents full Web parsing.
+- Test/verification status: targeted ESLint passed for `EmployeeDirectory.tsx`. TypeScript `transpileModule` syntax check passed for `EmployeeDirectory.tsx`. `git diff --check` passed with LF-to-CRLF warnings. Scoped secret scan returned no matches.
+- Verification blocked/limited: `pnpm --filter @workmap/web typecheck` did not reach the package script because pnpm attempted a workspace install and aborted in non-interactive mode. Direct Web `tsc --noEmit --incremental false` failed on the pre-existing `lib/api/authApi.ts` invalid-character/NUL corruption.
+- Manual QA status: not run. Required checks: select a virtual-map status such as `Offline`; select a device status such as `Focus active` or `Signal delayed`; confirm both filters combine with Department, Search, and Manager/Employee mode.
+- Risks: full app build verification and visual browser QA remain pending until `authApi.ts` is repaired.
+- Recommendation: pass for scoped diff review and targeted checks. Next round can proceed after full Web environment repair or to another scoped frontend fix with the same known build blocker documented.
+
+---
+
 ## 2026-07-08 Employees And Dashboard Split Presence/Device Status QA
 
 - Reviewed implementation: shared people-status aggregation helper, `/employees` API row mapping, Employee Directory status cell, Dashboard "People in the office" cards, Manager overview data loading, and shared `DashboardEmployee` shape.

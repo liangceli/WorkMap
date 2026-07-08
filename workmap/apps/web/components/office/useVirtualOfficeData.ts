@@ -30,7 +30,7 @@ import {
 } from "../../lib/office/virtualOfficeMapAdapter";
 import { readVirtualOfficeDataCache, writeVirtualOfficeDataCache } from "../../lib/office/virtualOfficeCache";
 import { remotePlayers, roomZones, type RemoteOfficePlayer } from "./mockOfficeData";
-import { statusFromFreshness } from "./presence";
+import { canAnimatePresenceMovement, statusFromFreshness } from "./presence";
 
 type VirtualOfficeDataSource = "mock" | "api" | "partial-api";
 
@@ -354,9 +354,12 @@ function toRemoteOfficePlayer(position: WorkMapApiPlayerPosition, mapManifest: V
     return null;
   }
 
+  const status = statusFromFreshness(player.status, player.updatedAt);
+
   return {
     ...player,
-    status: statusFromFreshness(player.status, player.updatedAt),
+    isMoving: canAnimatePresenceMovement(status) && player.isMoving,
+    status,
     role: "Team member",
   };
 }

@@ -5,7 +5,9 @@ import type { UserPresenceStatus } from "@workmap/shared-types";
 import { EmployeeAvatar } from "../dashboard/EmployeeAvatar";
 import { EmployeeStatusStack } from "../dashboard/EmployeeStatusStack";
 import type { DashboardEmployee } from "../dashboard/mockDashboardData";
+import { labelStatus } from "../office/presence";
 import { WorkMapEmptyState } from "../ui/WorkMapEmptyState";
+import { deviceActivityStatusLabel, type DeviceActivityStatus } from "../../lib/people/peopleStatus";
 import { getUserSetupState } from "../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
@@ -18,12 +20,14 @@ type EmployeeDirectoryProps = {
 };
 
 type RoleFilter = "manager" | "employee";
-type StatusFilter = "all" | UserPresenceStatus;
+type VirtualStatusFilter = "all" | UserPresenceStatus;
+type DeviceStatusFilter = "all" | DeviceActivityStatus;
 
 export function EmployeeDirectory({ employees, showProfileLinks = true, loading = false, statusText }: EmployeeDirectoryProps) {
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [virtualStatus, setVirtualStatus] = useState<VirtualStatusFilter>("all");
+  const [deviceStatus, setDeviceStatus] = useState<DeviceStatusFilter>("all");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("employee");
   const [canSwitchMode, setCanSwitchMode] = useState(false);
 
@@ -41,8 +45,12 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
     () => ["all", ...Array.from(new Set(employees.map((employee) => employee.department))).sort()],
     [employees],
   );
-  const statuses = useMemo(
-    () => ["all", ...Array.from(new Set(employees.map((employee) => employee.status))).sort()] as StatusFilter[],
+  const virtualStatuses = useMemo(
+    () => ["all", ...Array.from(new Set(employees.map((employee) => employee.status))).sort()] as VirtualStatusFilter[],
+    [employees],
+  );
+  const deviceStatuses = useMemo(
+    () => ["all", ...Array.from(new Set(employees.map((employee) => employee.deviceStatus ?? "no_report"))).sort()] as DeviceStatusFilter[],
     [employees],
   );
 
@@ -54,12 +62,13 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
         normalizedQuery.length === 0 ||
         `${employee.name} ${employee.role} ${employee.department}`.toLowerCase().includes(normalizedQuery);
       const matchesDepartment = department === "all" || employee.department === department;
-      const matchesStatus = status === "all" || employee.status === status;
+      const matchesVirtualStatus = virtualStatus === "all" || employee.status === virtualStatus;
+      const matchesDeviceStatus = deviceStatus === "all" || (employee.deviceStatus ?? "no_report") === deviceStatus;
       const matchesRole = !canSwitchMode || employeeMatchesRoleFilter(employee, roleFilter);
 
-      return matchesQuery && matchesDepartment && matchesStatus && matchesRole;
+      return matchesQuery && matchesDepartment && matchesVirtualStatus && matchesDeviceStatus && matchesRole;
     });
-  }, [canSwitchMode, department, employees, query, roleFilter, status]);
+  }, [canSwitchMode, department, deviceStatus, employees, query, roleFilter, virtualStatus]);
 
   const visibleOnlineCount = useMemo(
     () => filteredEmployees.filter((employee) => employee.status !== "offline").length,
@@ -91,11 +100,30 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
         </label>
 
         <label style={styles.controlLabel}>
-          <span style={styles.labelText}>Status</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} style={styles.select}>
-            {statuses.map((item) => (
+          <span style={styles.labelText}>Virtual map</span>
+          <select
+            value={virtualStatus}
+            onChange={(event) => setVirtualStatus(event.target.value as VirtualStatusFilter)}
+            style={styles.select}
+          >
+            {virtualStatuses.map((item) => (
               <option key={item} value={item}>
-                {item === "all" ? "All statuses" : item.replace("_", " ")}
+                {formatVirtualStatusFilterLabel(item)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label style={styles.controlLabel}>
+          <span style={styles.labelText}>Device status</span>
+          <select
+            value={deviceStatus}
+            onChange={(event) => setDeviceStatus(event.target.value as DeviceStatusFilter)}
+            style={styles.select}
+          >
+            {deviceStatuses.map((item) => (
+              <option key={item} value={item}>
+                {formatDeviceStatusFilterLabel(item)}
               </option>
             ))}
           </select>
@@ -128,8 +156,10 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
       {loading ? <WorkMapLoader label="Loading employees" /> : <>
       <section style={styles.summaryBar}>
         <span>{filteredEmployees.length} people shown</span>
-        <span>{visibleOnlineCount} online or recently active</span>
+        <span>{visibleOnlineCount} virtual-map online or recently active</span>
         <span>{canSwitchMode ? `${roleFilter === "manager" ? "Manager" : "Employee"} filter active` : "Contact-only view"}</span>
+        {virtualStatus !== "all" ? <span>Virtual map: {formatVirtualStatusFilterLabel(virtualStatus)}</span> : null}
+        {deviceStatus !== "all" ? <span>Device: {formatDeviceStatusFilterLabel(deviceStatus)}</span> : null}
         {statusText ? <span>{statusText}</span> : null}
       </section>
 
@@ -143,7 +173,7 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
 
         {filteredEmployees.length === 0 ? (
           <WorkMapEmptyState title="No employees match these filters">
-            Try clearing the search or choosing a different department/status.
+            Try clearing the search or choosing different department, virtual-map, or device filters.
           </WorkMapEmptyState>
         ) : (
           filteredEmployees.map((employee) => (
@@ -208,6 +238,26 @@ function inferRoleGroup(role: string) {
   return /\b(employee|engineer|support|analyst|designer|sales|qa|ops|operator|staff|member)\b/i.test(role)
     ? "employee"
     : "manager";
+}
+
+function formatVirtualStatusFilterLabel(status: VirtualStatusFilter) {
+  if (status === "all") {
+    return "All virtual map statuses";
+  }
+
+  return titleCase(labelStatus(status));
+}
+
+function formatDeviceStatusFilterLabel(status: DeviceStatusFilter) {
+  if (status === "all") {
+    return "All device statuses";
+  }
+
+  return deviceActivityStatusLabel(status);
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 const styles = {

@@ -53,7 +53,7 @@ import { OfficeMiniMap } from "./OfficeMiniMap";
 import { OfficeSidePanel } from "./OfficeSidePanel";
 import { officeTilesets, type RemoteOfficePlayer } from "./mockOfficeData";
 import { RoomContextCard } from "./RoomContextCard";
-import { statusColors } from "./presence";
+import { canAnimatePresenceMovement, statusColors } from "./presence";
 import { reactionEmoji } from "./reactions";
 import { drawTiledTile, getTiledTileGid } from "./tiledTiles";
 import { useVirtualOfficeRealtime } from "./useVirtualOfficeRealtime";
@@ -2453,7 +2453,7 @@ function mergeRenderedRemotePlayers(
       x: realtimePlayer.x,
       y: realtimePlayer.y,
       direction: realtimePlayer.direction,
-      isMoving: realtimePlayer.isMoving,
+      isMoving: canAnimatePresenceMovement(realtimePlayer.status) && realtimePlayer.isMoving,
       status: realtimePlayer.status,
       roomId: realtimePlayer.roomId,
       updatedAt: realtimePlayer.updatedAt,

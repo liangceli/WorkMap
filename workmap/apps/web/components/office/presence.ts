@@ -18,6 +18,10 @@ export function labelStatus(status: UserPresenceStatus) {
   return status.replace("_", " ");
 }
 
+export function canAnimatePresenceMovement(status: UserPresenceStatus) {
+  return status !== "idle" && status !== "offline";
+}
+
 export function statusFromFreshness(status: UserPresenceStatus, updatedAt: string): UserPresenceStatus {
   const updatedTime = Date.parse(updatedAt);
   if (!Number.isFinite(updatedTime)) {
