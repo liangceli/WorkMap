@@ -41,7 +41,10 @@ import {
   writeLocalOfficePosition,
   type CachedLocalOfficePosition,
 } from "../../lib/office/virtualOfficeCache";
+import { isVirtualOfficeInitialRenderReady } from "../../lib/office/virtualOfficeReadiness";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
+import type { WorkMapRole } from "../../lib/workflow/workflowState";
+import { WorkMapLoader } from "../ui/WorkMapLoader";
 import { FloatingRoomPill } from "./FloatingRoomPill";
 import { InteractionDrawer } from "./InteractionDrawer";
 import { OfficeBottomDock } from "./OfficeBottomDock";
@@ -153,7 +156,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const remoteAvatarConfigs: Record<string, LayeredAvatarConfig> = {};
 const remoteProfileRouteIds: Record<string, string> = {};
 
-export function OfficeMap() {
+export function OfficeMap({ currentUserRole }: { currentUserRole: WorkMapRole }) {
   const router = useRouter();
   const officeData = useVirtualOfficeData();
   const officeRooms = officeData.rooms;
@@ -170,6 +173,7 @@ export function OfficeMap() {
   const seatedChairRef = useRef<ChairSpot | null>(null);
   const preSitPositionRef = useRef<{ x: number; y: number; direction: PlayerDirection } | null>(null);
   const mapXmlRef = useRef<string | null>(null);
+  const mainSceneReadyRef = useRef(false);
   const zoomRef = useRef(1);
   const cameraOffsetRef = useRef({ x: 0, y: 0 });
   const officePeopleRef = useRef<RemoteOfficePlayer[]>(officePeople);
@@ -237,6 +241,8 @@ export function OfficeMap() {
   const [notices, setNotices] = useState<WorkMapApiNotice[]>([]);
   const [unreadNoticeCount, setUnreadNoticeCount] = useState(0);
   const [noticesLoading, setNoticesLoading] = useState(false);
+  const [mainSceneReady, setMainSceneReady] = useState(false);
+  const [miniMapReady, setMiniMapReady] = useState(false);
 
   const mapPixels = useMemo(
     () => ({
@@ -612,11 +618,17 @@ export function OfficeMap() {
   }, [mapManifest, officeData.currentUserPosition, officeData.loaded, officeRooms]);
 
   useEffect(() => {
-    if (!avatarChecked || !selectedAvatar) {
+    if (!officeData.loaded || !avatarChecked || !selectedAvatar) {
       return undefined;
     }
 
     let cancelled = false;
+    mapXmlRef.current = null;
+    mainSceneReadyRef.current = false;
+    setMap(null);
+    setLoadError(null);
+    setMainSceneReady(false);
+    setMiniMapReady(false);
 
     const loadMap = () => {
       fetch(mapManifest.tmxPath, { cache: process.env.NODE_ENV === "development" ? "no-store" : "force-cache" })
@@ -659,7 +671,7 @@ export function OfficeMap() {
         window.clearInterval(intervalId);
       }
     };
-  }, [avatarChecked, mapManifest, selectedAvatar]);
+  }, [avatarChecked, mapManifest, officeData.loaded, selectedAvatar]);
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -955,6 +967,11 @@ export function OfficeMap() {
           zoomRef.current,
           cameraOffsetRef.current,
         );
+
+        if (!mainSceneReadyRef.current) {
+          mainSceneReadyRef.current = true;
+          setMainSceneReady(true);
+        }
 
         animationFrame = requestAnimationFrame(loop);
       };
@@ -1297,13 +1314,28 @@ export function OfficeMap() {
   const peopleInDestination = (destination: OfficeDestination) =>
     officePeople.filter((remote) => destination.bounds && remote.x >= destination.bounds.x && remote.x <= destination.bounds.x + destination.bounds.width && remote.y >= destination.bounds.y && remote.y <= destination.bounds.y + destination.bounds.height).length;
 
+  const handleMiniMapReady = useCallback(() => {
+    setMiniMapReady(true);
+  }, []);
+
+  const initialRenderReady = isVirtualOfficeInitialRenderReady({
+    dataLoaded: officeData.loaded,
+    mapLoaded: Boolean(map),
+    mainSceneReady,
+    miniMapReady,
+  });
+
   if (!avatarChecked || !selectedAvatar) {
+    return <WorkMapLoader fullPage label="Preparing your virtual office" />;
+  }
+
+  if (loadError && !map) {
     return (
       <main style={styles.page}>
         <section style={styles.shell}>
           <div style={styles.card}>
-            <p style={styles.panelLabel}>Avatar setup</p>
-            <p style={styles.panelText}>Taking you to avatar selection...</p>
+            <p style={styles.panelLabel}>Virtual Office</p>
+            <p style={styles.panelText}>The office map could not be loaded. Refresh the page to try again.</p>
           </div>
         </section>
       </main>
@@ -1319,6 +1351,7 @@ export function OfficeMap() {
           presenceSource={officeData.source}
           realtimeState={realtimeConnectionState}
           remoteCount={officePeople.length}
+          currentUserRole={currentUserRole}
           onSearch={() => setCommandOpen(true)}
         />
         <OfficeLeftRail activePanel={activePanel} onSelectPanel={openPanel} unreadNoticeCount={unreadNoticeCount} />
@@ -1379,6 +1412,7 @@ export function OfficeMap() {
             player={player}
             tilesets={officeTilesets}
             shifted={Boolean(activePanel)}
+            onReady={handleMiniMapReady}
           />
         ) : null}
         <OfficeBottomDock
@@ -1451,6 +1485,7 @@ export function OfficeMap() {
           onNavigate={(href) => router.push(href)}
         />
         {toast ? <div className="wm-office-toast" style={styles.toast}>{toast}</div> : null}
+        {!initialRenderReady ? <WorkMapLoader fullPage label="Loading virtual office" /> : null}
       </VirtualOfficeShell>
     </main>
   );

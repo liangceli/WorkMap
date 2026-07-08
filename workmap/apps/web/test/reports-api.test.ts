@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { getAgentLiveStatus, getUsageSummary } from "../lib/api/reportsApi.js";
+import { getWorkspaceNavigationItemsForRole } from "../lib/navigation/workspaceNavigation.js";
 
 test("reports API sends date, department and scope filters", async () => {
   const originalFetch = globalThis.fetch;
@@ -88,12 +89,11 @@ test("company live Agent polling keeps department scope", async () => {
 });
 
 test("Reports navigation and page are hidden from employees", async () => {
-  const source = await readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8");
-  const reportsItem = source.split("\n").find((line) => line.includes('label: "Reports"')) ?? "";
   const gateSource = await readFile(new URL("../components/reports/ReportsAccessGate.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(reportsItem, /EMPLOYEE/);
-  assert.match(reportsItem, /IT_ADMIN/);
-  assert.match(reportsItem, /OWNER/);
+  assert.equal(getWorkspaceNavigationItemsForRole("EMPLOYEE").some((item) => item.href === "/reports"), false);
+  assert.equal(getWorkspaceNavigationItemsForRole("MANAGER").some((item) => item.href === "/reports"), true);
+  assert.equal(getWorkspaceNavigationItemsForRole("OWNER").some((item) => item.href === "/reports"), true);
+  assert.equal(getWorkspaceNavigationItemsForRole("IT_ADMIN").some((item) => item.href === "/reports"), true);
   assert.match(gateSource, /auth\.role === "EMPLOYEE"/);
   assert.match(gateSource, /router\.replace\("\/virtual-office"\)/);
 });

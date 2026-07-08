@@ -3,7 +3,9 @@
 import type { UserPresenceStatus } from "@workmap/shared-types";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { getVirtualOfficeNavigationItemsForRole } from "../../lib/navigation/workspaceNavigation";
 import { wm } from "../../lib/theme/workmapTheme";
+import type { WorkMapRole } from "../../lib/workflow/workflowState";
 import { OfficeIcon } from "./OfficeIcons";
 import { labelStatus, statusColors } from "./presence";
 import type { VirtualOfficeRealtimeState } from "./useVirtualOfficeRealtime";
@@ -14,6 +16,7 @@ type VirtualOfficeTopBarProps = {
   presenceSource: "mock" | "api" | "partial-api";
   realtimeState: VirtualOfficeRealtimeState;
   remoteCount: number;
+  currentUserRole: WorkMapRole;
   onSearch?: () => void;
 };
 
@@ -23,9 +26,11 @@ export function VirtualOfficeTopBar({
   presenceSource,
   realtimeState,
   remoteCount,
+  currentUserRole,
   onSearch,
 }: VirtualOfficeTopBarProps) {
   const connection = connectionCopy(realtimeState, presenceSource, remoteCount);
+  const workspaceRoutes = getVirtualOfficeNavigationItemsForRole(currentUserRole);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationRef = useRef<HTMLDivElement>(null);
 
@@ -115,13 +120,6 @@ export function VirtualOfficeTopBar({
     </>
   );
 }
-
-const workspaceRoutes = [
-  { label: "Dashboard", description: "Workspace overview", href: "/dashboard" },
-  { label: "Reports", description: "Activity and work insights", href: "/reports" },
-  { label: "Employees", description: "People directory", href: "/employees" },
-  { label: "Compliance", description: "Privacy and policy", href: "/compliance" },
-] as const;
 
 function connectionCopy(
   realtimeState: VirtualOfficeRealtimeState,

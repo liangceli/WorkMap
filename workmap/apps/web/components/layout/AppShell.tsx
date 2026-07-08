@@ -6,6 +6,11 @@ import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { getCurrentCompany } from "../../lib/api/companiesApi";
 import { getCurrentUser } from "../../lib/api/authApi";
 import { getWorkMapPlatformApiAuthOptions } from "../../lib/api/platformAuth";
+import {
+  getWorkspaceNavigationItemsForRole,
+  toWorkflowRole,
+  type WorkspaceNavigationItem,
+} from "../../lib/navigation/workspaceNavigation";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { redirectToRootForMissingCognitoSession } from "../../lib/auth/cognitoRedirect";
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
@@ -31,25 +36,21 @@ type PlatformSessionSummary = {
   source: string;
 };
 
-type NavItem = {
+type PlatformNavigationItem = {
   label: string;
   href: string;
-  group: "workspace" | "insight" | "admin" | "platform";
-  roles?: WorkMapRole[];
-  platformOnly?: boolean;
+  group: "platform";
+  platformOnly: true;
 };
 
-const navItems: NavItem[] = [
-  { label: "Employees", href: "/employees", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
-  { label: "Dashboard", href: "/dashboard", group: "insight", roles: ["MANAGER", "OWNER"] },
-  { label: "Reports", href: "/reports", group: "insight", roles: ["MANAGER", "OWNER", "IT_ADMIN"] },
-  { label: "Compliance", href: "/compliance", group: "insight", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
-  { label: "Office", href: "/virtual-office", group: "workspace", roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"] },
-  { label: "Invites", href: "/onboarding/invite", group: "admin", roles: ["OWNER"] },
-  { label: "Integrations", href: "/integrations", group: "admin", roles: ["OWNER", "IT_ADMIN"] },
-  { label: "Settings", href: "/settings", group: "admin", roles: ["OWNER", "IT_ADMIN"] },
-  { label: "Platform Admin", href: "/platform-admin", group: "platform", platformOnly: true },
-];
+type NavItem = WorkspaceNavigationItem | PlatformNavigationItem;
+
+const platformNavigationItem: PlatformNavigationItem = {
+  label: "Platform Admin",
+  href: "/platform-admin",
+  group: "platform",
+  platformOnly: true,
+};
 
 const APP_SHELL_CACHE_KEY = "workmap.appShellContext";
 
@@ -139,14 +140,15 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     const isPlatformAdmin = platformSummary?.platformRole === "PLATFORM_ADMIN";
 
     if (isPlatformAdmin && !activeRole) {
-      return navItems.filter((item) => item.platformOnly);
+      return [platformNavigationItem];
     }
 
     if (!activeRole) {
-      return navItems.filter((item) => item.platformOnly && isPlatformAdmin);
+      return isPlatformAdmin ? [platformNavigationItem] : [];
     }
 
-    return navItems.filter((item) => (item.platformOnly ? isPlatformAdmin : item.roles?.includes(activeRole)));
+    const workspaceItems: NavItem[] = getWorkspaceNavigationItemsForRole(activeRole);
+    return isPlatformAdmin ? [...workspaceItems, platformNavigationItem] : workspaceItems;
   }, [activeRole, platformSummary?.platformRole]);
 
   const roleLabel = platformSummary
@@ -205,7 +207,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
               style={{
                 ...styles.navLink,
                 ...(isActiveNav(pathname, item.href) ? styles.navLinkActive : {}),
-                ...(item.platformOnly ? styles.platformNavLink : {}),
+                ...("platformOnly" in item ? styles.platformNavLink : {}),
               }}
             >
               <span style={styles.navGroupLabel}>{formatNavGroup(item.group)}</span>
@@ -272,22 +274,6 @@ function clearAppShellCache() {
 
 function formatRole(role: string) {
   return role.replace(/_/g, " ");
-}
-
-function toWorkflowRole(role: string | undefined): WorkMapRole {
-  if (role === "OWNER") {
-    return "OWNER";
-  }
-
-  if (role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN") {
-    return "MANAGER";
-  }
-
-  if (role === "IT_ADMIN") {
-    return "IT_ADMIN";
-  }
-
-  return "EMPLOYEE";
 }
 
 function isActiveNav(pathname: string | null, href: string) {

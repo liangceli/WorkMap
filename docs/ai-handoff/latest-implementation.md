@@ -1,5 +1,38 @@
 # Latest Implementation Handoff
 
+## 2026-07-08 Virtual Office Complete-Render Loading Gate
+
+- Original task: prevent `/virtual-office` from exposing its empty chrome/canvas while the map is still loading; show the same full-page rotating WorkMap logo loader used by other pages until the complete Virtual Office is ready.
+- Changed files: `workmap/apps/web/components/office/OfficeMap.tsx`, `workmap/apps/web/components/office/OfficeMiniMap.tsx`, `workmap/apps/web/components/office/useVirtualOfficeData.ts`, `workmap/apps/web/lib/office/virtualOfficeReadiness.ts`, `workmap/apps/web/test/virtual-office-readiness.test.ts`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`. Existing uncommitted role-aware navigation files from the preceding round were preserved.
+- Root cause: after route authentication completed, `OfficeMap` rendered the full top bar, rails, controls, empty main canvas, and blank mini map immediately. TMX parsing, tileset images, avatar sprites, and both canvas draws completed asynchronously with no shared initial-render readiness signal.
+- Implementation summary: the existing full-page `WorkMapLoader` now covers the mounted Virtual Office until initial API loading is complete, the TMX map is loaded, tileset/avatar assets finish loading, the main canvas draws its first complete scene, and the mini map draws its first complete frame. Cached office data remains available for initialization but no longer marks the fresh API request complete by itself.
+- Error behavior: a TMX load failure no longer leaves the loader spinning forever; it shows the existing controlled Virtual Office error card instead of revealing an empty map shell.
+- Role/access behavior: no auth, role visibility, RBAC, tenant isolation, or route permission behavior changed in this round.
+- Verification: targeted readiness/navigation/reports tests passed 8/8. Targeted ESLint passed for the combined changed Web source/test files. `git diff --check` passed with LF-to-CRLF warnings.
+- Verification blocked/limited: full Web typecheck/lint/build remain blocked by the pre-existing `workmap/apps/web/lib/api/authApi.ts` NUL-byte corruption; the required pnpm command also remains subject to the existing non-interactive modules purge failure.
+- Manual QA: not run because the existing `authApi.ts` corruption prevents a local Web build. Required browser check after repair/deploy: enter `/virtual-office` on a cold load and confirm only the rotating Logo loader is visible until the main map, avatars, mini map, and controls appear together.
+- Intentionally not changed: no map art, TMX content, movement, collision, realtime, polling cadence, API contract, loading animation styling, or backend behavior changed.
+- Remaining risks: a slow or hanging initial API request can keep the loader visible because the current API client has no new timeout in this scoped change. Browser cold-cache QA is still required.
+- Suggested next step: restore `authApi.ts`, run full Web checks, then test `/virtual-office` with browser cache disabled and with normal cached assets.
+
+---
+
+## 2026-07-08 Virtual Office Role-Aware Workspace Menu
+
+- Original task: make the `/virtual-office` workspace dropdown show only pages available to the currently signed-in account, matching the role-aware tabs used by the main AppShell; specifically, Employee users must not see Reports.
+- Changed files: `workmap/apps/web/lib/navigation/workspaceNavigation.ts`, `workmap/apps/web/components/layout/AppShell.tsx`, `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx`, `workmap/apps/web/components/office/OfficeMap.tsx`, `workmap/apps/web/app/virtual-office/page.tsx`, `workmap/apps/web/test/reports-api.test.ts`, `workmap/apps/web/test/workspace-navigation.test.ts`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`.
+- Root cause: `VirtualOfficeTopBar.tsx` contained a separate hardcoded list of Dashboard, Reports, Employees, and Compliance routes. It did not read the signed-in user's role and could diverge from AppShell navigation visibility.
+- Implementation summary: extracted workspace navigation labels, descriptions, routes, role visibility, and backend-role normalization into `workspaceNavigation.ts`. AppShell and the Virtual Office dropdown now consume the same role matrix. The Virtual Office auth gate passes the backend-confirmed role through `OfficeMap` to the top bar; the cached onboarding role is used only during the existing early-render path until API auth resolves.
+- Role/access behavior: Employee sees Employees and Compliance in the Virtual Office dropdown; Manager sees Employees, Dashboard, Reports, and Compliance; Owner additionally sees Invites, Integrations, and Settings; IT Admin sees Employees, Reports, Compliance, Integrations, and Settings. The current `/virtual-office` page is omitted from its own dropdown. This remains frontend navigation visibility; backend RBAC is unchanged and remains authoritative.
+- Verification: targeted workspace/reports tests passed 7/7. Targeted ESLint passed for all changed source and test files. `git diff --check` passed with LF-to-CRLF warnings.
+- Verification blocked/limited: the required pnpm Web typecheck did not reach the package script because pnpm attempted a workspace install and aborted with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`. Direct full Web TypeScript parsing, full Web test suite, full ESLint, and Next production build remain blocked by the pre-existing `workmap/apps/web/lib/api/authApi.ts` file containing only NUL bytes; the full tests reached and passed the navigation assertions before another test imported the corrupted file.
+- Manual QA: not run in a browser because the existing `authApi.ts` corruption prevents a local Web build. Required check after repair/deploy: sign in as Employee and confirm the dropdown contains Employees and Compliance but not Dashboard/Reports/admin pages; repeat as Owner/Manager/IT Admin and compare with AppShell tabs.
+- Intentionally not changed: no backend authorization, route guards, auth session format, tenant isolation, API, schema, map behavior, or visual styling changed.
+- Remaining risks: the local app still cannot complete full Web typecheck/lint/build until `authApi.ts` is restored. Role-aware menu behavior has automated coverage but still needs authenticated browser QA.
+- Suggested next step: restore `authApi.ts`, run full Web typecheck/lint/build, then perform Employee and Owner dropdown smoke tests.
+
+---
+
 ## 2026-07-08 Virtual Office Offline Movement Animation Fix
 
 - Original task: explain why Sunny can show as `Offline` after leaving the virtual map but still appear to be running, and fix that behavior.

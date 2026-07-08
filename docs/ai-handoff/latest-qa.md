@@ -1,5 +1,31 @@
 # Latest QA Handoff
 
+## 2026-07-08 Virtual Office Complete-Render Loading Gate QA
+
+- Reviewed implementation: route/auth loading handoff, cached/API office data completion, avatar readiness, TMX loading, tileset/avatar image loading, main canvas first draw, mini-map first draw, full-page loader layering, and map-load error behavior.
+- Diff review summary: the Virtual Office continues mounting behind the existing fixed full-page loader so its canvases can initialize, but the chrome/empty canvas cannot become visible until all four readiness gates pass: API data, parsed map, main scene first frame, and mini map first frame.
+- Findings ordered by severity: no blocking finding in the scoped diff. Existing high-impact repository blocker remains the NUL-corrupted `workmap/apps/web/lib/api/authApi.ts`.
+- Test/verification status: targeted readiness/navigation/reports tests passed 8/8; targeted ESLint passed for the combined changed source/test files; `git diff --check` passed with LF-to-CRLF warnings. Readiness tests verify that any incomplete gate keeps the final UI covered.
+- Verification blocked/limited: full Web typecheck/lint/build cannot parse the existing corrupted `authApi.ts`; pnpm also continues to abort its non-interactive modules purge before package scripts.
+- Manual QA status: not run. Required cold-load check: navigate into `/virtual-office`, verify the rotating WorkMap Logo is the only visible page state, then verify the complete map/chrome/mini-map appears in one transition after first draw.
+- Risks: the loading gate intentionally waits for the initial API request; without an API timeout, a truly hung network request can leave the loader displayed. Asset load errors resolve through the existing tolerant image behavior, while TMX failure shows an explicit error card.
+- Recommendation: pass for scoped implementation and targeted automated verification. The next round can proceed, but deployment acceptance requires repairing `authApi.ts`, completing full Web checks, and running cold-cache browser QA.
+
+---
+
+## 2026-07-08 Virtual Office Role-Aware Workspace Menu QA
+
+- Reviewed implementation: shared workspace navigation configuration, AppShell role filtering, Virtual Office authentication-role propagation, top-bar dropdown rendering, and navigation-role regression tests.
+- Diff review summary: removed the Virtual Office hardcoded route list and made both AppShell and the Virtual Office dropdown consume one role matrix. The dropdown excludes the current Office route and uses the backend-confirmed role after authentication resolves.
+- Findings ordered by severity: no blocking finding in the scoped diff. Existing high-impact repository issue remains `workmap/apps/web/lib/api/authApi.ts`, which contains only NUL bytes and prevents full Web parsing/build.
+- Test/verification status: targeted workspace navigation and reports tests passed 7/7; targeted ESLint passed for all changed source/test files; `git diff --check` passed with LF-to-CRLF warnings. Employee exact-route coverage confirms Reports is absent; Manager/Owner/IT Admin role matrices and backend role aliases are also covered.
+- Verification blocked/limited: `pnpm --filter @workmap/web typecheck` aborted before scripts because pnpm attempted a non-interactive workspace module purge. Direct full Web TypeScript parsing, full Web test suite, full ESLint, and Next production build failed on the pre-existing NUL-corrupted `authApi.ts`; the full tests reached and passed the navigation assertions before another test imported that file.
+- Manual QA status: not run. Required authenticated checks: compare the `/virtual-office` dropdown with AppShell as Employee, Manager, Owner, and IT Admin; confirm Employee cannot see Reports and the current Office route is not duplicated.
+- Risks: navigation visibility is not a security boundary; backend route/API authorization must continue enforcing access. Until `authApi.ts` is restored, full build and browser validation remain unavailable.
+- Recommendation: pass for scoped implementation and targeted automated verification. The next round can proceed, but deployment readiness requires restoring `authApi.ts` and completing full Web checks plus role-based browser QA.
+
+---
+
 ## 2026-07-08 Virtual Office Offline Movement Animation Fix QA
 
 - Reviewed implementation: virtual-office presence freshness helper, REST position-to-remote-player mapping, realtime remote-player render merge, and canvas animation dependency on `player.isMoving`.

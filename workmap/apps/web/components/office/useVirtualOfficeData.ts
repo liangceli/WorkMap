@@ -79,7 +79,7 @@ export function useVirtualOfficeData(): VirtualOfficeData {
           status: statusFromFreshness(player.status, player.updatedAt),
           isMoving: false,
         })),
-        loaded: true,
+        loaded: false,
       });
     }
   }, []);

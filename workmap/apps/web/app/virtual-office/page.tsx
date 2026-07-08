@@ -6,20 +6,22 @@ import { WorkMapLoader } from "../../components/ui/WorkMapLoader";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { redirectToRootForMissingCognitoSession } from "../../lib/auth/cognitoRedirect";
 import { getCognitoSession } from "../../lib/auth/cognitoSession";
+import { toWorkflowRole } from "../../lib/navigation/workspaceNavigation";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
-import { getUserSetupState } from "../../lib/workflow/workflowState";
+import { getUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 
 type GateState =
   | { status: "checking" }
-  | { status: "ready" }
+  | { status: "ready"; role: WorkMapRole }
   | { status: "blocked"; reason: string };
 
 export default function VirtualOfficePage() {
   const [gate, setGate] = useState<GateState>({ status: "checking" });
 
   useLayoutEffect(() => {
-    if (getCognitoSession() && getUserSetupState()?.hasCompany) {
-      setGate({ status: "ready" });
+    const setup = getUserSetupState();
+    if (getCognitoSession() && setup?.hasCompany) {
+      setGate({ status: "ready", role: setup.role });
     }
   }, []);
 
@@ -40,7 +42,7 @@ export default function VirtualOfficePage() {
         return;
       }
 
-      setGate({ status: "ready" });
+      setGate({ status: "ready", role: toWorkflowRole(auth.role) });
     }
 
     void checkAccess();
@@ -51,7 +53,7 @@ export default function VirtualOfficePage() {
   }, []);
 
   if (gate.status === "ready") {
-    return <OfficeMap />;
+    return <OfficeMap currentUserRole={gate.role} />;
   }
 
   if (gate.status === "blocked") {

@@ -26,6 +26,7 @@ type OfficeMiniMapProps = {
   player: PlayerState;
   tilesets: OfficeTileset[];
   shifted?: boolean;
+  onReady?: () => void;
 };
 
 const MINI_MAP_WIDTH = 238;
@@ -38,14 +39,17 @@ type MiniMapStaticCache = {
   scale: number;
 };
 
-export function OfficeMiniMap({ map, player, tilesets, shifted }: OfficeMiniMapProps) {
+export function OfficeMiniMap({ map, player, tilesets, shifted, onReady }: OfficeMiniMapProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imagesRef = useRef(new Map<string, HTMLImageElement>());
   const staticCacheRef = useRef<MiniMapStaticCache | null>(null);
+  const readyNotifiedRef = useRef(false);
   const [staticCacheVersion, setStaticCacheVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    readyNotifiedRef.current = false;
+    staticCacheRef.current = null;
 
     Promise.all(
       tilesets.map(
@@ -83,8 +87,12 @@ export function OfficeMiniMap({ map, player, tilesets, shifted }: OfficeMiniMapP
   }, [map, tilesets]);
 
   useEffect(() => {
-    drawMiniMap(canvasRef.current, player, staticCacheRef.current);
-  }, [player, staticCacheVersion]);
+    const didDraw = drawMiniMap(canvasRef.current, player, staticCacheRef.current);
+    if (didDraw && !readyNotifiedRef.current) {
+      readyNotifiedRef.current = true;
+      onReady?.();
+    }
+  }, [onReady, player, staticCacheVersion]);
 
   return (
     <aside className="wm-office-minimap" aria-label="Office mini map" style={{ ...styles.shell, ...(shifted ? styles.shellShifted : {}) }}>
@@ -173,12 +181,12 @@ function createMiniMapStaticCache(
 
 function drawMiniMap(canvas: HTMLCanvasElement | null, player: PlayerState, staticCache: MiniMapStaticCache | null) {
   if (!canvas || !staticCache) {
-    return;
+    return false;
   }
 
   const context = canvas.getContext("2d");
   if (!context) {
-    return;
+    return false;
   }
 
   context.clearRect(0, 0, MINI_MAP_WIDTH, MINI_MAP_HEIGHT);
@@ -190,6 +198,7 @@ function drawMiniMap(canvas: HTMLCanvasElement | null, player: PlayerState, stat
   context.arc(staticCache.offsetX + player.x * staticCache.scale, staticCache.offsetY + player.y * staticCache.scale, 4, 0, Math.PI * 2);
   context.fill();
   context.stroke();
+  return true;
 }
 
 const styles = {
