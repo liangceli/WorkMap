@@ -523,23 +523,41 @@ export class ReportsService {
   }
 
   private async getEmployeeUsage(filter: UsageFilter) {
-    const rows = await this.prisma.appUsageSummary.groupBy({
-      by: ["userId"],
-      where: summaryWhere(filter),
-      _sum: { activeSeconds: true, idleSeconds: true },
-      orderBy: { _sum: { activeSeconds: "desc" } },
-    });
+    const [rows, topAppRows, topDomainRows] = await Promise.all([
+      this.prisma.appUsageSummary.groupBy({
+        by: ["userId"],
+        where: summaryWhere(filter),
+        _sum: { activeSeconds: true, idleSeconds: true },
+        orderBy: { _sum: { activeSeconds: "desc" } },
+      }),
+      this.prisma.appUsageSummary.groupBy({
+        by: ["userId", "appName"],
+        where: summaryWhere(filter),
+        _sum: { activeSeconds: true, idleSeconds: true },
+        orderBy: { _sum: { activeSeconds: "desc" } },
+      }),
+      this.prisma.websiteUsageSummary.groupBy({
+        by: ["userId", "domain"],
+        where: summaryWhere(filter),
+        _sum: { activeSeconds: true, idleSeconds: true },
+        orderBy: { _sum: { activeSeconds: "desc" } },
+      }),
+    ]);
     if (rows.length === 0) return [];
     const users = await this.prisma.user.findMany({
-      where: { companyId: filter.companyId, id: { in: rows.map((row) => row.userId) } },
+      where: { companyId: filter.companyId, id: { in: rows.map((row: { userId: string }) => row.userId) } },
       select: { id: true, displayName: true },
     });
-    const names = new Map(users.map((user) => [user.id, user.displayName]));
-    return rows.map((row) => ({
+    const names = new Map(users.map((user: { id: string; displayName: string }) => [user.id, user.displayName]));
+    const topAppByUser = firstMetricByUser(topAppRows, "appName");
+    const topDomainByUser = firstMetricByUser(topDomainRows, "domain");
+    return rows.map((row: { userId: string; _sum: { activeSeconds: number | null; idleSeconds: number | null } }) => ({
       userId: row.userId,
       displayName: names.get(row.userId) ?? "Employee",
       activeSeconds: row._sum.activeSeconds ?? 0,
       idleSeconds: row._sum.idleSeconds ?? 0,
+      topApp: topAppByUser.get(row.userId) ?? null,
+      topDomain: topDomainByUser.get(row.userId) ?? null,
     }));
   }
 
@@ -723,20 +741,70 @@ function aggregateLiveApps(segments: LiveAppSegment[]) {
 }
 
 function aggregateLiveEmployees(segments: LiveAppSegment[]) {
-  const totals = new Map<string, { userId: string; displayName: string; activeSeconds: number; idleSeconds: number }>();
+  const totals = new Map<string, {
+    userId: string;
+    displayName: string;
+    activeSeconds: number;
+    idleSeconds: number;
+    topApp: string | null;
+    topAppSeconds: number;
+  }>();
+  const appTotals = new Map<string, Map<string, number>>();
   for (const segment of segments) {
     const current = totals.get(segment.userId) ?? {
       userId: segment.userId,
       displayName: segment.displayName,
       activeSeconds: 0,
       idleSeconds: 0,
+      topApp: null,
+      topAppSeconds: 0,
     };
     current.activeSeconds += segment.activeSeconds;
     current.idleSeconds += segment.focusedIdleSeconds;
+    const byApp = appTotals.get(segment.userId) ?? new Map<string, number>();
+    const appSeconds = (byApp.get(segment.appName) ?? 0) + segment.activeSeconds + segment.focusedIdleSeconds;
+    byApp.set(segment.appName, appSeconds);
+    appTotals.set(segment.userId, byApp);
+    if (appSeconds > current.topAppSeconds || (appSeconds === current.topAppSeconds && segment.appName.localeCompare(current.topApp ?? "") < 0)) {
+      current.topApp = segment.appName;
+      current.topAppSeconds = appSeconds;
+    }
     totals.set(segment.userId, current);
   }
   return Array.from(totals.values())
+    .map((employee) => ({
+      userId: employee.userId,
+      displayName: employee.displayName,
+      activeSeconds: employee.activeSeconds,
+      idleSeconds: employee.idleSeconds,
+      topApp: employee.topApp,
+      topDomain: null,
+    }))
     .sort((left, right) => right.activeSeconds - left.activeSeconds || left.displayName.localeCompare(right.displayName));
+}
+
+function firstMetricByUser<T extends { userId: string; _sum: { activeSeconds: number | null; idleSeconds?: number | null } } & Record<string, unknown>>(
+  rows: T[],
+  field: string,
+) {
+  const result = new Map<string, string>();
+  const scores = new Map<string, number>();
+  for (const row of rows) {
+    const value = row[field];
+    if (typeof value !== "string" || value.length === 0) continue;
+    const score = row._sum.activeSeconds ?? 0;
+    const currentScore = scores.get(row.userId);
+    const currentValue = result.get(row.userId);
+    if (
+      currentScore === undefined
+      || score > currentScore
+      || (score === currentScore && (!currentValue || value.localeCompare(currentValue) < 0))
+    ) {
+      result.set(row.userId, value);
+      scores.set(row.userId, score);
+    }
+  }
+  return result;
 }
 
 function utcDateOnly(date: Date) {

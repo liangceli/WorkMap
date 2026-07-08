@@ -1,5 +1,44 @@
 # Latest QA Handoff
 
+## 2026-07-08 Employees Dynamic Aggregation Page QA
+
+- Reviewed implementation: `/employees` now aggregates `/users`, today's company usage summary, company live agent status, and browser-extension coverage; backend reports now include per-user `topApp/topDomain` fields where available.
+- Diff review summary: the previous hardcoded Today values (`API scoped`, `Contact view`, `Not shown`) were removed from the API-mapped rows. Rows now display real active/idle durations, top app/domain from reports, device health from activity/coverage, and explicit unavailable/no-data labels when the API cannot provide data.
+- Findings ordered by severity: no blocking diff-level finding in the scoped changes. Medium limitation remains: live `topDomain` is not available because live browser foreground-domain state is not currently part of the reports API; same-day summary `topDomain` is used when present.
+- Test/verification status: `git diff --check` passed with LF-to-CRLF warnings. Targeted direct `tsc` filtering identified and the implementation fixed new implicit-any/type narrowing issues introduced in `reports.service.ts`.
+- Verification blocked: standard pnpm scripts did not reach typecheck/test because the local pnpm wrapper attempted an install and failed on non-interactive module purge, ignored dependency build scripts, and bin creation errors. Direct API typecheck/test remain blocked by missing/generated Prisma client artifacts. Direct Web typecheck remains blocked by an existing invalid-character parse error in `workmap/apps/web/lib/api/authApi.ts`.
+- Manual QA status: not run. Required browser check: use an Owner/Manager account with an employee machine producing activity, open `/employees`, confirm Today values are not placeholders, and verify Department/Status/Manager/Employee filters still update rows and counts.
+- Risks: aggregation depends on reports endpoints being deployed with the new `employeeUsage.topApp/topDomain` contract. Report failure is now visible in the summary/status text, but should be verified against real 403/500 cases.
+- Recommendation: pass for scoped diff review, with automated verification currently blocked by local dependency/Prisma state. Next round can proceed after environment repair and browser QA.
+
+---
+
+## 2026-07-08 Employees Directory Filter Behavior Fix QA
+
+- Reviewed implementation: `/employees` directory filtering in `EmployeeDirectory.tsx`, API row mapping in `app/employees/page.tsx`, and shared `DashboardEmployee` type update.
+- Diff review summary: filtering now combines search, department, status, and Manager/Employee role filter. API users are mapped into `roleGroup` from backend role so the segmented control changes the displayed list.
+- Findings ordered by severity: no blocking diff-level finding. The page still intentionally displays placeholder Today metrics and inferred device labels; real report/device aggregation was not part of this fix.
+- Test/verification status: `git diff --check` passed with existing LF-to-CRLF warnings. Scoped secret scan found only existing handoff/QA documentation examples referencing `WORKMAP_JWT_SECRET=qa-local-secret`.
+- Verification blocked: Web typecheck/lint did not run because pnpm attempted a workspace install first and failed before reaching TypeScript/ESLint due node_modules/bin/lockfile permission and ignored-build-script policy errors in this environment.
+- Manual QA status: not run. Required check: use `/employees` Department, Status, Manager, and Employee controls and confirm row list plus summary counts update.
+- Risks: fallback/mock role inference is heuristic for old demo rows; API rows have explicit role groups. The dynamic data gap for Today metrics/device health remains.
+- Recommendation: pass for scoped code review; perform browser interaction QA before treating the UX as accepted.
+
+---
+
+## 2026-07-08 Virtual Office Navigation Menu Layer Fix QA
+
+- Reviewed implementation: `/virtual-office` top brand trigger and expanded workspace navigation menu z-index changes in `VirtualOfficeTopBar.tsx`.
+- Diff review summary: the change is limited to stacking order. The navigation menu now renders above the left rail while remaining below the command palette/modal layer.
+- Findings ordered by severity: no blocking code finding from diff review. Remaining visual QA is required because browser rendering was not exercised here.
+- Test/verification status: `git diff --check` passed with the existing LF-to-CRLF warning. Scoped secret scan found only an existing docs example `WORKMAP_JWT_SECRET=qa-local-secret`.
+- Verification blocked: Web typecheck/lint did not execute because pnpm attempted a pre-run install and aborted in non-interactive mode with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`.
+- Manual QA status: not run. Check `/virtual-office` by opening the Virtual Office card and confirming the expanded menu is not hidden behind the left rail.
+- Risks: needs viewport smoke around the screenshot size plus narrow breakpoints to confirm no new overlap.
+- Recommendation: pass for scoped code review; next round can proceed after a quick browser visual confirmation.
+
+---
+
 ## 2026-07-07 Browser Extension Alpha ZIP Release Preparation QA
 
 - Reviewed: fresh Browser Extension 0.4.0 build, generated ZIP structure, artifact naming, checksum, expected GitHub Release URL, and required Vercel build-time environment configuration.

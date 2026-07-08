@@ -14,16 +14,17 @@ type EmployeeDirectoryProps = {
   employees: DashboardEmployee[];
   showProfileLinks?: boolean;
   loading?: boolean;
+  statusText?: string;
 };
 
-type VisibilityMode = "manager" | "employee";
+type RoleFilter = "manager" | "employee";
 type StatusFilter = "all" | UserPresenceStatus;
 
-export function EmployeeDirectory({ employees, showProfileLinks = true, loading = false }: EmployeeDirectoryProps) {
+export function EmployeeDirectory({ employees, showProfileLinks = true, loading = false, statusText }: EmployeeDirectoryProps) {
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
   const [status, setStatus] = useState<StatusFilter>("all");
-  const [mode, setMode] = useState<VisibilityMode>("employee");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("employee");
   const [canSwitchMode, setCanSwitchMode] = useState(false);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
 
     setCanSwitchMode(canUseManagerMode);
     if (canUseManagerMode) {
-      setMode("manager");
+      setRoleFilter("manager");
     }
   }, []);
 
@@ -54,10 +55,16 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
         `${employee.name} ${employee.role} ${employee.department}`.toLowerCase().includes(normalizedQuery);
       const matchesDepartment = department === "all" || employee.department === department;
       const matchesStatus = status === "all" || employee.status === status;
+      const matchesRole = !canSwitchMode || employeeMatchesRoleFilter(employee, roleFilter);
 
-      return matchesQuery && matchesDepartment && matchesStatus;
+      return matchesQuery && matchesDepartment && matchesStatus && matchesRole;
     });
-  }, [department, employees, query, status]);
+  }, [canSwitchMode, department, employees, query, roleFilter, status]);
+
+  const visibleOnlineCount = useMemo(
+    () => filteredEmployees.filter((employee) => employee.status !== "offline").length,
+    [filteredEmployees],
+  );
 
   return (
     <div className="wm-employee-directory" style={styles.stack}>
@@ -95,18 +102,20 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
         </label>
 
         {canSwitchMode ? (
-          <div style={styles.segmented} aria-label="Visibility mode">
+          <div style={styles.segmented} aria-label="Employee type filter">
             <button
               type="button"
-              onClick={() => setMode("manager")}
-              style={{ ...styles.segmentButton, ...(mode === "manager" ? styles.segmentButtonActive : {}) }}
+              aria-pressed={roleFilter === "manager"}
+              onClick={() => setRoleFilter("manager")}
+              style={{ ...styles.segmentButton, ...(roleFilter === "manager" ? styles.segmentButtonActive : {}) }}
             >
               Manager
             </button>
             <button
               type="button"
-              onClick={() => setMode("employee")}
-              style={{ ...styles.segmentButton, ...(mode === "employee" ? styles.segmentButtonActive : {}) }}
+              aria-pressed={roleFilter === "employee"}
+              onClick={() => setRoleFilter("employee")}
+              style={{ ...styles.segmentButton, ...(roleFilter === "employee" ? styles.segmentButtonActive : {}) }}
             >
               Employee
             </button>
@@ -119,8 +128,9 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
       {loading ? <WorkMapLoader label="Loading employees" /> : <>
       <section style={styles.summaryBar}>
         <span>{filteredEmployees.length} people shown</span>
-        <span>{employees.filter((employee) => employee.status !== "offline").length} online or recently active</span>
-        <span>{mode === "manager" ? "Manager summaries visible" : "Contact-only view"}</span>
+        <span>{visibleOnlineCount} online or recently active</span>
+        <span>{canSwitchMode ? `${roleFilter === "manager" ? "Manager" : "Employee"} filter active` : "Contact-only view"}</span>
+        {statusText ? <span>{statusText}</span> : null}
       </section>
 
       <section style={styles.tablePanel}>
@@ -128,7 +138,7 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
           <span>Employee</span>
           <span>Status</span>
           <span>Contact</span>
-          {mode === "manager" ? <span>Today</span> : null}
+          {canSwitchMode ? <span>Today</span> : null}
         </div>
 
         {filteredEmployees.length === 0 ? (
@@ -161,7 +171,7 @@ export function EmployeeDirectory({ employees, showProfileLinks = true, loading 
                 {showProfileLinks ? <a href={`/employees/${employee.id}`} style={styles.actionLink}>View</a> : null}
               </div>
 
-              {mode === "manager" ? (
+              {canSwitchMode ? (
                 <dl style={styles.managerSummary}>
                   <div>
                     <dt style={styles.statLabel}>Active</dt>
@@ -212,6 +222,17 @@ function getDeviceStyle(health?: DashboardEmployee["deviceHealth"]) {
       health === "offline" ? wm.colors.borderStrong : health === "delayed" ? wm.colors.warningBorder : wm.colors.successBorder,
     background: health === "offline" ? wm.colors.appBackground : health === "delayed" ? wm.colors.warningBg : wm.colors.successBg,
   };
+}
+
+function employeeMatchesRoleFilter(employee: DashboardEmployee, filter: RoleFilter) {
+  const group = employee.roleGroup ?? inferRoleGroup(employee.role);
+  return group === filter;
+}
+
+function inferRoleGroup(role: string) {
+  return /\b(employee|engineer|support|analyst|designer|sales|qa|ops|operator|staff|member)\b/i.test(role)
+    ? "employee"
+    : "manager";
 }
 
 const styles = {

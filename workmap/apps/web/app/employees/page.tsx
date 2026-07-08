@@ -6,7 +6,8 @@ import { WorkMapButton } from "../../components/ui/WorkMapButton";
 import { WorkMapPageHeader } from "../../components/ui/WorkMapPageHeader";
 import { AppShell } from "../../components/layout/AppShell";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
-import type { WorkMapApiUser } from "../../lib/api/apiTypes";
+import type { WorkMapApiReportLiveStatus, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
+import { getAgentLiveStatus, getUsageSummary } from "../../lib/api/reportsApi";
 import { listUsers } from "../../lib/api/usersApi";
 import { decodeLayeredAvatarId } from "../../lib/avatar/avatarProfile";
 import { defaultLayeredAvatarConfig } from "../../lib/avatar/avatarLayerAssets";
@@ -54,7 +55,19 @@ export default function EmployeesPage() {
         return;
       }
 
-      const result = await listUsers(auth.options);
+      setActiveRole(toWorkflowRole(auth.role));
+
+      const today = toUtcDateOnly(new Date());
+      const canLoadCompanyReports = canRequestCompanyReports(auth.role);
+      const [result, usageSummaryResult, liveStatusResult] = await Promise.all([
+        listUsers(auth.options),
+        canLoadCompanyReports
+          ? getUsageSummary({ ...auth.options, scope: "company", from: today, to: today })
+          : Promise.resolve(null),
+        canLoadCompanyReports
+          ? getAgentLiveStatus({ ...auth.options, scope: "company", from: today, to: today })
+          : Promise.resolve(null),
+      ]);
 
       if (cancelled) {
         return;
@@ -70,11 +83,16 @@ export default function EmployeesPage() {
         return;
       }
 
+      const usageSummary = usageSummaryResult?.ok ? usageSummaryResult.data : null;
+      const liveStatus = liveStatusResult?.ok && liveStatusResult.data.scope === "company" ? liveStatusResult.data : null;
+      const aggregated = aggregateDirectoryActivity(usageSummary, liveStatus);
+      const reportsLoaded = Boolean(usageSummary || liveStatus);
+
       setDirectoryState({
         loading: false,
         source: "api",
-        employees: result.data.map(toDirectoryEmployee),
-        statusText: `${result.data.length} same-workspace users loaded from GET /users.`,
+        employees: result.data.map((user) => toDirectoryEmployee(user, aggregated.byUser.get(user.id), aggregated.deviceByUser.get(user.id), reportsLoaded)),
+        statusText: buildStatusText(result.data.length, canLoadCompanyReports, usageSummaryResult, liveStatusResult),
       });
     }
 
@@ -106,30 +124,154 @@ export default function EmployeesPage() {
           employees={directoryState.employees}
           showProfileLinks={directoryState.source !== "api"}
           loading={directoryState.loading}
+          statusText={directoryState.statusText}
         />
       </section>
     </AppShell>
   );
 }
 
-function toDirectoryEmployee(user: WorkMapApiUser): DashboardEmployee {
-  const status = user.status ?? "offline";
+type AggregatedEmployeeActivity = {
+  activeSeconds: number;
+  idleSeconds: number;
+  topApp: string | null;
+  topDomain: string | null;
+};
+
+type BrowserCoverage = WorkMapApiUsageSummary["browserExtensionCoverage"][number];
+
+function toDirectoryEmployee(
+  user: WorkMapApiUser,
+  activity: AggregatedEmployeeActivity | undefined,
+  browserCoverage: BrowserCoverage | undefined,
+  reportsLoaded: boolean,
+): DashboardEmployee {
+  const hasActivity = Boolean(activity && activity.activeSeconds + activity.idleSeconds > 0);
+  const status = user.status && (user.status !== "offline" || !hasActivity) ? user.status : hasActivity ? "available" : "offline";
   const backendAvatar = decodeLayeredAvatarId(user.avatarId);
 
   return {
     id: user.id,
     name: user.displayName,
     role: user.jobTitle || formatRole(user.role) || "Team member",
+    roleGroup: isEmployeeRole(user.role) ? "employee" : "manager",
     department: readDepartmentName(user.department),
     status,
-    localTime: "Team directory",
+    localTime: reportsLoaded ? (hasActivity ? "Activity today" : "No activity today") : "Team directory",
     avatar: backendAvatar ?? defaultLayeredAvatarConfig,
-    activeTime: "API scoped",
-    idleTime: "Contact view",
-    topApp: "Not shown",
-    topDomain: "Not shown",
-    deviceHealth: status === "offline" ? "offline" : "online",
+    activeTime: activity ? formatDuration(activity.activeSeconds) : reportsLoaded ? "0m" : "Report unavailable",
+    idleTime: activity ? formatDuration(activity.idleSeconds) : reportsLoaded ? "0m" : "Report unavailable",
+    topApp: activity?.topApp ?? (reportsLoaded ? "No app data" : "Report unavailable"),
+    topDomain: activity?.topDomain ?? (reportsLoaded ? "No domain data" : "Report unavailable"),
+    deviceHealth: deriveDeviceHealth(activity, browserCoverage),
   };
+}
+
+function aggregateDirectoryActivity(
+  usageSummary: WorkMapApiUsageSummary | null,
+  liveStatus: Extract<WorkMapApiReportLiveStatus, { scope: "company" }> | null,
+) {
+  const byUser = new Map<string, AggregatedEmployeeActivity>();
+  const deviceByUser = new Map<string, BrowserCoverage>();
+
+  for (const coverage of usageSummary?.browserExtensionCoverage ?? []) {
+    deviceByUser.set(coverage.userId, coverage);
+  }
+  for (const coverage of liveStatus?.browserExtensionCoverage ?? []) {
+    deviceByUser.set(coverage.userId, coverage);
+  }
+
+  for (const row of usageSummary?.employeeUsage ?? []) {
+    byUser.set(row.userId, {
+      activeSeconds: row.activeSeconds,
+      idleSeconds: row.idleSeconds,
+      topApp: row.topApp ?? null,
+      topDomain: row.topDomain ?? null,
+    });
+  }
+
+  for (const row of liveStatus?.employeeUsage ?? []) {
+    const current = byUser.get(row.userId) ?? { activeSeconds: 0, idleSeconds: 0, topApp: null, topDomain: null };
+    current.activeSeconds += row.activeSeconds;
+    current.idleSeconds += row.idleSeconds ?? 0;
+    current.topApp = row.topApp ?? current.topApp;
+    current.topDomain = row.topDomain ?? current.topDomain;
+    byUser.set(row.userId, current);
+  }
+
+  return { byUser, deviceByUser };
+}
+
+function deriveDeviceHealth(activity: AggregatedEmployeeActivity | undefined, browserCoverage: BrowserCoverage | undefined) {
+  if (activity && activity.activeSeconds + activity.idleSeconds > 0) {
+    return "online";
+  }
+
+  if (browserCoverage?.state === "connected") {
+    return "online";
+  }
+
+  if (browserCoverage?.state === "signal_lost") {
+    return "delayed";
+  }
+
+  return "offline";
+}
+
+function formatDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  return `${minutes}m`;
+}
+
+function buildStatusText(
+  userCount: number,
+  canLoadCompanyReports: boolean,
+  usageSummaryResult: Awaited<ReturnType<typeof getUsageSummary>> | null,
+  liveStatusResult: Awaited<ReturnType<typeof getAgentLiveStatus>> | null,
+) {
+  if (!canLoadCompanyReports) {
+    return `${userCount} same-workspace users loaded from GET /users. Activity summaries require manager report access.`;
+  }
+
+  const summaryLoaded = usageSummaryResult?.ok === true;
+  const liveLoaded = liveStatusResult?.ok === true;
+  if (summaryLoaded && liveLoaded) {
+    return `${userCount} users aggregated from /users + today's company reports.`;
+  }
+
+  const errors = [
+    usageSummaryResult && !usageSummaryResult.ok ? `usage summary: ${usageSummaryResult.error}` : null,
+    liveStatusResult && !liveStatusResult.ok ? `live status: ${liveStatusResult.error}` : null,
+  ].filter(Boolean);
+
+  return `${userCount} users loaded from /users. Activity aggregation partial${errors.length > 0 ? ` (${errors.join("; ")})` : ""}.`;
+}
+
+function canRequestCompanyReports(role: string) {
+  return role === "OWNER" || role === "MANAGER" || role === "TEAM_LEAD" || role === "HR_ADMIN";
+}
+
+function toWorkflowRole(role: string): WorkMapRole | null {
+  if (role === "OWNER" || role === "MANAGER" || role === "EMPLOYEE" || role === "IT_ADMIN") {
+    return role;
+  }
+
+  if (role === "TEAM_LEAD" || role === "HR_ADMIN") {
+    return "MANAGER";
+  }
+
+  return null;
+}
+
+function toUtcDateOnly(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
 function readDepartmentName(department: WorkMapApiUser["department"]) {
@@ -146,6 +288,10 @@ function readDepartmentName(department: WorkMapApiUser["department"]) {
 
 function formatRole(role: string | undefined) {
   return role ? role.replace(/_/g, " ") : "";
+}
+
+function isEmployeeRole(role: string | undefined) {
+  return (role ?? "").toUpperCase() === "EMPLOYEE";
 }
 
 const styles = {

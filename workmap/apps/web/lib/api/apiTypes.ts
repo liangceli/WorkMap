@@ -316,6 +316,8 @@ export type WorkMapApiUsageSummary = {
     displayName: string;
     activeSeconds: number;
     idleSeconds: number;
+    topApp?: string | null;
+    topDomain?: string | null;
   }>;
   activityRevision: string | null;
 };
@@ -334,7 +336,14 @@ export type WorkMapApiReportLiveStatus =
       userId: null;
       departmentId: string | null;
       apps: Array<{ appName: string; activeSeconds: number; focusedIdleSeconds?: number }>;
-      employeeUsage: Array<{ userId: string; displayName: string; activeSeconds: number; idleSeconds?: number }>;
+      employeeUsage: Array<{
+        userId: string;
+        displayName: string;
+        activeSeconds: number;
+        idleSeconds?: number;
+        topApp?: string | null;
+        topDomain?: string | null;
+      }>;
       browserExtensionCoverage: WorkMapApiUsageSummary["browserExtensionCoverage"];
       activityRevision: string | null;
     };

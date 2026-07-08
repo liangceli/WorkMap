@@ -1,5 +1,55 @@
 # Latest Implementation Handoff
 
+## 2026-07-08 Employees Dynamic Aggregation Page
+
+- Original task: make `/employees` a truly dynamic aggregation page instead of showing hardcoded Today/device placeholders.
+- Changed files: `workmap/apps/web/app/employees/page.tsx`, `workmap/apps/web/components/employees/EmployeeDirectory.tsx`, `workmap/apps/web/lib/api/apiTypes.ts`, `workmap/apps/api/src/modules/reports/reports.service.ts`, `workmap/apps/api/test/tracking-reports-verification.test.ts`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`. This round builds on the existing uncommitted Employees filter and Virtual Office z-index changes.
+- Implementation summary: `/employees` now loads same-workspace users from `/users` and, for roles allowed to view team reports (`OWNER`, `MANAGER`, `TEAM_LEAD`, `HR_ADMIN`), also requests today's UTC company `/reports/usage-summary` and `/reports/agent-status`. The page merges directory profile data, historical same-day summary data, live foreground agent data, and browser-extension coverage into each employee row.
+- Backend API behavior: company `employeeUsage` now includes optional per-user `topApp` and `topDomain` from same-day app/domain summaries. Company live status now includes each live employee's current `topApp`; `topDomain` remains `null` for live-only rows because live browser foreground-domain status is not currently exposed by the API.
+- Frontend behavior: Today `Active`, `Idle`, `Top app`, `Top domain`, `Device online/delayed/offline`, row status, and row subtitle are now derived from actual report/coverage data when reports load. If report aggregation is unavailable, the row says `Report unavailable`; if reports loaded but a user has no activity, it says `0m`/`No app data`/`No domain data` rather than using fake values.
+- Filter behavior preserved: search, Department, Status, and Manager/Employee role filters continue to combine into one filtered row list. Summary counts reflect the filtered rows and now also display the aggregation source/status.
+- Role/access behavior: no backend permission expansion. The frontend attempts company report aggregation only for roles that already have team-report visibility, and the backend remains authoritative for RBAC, tenant scoping, audit logging, and report visibility.
+- Verification: `git diff --check` passed with existing LF-to-CRLF working-copy warnings. Targeted direct `tsc` review found and fixed two new implicit-any/type-narrowing issues in the new reports helper.
+- Verification blocked/limited: standard `pnpm.cmd --filter @workmap/api typecheck`, `@workmap/web typecheck`, and `@workmap/api test` did not reach package scripts because pnpm attempted a workspace install first and failed on non-interactive module purge / ignored-build policy / bin creation issues. Direct API `tsc --noEmit` is still blocked by the existing missing/generated Prisma client state (`@prisma/client` exports and PrismaService delegates unavailable). Direct Web `tsc --noEmit` is blocked by an existing `lib/api/authApi.ts` invalid-character parse error. Direct API test is blocked by missing `.prisma/client/default`.
+- Manual QA: not run in a browser. Required check: open `/employees` as Owner/Manager with real activity data, confirm rows show real Active/Idle/Top app/Top domain/device state, and verify Department/Status/Manager/Employee filters still change the displayed list.
+- Intentionally not changed: no schema migration, auth/RBAC/capability changes, tenant boundary changes, Desktop Agent behavior, Browser Extension behavior, Teams/Email/3CX integrations, or real-time browser top-domain endpoint was added.
+- Remaining risks: `topDomain` cannot be live-only until the API exposes current per-user browser foreground/domain status; current top domain comes from same-day summary data. Verification remains constrained until Prisma client generation and pnpm ignored-build policy are fixed locally.
+- Suggested next step: restore/generate the local Prisma client and approve/build dependencies, then rerun `pnpm --filter @workmap/api typecheck/test` and `pnpm --filter @workmap/web typecheck/lint/build`; after that, do browser QA on `/employees` with a paired employee machine producing activity.
+
+---
+
+## 2026-07-08 Employees Directory Filter Behavior Fix
+
+- Original task: enable `/employees` Department and Status filters and make the Manager/Employee segmented control actually change the employee list.
+- Changed files: `workmap/apps/web/app/employees/page.tsx`, `workmap/apps/web/components/employees/EmployeeDirectory.tsx`, `workmap/apps/web/components/dashboard/mockDashboardData.ts`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`. This round also preserves the prior uncommitted Virtual Office navigation layer fix.
+- Implementation: added an explicit `roleGroup` to API-mapped directory rows (`EMPLOYEE` -> employee, all other backend roles -> manager). The Employee Directory now combines search, department, status, and Manager/Employee role filtering into one `filteredEmployees` list.
+- Behavior change: the Manager/Employee segmented control is now an employee-type filter instead of only toggling the Today/contact presentation. For users with manager access, Today summary columns remain visible while the segment changes which rows are shown. Summary counts now reflect the filtered rows, not the full unfiltered dataset.
+- Department/status behavior: existing department/status selectors now participate in the same combined filter with role and search. Empty results continue to show the existing no-match empty state.
+- Role/access behavior: backend RBAC and `/users` authorization are unchanged. This is frontend filtering/presentation only and does not expose new employee data.
+- Verification: `git diff --check` passed with existing LF-to-CRLF warnings. Scoped secret scan found only existing documentation/example references to `WORKMAP_JWT_SECRET=qa-local-secret`; no new secret was introduced.
+- Verification blocked: `pnpm.cmd --filter @workmap/web typecheck` and `lint` were attempted with non-interactive settings, but the current pnpm wrapper still attempted a workspace install before running checks and failed on node_modules/bin/lockfile permissions or ignored-build policy before TypeScript/ESLint started.
+- Manual QA: not run in a browser. Required visual/function check: open `/employees`, select Manager and Employee and confirm row lists change; select Department/Status combinations and confirm rows filter and summary counts update.
+- Intentionally not changed: no API, schema, device status aggregation, report metrics, Teams/Email/3CX actions, or real device/report data integration was added.
+- Remaining risks: the page still uses placeholder Today metrics (`API scoped`, `Contact view`, `Not shown`) and inferred device labels; making those dynamic needs a separate aggregation/data-source round.
+- Suggested next step: perform browser QA on deployed/local `/employees`; then wire real device/report status if the directory should show live monitoring data.
+
+---
+
+## 2026-07-08 Virtual Office Navigation Menu Layer Fix
+
+- Original task: fix `/virtual-office` where the expanded Virtual Office navigation card was visually covered by the left rail.
+- Changed files: `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`.
+- Implementation: raised the Virtual Office top brand trigger and its expanded navigation menu from z-index 20/30 to z-index 50. This puts the expanded workspace navigation above the left tool rail (`officePanel` z-index 35) while keeping the command palette/modal layer (`officeModal` z-index 60) higher.
+- Role/access behavior: unchanged. No auth, RBAC, tenant, API, Desktop Agent, Browser Extension, tracking, or reporting behavior changed.
+- Verification: `git diff --check` passed with the existing LF-to-CRLF working-copy warning for the touched TSX file. Scoped secret scan found only an existing documentation example value `WORKMAP_JWT_SECRET=qa-local-secret`; no new secret was introduced.
+- Verification blocked: `pnpm.cmd --config.offline=true --filter @workmap/web typecheck` and `lint` did not reach TypeScript/ESLint because the current pnpm wrapper attempted an install first and aborted in non-interactive mode with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`.
+- Manual QA: not run in a browser in this environment. Required visual check: open `/virtual-office`, click the Virtual Office card, and confirm the expanded menu is above the left rail at the screenshot viewport.
+- Intentionally not changed: no layout positions, rail behavior, side panel behavior, command palette layering, map rendering, movement, realtime, or data loading changed.
+- Remaining risks: visual/browser confirmation is still needed across narrow breakpoints to ensure the raised menu does not unintentionally cover another control.
+- Suggested next step: run a quick browser smoke on `/virtual-office` and confirm the menu is clickable/visible over the left rail.
+
+---
+
 ## 2026-07-07 Browser Extension Alpha ZIP Release Preparation
 
 - Original task: guide the selected manual Browser Extension path through ZIP preparation, release URL configuration, and Web redeployment.

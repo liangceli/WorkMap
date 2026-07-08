@@ -352,12 +352,26 @@ async function testOwnerSeesLiveForegroundUsageBeforeAppSwitch() {
   });
   assert.equal(live.scope, "company");
   assert.deepEqual(live.apps, [{ appName: "Microsoft Store", activeSeconds: 120, focusedIdleSeconds: 0 }]);
-  assert.deepEqual(live.employeeUsage, [{ userId: EMPLOYEE_ID, displayName: "Employee", activeSeconds: 120, idleSeconds: 0 }]);
+  assert.deepEqual(live.employeeUsage, [{
+    userId: EMPLOYEE_ID,
+    displayName: "Employee",
+    activeSeconds: 120,
+    idleSeconds: 0,
+    topApp: "Microsoft Store",
+    topDomain: null,
+  }]);
 
   prisma.agentSessions[0].currentAppIsIdle = true;
   const idle = await reports.getAgentLiveStatus(ownerContext, { scope: "company", from: today, to: today });
   assert.deepEqual(idle.apps, [{ appName: "Microsoft Store", activeSeconds: 0, focusedIdleSeconds: 120 }]);
-  assert.deepEqual(idle.employeeUsage, [{ userId: EMPLOYEE_ID, displayName: "Employee", activeSeconds: 0, idleSeconds: 120 }]);
+  assert.deepEqual(idle.employeeUsage, [{
+    userId: EMPLOYEE_ID,
+    displayName: "Employee",
+    activeSeconds: 0,
+    idleSeconds: 120,
+    topApp: "Microsoft Store",
+    topDomain: null,
+  }]);
 }
 
 async function testCrossMidnightUsageIsSplitPrecisely() {
@@ -533,9 +547,11 @@ class MockPrisma {
     },
     groupBy: async ({ where, take, by }: any) => by.includes("date")
       ? groupDailySummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
-      : by.includes("userId")
-        ? groupUserAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
-        : groupAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)), take),
+      : by.includes("userId") && by.includes("appName")
+        ? groupUserAppNameSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
+        : by.includes("userId")
+          ? groupUserAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
+          : groupAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)), take),
   };
 
   websiteUsageSummary = {
@@ -562,7 +578,9 @@ class MockPrisma {
     },
     groupBy: async ({ where, take, by }: any) => by.includes("date")
       ? groupDailySummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)))
-      : groupWebsiteSummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)), take),
+      : by.includes("userId") && by.includes("domain")
+        ? groupUserDomainSummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)))
+        : groupWebsiteSummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)), take),
   };
 
   user = {
@@ -824,6 +842,27 @@ function groupUserAppSummaries(rows: AppSummaryRow[]) {
   return Array.from(grouped.values()).sort((left, right) => right._sum.activeSeconds - left._sum.activeSeconds);
 }
 
+function groupUserAppNameSummaries(rows: AppSummaryRow[]) {
+  const grouped = new Map<string, {
+    userId: string;
+    appName: string;
+    _sum: { activeSeconds: number; idleSeconds: number };
+  }>();
+  for (const row of rows) {
+    const key = `${row.userId}:${row.appName}`;
+    const item = grouped.get(key) ?? {
+      userId: row.userId,
+      appName: row.appName,
+      _sum: { activeSeconds: 0, idleSeconds: 0 },
+    };
+    item._sum.activeSeconds += row.activeSeconds;
+    item._sum.idleSeconds += row.idleSeconds;
+    grouped.set(key, item);
+  }
+  return Array.from(grouped.values()).sort((left, right) =>
+    right._sum.activeSeconds - left._sum.activeSeconds || left.appName.localeCompare(right.appName));
+}
+
 function groupActivityRuntimeByApp(rows: ActivityEventRow[]) {
   const grouped = new Map<string | null, { appName: string | null; _sum: { durationSeconds: number } }>();
   for (const row of rows) {
@@ -858,6 +897,29 @@ function groupWebsiteSummaries(rows: WebsiteSummaryRow[], take?: number) {
   return Array.from(grouped.values())
     .sort((left, right) => right._sum.activeSeconds - left._sum.activeSeconds)
     .slice(0, take ?? grouped.size);
+}
+
+function groupUserDomainSummaries(rows: WebsiteSummaryRow[]) {
+  const grouped = new Map<string, {
+    userId: string;
+    domain: string;
+    _sum: { activeSeconds: number; idleSeconds: number };
+  }>();
+
+  for (const row of rows) {
+    const key = `${row.userId}:${row.domain}`;
+    const existing = grouped.get(key) ?? {
+      userId: row.userId,
+      domain: row.domain,
+      _sum: { activeSeconds: 0, idleSeconds: 0 },
+    };
+    existing._sum.activeSeconds += row.activeSeconds;
+    existing._sum.idleSeconds += row.idleSeconds;
+    grouped.set(key, existing);
+  }
+
+  return Array.from(grouped.values()).sort((left, right) =>
+    right._sum.activeSeconds - left._sum.activeSeconds || left.domain.localeCompare(right.domain));
 }
 
 function uniqueBy<T>(rows: T[], key: keyof T) {

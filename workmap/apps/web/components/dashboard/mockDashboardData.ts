@@ -5,6 +5,7 @@ export type DashboardEmployee = {
   id: string;
   name: string;
   role: string;
+  roleGroup?: "manager" | "employee";
   department: string;
   status: UserPresenceStatus;
   localTime: string;
