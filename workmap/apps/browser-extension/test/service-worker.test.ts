@@ -19,6 +19,24 @@ test("MV3 runtime listens to page activity and complete tab/window lifecycle", a
   assert(!source.includes("setInterval("));
 });
 
+test("local extension status does not preserve stale connected state", async () => {
+  const manifest = JSON.parse(await readFile(new URL("../manifest.json", import.meta.url), "utf8"));
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const background = await readFile(new URL("../src/background.ts", import.meta.url), "utf8");
+  const options = await readFile(new URL("../src/options.ts", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
+
+  assert.equal(manifest.version, "0.4.1");
+  assert.equal(packageJson.version, "0.4.1");
+  assert.match(api, /browser-extension-mv3\/0\.4\.1/);
+  assert.match(background, /status\?\.state \?\? "offline"/);
+  assert.doesNotMatch(background, /status\?\.state \?\? "connected"/);
+  assert.match(options, /deriveStatusHealth/);
+  assert.match(options, /Signal stale/);
+  assert.match(options, /Last server-confirmed heartbeat/);
+  assert.doesNotMatch(options, /current\?\.state \?\? "connected"/);
+});
+
 test("content script reports only trusted activity timestamps including wheel", async () => {
   const source = await readFile(new URL("../src/contentScript.ts", import.meta.url), "utf8");
   for (const marker of ["event.isTrusted", '"wheel"', '"keydown"', '"pointermove"', '"touchstart"', "activityAt", "lastInputAt"]) {

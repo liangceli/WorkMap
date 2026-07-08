@@ -1,5 +1,21 @@
 # Latest Implementation Handoff
 
+## 2026-07-08 Desktop Agent Stale Connected Status Fix
+
+- Original task: determine why the `mia admin test` Windows Desktop Agent, installed as `desktop-agent-windows/0.5.4`, still showed Connected locally while Owner-side WorkMap data only showed a 2026-07-07 signal and the report stayed disconnected.
+- Changed files: `workmap/apps/desktop-agent/src/runtime.ts`, `workmap/apps/desktop-agent/src/electron/main.ts`, `workmap/apps/desktop-agent/renderer/app.js`, `workmap/apps/desktop-agent/renderer/index.html`, `workmap/apps/desktop-agent/test/gui-release.test.ts`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`.
+- Root cause found: the backend data was not ambiguous. `/devices` showed `mia admin test` device `DESKTOP-ND7S198` last signal at `2026-07-07T08:16:39.551Z`, which matches the Agent window's `05:46:37 PM` display in Adelaide local time. The local Agent UI was misleading because it displayed stale local status as Connected.
+- Implementation summary: Desktop Agent runtime no longer starts optimistically as `connected`; it starts as `offline` until a fresh server-confirmed heartbeat is written. Electron startup no longer swallows runtime crashes silently; it writes an `error` status with a sanitized message so stale `status.json` cannot keep presenting an old Connected state.
+- Renderer behavior: the Agent window now derives health from heartbeat freshness. A connected state without a recent heartbeat becomes `Signal stale` or `Not connected`, and the UI displays a visible diagnostic line with the last server-confirmed heartbeat. Old heartbeat timestamps now include the date instead of showing only a time-of-day that can look current the next day.
+- Role/access behavior: no auth, RBAC, tenant, API, pairing, backend report, or Owner visibility rule changed. This is a Desktop Agent local truthfulness/diagnostics fix only.
+- Verification: direct Desktop Agent `tsc --noEmit` passed. `tsx --test test/gui-release.test.ts` passed 3/3. `tsx --test test/queue-api.test.ts` passed 5/5. `git diff --check` passed with existing LF-to-CRLF working-copy warnings. Scoped secret scan found no matches.
+- Manual QA: not run on the separate Employee Windows computer. Required acceptance: build/release/install the next Desktop Agent version on the Employee computer, leave it running across restart/day boundary, and confirm the Agent window no longer shows Connected unless `/devices.lastSeenAt` is fresh.
+- Intentionally not changed: no backend heartbeat/session threshold, `/devices` endpoint, report aggregation, pairing ownership, Windows auto-start registration, installer publishing, or deployed `0.5.4` binary was changed in this round.
+- Remaining risks: this fix does not make the already-installed `0.5.4` binary start heartbeating. It makes the next build stop lying locally. If the next build still cannot heartbeat, the visible error/stale state should expose the real next cause: API/network/auth/runtime failure, stale credential, or auto-start/runtime startup issue.
+- Suggested next step: bump/package a new Desktop Agent release, install it on the `mia admin test` employee computer, then compare the local Agent diagnostic line with `https://workmap-api.onrender.com/devices` for the same device id/user.
+
+---
+
 ## 2026-07-08 Employees Device Heartbeat Aggregation Fix
 
 - Original task: user could not access `/devices` directly because it returned 404, and `/employees` still showed an employee device as offline while the Employee computer's Desktop Agent UI showed connected.

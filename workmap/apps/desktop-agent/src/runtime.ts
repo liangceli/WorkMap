@@ -24,7 +24,7 @@ export class DesktopAgentRuntime {
   ) {
     this.adapter = options.adapter ?? new WindowsForegroundAdapter(readPositiveNumber("WORKMAP_AGENT_IDLE_SECONDS", DEFAULT_IDLE_THRESHOLD_SECONDS));
     this.queue = options.queue ?? new FileEventQueue();
-    this.status = { state: "connected", deviceId: config.deviceId, queuedEvents: 0 };
+    this.status = { state: "offline", deviceId: config.deviceId, queuedEvents: 0 };
   }
 
   async run() {

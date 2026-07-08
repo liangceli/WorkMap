@@ -1,5 +1,17 @@
 # Latest QA Handoff
 
+## 2026-07-08 Desktop Agent Stale Connected Status Fix QA
+
+- Reviewed implementation: Desktop Agent runtime initial status, Electron runtime startup failure handling, renderer heartbeat-freshness health derivation, local timestamp display, and GUI release tests.
+- Diff review summary: the change is scoped to preventing stale local `status.json` from being presented as current Connected. Runtime starts as offline, startup crashes write a sanitized error state, and the renderer only shows Connected when the last server-confirmed heartbeat is fresh.
+- Findings ordered by severity: no blocking diff-level finding. Important product boundary: the backend `/devices` value for `mia admin test` already proves the last server signal was 2026-07-07; this fix corrects the local Agent's misleading presentation but does not repair the already-installed 0.5.4 binary or any underlying network/auth/runtime failure on that employee computer.
+- Test/verification status: Desktop Agent direct `tsc --noEmit` passed. `test/gui-release.test.ts` passed 3/3. `test/queue-api.test.ts` passed 5/5. `git diff --check` passed with LF-to-CRLF warnings. Scoped secret scan returned no matches.
+- Manual QA status: not run on the Employee Windows computer. Required check: install the next packaged Desktop Agent build, restart the machine or wait across a day boundary, and confirm the local Agent state matches `/devices.lastSeenAt` freshness instead of showing stale Connected.
+- Risks: if heartbeat still fails after the next install, Owner reports will remain disconnected; the expected improvement is that the Agent window will expose stale/offline/error rather than falsely reassuring the employee.
+- Recommendation: pass for scoped implementation and automated verification. Proceed to package/release/install verification before treating the production Employee machine issue as resolved.
+
+---
+
 ## 2026-07-08 Employees Device Heartbeat Aggregation Fix QA
 
 - Reviewed implementation: `/employees` device-health aggregation, `WorkMapApiDevice` frontend type, existing `listDevices()` API wrapper, and backend `/devices` response shape.

@@ -10,6 +10,9 @@ const pairError = document.querySelector("#pair-error");
 const progressTitle = document.querySelector("#progress-title");
 const progressDetail = document.querySelector("#progress-detail");
 const statusChip = document.querySelector("#status-chip");
+const agentError = document.querySelector("#agent-error");
+const FRESH_HEARTBEAT_MS = 30_000;
+const STALE_HEARTBEAT_MS = 120_000;
 
 const progressCopy = {
   waking: ["Connecting to WorkMap...", "The service may need up to a minute to wake securely."],
@@ -69,14 +72,19 @@ async function refreshState() {
   document.querySelector("#version-label").textContent = `Version ${state.version}`;
 
   const status = state.status;
-  setStatusChip(status.state);
+  setStatusChip(status);
   document.querySelector("#current-app").textContent = status.currentActivity?.appName ?? "No active app";
   document.querySelector("#last-heartbeat").textContent = formatTime(status.lastHeartbeatAt);
   document.querySelector("#queued-events").textContent = String(status.queuedEvents ?? 0);
   document.querySelector("#auto-start").textContent = state.startsWithWindows ? "Enabled" : state.paired ? "Enabling..." : "Not enabled";
+  const health = deriveStatusHealth(status);
+  const errorCopy = status.error || health.detail;
+  agentError.textContent = errorCopy;
+  agentError.hidden = !errorCopy;
 }
 
-function setStatusChip(state) {
+function setStatusChip(status) {
+  const health = deriveStatusHealth(status);
   const copy = {
     connected: ["Connected", "status-connected"],
     pairing: ["Pairing", "status-warning"],
@@ -84,15 +92,45 @@ function setStatusChip(state) {
     auth_required: ["Pair again", "status-error"],
     error: ["Needs attention", "status-error"],
     unpaired: ["Not connected", "status-neutral"],
-  }[state] ?? ["Checking", "status-neutral"];
+    stale: ["Signal stale", "status-warning"],
+  }[health.state] ?? ["Checking", "status-neutral"];
   statusChip.className = `status-chip ${copy[1]}`;
   statusChip.querySelector("b").textContent = copy[0];
+}
+
+function deriveStatusHealth(status) {
+  if (status.state !== "connected") {
+    return { state: status.state };
+  }
+
+  const heartbeatAge = heartbeatAgeMs(status.lastHeartbeatAt);
+  if (heartbeatAge === null) {
+    return { state: "offline", detail: "Waiting for the first server-confirmed heartbeat." };
+  }
+
+  if (heartbeatAge <= FRESH_HEARTBEAT_MS) {
+    return { state: "connected" };
+  }
+
+  const detail = `Last server-confirmed heartbeat was ${formatTime(status.lastHeartbeatAt)}. The Agent is retrying until WorkMap confirms a fresh heartbeat.`;
+  return { state: heartbeatAge <= STALE_HEARTBEAT_MS ? "stale" : "offline", detail };
+}
+
+function heartbeatAgeMs(value) {
+  if (!value) return null;
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return null;
+  return Date.now() - time;
 }
 
 function formatTime(value) {
   if (!value) return "Starting...";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Starting..." : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  if (Number.isNaN(date.getTime())) return "Starting...";
+  const sameDay = date.toDateString() === new Date().toDateString();
+  return date.toLocaleString([], sameDay
+    ? { hour: "2-digit", minute: "2-digit", second: "2-digit" }
+    : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function cleanIpcError(error) {

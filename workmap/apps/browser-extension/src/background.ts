@@ -202,7 +202,7 @@ async function heartbeat(config: ExtensionConfig, previous?: ExtensionStatus) {
       },
     });
   } catch (error) {
-    await storeFailure(error, previous?.queuedEvents ?? 0);
+    await storeFailure(error, previous, previous?.queuedEvents ?? 0);
   }
 }
 
@@ -239,13 +239,13 @@ async function flushQueue(config: ExtensionConfig) {
   }
 }
 
-async function storeFailure(error: unknown, queuedEvents: number) {
+async function storeFailure(error: unknown, previous: ExtensionStatus | undefined, queuedEvents: number) {
   const auth = error instanceof ExtensionApiError && (error.status === 401 || error.status === 403);
-  await writeStoredState({ workmapStatus: { state: auth ? "auth_required" : "offline", queuedEvents, error: safeError(error) } });
+  await writeStoredState({ workmapStatus: { ...previous, state: auth ? "auth_required" : "offline", queuedEvents, error: safeError(error) } });
 }
 
 function statusWithQueue(status: ExtensionStatus | undefined, queuedEvents: number, config?: ExtensionConfig | null): ExtensionStatus {
-  return { ...status, state: config ? status?.state ?? "connected" : "unpaired", queuedEvents };
+  return { ...status, state: config ? status?.state ?? "offline" : "unpaired", queuedEvents };
 }
 
 function safeError(error: unknown) {

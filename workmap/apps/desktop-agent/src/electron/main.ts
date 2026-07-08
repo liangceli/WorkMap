@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { loadAgentConfig } from "../credentialStore.js";
-import { getAgentDataDirectory, readJson } from "../fileStore.js";
+import { getAgentDataDirectory, readJson, writeAgentStatus } from "../fileStore.js";
 import { pairDesktopAgent, safePairingError, type PairingProgress } from "../pairing.js";
 import { DesktopAgentRuntime } from "../runtime.js";
 import type { AgentStatus } from "../types.js";
@@ -122,7 +122,12 @@ async function startRuntime() {
   if (!config) return;
   runtime = new DesktopAgentRuntime(config);
   runtimePromise = runtime.run()
-    .catch(() => undefined)
+    .catch((error) => writeAgentStatus({
+      state: "error",
+      deviceId: config.deviceId,
+      queuedEvents: 0,
+      error: safeRuntimeError(error),
+    }))
     .finally(() => {
       runtime = null;
       runtimePromise = null;
@@ -160,3 +165,7 @@ function removeLegacyAutoStart() {
 
 app.on("before-quit", () => { allowQuit = true; });
 app.on("window-all-closed", () => undefined);
+
+function safeRuntimeError(error: unknown) {
+  return error instanceof Error ? error.message.replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]") : "Unknown runtime failure";
+}
