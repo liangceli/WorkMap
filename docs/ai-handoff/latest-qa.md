@@ -1,5 +1,34 @@
 # Latest QA Handoff
 
+## 2026-07-08 Employees Device Heartbeat Aggregation Fix QA
+
+- Reviewed implementation: `/employees` device-health aggregation, `WorkMapApiDevice` frontend type, existing `listDevices()` API wrapper, and backend `/devices` response shape.
+- Diff review summary: the page now uses `/devices` as an authenticated API call rather than expecting a frontend `/devices` route. Desktop Agent device `lastSeenAt` is merged per bound user with browser-extension coverage and report/live activity before rendering `Device online/delayed/offline`.
+- Findings ordered by severity: no blocking diff-level finding. Important boundary: Owner Reports still use session heartbeat for the `Desktop Agent now` card, so this directory fix does not by itself prove the live session card will become online.
+- Test/verification status: `git diff --check` passed with LF-to-CRLF warnings. Scoped secret scan returned only existing documentation/env-name references; no new secret was introduced.
+- Verification blocked/not run: Web typecheck/lint/build were not rerun due the known local pnpm/Prisma dependency-state blocker from the previous round.
+- Manual QA status: not run. Required check: after deploying, reload `/employees` and confirm the status text includes `/devices`; verify the Employee row device health reflects the Desktop Agent's recent backend `lastSeenAt`.
+- Risks: if `/devices` fails because the frontend API base is wrong, auth is missing, or the device is bound to another user, the row can still show offline. This is expected and should be surfaced with a future diagnostics view.
+- Recommendation: pass for scoped diff review; proceed to browser/API verification on the deployed environment.
+
+---
+
+## 2026-07-08 Desktop Agent Connected Locally But Owner Report Interrupted QA
+
+- Reviewed implementation: Desktop Agent runtime heartbeat/session/upload code, pairing code exchange, local Agent UI status rendering, backend device heartbeat/session/report status logic, and report panel display.
+- Diff review summary: documentation-only investigation. No runtime diff was introduced.
+- Findings ordered by severity:
+  - High likely cause: the paired device may be bound to a different WorkMap user than the employee selected in Owner reports. Pairing codes are user-bound to the account that generated the code.
+  - High diagnostic gap: Agent local `Connected` is not the same as Owner-visible `online`; Owner requires backend `agentSession.lastHeartbeatAt` within 30 seconds.
+  - Medium: `Pending uploads: 6` indicates queued local events and should be treated as an upload/API/network/auth signal until proven otherwise.
+  - Medium: Desktop Agent default API and `Open WorkMap` frontend URL are hardcoded to the current deployed targets; mismatched deployments can produce split-brain status.
+- Test/verification status: source review only. No automated tests were run because no runtime code changed.
+- Manual QA status: not run. Required checks are to compare `/devices` device id/user ownership with the selected report user, verify the API base URL in the paired Agent config, and confirm the Owner report is using the same API deployment.
+- Risks: without a diagnostics surface, support relies on manually checking device id/user/API URL. The next implementation should make these facts visible without exposing credentials.
+- Recommendation: pass for investigation. Next round can proceed with a scoped diagnostics/UI fix or with manual production data verification.
+
+---
+
 ## 2026-07-08 Employees Dynamic Aggregation Page QA
 
 - Reviewed implementation: `/employees` now aggregates `/users`, today's company usage summary, company live agent status, and browser-extension coverage; backend reports now include per-user `topApp/topDomain` fields where available.

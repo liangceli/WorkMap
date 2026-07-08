@@ -1,5 +1,42 @@
 # Latest Implementation Handoff
 
+## 2026-07-08 Employees Device Heartbeat Aggregation Fix
+
+- Original task: user could not access `/devices` directly because it returned 404, and `/employees` still showed an employee device as offline while the Employee computer's Desktop Agent UI showed connected.
+- Changed files: `workmap/apps/web/app/employees/page.tsx`, `workmap/apps/web/lib/api/apiTypes.ts`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`.
+- Clarification: `/devices` is a backend API endpoint, not a frontend route. Visiting `https://work-map-teal.vercel.app/devices` will 404 because no Next.js page exists there. The frontend must call the configured API base, for example `https://workmap-api.onrender.com/devices`, with an authenticated Bearer token.
+- Implementation summary: `/employees` now calls the existing authenticated `listDevices()` API alongside `/users` and reports. The directory aggregates Desktop Agent device `lastSeenAt` by `device.user.id`, skips revoked devices and Browser Extension devices in that Desktop Agent pass, and merges this signal with Browser Extension coverage plus live/report activity.
+- Device health behavior: if a user has live/report activity, the row remains `Device online`. Otherwise Desktop Agent `lastSeenAt <= 30s` is `online`, `<= 120s` is `delayed`, and older/missing signals are `offline`. Browser Extension connected/signal-lost coverage still contributes online/delayed as before. The best signal wins per user.
+- API type behavior: `WorkMapApiDevice` now includes the optional `user` object that the backend already returns from `/devices` for visible devices.
+- Role/access behavior: no backend permission change. `/devices` remains protected by existing auth and device-health visibility; employees see their own visible devices, and authorized owner/manager roles can see company-visible devices per existing backend policy.
+- Verification: `git diff --check` passed with LF-to-CRLF working-copy warnings. Scoped secret scan found only existing docs/env-name references and no new committed secret.
+- Verification not run: full Web typecheck/lint/build were not rerun because the local pnpm/Prisma environment was already known to be blocked in the previous round.
+- Manual QA: not run in browser. Required check: open `/employees` as Owner/Manager after deployment, confirm the summary mentions `/devices`, and verify an employee with a fresh Desktop Agent heartbeat no longer shows `Device offline` unless `/devices` fails or the device is bound to a different user.
+- Intentionally not changed: no public `/devices` page was added, no auth/RBAC/backend endpoint behavior changed, no Desktop Agent runtime changed, and no heartbeat thresholds in backend reports were changed.
+- Remaining risks: this fixes directory device-health presentation, but Owner Reports' `Desktop Agent now` card still depends on `agentSession.lastHeartbeatAt` within 30 seconds. A device heartbeat alone does not prove a live session if session start/heartbeat is failing.
+- Suggested next step: add a small Owner-facing diagnostics view or row showing each visible Desktop Agent device, bound employee, lastSeenAt, and agentVersion so support can confirm binding without using raw API calls.
+
+---
+
+## 2026-07-08 Desktop Agent Connected Locally But Owner Report Interrupted Investigation
+
+- Original task: investigate why the Employee Windows Desktop Agent shows `Connected`, while the Owner-side WorkMap report still shows Desktop Agent disconnected/interrupted.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`. Runtime code was not changed in this investigation round.
+- Investigation summary: Desktop Agent local UI and Owner report use different truth sources. The Agent window reads local `status.json` under `%LOCALAPPDATA%\WorkMap\DesktopAgent`; Owner reports read backend `agentSession.lastHeartbeatAt` through `/reports/usage-summary` and `/reports/agent-status`.
+- Key finding: pairing is user-bound. `DevicePairingService.exchangePairingCode` creates `Device.userId = pairing.userId`, so the paired Windows computer belongs to the WorkMap user who generated the one-time code. The Agent UI does not prove it is paired to the employee currently selected in Owner reports.
+- Key finding: report online state is strict. `ReportsService.getAgentStatus` returns `online` only when the latest non-ended `agentSession.lastHeartbeatAt` is no more than 30 seconds old. Otherwise it becomes `interrupted` unless the session ended gracefully.
+- Key finding: the screenshot's `Pending uploads: 6` means app usage events are queued locally and not fully acknowledged. That does not by itself prove heartbeat failure, but it is a strong signal that API upload/authorization/network/environment mismatch should be checked.
+- Deployment/environment finding: packaged Desktop Agent defaults to `https://workmap-api.onrender.com`; `Open WorkMap` opens `https://work-map-teal.vercel.app`. If the user is viewing a different frontend/API deployment or a different report user, local Agent `Connected` can diverge from Owner report status.
+- Suggested immediate verification: in Owner account, call or inspect `/devices` and compare the Agent window device prefix with the returned device `id`, `user.displayName`, `agentVersion`, and `lastSeenAt`. The expected owner-visible employee report must use the same `user.id` as that device.
+- Role/access behavior: no permission behavior changed. Existing backend tenant/user binding and Owner/Manager device visibility remain the source of truth.
+- Verification: code review only. Reviewed Desktop Agent runtime/API client/pairing/UI, backend device pairing/heartbeat/session/report status, and report panel live status rendering.
+- Manual QA: not run on the Employee computer. Required checks: confirm the WorkMap account used to generate the Desktop Agent pairing code; compare `/devices` device owner against the report-selected employee; confirm the frontend is using the same API base URL as the Agent.
+- Intentionally not changed: no heartbeat threshold, session logic, device pairing, auth/RBAC, deployment URL, Desktop Agent UI, or report UI was changed.
+- Remaining risks: current UI does not clearly show which WorkMap user the Agent is bound to, the exact API endpoint it is posting to, or the server-confirmed last heartbeat. A small diagnostics improvement would reduce this class of confusion.
+- Suggested next step: add a Desktop Agent diagnostics row showing API base URL, device id prefix, queued upload error, and server-confirmed heartbeat; optionally add Owner `/devices` diagnostics linking a device to the report user.
+
+---
+
 ## 2026-07-08 Employees Dynamic Aggregation Page
 
 - Original task: make `/employees` a truly dynamic aggregation page instead of showing hardcoded Today/device placeholders.

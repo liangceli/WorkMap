@@ -355,6 +355,11 @@ export type WorkMapApiDevice = {
   agentVersion: string | null;
   lastSeenAt: string | null;
   revokedAt?: string | null;
+  user?: {
+    id: string;
+    displayName: string;
+    email?: string;
+  };
 };
 
 export type WorkMapApiDeviceRegistration = {
