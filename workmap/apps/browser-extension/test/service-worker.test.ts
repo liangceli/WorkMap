@@ -26,15 +26,28 @@ test("local extension status does not preserve stale connected state", async () 
   const options = await readFile(new URL("../src/options.ts", import.meta.url), "utf8");
   const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
 
-  assert.equal(manifest.version, "0.4.1");
-  assert.equal(packageJson.version, "0.4.1");
-  assert.match(api, /browser-extension-mv3\/0\.4\.1/);
+  assert.equal(manifest.version, "0.4.2");
+  assert.equal(packageJson.version, "0.4.2");
+  assert.match(api, /browser-extension-mv3\/0\.4\.2/);
   assert.match(background, /status\?\.state \?\? "offline"/);
   assert.doesNotMatch(background, /status\?\.state \?\? "connected"/);
   assert.match(options, /deriveStatusHealth/);
   assert.match(options, /Signal stale/);
   assert.match(options, /Last server-confirmed heartbeat/);
   assert.doesNotMatch(options, /current\?\.state \?\? "connected"/);
+});
+
+test("options page shows pairing progress and times out stuck Edge permission prompts", async () => {
+  const options = await readFile(new URL("../src/options.ts", import.meta.url), "utf8");
+
+  for (const marker of [
+    "Requesting Edge website tracking permission",
+    "Registering WorkMap domain tracker",
+    "Pairing with WorkMap API",
+    "Edge did not finish the website tracking permission request",
+    "setBusy(true",
+    "withTimeout",
+  ]) assert(options.includes(marker), `missing ${marker}`);
 });
 
 test("content script reports only trusted activity timestamps including wheel", async () => {

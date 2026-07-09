@@ -11,10 +11,13 @@ const form = document.querySelector<HTMLFormElement>("#pair-form")!;
 const apiInput = document.querySelector<HTMLInputElement>("#api-url")!;
 const codeInput = document.querySelector<HTMLInputElement>("#pairing-code")!;
 const browserSelect = document.querySelector<HTMLSelectElement>("#browser-name")!;
+const pairButton = form.querySelector<HTMLButtonElement>("button[type='submit']")!;
 const message = document.querySelector<HTMLElement>("#message")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const FRESH_HEARTBEAT_MS = 30_000;
 const SIGNAL_LOST_MS = 90_000;
+const PERMISSION_TIMEOUT_MS = 15_000;
+const DEFAULT_BUTTON_TEXT = pairButton.textContent ?? "Pair extension";
 
 void refreshStatus();
 form.addEventListener("submit", (event) => { event.preventDefault(); void pair(); });
@@ -24,12 +27,17 @@ async function pair() {
   const code = codeInput.value.trim();
   if (!isAllowedApiUrl(apiBaseUrl)) return show("Use HTTPS, or localhost for development.", true);
   if (!code) return show("Enter the short-lived pairing code from WorkMap.", true);
-  setDisabled(true);
+  setBusy(true, "Requesting permission...");
   try {
+    showProgress("Requesting Edge website tracking permission...");
     if (!await requestTrackingPermission(apiBaseUrl)) throw new Error("Website tracking permission was not granted.");
+    setBusy(true, "Registering tracker...");
+    showProgress("Registering WorkMap domain tracker in Edge...");
     await ensureDomainContentScriptRegistered(true);
     await writeStoredState({ workmapStatus: { state: "pairing", queuedEvents: 0 } });
     await refreshStatus();
+    setBusy(true, "Pairing with WorkMap...");
+    showProgress("Pairing with WorkMap API...");
     const result = await exchangePairingCode(apiBaseUrl, code, browserSelect.value);
     await savePairedConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, browserName: browserSelect.value });
     await writeStoredState({
@@ -44,9 +52,10 @@ async function pair() {
   } catch (error) {
     const messageText = error instanceof Error ? error.message : "Pairing failed.";
     await writeStoredState({ workmapStatus: { state: "unpaired", queuedEvents: 0, error: messageText } });
+    await refreshStatus();
     show(messageText, true);
   }
-  finally { setDisabled(false); }
+  finally { setBusy(false); }
 }
 
 async function refreshStatus() {
@@ -57,7 +66,9 @@ async function refreshStatus() {
   const health = deriveStatusHealth(current);
   status.textContent = stored.workmapConfig
     ? `Paired | ${health.label} | queued ${current?.queuedEvents ?? 0} | heartbeat ${formatTime(current?.lastHeartbeatAt)} | upload ${formatTime(current?.lastUploadAt)}${health.detail ? ` | ${health.detail}` : ""}${current?.error ? ` | ${current.error}` : ""}`
-    : "Not paired";
+    : current
+      ? `${health.label}${current.error ? ` | ${current.error}` : ""}`
+      : "Not paired";
 }
 
 function deriveStatusHealth(current: Awaited<ReturnType<typeof readStoredState>>["workmapStatus"]) {
@@ -93,11 +104,38 @@ function formatTime(value: string | undefined) {
 }
 
 function show(value: string, error: boolean) { message.textContent = value; message.dataset.error = String(error); }
-function setDisabled(value: boolean) { for (const element of Array.from(form.elements)) (element as HTMLInputElement).disabled = value; }
+function showProgress(value: string) {
+  status.textContent = value;
+  show(value, false);
+}
+function setBusy(value: boolean, label = DEFAULT_BUTTON_TEXT) {
+  for (const element of Array.from(form.elements)) (element as HTMLInputElement).disabled = value;
+  pairButton.textContent = value ? label : DEFAULT_BUTTON_TEXT;
+}
 function isAllowedApiUrl(value: string) { return /^https:\/\//i.test(value) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value); }
 function inferBrowser() { return navigator.userAgent.includes("Edg/") ? "EDGE" : "CHROME"; }
 
 async function requestTrackingPermission(apiBaseUrl: string) {
   const origin = `${new URL(apiBaseUrl).origin}/*`;
-  return new Promise<boolean>((resolve) => chrome.permissions.request({ origins: Array.from(new Set([origin, "https://*/*", "http://*/*"])) }, resolve));
+  return withTimeout(
+    new Promise<boolean>((resolve, reject) => {
+      chrome.permissions.request({ origins: Array.from(new Set([origin, "https://*/*", "http://*/*"])) }, (allowed) => {
+        const error = chrome.runtime.lastError as { message?: string } | undefined;
+        if (error) reject(new Error(error.message ?? "Website tracking permission request failed."));
+        else resolve(allowed);
+      });
+    }),
+    "Edge did not finish the website tracking permission request. Open edge://extensions, keep WorkMap enabled, allow website access, reload this Options page, and try again.",
+    PERMISSION_TIMEOUT_MS,
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, messageText: string, timeoutMs: number) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(messageText)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
 }

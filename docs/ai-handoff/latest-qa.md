@@ -1,5 +1,35 @@
 # Latest QA Handoff
 
+## 2026-07-09 Browser Extension 0.4.2 Pairing Feedback Fix QA
+
+- Reviewed implementation: Browser Extension Options pairing flow, Edge optional host-permission request handling, content-script registration wrappers, API error detail handling, version identity, generated unpacked manifest/CSS, and release ZIP metadata.
+- Diff review summary:
+  - The no-feedback symptom is addressed at the local extension layer. The Options page now shows progress before the API call and cannot silently wait forever on the Edge permission request or content-script registration path.
+  - `/device-client/pair` is still called only after permission and tracker registration succeed, preserving the existing permission-before-tracking flow.
+  - API 4xx/5xx failures now surface a short sanitized response-body message for employee troubleshooting.
+  - Tracking payload/privacy behavior is unchanged.
+- Findings ordered by severity:
+  - No blocking scoped finding found in code review or automated verification.
+  - Medium remaining manual risk: real Edge behavior around optional host permissions must be verified on the employee machine because the original failure occurred inside Edge UI/runtime, not in Node tests.
+  - Low expected limitation: if a pairing code is expired or generated for the wrong client type, pairing will still fail; `0.4.2` should now display that failure instead of appearing inert.
+- Test/verification status:
+  - `npm.cmd run typecheck` from `workmap/apps/browser-extension`: passed.
+  - `npm.cmd test` from `workmap/apps/browser-extension`: passed 15/15, including new source coverage for progress messages and timeout path.
+  - `npm.cmd run lint` from `workmap/apps/browser-extension`: passed.
+  - `npm.cmd run build` from `workmap/apps/browser-extension`: passed.
+  - Generated ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.4.2.zip`.
+  - ZIP SHA-256: `80190D61C900DC3A26D2DE5BB78F00BF72F6E5C6B88980B2909AC79F63CD1F61`.
+  - `git diff --check`: passed with existing LF-to-CRLF warnings only.
+  - Scoped secret scan: no new secret found; only existing docs/example `WORKMAP_JWT_SECRET=qa-local-secret` references appeared.
+- Manual QA status: not run. Required manual acceptance: load the `0.4.2` unpacked/ZIP in Edge, open Options, click `Pair extension`, confirm visible stage changes, use a fresh Browser Extension pairing code from the correct employee account, confirm success, then verify `/devices` reports `browser-extension-mv3/0.4.2` and fresh `lastSeenAt`.
+- Risks:
+  - The generated ZIP is for manual load-unpacked installation, not Edge Add-ons distribution.
+  - The user must update the Vercel browser-extension download URL after uploading the GitHub Release asset, otherwise employees may still download `0.4.1`.
+- Pass/fail recommendation: pass for scoped Browser Extension pairing-feedback/release package fix. Proceed to GitHub Release upload and real Edge pairing acceptance.
+- Whether the next round can proceed: yes.
+
+---
+
 ## 2026-07-09 Desktop Agent 0.5.6 Release Installer Packaging QA
 
 - Reviewed implementation: Desktop Agent `release:windows` packaging output, generated NSIS installer file, blockmap, SHA-256 hash, and Authenticode signature status.

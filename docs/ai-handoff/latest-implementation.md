@@ -1,5 +1,55 @@
 # Latest Implementation Handoff
 
+## 2026-07-09 Browser Extension 0.4.2 Pairing Feedback Fix
+
+- Original task: user reported that Edge Browser Extension `Pair extension` click had no visible feedback; DevTools showed no `/device-client/pair` network request after clicking.
+- Changed files:
+  - `workmap/apps/browser-extension/package.json`
+  - `workmap/apps/browser-extension/manifest.json`
+  - `workmap/apps/browser-extension/options.css`
+  - `workmap/apps/browser-extension/src/options.ts`
+  - `workmap/apps/browser-extension/src/contentRegistration.ts`
+  - `workmap/apps/browser-extension/src/extensionApi.ts`
+  - `workmap/apps/browser-extension/test/service-worker.test.ts`
+  - `workmap/apps/browser-extension/alpha-unpacked/manifest.json`
+  - `workmap/apps/browser-extension/alpha-unpacked/options.css`
+  - `docs/ai-handoff/latest-implementation.md`
+  - `docs/ai-handoff/latest-qa.md`
+- Generated artifact:
+  - `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.4.2.zip`
+  - Size: `14,498` bytes.
+  - SHA-256: `80190D61C900DC3A26D2DE5BB78F00BF72F6E5C6B88980B2909AC79F63CD1F61`.
+- Implementation summary:
+  - Bumped Browser Extension identity to `0.4.2` in package, manifest, pairing heartbeat, and generated unpacked manifest.
+  - Options page now immediately changes the button label and visible status/message after click: requesting Edge permission, registering the WorkMap tracker, then pairing with the WorkMap API.
+  - Added timeout handling around the Edge website permission request so a stuck/hidden browser permission prompt becomes a visible actionable error instead of appearing as a dead button.
+  - Added timeout handling around content-script permission checks, content-script registration/update, tab listing, and existing-tab injection. Existing-tab injection failures/timeouts are settled instead of hanging pairing forever.
+  - API pairing/heartbeat errors now include a short sanitized response-body detail, so expired/wrong pairing-code responses are visible to the employee instead of only `returned 4xx`.
+- Role/access behavior:
+  - No Owner/Employee/Platform Admin permission behavior changed.
+  - Browser Extension pairing still binds to the employee account that generated the one-time Browser Extension code through existing backend device-client pairing.
+  - Domain tracking privacy boundaries remain unchanged: hostnames/timing/activity occurrence only, no full URLs, content, titles, input values, screenshots, clipboard, camera, microphone, or private messages.
+- Verification commands and results:
+  - `npm.cmd run typecheck` from `workmap/apps/browser-extension`: passed.
+  - `npm.cmd test` from `workmap/apps/browser-extension`: passed 15/15.
+  - `npm.cmd run lint` from `workmap/apps/browser-extension`: passed.
+  - `npm.cmd run build` from `workmap/apps/browser-extension`: passed and regenerated `alpha-unpacked`.
+  - `Compress-Archive ... WorkMap-Browser-Extension-0.4.2.zip`: passed.
+  - `Get-FileHash artifacts\browser-extension\WorkMap-Browser-Extension-0.4.2.zip -Algorithm SHA256`: passed, hash listed above.
+  - `git diff --check`: passed with existing LF-to-CRLF working-copy warnings only.
+  - Scoped secret scan excluding env/generated/dependency/reference paths found only existing documentation/example references to `WORKMAP_JWT_SECRET=qa-local-secret`; no new secret was introduced.
+- Manual QA results: not run in the real employee Edge browser after packaging. The user-provided screenshot/DevTools evidence was used to reproduce the likely pre-API hang path from source.
+- Intentionally not changed:
+  - No Desktop Agent, API service, Web reports/employees/dashboard pages, Prisma schema/migration, Cognito/auth, RBAC, or tenant isolation code changed.
+  - No domain timing algorithm, event payload, or browser permission scope expansion changed.
+  - No Edge/Chrome store packaging was added; this remains a load-unpacked ZIP workflow.
+- Remaining risks:
+  - Real Edge acceptance still requires loading `0.4.2`, generating a fresh Browser Extension code from the correct employee account, confirming the Options page progresses past permission/registration/API pairing, and confirming `/devices` shows `browser-extension-mv3/0.4.2` with a fresh `lastSeenAt`.
+  - If Edge itself suppresses or blocks the optional host-permission prompt, `0.4.2` should now surface a timeout/error, but the employee may still need to enable site access in `edge://extensions`.
+- Suggested next steps: upload `WorkMap-Browser-Extension-0.4.2.zip` to a GitHub Release, update `NEXT_PUBLIC_WORKMAP_BROWSER_EXTENSION_URL` in Vercel to that asset URL, redeploy Web, then install/pair on the employee Edge profile and verify Owner `/devices` plus Reports domain usage.
+
+---
+
 ## 2026-07-09 Desktop Agent 0.5.6 Release Installer Packaging
 
 - Original task: package Desktop Agent `0.5.6` so the user can upload the installer to GitHub Releases.
