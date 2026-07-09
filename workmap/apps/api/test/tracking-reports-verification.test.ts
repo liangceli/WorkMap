@@ -107,6 +107,7 @@ async function testDeviceRegistrationHeartbeatAndOwnership() {
 async function testActivityIngestionAndReportsLoop() {
   const prisma = new MockPrisma();
   prisma.seedDevice({ id: DEVICE_ID, companyId: COMPANY_ID, userId: EMPLOYEE_ID });
+  prisma.seedDevice({ id: OTHER_DEVICE_ID, companyId: OTHER_COMPANY_ID, userId: OTHER_USER_ID });
   const activity = new ActivityService(prisma as any);
   const reports = new ReportsService(prisma as any, new MockAuditService() as any);
 

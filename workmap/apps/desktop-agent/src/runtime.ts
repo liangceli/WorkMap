@@ -1,4 +1,11 @@
-import { AgentApiError, sendAppUsage, sendHeartbeat, startAgentSession, stopAgentSession } from "./apiClient.js";
+import {
+  AgentApiError,
+  isInactiveAgentSessionError,
+  sendAppUsage,
+  sendHeartbeat,
+  startAgentSession,
+  stopAgentSession,
+} from "./apiClient.js";
 import { FileEventQueue, readTrackingCheckpoint, writeAgentStatus, writeTrackingCheckpoint } from "./fileStore.js";
 import { AppTrackingState, recoverTrackingCheckpoint } from "./trackingState.js";
 import type { AgentConfig, AgentStatus } from "./types.js";
@@ -46,30 +53,33 @@ export class DesktopAgentRuntime {
 
     try {
       while (!this.stopped) {
-        const now = Date.now();
+        let completedEventCount = 0;
         try {
+          const now = Date.now();
           const sample = await this.adapter.sample();
           if (this.stopped) break;
           const events = this.tracking.observe(sample, this.config.deviceId);
+          completedEventCount = events.length;
           for (const event of events) await this.queue.enqueue(event);
           if (events.length > 0 || now >= nextCheckpointAt) {
             await writeTrackingCheckpoint(this.tracking.checkpoint());
             nextCheckpointAt = now + checkpointInterval;
           }
-          if (shouldSendHeartbeat(events.length, now, nextHeartbeatAt)) {
-            await this.heartbeat();
-            nextHeartbeatAt = now + heartbeatInterval;
-          }
-          if (this.status.state === "auth_required") {
-            this.stopped = true;
-            break;
-          }
-          await this.flushQueue();
         } catch (error) {
-          this.status.state = "error";
+          if (this.status.state !== "connected") this.status.state = "error";
           this.status.error = safeError(error);
           await this.updateStatus();
         }
+        const heartbeatNow = Date.now();
+        if (shouldSendHeartbeat(completedEventCount, heartbeatNow, nextHeartbeatAt)) {
+          await this.heartbeat();
+          nextHeartbeatAt = Date.now() + heartbeatInterval;
+        }
+        if (this.status.state === "auth_required") {
+          this.stopped = true;
+          break;
+        }
+        await this.flushQueue();
         if (!this.stopped) await delay(sampleInterval);
       }
     } finally {
@@ -104,11 +114,7 @@ export class DesktopAgentRuntime {
 
   private async heartbeat() {
     try {
-      if (!this.sessionId) {
-        const started = await startAgentSession(this.config);
-        this.sessionId = started.sessionId;
-      }
-      await sendHeartbeat(this.config, this.sessionId, this.tracking.currentActivity());
+      await this.sendHeartbeatWithSessionRecovery();
       this.status.state = "connected";
       this.status.lastHeartbeatAt = new Date().toISOString();
       this.status.error = undefined;
@@ -116,6 +122,23 @@ export class DesktopAgentRuntime {
       this.applyApiFailure(error);
     }
     await this.updateStatus();
+  }
+
+  private async sendHeartbeatWithSessionRecovery() {
+    if (!this.sessionId) await this.startNewSession();
+    try {
+      await sendHeartbeat(this.config, this.sessionId ?? undefined, this.tracking.currentActivity());
+    } catch (error) {
+      if (!isInactiveAgentSessionError(error)) throw error;
+      this.sessionId = null;
+      await this.startNewSession();
+      await sendHeartbeat(this.config, this.sessionId ?? undefined, this.tracking.currentActivity());
+    }
+  }
+
+  private async startNewSession() {
+    const started = await startAgentSession(this.config);
+    this.sessionId = started.sessionId;
   }
 
   private async flushQueue() {
@@ -145,7 +168,7 @@ export class DesktopAgentRuntime {
   }
 
   private applyApiFailure(error: unknown) {
-    if (error instanceof AgentApiError && (error.status === 401 || error.status === 403)) this.status.state = "auth_required";
+    if (error instanceof AgentApiError && (error.status === 401 || (error.status === 403 && !isInactiveAgentSessionError(error)))) this.status.state = "auth_required";
     else this.status.state = "offline";
     this.status.error = safeError(error);
   }

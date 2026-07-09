@@ -1,5 +1,106 @@
 # Latest QA Handoff
 
+## 2026-07-09 Desktop Agent 0.5.6 Release Installer Packaging QA
+
+- Reviewed implementation: Desktop Agent `release:windows` packaging output, generated NSIS installer file, blockmap, SHA-256 hash, and Authenticode signature status.
+- Diff review summary: no source-code logic changed during this packaging round. The installer artifact is generated under ignored `workmap/artifacts/desktop-agent/`; handoff docs were updated with artifact metadata.
+- Findings ordered by severity:
+  - No blocking packaging failure after rerun with approved network access.
+  - Medium expected release risk: the installer is `NotSigned`, so Windows may show SmartScreen/security warnings.
+  - Medium remaining acceptance risk: installer generation does not prove employee-machine reboot/wake behavior until installed and tested on the real employee PC.
+- Test/verification status:
+  - `npm.cmd run release:windows`: passed after approved network escalation.
+  - Output exists: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.6.exe`.
+  - File size: `91,938,656` bytes.
+  - SHA-256: `8295AC37ED777C18AF84F83251A76064EA4AEB8193C49CE037D1899ED1CA2766`.
+  - Authenticode: `NotSigned`.
+- Manual QA status: not run. The installer was not installed or launched on the separate employee Windows computer.
+- Risks: GitHub upload can proceed, but production acceptance still depends on installing this exact artifact under the correct Windows user and confirming Owner-side `/devices` and reports refresh after reboot/sleep/network recovery.
+- Pass/fail recommendation: pass for packaging. Proceed to GitHub Release upload and employee-machine acceptance.
+- Whether the next round can proceed: yes.
+
+---
+
+## 2026-07-09 Desktop Agent 0.5.6 Functional Reliability Fix QA
+
+- Reviewed implementation: Desktop Agent `apiClient.ts`, `runtime.ts`, pairing/version identity, GUI release expectations, runtime queue/API tests, backend `device-client` binding regression, existing activity ingestion cross-tenant checks, and unchanged backend credential/device/session services.
+- Diff review summary:
+  - Runtime heartbeat/upload flow is now outside the foreground-sampling try block, so sampler failure no longer prevents scheduled heartbeat or queued upload attempts.
+  - Heartbeat now handles the specific recoverable stale-session backend error by starting a new session and retrying, while true credential/device 401/403 errors still move to `auth_required`.
+  - Runtime API calls now retry only network/5xx failures; 4xx credential/device failures still fail fast. Pairing-code exchange remains non-retried to preserve one-time-code semantics.
+  - Backend product code already bound device-client requests through credential context; this round added tests proving spoofed client `deviceId` values are overwritten and wrong client type is rejected.
+- Findings ordered by severity:
+  - No blocking scoped finding found in code review or automated verification.
+  - Medium remaining acceptance risk: this proves the runtime behavior in automated tests, but not yet that the packaged `.exe` is installed under the employee's actual Windows profile and started by Windows after a real overnight shutdown.
+  - Medium remaining operational risk: if the Windows sampler itself remains permanently broken on an employee computer, heartbeat/device visibility will recover, but no new foreground app usage can be generated until sampling works.
+  - Low expected limitation: Owner-side UI readability/diagnostic display was explicitly out of scope per user instruction; this fix relies on existing `/devices`, reports, and live foreground APIs.
+- Test/verification status:
+  - `.\node_modules\.bin\prisma.CMD generate`: passed after approved network escalation.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps\desktop-agent\tsconfig.json`: passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps\api\tsconfig.json`: passed.
+  - Desktop Agent ESLint from `workmap/apps/desktop-agent`: passed.
+  - API ESLint from `workmap/apps/api`: passed.
+  - Desktop Agent full package tests: 25/25 passed, including new sampler-failure heartbeat and stale-session recovery regressions.
+  - API full package tests: 10/10 passed, including new device-client credential-binding regression and existing tracking/report isolation coverage.
+  - Desktop Agent build: passed.
+  - API build: passed.
+  - `git diff --check`: passed with CRLF working-copy warnings only.
+  - High-confidence secret scan: no matches. A broader scan with generic `Bearer` matching returned documentation/code false positives only.
+  - `pnpm.cmd --filter ...` attempts were blocked by existing pnpm non-interactive purge/registry-fetch behavior, so equivalent local npm/direct-bin verification was used.
+- Manual QA status: not run on the physical employee Windows computer. Required manual acceptance: install `0.5.6`, confirm tray startup after Windows login, confirm `/devices` lastSeen refreshes after reboot, confirm foreground app usage appears in Owner reports, confirm sleep/wake does not leave the device disconnected, confirm offline queue drains after reconnect, and confirm revoking the device still forces re-pair.
+- Risks:
+  - No installer artifact was produced in this round; `npm.cmd run build` produced the local alpha build only, not the NSIS release installer.
+  - The deployed Render API must contain the current backend behavior and the employee computer must be paired with the new `0.5.6` credential/device record for end-to-end acceptance.
+  - Existing unrelated Web loader changes remain dirty in the worktree and were intentionally not reviewed as part of this QA pass.
+- Pass/fail recommendation: pass for scoped Desktop Agent/API functional implementation and automated regression coverage. Do not call the real employee-machine issue fully resolved until the packaged `0.5.6` installer passes the real reboot/sleep/network acceptance matrix.
+- Whether the next round can proceed: yes. Next round should package/release `0.5.6` and run physical Windows acceptance.
+
+---
+
+## 2026-07-09 Desktop Agent 0.5.6 Scope Proposal QA
+
+- Reviewed implementation: Desktop Agent runtime loop, API client timeout/error handling, Windows foreground sampler, Electron startup/autostart, local DPAPI credential storage, queue/status files, backend device/session/report services, frontend API types, and Employees aggregation behavior.
+- Diff review summary: no product code was changed. This round produced a concrete 0.5.6 scope recommendation for reliability/diagnostics, with real user scenarios and boundaries.
+- Findings ordered by severity:
+  - High: an Agent-only release can improve local heartbeat/recovery, but Owner-side clarity requires API/Web diagnostics too. Otherwise Owner still sees only stale `lastSeenAt`/report gaps.
+  - High: heartbeat must be decoupled from foreground sampling; otherwise sampler failure can make a running tray process appear disconnected from the Owner side.
+  - Medium: stale session 403 should be recoverable; treating all 403 responses as invalid credentials risks unnecessary re-pairing.
+  - Medium: DPAPI/wrong-Windows-user failures need explicit UI/diagnostics because installed apps are per-user and credentials are protected to the Windows account.
+- Test/verification status: read-only review only. No automated tests were run because no product code changed.
+- Manual QA status: not run.
+- Risks: this is a proposal, not an implementation. The next coding round must convert the scope into tests and code before packaging.
+- Recommendation: proceed only after confirming whether 0.5.6 includes Owner-side API/Web diagnostics or is limited to the Windows `.exe`. For the stated monitoring need, coordinated Agent + API/Web diagnostics is recommended.
+
+---
+
+## 2026-07-09 Desktop Agent Still Disconnected Diagnostic QA
+
+- Reviewed implementation: Desktop Agent `runtime.ts`, `apiClient.ts`, `pairing.ts`, Electron startup, local credential/status storage, backend `device-client` controller, backend `DevicesService`, and previous Desktop Agent stale-connected handoff.
+- Diff review summary: no product code was changed. This was a read-only diagnostic review prompted by the employee Desktop Agent still failing to refresh Owner-side device/report data after the `0.5.5` release.
+- Findings ordered by severity:
+  - High: heartbeat is coupled to successful foreground sampling. If the Windows foreground sampler fails persistently, the Agent process can keep running while no heartbeat reaches `/device-client/heartbeat`, leaving `/devices.lastSeenAt` stale and reports disconnected.
+  - Medium: heartbeat/upload `401/403` failures are all treated as `auth_required`. A stale or inactive `agentSession` can produce a backend `403` that may be recoverable, but the current Agent can stop as if the credential were invalid.
+  - Medium: diagnostics are still too thin. `status.json` has one error string, but there is no persistent rolling log or explicit UI row for API URL, agent version, bound device id/user, last heartbeat request result, and sampler status.
+- Test/verification status: read-only source review only. No automated tests were run because no implementation code changed in this round.
+- Manual QA status: not run on the employee Windows computer. Required evidence: capture Agent window status/error line and `%LOCALAPPDATA%\WorkMap\DesktopAgent\status.json` after the disconnected state appears.
+- Risks: the exact live cause is not confirmed until employee-machine status/config data is inspected. Plausible live causes include sampler failure, stale session 403, revoked/invalid credential, wrong Windows user profile, blocked network/API, or still-running older binary.
+- Recommendation: do not treat `0.5.5` as the final fix. It improved stale-state truthfulness but did not harden the heartbeat/upload loop. Next round should implement heartbeat/sampler decoupling and stale-session recovery, then package a new Desktop Agent release for employee-machine verification.
+
+---
+
+## 2026-07-09 WorkMap Loading Pixel Walker QA
+
+- Reviewed implementation: shared `WorkMapLoader` markup, global loader CSS, selected layered avatar asset paths, six-frame down-walk animation coordinates, reduced-motion behavior, and source regression test coverage.
+- Diff review summary: the old rotating `wm-loader-mark`/`WM` logo has been removed from the loader component. The replacement is a four-layer pixel avatar stacked from existing public spritesheets, animated with `background-position` across the confirmed walk-down frames. No loading-state timing, data readiness, auth, or route behavior changed.
+- Findings ordered by severity: no scoped blocking finding. Existing repository blocker remains `workmap/apps/web/lib/api/authApi.ts`, which contains NUL/invalid characters and prevents full Web parsing/build.
+- Test/verification status: `tsx --test apps/web/test/workmap-loader-source.test.ts` passed 3/3; targeted ESLint passed for `WorkMapLoader.tsx` and the new test; all four sprite asset files were confirmed present; `git diff --check` passed with LF-to-CRLF warnings; scoped secret scan returned no matches.
+- Verification blocked/limited: `pnpm.cmd --filter @workmap/web typecheck`, `pnpm.cmd --filter @workmap/web lint`, and `pnpm.cmd --filter @workmap/web build` all failed on the pre-existing `authApi.ts` invalid-character/NUL corruption before full-app validation could complete.
+- Manual QA status: not run. Product Design rendered comparison is blocked because the local Web app cannot build until `authApi.ts` is restored.
+- Risks: the animation frame coordinates and asset paths are automated-source-tested, but the final perceived scale and visual timing still need browser verification after the build blocker is fixed.
+- Recommendation: pass for scoped code review and targeted automated verification. The next round can proceed, but release/deployment acceptance requires fixing `authApi.ts`, rerunning full Web checks, and visually QAing the loader on real routes.
+
+---
+
 ## 2026-07-08 Virtual Office Complete-Render Loading Gate QA
 
 - Reviewed implementation: route/auth loading handoff, cached/API office data completion, avatar readiness, TMX loading, tileset/avatar image loading, main canvas first draw, mini-map first draw, full-page loader layering, and map-load error behavior.

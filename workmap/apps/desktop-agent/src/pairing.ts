@@ -2,7 +2,7 @@ import { exchangePairingCode, waitForApiReady } from "./apiClient.js";
 import { loadAgentConfig, saveAgentConfig } from "./credentialStore.js";
 import { FileEventQueue, writeAgentStatus, writeTrackingCheckpoint } from "./fileStore.js";
 
-export const DESKTOP_AGENT_VERSION = "desktop-agent-windows/0.5.5";
+export const DESKTOP_AGENT_VERSION = "desktop-agent-windows/0.5.6";
 export const DEFAULT_API_BASE_URL = "https://workmap-api.onrender.com";
 
 export type PairingProgress = "waking" | "validating" | "securing";

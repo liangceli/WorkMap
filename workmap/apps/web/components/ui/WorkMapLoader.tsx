@@ -11,7 +11,12 @@ export function WorkMapLoader({ fullPage = false, label = "Loading" }: WorkMapLo
       aria-live="polite"
       aria-label={label}
     >
-      <div className="wm-loader-mark" aria-hidden="true"><span>WM</span></div>
+      <div className="wm-loader-walker" aria-hidden="true">
+        <span className="wm-loader-walker-layer wm-loader-walker-body" />
+        <span className="wm-loader-walker-layer wm-loader-walker-eyes" />
+        <span className="wm-loader-walker-layer wm-loader-walker-outfit" />
+        <span className="wm-loader-walker-layer wm-loader-walker-hair" />
+      </div>
       <span className="wm-loader-label">{label}</span>
     </div>
   );

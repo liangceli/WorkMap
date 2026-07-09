@@ -4,11 +4,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { DeviceClientType, UserRole } from "@prisma/client";
-import { UnauthorizedException } from "@nestjs/common";
+import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
+import { DeviceClientController } from "../src/modules/devices/device-client.controller.js";
 import { DevicePairingService } from "../src/modules/devices/device-pairing.service.js";
 
 const COMPANY_ID = "11111111-1111-4111-8111-111111111111";
 const USER_ID = "33333333-3333-4333-8333-333333333333";
+const DEVICE_ID = "44444444-4444-4444-8444-444444444444";
+const SPOOFED_DEVICE_ID = "55555555-5555-4555-8555-555555555555";
 const context = { companyId: COMPANY_ID, userId: USER_ID, role: "EMPLOYEE" as const };
 
 test("pairing code is tenant/user bound, short-lived, one-time and credential is hash-only", async () => {
@@ -58,6 +61,41 @@ test("device credentials are isolated from tenant report auth surface", async ()
   assert.doesNotMatch(reportController, /DeviceCredentialGuard/);
   assert.match(deviceController, /DeviceCredentialGuard/);
   assert.match(deviceController, /device-client/);
+});
+
+test("device-client endpoints bind uploaded usage to the credential device context", async () => {
+  const calls: Array<{ context: unknown; input: any }> = [];
+  const activity = {
+    ingestAppUsage: async (requestContext: unknown, input: unknown) => {
+      calls.push({ context: requestContext, input });
+      return { accepted: 2 };
+    },
+    ingestDomainUsage: async () => ({ accepted: 0 }),
+  };
+  const controller = new DeviceClientController({} as never, {} as never, activity as never);
+  const deviceContext = {
+    companyId: COMPANY_ID,
+    userId: USER_ID,
+    role: UserRole.EMPLOYEE,
+    deviceId: DEVICE_ID,
+    credentialId: "credential-1",
+    clientType: DeviceClientType.DESKTOP_AGENT,
+  };
+
+  const result = await controller.appUsage(deviceContext, {
+    events: [
+      { deviceId: SPOOFED_DEVICE_ID, appName: "Code", durationSeconds: 60 },
+      { appName: "Edge", durationSeconds: 30 },
+    ],
+  });
+
+  assert.deepEqual(result, { accepted: 2 });
+  assert.deepEqual(calls[0]?.context, { companyId: COMPANY_ID, userId: USER_ID, role: UserRole.EMPLOYEE });
+  assert.deepEqual(calls[0]?.input.events.map((event: any) => event.deviceId), [DEVICE_ID, DEVICE_ID]);
+  assert.throws(
+    () => controller.domainUsage(deviceContext, { events: [{ deviceId: SPOOFED_DEVICE_ID, domain: "example.com" }] }),
+    ForbiddenException,
+  );
 });
 
 class PairingPrisma {

@@ -218,18 +218,41 @@ a {
   background: rgba(255, 253, 248, 0.72);
 }
 
-.wm-loader-mark {
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 18px;
-  background: var(--wm-secondary);
-  color: white;
-  font-size: 16px;
-  font-weight: 800;
-  box-shadow: 0 16px 36px rgba(36, 127, 122, 0.22);
-  animation: wm-logo-spin 950ms cubic-bezier(0.55, 0.1, 0.45, 0.9) infinite;
+.wm-loader-walker {
+  position: relative;
+  width: 96px;
+  height: 144px;
+  filter: drop-shadow(0 18px 24px rgba(16, 32, 51, 0.16));
+  image-rendering: pixelated;
+  transform: translateY(2px);
+}
+
+.wm-loader-walker-layer {
+  position: absolute;
+  inset: 0;
+  width: 96px;
+  height: 144px;
+  background-position: -1728px -432px;
+  background-repeat: no-repeat;
+  background-size: 5376px 2112px;
+  image-rendering: pixelated;
+  animation: wm-loader-walk-down 840ms steps(6) infinite;
+}
+
+.wm-loader-walker-body {
+  background-image: url("/assets/avatars/layers/bodies/Body_1.png");
+}
+
+.wm-loader-walker-eyes {
+  background-image: url("/assets/avatars/layers/eyes/Eyes_Blue.png");
+}
+
+.wm-loader-walker-outfit {
+  background-image: url("/assets/avatars/layers/outfits/Outfit_Braces_Brown.png");
+}
+
+.wm-loader-walker-hair {
+  background-image: url("/assets/avatars/layers/hairstyles/Hairstyle_Short_Brown_Dark.png");
 }
 
 .wm-loader-label {
@@ -238,13 +261,13 @@ a {
   letter-spacing: 0.02em;
 }
 
-@keyframes wm-logo-spin {
-  to { transform: rotate(360deg); }
+@keyframes wm-loader-walk-down {
+  from { background-position: -1728px -432px; }
+  to { background-position: -2304px -432px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wm-loader-mark { animation: wm-logo-pulse 1.2s ease-in-out infinite alternate; }
-  @keyframes wm-logo-pulse { to { opacity: 0.55; } }
+  .wm-loader-walker-layer { animation: none; }
 }
 
 @media (max-width: 720px) {

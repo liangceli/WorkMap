@@ -1,5 +1,146 @@
 # Latest Implementation Handoff
 
+## 2026-07-09 Desktop Agent 0.5.6 Release Installer Packaging
+
+- Original task: package Desktop Agent `0.5.6` so the user can upload the installer to GitHub Releases.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`. The installer artifact was generated under `workmap/artifacts/desktop-agent/` and is ignored by git.
+- Generated artifact:
+  - `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.6.exe`
+  - Size: `91,938,656` bytes.
+  - SHA-256: `8295AC37ED777C18AF84F83251A76064EA4AEB8193C49CE037D1899ED1CA2766`.
+  - Authenticode status: `NotSigned`.
+  - Blockmap also generated: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.6.exe.blockmap`.
+- Implementation summary: ran the Desktop Agent `release:windows` script for the already-implemented `0.5.6` code. The command regenerated the app icon, ran TypeScript compilation, packaged the Electron app for Windows x64, and built the NSIS one-click current-user installer.
+- Verification commands and results:
+  - `npm.cmd run release:windows` from `workmap/apps/desktop-agent`: first attempt reached packaging but failed when electron-builder needed network access from the sandbox.
+  - `npm.cmd run release:windows` rerun with approved network escalation: passed and produced `WorkMap-Desktop-Agent-Setup-0.5.6.exe`.
+  - `Get-FileHash artifacts\desktop-agent\WorkMap-Desktop-Agent-Setup-0.5.6.exe -Algorithm SHA256`: passed, hash listed above.
+  - `Get-AuthenticodeSignature artifacts\desktop-agent\WorkMap-Desktop-Agent-Setup-0.5.6.exe`: passed, status `NotSigned`.
+- Manual QA results: installer was not installed on the employee Windows computer in this round.
+- Intentionally not changed: no source code logic, API, Web, Browser Extension, schema, RBAC, deployment config, or git-tracked release metadata changed during packaging.
+- Remaining risks: the installer is unsigned, so Windows SmartScreen/security prompts may appear. Real acceptance still requires installing this exact `0.5.6` file under the employee's actual Windows account and confirming reboot/sleep/network recovery.
+- Suggested next steps: upload `WorkMap-Desktop-Agent-Setup-0.5.6.exe` to the GitHub Release, then install it on the employee PC and run the manual acceptance matrix from the previous handoff.
+
+---
+
+## 2026-07-09 Desktop Agent 0.5.6 Functional Reliability Fix
+
+- Original task: implement and review the concrete Desktop Agent `0.5.6` fixes only. Do not include Owner-page readability/status-display work. The required behavior is functional: after an employee computer is shut down overnight and restarted, the Desktop Agent must wake, heartbeat, track foreground app usage, upload usage for the bound employee only, and preserve employee/company data isolation for multiple employees and future companies.
+- Changed files:
+  - `workmap/apps/desktop-agent/package.json`
+  - `workmap/apps/desktop-agent/src/apiClient.ts`
+  - `workmap/apps/desktop-agent/src/runtime.ts`
+  - `workmap/apps/desktop-agent/src/pairing.ts`
+  - `workmap/apps/desktop-agent/test/gui-release.test.ts`
+  - `workmap/apps/desktop-agent/test/queue-api.test.ts`
+  - `workmap/apps/api/test/device-pairing.test.ts`
+  - `workmap/apps/api/test/tracking-reports-verification.test.ts`
+  - `docs/ai-handoff/latest-implementation.md`
+  - `docs/ai-handoff/latest-qa.md`
+- Implementation summary:
+  - Bumped Desktop Agent identity to `0.5.6` (`package.json` version and `desktop-agent-windows/0.5.6` pairing/heartbeat agent version).
+  - Decoupled the runtime heartbeat/upload path from foreground sampling. If the Windows foreground sampler fails after reboot/wake, the loop now still sends heartbeat and flushes queued events instead of skipping all API communication for that iteration.
+  - Added stale/inactive agent-session recovery. If heartbeat receives backend `403` with `Agent session is not active for this device.`, the Agent clears the old `sessionId`, starts a new session, and retries heartbeat once without requiring re-pairing.
+  - Added limited retries for runtime API calls (`session/start`, `heartbeat`, `app-usage`, `session/stop`) on network failures or 5xx responses. Pairing-code exchange intentionally does not use those runtime retries, because pairing codes are one-time credentials and retrying a timed-out successful exchange could consume the code without recovering the credential.
+  - API error handling now reads sanitized response-body messages, so the runtime can distinguish recoverable stale-session `403` from real credential/device authorization failures.
+  - Added backend regression coverage that `device-client` uploads are bound to the credential's `companyId`, `userId`, `deviceId`, and `clientType`; a client-supplied/spoofed `deviceId` is overwritten before activity ingestion.
+  - Strengthened activity/report regression setup by seeding an existing other-company device before asserting same employee context cannot upload usage to it.
+- Functional behavior by scenario:
+  - Employee PC reboot after a night offline: the installed per-user Agent starts at Windows login through existing Electron `openAtLogin`, starts a fresh session if needed, heartbeats even before/while sampler recovery is unstable, and uploads any durable queued events when the API is reachable.
+  - Sampler failure after wake: Owner-side `/devices.lastSeenAt` can still refresh because heartbeat is no longer blocked by `WindowsForegroundAdapter.sample()` throwing.
+  - Stale server session after restart/wake: Agent no longer stops as `auth_required`; it creates a new backend AgentSession and continues.
+  - Multiple employees on different computers: app usage sent through `/device-client/app-usage` is stored under the employee and company resolved from the device credential, not from client-provided user/company/device fields.
+  - Future multiple companies: credential resolution and activity ingestion still require the credential device to match the same `companyId` and `userId`; cross-company device ids are rejected.
+- Role/access behavior:
+  - No Owner/Employee/Platform Admin frontend role surface changed.
+  - No report permission, RBAC, auth, schema, Prisma migration, or tenant-membership model changed.
+  - The existing backend credential context remains authoritative for Desktop Agent uploads.
+- Verification commands and results:
+  - `.\node_modules\.bin\prisma.CMD generate`: passed after escalation because the local Prisma Client was missing and the Prisma engine checksum download needed network access.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps\desktop-agent\tsconfig.json`: passed.
+  - `.\node_modules\.bin\tsc.CMD --noEmit -p apps\api\tsconfig.json`: passed after Prisma Client generation.
+  - `..\..\node_modules\.bin\eslint.CMD .` from `workmap/apps/desktop-agent`: passed.
+  - `..\..\node_modules\.bin\eslint.CMD .` from `workmap/apps/api`: passed.
+  - `npm.cmd test` from `workmap/apps/desktop-agent`: passed 25/25.
+  - `npm.cmd test` from `workmap/apps/api`: passed 10/10.
+  - `npm.cmd run build` from `workmap/apps/desktop-agent`: passed.
+  - `npm.cmd run build` from `workmap/apps/api`: passed.
+  - `git diff --check`: passed with CRLF working-copy warnings only.
+  - High-confidence secret scan excluding env, generated, node_modules, dist, tsbuildinfo, and reference directories: no matches.
+  - Initial `pnpm.cmd --filter ...` verification attempts were blocked by the known pnpm non-interactive modules purge plus registry fetch issue; equivalent local package commands above were run instead.
+- Manual QA results: not run on the separate employee Windows computer. Required release acceptance remains: install the packaged `0.5.6` on the employee Windows account, reboot after shutdown, confirm `/devices` lastSeen refreshes shortly after login, confirm Owner reports receive fresh foreground app usage, then repeat after sleep/wake and network disconnect/reconnect.
+- Intentionally not changed:
+  - No Owner website status-display/readability work was included.
+  - No Browser Extension code changed.
+  - No screenshots, window titles, full URLs, keystrokes, clipboard, camera, microphone, file content, or message-content collection added.
+  - No backend schema/migration or frontend page behavior changed.
+  - Existing unrelated Web loader files already dirty in the worktree were preserved and not included in this implementation scope.
+- Remaining risks:
+  - The real employee-machine defect is not fully accepted until the new `0.5.6` binary is packaged, installed for the correct Windows user, and tested through a real reboot/sleep-wake cycle against the deployed Render API.
+  - If Windows blocks the foreground sampler permanently, `0.5.6` will still heartbeat and upload queued events, but new foreground-app usage cannot be created until the sampler succeeds again.
+  - Existing per-user Windows autostart is preserved; if the Agent was installed/paired under a different Windows profile, that separate operational issue still requires pairing/installing under the employee's actual Windows login.
+- Suggested next steps: package the Desktop Agent `0.5.6` installer, install it on the employee PC under the paired employee Windows profile, and run the reboot/sleep/network acceptance matrix before declaring the production monitoring issue resolved.
+
+---
+
+## 2026-07-09 Desktop Agent 0.5.6 Scope Proposal
+
+- Original task: carefully define what Desktop Agent `0.5.6` should do, using short concrete scenarios rather than abstract claims, so the next release can satisfy the Owner need without repeated rework.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only. No Desktop Agent/API/Web product code was changed in this planning round.
+- Scope conclusion: `0.5.6` should be a reliability and diagnostics release. Its job is not to add new monitoring types. Its job is to make the existing Desktop Agent reliably answer four practical questions: is the employee computer heartbeating, is app tracking working, is usage queued/uploaded, and if not, what exact action is required.
+- Recommended must-have behavior:
+  - Heartbeat must run even if foreground app sampling fails. Scenario: PowerShell sampling breaks after wake; Owner still sees the device online, while employee/diagnostics show tracking degraded.
+  - Stale/inactive agent sessions must self-recover. Scenario: backend says the old session is not active; Agent clears `sessionId`, starts a new session, and continues without re-pairing.
+  - Runtime startup should warm/check API before declaring failure. Scenario: employee opens the laptop after Render/API cold start; Agent waits long enough to wake the API instead of failing the first 10-second heartbeat and looking dead.
+  - Usage queue must remain durable and visibly drain. Scenario: employee works offline, then reconnects; queued app usage uploads and the queue count falls to zero.
+  - Employee window needs concrete diagnostics. Scenario: employee says "it's open"; Owner asks for Copy diagnostics and sees version, API, device id prefix, last heartbeat, last upload, queue count, sampler state, and last sanitized error.
+  - Wrong Windows profile / DPAPI failure must be explicit. Scenario: the installer was run under a different Windows user; Agent says this Windows account is not paired instead of silently showing stale state.
+  - Owner-side status should distinguish online-but-not-tracking from disconnected. Scenario: device heartbeat is fresh but app sampler is failing; `/employees` or `/devices` should show "Device online / Tracking error", not "Disconnected".
+- Behavior boundaries: no screenshots, window titles, full URLs, keystrokes, clipboard, camera, microphone, file contents, or message contents should be added. Browser domain monitoring remains Browser Extension scope, not Desktop Agent scope.
+- Product fit: this scope satisfies the Owner need only if combined with minimal API/Web status display work. A new `.exe` alone can improve heartbeat/recovery/local diagnostics, but Owner-side pages cannot explain sampler/session errors unless the API/Web surface exposes those diagnostics.
+- Acceptance checks proposed: install `0.5.6`, reboot Windows, confirm `/devices.lastSeenAt` refreshes within about 30 seconds after login; sleep/wake and confirm refresh; simulate sampler failure and confirm heartbeat continues but tracking shows degraded; simulate stale session and confirm auto-recovery; disconnect/reconnect network and confirm queue drains; revoke device and confirm the Agent clearly shows Pair again.
+- Verification commands and results: read-only source review of Desktop Agent runtime, API client, Windows sampler, Electron startup, local credential/status storage, backend device/session/report services, frontend device/report types, and Employees aggregation. No tests were run because no product code changed.
+- Manual QA results: not run on the employee Windows computer.
+- Intentionally not changed: no Desktop Agent implementation, API contract, schema, Web UI, release package, or deployment was changed.
+- Remaining risks: exact implementation effort depends on whether Owner-side diagnostics are included in `0.5.6` or deferred. Agent-only `0.5.6` will not fully solve "why is this employee disconnected" from the Owner website.
+- Suggested next steps: confirm this scope, then implement `0.5.6` as a coordinated Desktop Agent + small API/Web diagnostics release rather than only repackaging the `.exe`.
+
+---
+
+## 2026-07-09 Desktop Agent Still Disconnected Diagnostic
+
+- Original task: explain why, after another day, the employee Desktop Agent still appears disconnected and Owner-side WorkMap still cannot get fresh device info or usage duration even though the latest `0.5.5` Desktop Agent was published.
+- Changed files: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md` only. No product code was changed in this diagnostic round.
+- Diagnostic summary: the previous `0.5.5` fix was scoped to local truthfulness: it stopped the Agent window from showing stale local `Connected` when there was no fresh server-confirmed heartbeat. It did not prove or guarantee that the underlying heartbeat/upload path would recover after restart, sleep/wake, or a new day.
+- Root cause hypothesis from code review: `DesktopAgentRuntime.runLoop()` samples the foreground app before it sends heartbeat. If `WindowsForegroundAdapter.sample()` fails after reboot/wake, PowerShell script failure, timeout, policy/AV interference, or packaged resource issue, the loop jumps to the catch block and never calls `heartbeat()` for that iteration. Persistent sampling failure therefore leaves the tray/app process present while `/devices.lastSeenAt`, report live status, and usage summaries remain stale.
+- Secondary risk found: any `401/403` from heartbeat or upload is mapped to `auth_required`. Backend heartbeat can return `403` when the supplied `sessionId` is no longer active. That is potentially recoverable by starting a new session, but the current Agent treats it like an invalid/revoked credential and stops.
+- Evidence: `workmap/apps/desktop-agent/src/runtime.ts` lines 51-68 place sampling, tracking, heartbeat, and queue flush in one try block; lines 105-118 only update `lastHeartbeatAt` after successful API heartbeat; lines 147-150 map all heartbeat 401/403 failures to `auth_required`. `workmap/apps/api/src/modules/devices/devices.service.ts` line 137 can throw `ForbiddenException("Agent session is not active for this device.")` for stale session IDs.
+- Expected employee-machine evidence: `%LOCALAPPDATA%\WorkMap\DesktopAgent\status.json` should show one of `error`, `offline`, or `auth_required`, plus a sanitized `error` field. If it still shows `connected`, the release installed/running on that Windows user is not the expected `0.5.5` behavior or the UI is reading a fresh-but-not-owner-visible signal for a different bound user/device.
+- Role/access behavior: no Owner/Employee RBAC, tenant isolation, backend report permission, pairing ownership, or deployment behavior was changed.
+- Verification commands and results: read-only source review of Desktop Agent runtime/API client/Electron startup, device client controller, device service, and previous handoff records. No tests were run because no source code changed.
+- Manual QA results: not run on the separate employee Windows computer. Required check: open the employee machine and inspect `%LOCALAPPDATA%\WorkMap\DesktopAgent\status.json`, `config.json` metadata, Agent window status/error line, and `/devices` for the same device id.
+- Intentionally not changed: no code fix was implemented yet; existing uncommitted Web loader changes were preserved.
+- Remaining risks: until the employee-machine `status.json` is inspected, the exact live branch remains unconfirmed: sampler failure, invalid/revoked credential, stale agent session, network/API timeout, wrong Windows user profile, or not actually running the newly installed build.
+- Suggested next steps: implement a Desktop Agent robustness fix that decouples heartbeat from foreground sampling, adds persistent diagnostics/logging, includes API error body text, and recovers stale session IDs by clearing `sessionId` and starting a new session before requiring re-pair.
+
+---
+
+## 2026-07-09 WorkMap Loading Pixel Walker
+
+- Original task: replace the current rotating WorkMap logo loading page with a walking pixel character chosen from the existing Virtual Office avatar assets.
+- Changed files: `workmap/apps/web/components/ui/WorkMapLoader.tsx`, `workmap/apps/web/app/globals.css`, `workmap/apps/web/test/workmap-loader-source.test.ts`, `design-qa.md`, `docs/ai-handoff/latest-implementation.md`, and `docs/ai-handoff/latest-qa.md`.
+- Implementation summary: the shared `WorkMapLoader` now renders a layered pixel walker instead of the old `WM` rotating mark. The loader uses the confirmed default avatar layers: `Body_1`, `Eyes_Blue`, `Outfit_Braces_Brown`, and `Hairstyle_Short_Brown_Dark`. CSS animates the existing layered spritesheets through the six calibrated down-walk frames with `steps(6)`.
+- Accessibility and motion behavior: the existing `role="status"`, `aria-live`, and `aria-label` behavior remains unchanged. `prefers-reduced-motion: reduce` disables the walking animation and leaves the first frame visible.
+- Role/access behavior: no auth, RBAC, tenant isolation, route permission, Virtual Office data loading, Desktop Agent, Browser Extension, report aggregation, or backend behavior changed.
+- Verification commands and results: `tsx --test apps/web/test/workmap-loader-source.test.ts` passed 3/3; targeted ESLint on `WorkMapLoader.tsx` and the new source test passed; four referenced sprite assets were confirmed present under `apps/web/public/assets/avatars/layers`; `git diff --check` passed with LF-to-CRLF warnings; scoped secret scan returned no matches.
+- Verification blocked/limited: `pnpm.cmd --filter @workmap/web typecheck`, `lint`, and `build` all still fail on the pre-existing NUL/invalid-character corruption in `workmap/apps/web/lib/api/authApi.ts`. This blocker is unrelated to the loader change.
+- Manual QA results: browser visual QA was not run because the same `authApi.ts` corruption prevents a local Web build. Product Design `design-qa.md` was updated as blocked for rendered screenshot comparison.
+- Intentionally not changed: no new image assets were generated, no sprite sheets were edited, no loading gate timing changed, and no page-specific loader logic was added.
+- Remaining risks: the loader animation is source-tested but not visually browser-verified in this checkout. Full deployment confidence requires restoring `authApi.ts`, running full Web checks, and cold-loading pages that use `WorkMapLoader`.
+- Suggested next steps: restore `workmap/apps/web/lib/api/authApi.ts`, rerun full Web typecheck/lint/build, then visually confirm `/virtual-office` and a normal route-level loading state show the walking pixel character cleanly.
+
+---
+
 ## 2026-07-08 Virtual Office Complete-Render Loading Gate
 
 - Original task: prevent `/virtual-office` from exposing its empty chrome/canvas while the map is still loading; show the same full-page rotating WorkMap logo loader used by other pages until the complete Virtual Office is ready.
