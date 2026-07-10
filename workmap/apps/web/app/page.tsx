@@ -1,88 +1,181 @@
 "use client";
 
+import Image from "next/image";
 import {
   Activity,
+  AppWindow,
   ArrowRight,
   BarChart3,
+  BookOpenCheck,
   Building2,
   Check,
-  CheckCircle2,
-  ChevronDown,
+  ChevronRight,
+  CircleStop,
+  Clock3,
+  Eye,
   FileBarChart,
-  LayoutDashboard,
+  Globe2,
+  HeartPulse,
+  KeyRound,
+  Laptop,
   LockKeyhole,
   Menu,
+  MessageCircle,
   MonitorCheck,
+  PauseCircle,
+  RefreshCw,
   ShieldCheck,
-  Sparkles,
-  UserPlus,
+  Signal,
+  UserCheck,
   Users,
   X,
+  XCircle,
 } from "lucide-react";
-import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import styles from "./home.module.css";
 
-type ProductTab = "visibility" | "reports" | "office";
+type ServiceId = "visibility" | "reports" | "office";
 
-const tabs: Array<{
-  id: ProductTab;
-  label: string;
-  description: string;
-  icon: typeof Activity;
-}> = [
+const services = [
   {
-    id: "visibility",
+    id: "visibility" as const,
     label: "Work visibility",
-    description: "Understand activity and collaboration at a glance.",
+    description: "Understand activity without private content.",
     icon: Activity,
   },
   {
-    id: "reports",
+    id: "reports" as const,
     label: "Reports",
-    description: "Track trends and plan with confidence.",
+    description: "Review clear, role-aware summaries.",
     icon: BarChart3,
   },
   {
-    id: "office",
+    id: "office" as const,
     label: "Virtual Office",
-    description: "See who is around and where work is happening.",
+    description: "Meet, signal availability, and interact.",
     icon: Building2,
   },
 ];
 
+const visibilityFeatures = [
+  { icon: AppWindow, text: "Foreground app name + duration" },
+  { icon: Globe2, text: "Browser hostname + duration" },
+  { icon: Clock3, text: "Idle and locked time stop counting" },
+  { icon: UserCheck, text: "Employees can review their own summary" },
+];
+
+const signals = [
+  { icon: AppWindow, name: "App", included: "App name", discarded: "No window title" },
+  { icon: Globe2, name: "Domain", included: "Hostname", discarded: "No URL path, query or title" },
+  { icon: Users, name: "Presence", included: "Status + room", discarded: "No private content" },
+  { icon: Laptop, name: "Device", included: "Heartbeat", discarded: "No screens or keystrokes" },
+];
+
 const collectedSignals = [
-  ["Presence signals", "Status, workspace presence and time segments"],
-  ["App and domain duration", "Privacy-minimised work patterns over time"],
-  ["Acknowledgement records", "Clear policy notice and consent timestamps"],
+  { icon: AppWindow, text: "App name + duration" },
+  { icon: Globe2, text: "Domain hostname + duration" },
+  { icon: Users, text: "Presence status + room" },
+  { icon: HeartPulse, text: "Device heartbeat + coverage" },
+  { icon: BookOpenCheck, text: "Policy acknowledgement" },
 ];
 
 const excludedSignals = [
-  "Screenshots or screen recordings",
-  "Keystrokes, clipboard or form inputs",
-  "Camera, microphone or private messages",
-  "Email or webpage body content",
-  "Passwords or full URL paths",
+  "Screenshots or recordings",
+  "Keystrokes or clipboard",
+  "Window or page titles",
+  "Full URLs, paths or queries",
+  "Page, form, email or message content",
+  "Camera or microphone",
+];
+
+const frequentlyAskedQuestions = [
+  {
+    question: "What does the Desktop Agent do?",
+    answer: "It records the foreground app name and active duration. It stops when Windows is idle or locked.",
+  },
+  {
+    question: "What does the Browser Extension do?",
+    answer: "It records the active website hostname and duration. It discards paths, queries, titles, and page content.",
+  },
+  {
+    question: "What does WorkMap collect?",
+    answer: "App and domain duration, presence, room, device heartbeat, and policy acknowledgement.",
+  },
+  {
+    question: "What does WorkMap never collect?",
+    answer: "No screenshots, keystrokes, clipboard, full URLs, private content, camera, or microphone.",
+  },
+  {
+    question: "Can employees stop tracking?",
+    answer: "Yes. They can stop the Desktop Agent or disable the Browser Extension.",
+  },
+  {
+    question: "What happens when a device is offline?",
+    answer: "A limited local queue retries with backoff when the network returns.",
+  },
+  {
+    question: "What can employees see?",
+    answer: "Their own activity summary, device status, and compliance state.",
+  },
+  {
+    question: "What can owners see?",
+    answer: "Company summaries and role-allowed employee views inside the same tenant.",
+  },
+  {
+    question: "How does secure pairing work?",
+    answer: "A short-lived, one-time code creates a device-scoped credential. Revoking the device stops access.",
+  },
+  {
+    question: "How do I start using WorkMap?",
+    answer: "Create an owner account, set up the workspace, invite the team, then pair the Agent and Extension.",
+  },
 ];
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<ProductTab>("visibility");
+  const [activeService, setActiveService] = useState<ServiceId>("visibility");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [headerCompact, setHeaderCompact] = useState(false);
+  const [openQuestion, setOpenQuestion] = useState(0);
+  const faqListRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onScroll = () => setHeaderCompact(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-home-reveal]"));
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      nodes.forEach((node) => node.classList.add(styles.revealed));
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add(styles.revealed);
+          observer.unobserve(entry.target);
+        });
+      },
+      { threshold: 0.18, rootMargin: "0px 0px -12%" },
+    );
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+
+  const closeMenu = () => setMenuOpen(false);
 
   return (
     <div className={styles.page}>
-      <a className={styles.skipLink} href="#main-content">
-        Skip to main content
-      </a>
+      <a className={styles.skipLink} href="#main-content">Skip to main content</a>
 
-      <header className={`${styles.header} ${menuOpen ? styles.headerMenuOpen : ""}`}>
+      <header className={`${styles.header} ${headerCompact ? styles.headerCompact : ""} ${menuOpen ? styles.headerMenuOpen : ""}`}>
         <nav className={styles.nav} aria-label="Main navigation">
-          <a className={styles.brand} href="#top" aria-label="WorkMap home">
-            <span className={styles.brandMark} aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
+          <a className={styles.brand} href="#top" aria-label="WorkMap home" onClick={closeMenu}>
+            <span className={styles.brandMark} aria-hidden="true">WM</span>
             <span>WorkMap</span>
           </a>
 
@@ -94,24 +187,24 @@ export default function HomePage() {
             aria-controls="home-mobile-navigation"
             onClick={() => setMenuOpen((open) => !open)}
           >
-            {menuOpen ? <X size={22} /> : <Menu size={22} />}
+            {menuOpen ? <X size={22} /> : <Menu size={24} />}
           </button>
 
           <div id="home-mobile-navigation" className={`${styles.navLinks} ${menuOpen ? styles.navLinksOpen : ""}`}>
-            <a href="#product" onClick={() => setMenuOpen(false)}>Product</a>
-            <a href="#privacy" onClick={() => setMenuOpen(false)}>Privacy</a>
-            <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
-            <a href="#company" onClick={() => setMenuOpen(false)}>Company</a>
-            <div className={styles.mobileMenuActions} aria-label="Account actions">
-              <a className={styles.mobileLoginButton} href="/login?mode=signin" onClick={() => setMenuOpen(false)}>Login</a>
-              <a className={styles.mobilePrimaryButton} href="/login?mode=signup" onClick={() => setMenuOpen(false)}>Get started</a>
+            <a href="#product" onClick={closeMenu}>Product</a>
+            <a href="#how-it-works" onClick={closeMenu}>How it works</a>
+            <a href="#privacy" onClick={closeMenu}>Privacy</a>
+            <a href="#faq" onClick={closeMenu}>FAQ</a>
+            <div className={styles.mobileMenuActions}>
+              <a href="/login?mode=signin" onClick={closeMenu}>Login</a>
+              <a className={styles.mobilePrimaryButton} href="/login?mode=signup" onClick={closeMenu}>Get started</a>
             </div>
           </div>
 
           <div className={styles.navActions}>
             <a className={styles.signInLink} href="/login?mode=signin">Sign in</a>
             <a className={styles.primaryButton} href="/login?mode=signup">
-              Create owner account <ArrowRight size={17} />
+              Create owner account <ArrowRight size={15} />
             </a>
           </div>
         </nav>
@@ -119,126 +212,190 @@ export default function HomePage() {
 
       <main id="main-content">
         <section className={styles.hero} id="top">
-          <div className={styles.heroContent}>
-            <p className={styles.eyebrow}>Privacy-conscious work visibility</p>
-            <h1>
-              Clarity for teams.
-              <span>Dignity for people.</span>
-            </h1>
-            <p className={styles.heroLead}>
-              WorkMap connects virtual presence and privacy-minimised work signals, so leaders can support work without watching every move.
-            </p>
-            <div className={styles.heroActions}>
-              <a className={styles.primaryButtonLarge} href="/login?mode=signup">
-                Create owner account <ArrowRight size={19} />
-              </a>
-              <a className={styles.secondaryButtonLarge} href="#privacy">
-                See how privacy works
-              </a>
+          <div className={styles.heroInner}>
+            <div className={styles.heroCopy}>
+              <p className={styles.eyebrow}>Transparent work visibility</p>
+              <h1>See the work.<span>Keep the boundary clear.</span></h1>
+              <p className={styles.heroLead}>
+                WorkMap shows app and domain time, presence, and device status. Never screens, keystrokes, or private content.
+              </p>
+              <div className={styles.heroActions}>
+                <a className={styles.primaryButtonLarge} href="/login?mode=signup">
+                  Create owner account <ArrowRight size={17} />
+                </a>
+                <a className={styles.secondaryButtonLarge} href="#privacy">Explore privacy</a>
+              </div>
+              <div className={styles.heroProof} aria-label="WorkMap principles">
+                <Proof icon={<ShieldCheck size={21} />} label="Explainable signals" />
+                <Proof icon={<Users size={21} />} label="Employee visibility" />
+                <Proof icon={<LockKeyhole size={21} />} label="Clear limits" />
+              </div>
             </div>
 
-            <div className={styles.heroProof} aria-label="WorkMap principles">
-              <div><Users size={22} /><span><strong>Support your team</strong> in the moments that matter.</span></div>
-              <div><ShieldCheck size={22} /><span><strong>Privacy by design.</strong> No surveillance. No surprises.</span></div>
-              <div><CheckCircle2 size={22} /><span><strong>Clear boundaries</strong> around every work signal.</span></div>
+            <div className={styles.heroMedia}>
+              <Image
+                className={styles.heroImage}
+                src="/marketing/workmap-virtual-office-panorama.png"
+                alt="WorkMap Virtual Office showing the complete office map, team presence, navigation, minimap, and visible status controls"
+                width={1904}
+                height={949}
+                priority
+                sizes="(max-width: 900px) calc(100vw - 32px), 60vw"
+              />
             </div>
           </div>
-
-          <HeroPresenceMap />
         </section>
 
-        <section className={styles.productSection} id="product">
-          <div className={styles.tabList} role="tablist" aria-label="WorkMap product areas">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = tab.id === activeTab;
-              return (
-                <button
-                  key={tab.id}
-                  className={`${styles.tab} ${isActive ? styles.tabActive : ""}`}
-                  type="button"
-                  role="tab"
-                  id={`tab-${tab.id}`}
-                  aria-selected={isActive}
-                  aria-controls={`panel-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  <Icon size={24} aria-hidden="true" />
-                  <span><strong>{tab.label}</strong><small>{tab.description}</small></span>
-                </button>
-              );
-            })}
-          </div>
+        <section className={`${styles.servicesSection} ${styles.reveal}`} id="product" data-home-reveal>
+          <div className={styles.sectionContainer}>
+            <div className={styles.serviceTabs} role="tablist" aria-label="WorkMap services">
+              {services.map((service) => {
+                const Icon = service.icon;
+                const selected = activeService === service.id;
+                return (
+                  <button
+                    key={service.id}
+                    className={`${styles.serviceTab} ${selected ? styles.serviceTabActive : ""}`}
+                    type="button"
+                    role="tab"
+                    id={`service-tab-${service.id}`}
+                    aria-selected={selected}
+                    aria-controls={`service-panel-${service.id}`}
+                    onClick={() => setActiveService(service.id)}
+                  >
+                    <Icon size={24} aria-hidden />
+                    <span><strong>{service.label}</strong><small>{service.description}</small></span>
+                  </button>
+                );
+              })}
+            </div>
 
-          <div
-            className={styles.productPanel}
-            id={`panel-${activeTab}`}
-            role="tabpanel"
-            aria-labelledby={`tab-${activeTab}`}
-          >
-            {activeTab === "visibility" && <VisibilityPanel />}
-            {activeTab === "reports" && <ReportsPanel />}
-            {activeTab === "office" && <OfficePanel />}
-          </div>
-        </section>
-
-        <section className={styles.stepsSection} id="how-it-works">
-          <div className={styles.sectionHeading}>
-            <p className={styles.eyebrow}>How it works</p>
-            <h2>Get started in 3 simple steps</h2>
-            <p>From owner setup to shared visibility in minutes.</p>
-          </div>
-          <div className={styles.stepsGrid}>
-            <Step number="1" icon={UserPlus} title="Create your owner account">
-              Set up your organisation, invite co-owners, and define basic settings.
-            </Step>
-            <Step number="2" icon={Building2} title="Build your office">
-              Create rooms and teams that mirror how your organisation works.
-            </Step>
-            <Step number="3" icon={Users} title="Invite your team">
-              Send secure invites. People join, set their status, and start showing up.
-            </Step>
+            <div
+              className={styles.servicePanel}
+              id={`service-panel-${activeService}`}
+              role="tabpanel"
+              aria-labelledby={`service-tab-${activeService}`}
+              key={activeService}
+            >
+              {activeService === "visibility" ? <VisibilityService /> : null}
+              {activeService === "reports" ? <ReportsService /> : null}
+              {activeService === "office" ? <OfficeService /> : null}
+            </div>
           </div>
         </section>
 
-        <section className={styles.privacySection} id="privacy">
-          <div className={styles.sectionHeading}>
-            <p className={styles.eyebrow}>Transparent by design</p>
-            <h2>We collect less. On purpose.</h2>
-            <p>WorkMap provides privacy-minimised telemetry—not productivity scores or disciplinary decisions.</p>
-          </div>
-          <div className={styles.privacyGrid}>
-            <article className={styles.privacyColumn}>
-              <div className={styles.privacyTitle}><CheckCircle2 size={28} /><div><h3>What we collect</h3><p>Signals that help your organisation understand work patterns.</p></div></div>
-              <ul>
-                {collectedSignals.map(([title, copy]) => (
-                  <li key={title}><Check size={18} /><span><strong>{title}</strong><small>{copy}</small></span></li>
-                ))}
-              </ul>
-            </article>
-            <article className={`${styles.privacyColumn} ${styles.privacyColumnExcluded}`}>
-              <div className={styles.privacyTitle}><LockKeyhole size={28} /><div><h3>What we never collect</h3><p>Personal, private, or sensitive content stays outside WorkMap.</p></div></div>
-              <ul>
-                {excludedSignals.map((signal) => <li key={signal}><X size={17} /><span>{signal}</span></li>)}
-              </ul>
-            </article>
-          </div>
-          <div className={styles.privacyFooter}>
-            <ShieldCheck size={20} />
-            <span>Designed around transparent notice, employee access, and clear collection boundaries.</span>
-            <a href="/compliance">Explore compliance <ArrowRight size={16} /></a>
+        <section className={`${styles.flowSection} ${styles.reveal}`} id="how-it-works" data-home-reveal>
+          <div className={styles.sectionContainer}>
+            <div className={styles.sectionIntro}>
+              <p className={styles.eyebrow}>How WorkMap works</p>
+              <h2>One workspace. Two visible agents. Clear reports.</h2>
+            </div>
+
+            <div className={styles.flowRail} aria-label="How WorkMap connects the web app, agents, offline recovery, and reports">
+              <FlowStage avatarIndexes={[0]} icon={<MonitorCheck size={27} />} title="WorkMap Web">
+                Owners create the workspace and invite the team.
+              </FlowStage>
+              <FlowArrow />
+              <FlowStage avatarIndexes={[1]} icon={<KeyRound size={27} />} title="One-time pairing">
+                Employees pair each device with a short-lived code.
+              </FlowStage>
+              <FlowArrow />
+              <div className={styles.agentBranch}>
+                <FlowNode icon={<Laptop size={24} />} title="Desktop Agent">App name + duration; idle and locked time stops.</FlowNode>
+                <FlowNode icon={<Globe2 size={24} />} title="Browser Extension">Hostname + duration; path, title and content are discarded.</FlowNode>
+              </div>
+              <FlowArrow />
+              <FlowStage icon={<RefreshCw size={27} />} title="Offline recovery">
+                A bounded queue retries safely after a network gap.
+              </FlowStage>
+              <FlowArrow />
+              <FlowStage avatarIndexes={[2, 3]} icon={<FileBarChart size={27} />} title="Role-aware reports">
+                Employees see their own summary. Owners see aggregate and allowed views.
+              </FlowStage>
+            </div>
           </div>
         </section>
 
-        <section className={styles.finalCta} id="company">
-          <div>
-            <p className={styles.eyebrowLight}>Start with clarity</p>
-            <h2>Lead with confidence. Respect people.</h2>
-            <p>Create the workspace first, then invite employees through secure links.</p>
+        <section className={`${styles.privacySection} ${styles.reveal}`} id="privacy" data-home-reveal>
+          <div className={styles.sectionContainer}>
+            <div className={styles.privacyHeading}>
+              <p className={styles.eyebrowLight}>Employee privacy</p>
+              <h2>Always visible. Always limited. Always under your control.</h2>
+            </div>
+
+            <div className={styles.privacyDiagram}>
+              <SignalList title="Collected signals" tone="collected" items={collectedSignals} />
+              <div className={styles.privacyGate} aria-label="WorkMap privacy filter">
+                <span /><span /><span /><span /><span /><span /><span /><span /><span />
+                <Check size={45} strokeWidth={2.5} />
+              </div>
+              <div className={`${styles.signalList} ${styles.excludedList}`}>
+                <h3>Not collected</h3>
+                <ul>{excludedSignals.map((item) => <li key={item}><XCircle size={18} />{item}</li>)}</ul>
+              </div>
+            </div>
+
+            <div className={styles.controlStrip}>
+              <ControlItem avatarIndex={4} icon={<Eye size={24} />} text="Agent and Extension status stays visible" />
+              <ControlItem avatarIndex={5} icon={<PauseCircle size={24} />} text="Pause or stop at any time" />
+              <ControlItem avatarIndex={6} icon={<FileBarChart size={24} />} text="Review your own summary" />
+              <ControlItem avatarIndex={7} icon={<BookOpenCheck size={24} />} text="Review and acknowledge policy" />
+            </div>
           </div>
-          <div className={styles.finalActions}>
-            <a className={styles.primaryButtonLarge} href="/login?mode=signup">Create owner account <ArrowRight size={18} /></a>
-            <a className={styles.darkSecondaryButton} href="/login?mode=signin">Sign in</a>
+        </section>
+
+        <section className={`${styles.faqSection} ${styles.reveal}`} id="faq" data-home-reveal>
+          <div className={`${styles.sectionContainer} ${styles.faqGrid}`}>
+            <div className={styles.faqIntro}>
+              <p className={styles.eyebrow}>FAQ</p>
+              <h2>Questions? We keep the answers clear.</h2>
+              <p>Everything you need to know about WorkMap and your privacy.</p>
+              <div className={styles.faqHelp}>
+                <MessageCircle size={25} />
+                <strong>Still have questions?</strong>
+                <span>Start with a workspace and review the policy before pairing a device.</span>
+                <a href="/login?mode=signup">Create an account <ArrowRight size={15} /></a>
+              </div>
+            </div>
+
+            <div className={styles.faqList} ref={faqListRef} aria-label="Frequently asked questions">
+              {frequentlyAskedQuestions.map((item, index) => {
+                const open = openQuestion === index;
+                return (
+                  <article className={`${styles.faqItem} ${open ? styles.faqItemOpen : ""}`} key={item.question}>
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-controls={`faq-answer-${index}`}
+                      onClick={() => setOpenQuestion((current) => current === index ? -1 : index)}
+                    >
+                      <span className={styles.faqIndex}>{String(index + 1).padStart(2, "0")}</span>
+                      <strong>{item.question}</strong>
+                      <span className={styles.faqToggle} aria-hidden>{open ? "-" : "+"}</span>
+                    </button>
+                    <div className={styles.faqAnswer} id={`faq-answer-${index}`} hidden={!open}>
+                      <p>{item.answer}</p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className={`${styles.consentSection} ${styles.reveal}`} data-home-reveal>
+          <div className={styles.consentInner}>
+            <blockquote>WorkMap works with your people, not around them.</blockquote>
+            <p>Transparent signals.<br />Clear boundaries.<br />Fair by design.</p>
+            <p>Policy first.<br />People always.</p>
+            <MarketingAvatar index={1} label="WorkMap team avatar" size="large" />
+          </div>
+          <div className={styles.ctaBar}>
+            <strong>Transparency you can trust. Visibility you can explain.</strong>
+            <div>
+              <a className={styles.primaryButtonLarge} href="/login?mode=signup">Create owner account <ArrowRight size={17} /></a>
+              <a className={styles.darkSecondaryButton} href="/login?mode=signin">Sign in</a>
+            </div>
           </div>
         </section>
       </main>
@@ -246,125 +403,137 @@ export default function HomePage() {
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           <div className={styles.footerBrand}>
-            <a className={styles.brandLight} href="#top"><Sparkles size={24} /> WorkMap</a>
-            <p>Clear work visibility for modern, privacy-conscious teams.</p>
+            <a className={styles.brandLight} href="#top"><span className={styles.brandMark}>WM</span>WorkMap</a>
+            <p>Transparent work visibility that respects privacy and builds trust.</p>
           </div>
-          <div><strong>Product</strong><a href="#product">Work visibility</a><a href="#product">Reports</a><a href="#product">Virtual Office</a></div>
-          <div><strong>Privacy</strong><a href="#privacy">What we collect</a><a href="/compliance">Compliance</a><a href="#privacy">Transparency</a></div>
-          <div><strong>Get started</strong><a href="/login?mode=signup">Owner account</a><a href="/login?mode=signin">Sign in</a><a href="#how-it-works">How it works</a></div>
+          <div><strong>Product</strong><a href="#product">Work visibility</a><a href="#how-it-works">How it works</a><a href="#product">Reports</a><a href="#product">Virtual Office</a></div>
+          <div><strong>Privacy</strong><a href="#privacy">What we collect</a><a href="#privacy">What we never collect</a><a href="#privacy">Employee controls</a><a href="#faq">FAQ</a></div>
+          <div><strong>Account</strong><a href="/login?mode=signin">Sign in</a><a href="/login?mode=signup">Create owner account</a><a href="/compliance">Review policy</a></div>
         </div>
-        <div className={styles.footerBottom}><span>WorkMap Pty Ltd</span><span>Built for controlled pilot use in Australia.</span></div>
+        <div className={styles.footerBottom}><span>WorkMap Pty Ltd</span><span>Privacy-conscious work visibility.</span></div>
       </footer>
     </div>
   );
 }
 
-function HeroPresenceMap() {
-  const people = [
-    ["AL", "Focus Room", "online"],
-    ["MK", "Collab Space", "online"],
-    ["JS", "Quiet Room", "focus"],
-    ["PN", "Work Café", "online"],
-  ];
+function Proof({ icon, label }: { icon: ReactNode; label: string }) {
+  return <div>{icon}<span>{label}</span></div>;
+}
+
+function VisibilityService() {
   return (
-    <div className={styles.heroVisual} aria-label="Demo view of team presence across a WorkMap office">
-      <div className={styles.visualToolbar}><span>Melbourne Office <ChevronDown size={14} /></span><span>9:41am AEST</span><span className={styles.livePill}><i /> Live demo</span></div>
-      <div className={styles.mapCanvas}>
-        <div className={`${styles.room} ${styles.roomOne}`}><strong>Focus Room</strong><small>2 people</small></div>
-        <div className={`${styles.room} ${styles.roomTwo}`}><strong>Collab Space</strong><small>5 people</small></div>
-        <div className={`${styles.room} ${styles.roomThree}`}><strong>Quiet Room</strong><small>1 person</small></div>
-        <div className={`${styles.room} ${styles.roomFour}`}><strong>Work Café</strong><small>4 people</small></div>
-        {people.map(([initials, place, state], index) => (
-          <div key={initials} className={`${styles.mapPerson} ${styles[`person${index + 1}`]}`} title={`${initials}, ${place}`}>
-            <span>{initials}</span><i className={state === "focus" ? styles.focusDot : ""} />
-          </div>
-        ))}
-        <div className={styles.mapMessage}>Presence reflects where work happens—not what gets done.</div>
+    <>
+      <div className={styles.serviceIntro}>
+        <p className={styles.eyebrow}>Work visibility</p>
+        <h2>Progress you can explain. Privacy people can see.</h2>
+        <p>WorkMap records the minimum signals needed to understand work patterns - nothing more.</p>
+        <div className={styles.featureGrid}>
+          {visibilityFeatures.map(({ icon: Icon, text }) => <div key={text}><Icon size={25} /><span>{text}</span></div>)}
+        </div>
       </div>
-      <div className={styles.timelineCard}>
-        <div className={styles.timelineHeader}><span>8am</span><strong>9am</strong><span>10am</span><span>11am</span><span>12pm</span></div>
-        {[64, 78, 52].map((width, index) => <div className={styles.timelineRow} key={width}><span>{["AL", "MK", "JS"][index]}</span><i style={{ width: `${width}%` }} /></div>)}
-      </div>
-      <div className={styles.mapLegend}><span><i className={styles.greenDot} /> In office</span><span><i className={styles.blueDot} /> Focus</span><span><i className={styles.grayDot} /> Offline</span></div>
+      <SignalLedger />
+    </>
+  );
+}
+
+function SignalLedger() {
+  return (
+    <div className={styles.signalLedger}>
+      <div className={styles.ledgerHeader}><span>Signal view</span><span>What is discarded</span></div>
+      {signals.map(({ icon: Icon, name, included, discarded }) => (
+        <div className={styles.ledgerRow} key={name}>
+          <div><Icon size={23} /><strong>{name}</strong><span>{included}</span></div>
+          <p>{discarded}</p>
+        </div>
+      ))}
     </div>
   );
 }
 
-function VisibilityPanel() {
+function ReportsService() {
+  const facts = [
+    ["Apps and domains", "Names and active duration remain separate."],
+    ["Focus-active time", "Idle and open/runtime context stays explicit."],
+    ["Device coverage", "Agent and Extension signal health is visible."],
+    ["Exports", "Authorized report views support CSV and text export."],
+  ];
   return (
     <>
-      <div className={styles.panelCopy}>
-        <p className={styles.eyebrow}>Work visibility</p>
-        <h2>See work patterns without watching people.</h2>
-        <p>Understand app and domain time, presence, and team rhythms with clear privacy boundaries.</p>
-        <ul className={styles.featureList}>
-          <li><CheckCircle2 size={19} /> Visible foreground app duration</li>
-          <li><CheckCircle2 size={19} /> Active, idle, and offline distinctions</li>
-          <li><CheckCircle2 size={19} /> Team trends without employee scoring</li>
-        </ul>
-      </div>
-      <div className={styles.dashboardMock} aria-label="Demo Work visibility dashboard">
-        <DemoSidebar active="Overview" />
-        <div className={styles.dashboardContent}>
-          <div className={styles.mockHeader}><div><small>Demo workspace</small><strong>Overview</strong></div><span>Today <ChevronDown size={13} /></span></div>
-          <div className={styles.metricGrid}>
-            <Metric label="People online" value="23" note="of 45" />
-            <Metric label="In meetings" value="10" note="of 45" />
-            <Metric label="Focused time" value="2h 15m" note="avg / person" />
-            <Metric label="After hours" value="3" note="working now" />
-          </div>
-          <div className={styles.chartGrid}>
-            <BarList title="App time (top)" rows={[["Microsoft 365", 82, "2h 40m"], ["Google Workspace", 60, "1h 35m"], ["Slack", 45, "1h 10m"], ["Figma", 30, "45m"]]} />
-            <BarList title="Domain time (top)" rows={[["workmap.co", 88, "3h 05m"], ["google.com", 62, "2h 10m"], ["slack.com", 48, "1h 20m"], ["figma.com", 28, "45m"]]} />
-          </div>
-          <div className={styles.presenceChart}><strong>Presence timeline</strong>{[74, 55, 84].map((width, index) => <div key={width}><span>{["Marketing", "Product", "Customer Success"][index]}</span><i style={{ width: `${width}%` }} /></div>)}</div>
-        </div>
-        <aside className={styles.guardrailCard}><ShieldCheck size={22} /><strong>Privacy guardrails</strong><span>No keystrokes, content or messages</span><span>No individual productivity scoring</span><span>Clear personal-space boundaries</span></aside>
-      </div>
-    </>
-  );
-}
-
-function ReportsPanel() {
-  return (
-    <>
-      <div className={styles.panelCopy}>
+      <div className={styles.serviceIntro}>
         <p className={styles.eyebrow}>Reports</p>
-        <h2>Turn reliable patterns into better planning.</h2>
-        <p>Review active time, app and domain duration, and team-level trends without turning people into a score.</p>
-        <ul className={styles.featureList}><li><CheckCircle2 size={19} /> Company and employee-authorised views</li><li><CheckCircle2 size={19} /> Clear date and department filters</li><li><CheckCircle2 size={19} /> Export-ready summaries</li></ul>
+        <h2>Patterns you can review. Boundaries you can explain.</h2>
+        <p>Employees see their own activity. Owners see company summaries and role-allowed detail.</p>
+        <a className={styles.inlineLink} href="/reports">View reports <ArrowRight size={16} /></a>
       </div>
-      <div className={styles.simpleMock}><FileBarChart size={38} /><div><small>Demo report</small><h3>Team activity summary</h3><p>Visible foreground time · Week of 6 July</p></div><div className={styles.reportBars}>{[82, 65, 58, 42].map((width) => <i key={width} style={{ width: `${width}%` }} />)}</div><div className={styles.reportSummary}><span><strong>31h 42m</strong> active time</span><span><strong>5</strong> team members</span><span><strong>92%</strong> data coverage</span></div></div>
+      <div className={styles.capabilityPanel}>
+        <div className={styles.capabilityHeader}><FileBarChart size={24} /><span>Real report capabilities</span></div>
+        {facts.map(([title, copy]) => <div key={title}><strong>{title}</strong><p>{copy}</p><ChevronRight size={18} /></div>)}
+        <p className={styles.dataNote}>No sample values are shown. Signed-in reports use the current tenant and role.</p>
+      </div>
     </>
   );
 }
 
-function OfficePanel() {
+function OfficeService() {
   return (
     <>
-      <div className={styles.panelCopy}>
+      <div className={styles.serviceIntro}>
         <p className={styles.eyebrow}>Virtual Office</p>
-        <h2>Give distributed work a shared place.</h2>
-        <p>See workspace presence, rooms, status and recency in one lightweight office view.</p>
-        <ul className={styles.featureList}><li><CheckCircle2 size={19} /> Room and desk presence</li><li><CheckCircle2 size={19} /> Realtime movement with polling fallback</li><li><CheckCircle2 size={19} /> Honest local-only placeholders</li></ul>
+        <h2>A shared place to be present, available, and easy to reach.</h2>
+        <p>See who is around, move between rooms, wave, send a quick message, and understand room context.</p>
+        <ul className={styles.officeFeatureList}>
+          <li><Signal size={18} />Live presence</li>
+          <li><CircleStop size={18} />Focus, busy, away, and offline states</li>
+          <li><Building2 size={18} />Room context</li>
+          <li><MessageCircle size={18} />Wave and quick message</li>
+        </ul>
+        <a className={styles.inlineLink} href="/virtual-office">Open Virtual Office <ArrowRight size={16} /></a>
       </div>
-      <div className={`${styles.simpleMock} ${styles.officeMock}`}><Building2 size={38} /><div><small>Demo office</small><h3>Main Office</h3><p>23 people present · 4 rooms active</p></div><div className={styles.officeRooms}><span>Focus room <b>2</b></span><span>Product <b>6</b></span><span>Marketing <b>5</b></span><span>Open area <b>10</b></span></div></div>
+      <div className={styles.officePreview}>
+        <Image src="/marketing/workmap-virtual-office-panorama.png" alt="Complete WorkMap Virtual Office" width={1904} height={949} sizes="(max-width: 900px) 100vw, 58vw" />
+      </div>
     </>
   );
 }
 
-function DemoSidebar({ active }: { active: string }) {
-  return <aside className={styles.demoSidebar}><strong>W</strong><span className={styles.demoActive}><LayoutDashboard size={14} />{active}</span><span><Users size={14} />People</span><span><MonitorCheck size={14} />Activity</span><span><BarChart3 size={14} />Reports</span></aside>;
+function FlowStage({ icon, title, children, avatarIndexes = [] }: { icon: ReactNode; title: string; children: ReactNode; avatarIndexes?: number[] }) {
+  return (
+    <div className={styles.flowStage}>
+      {avatarIndexes.length ? <div className={styles.flowAvatars}>{avatarIndexes.map((index) => <MarketingAvatar key={index} index={index} label="WorkMap avatar" />)}</div> : null}
+      <FlowNode icon={icon} title={title}>{children}</FlowNode>
+    </div>
+  );
 }
 
-function Metric({ label, value, note }: { label: string; value: string; note: string }) {
-  return <div className={styles.metric}><small>{label}</small><strong>{value}</strong><span>{note}</span></div>;
+function FlowNode({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+  return <div className={styles.flowNode}><span>{icon}</span><div><h3>{title}</h3><p>{children}</p></div></div>;
 }
 
-function BarList({ title, rows }: { title: string; rows: Array<[string, number, string]> }) {
-  return <div className={styles.barList}><strong>{title}</strong>{rows.map(([label, width, value]) => <div key={label}><span>{label}</span><i><b style={{ width: `${width}%` }} /></i><small>{value}</small></div>)}</div>;
+function FlowArrow() {
+  return <span className={styles.flowArrow} aria-hidden><ArrowRight size={20} /></span>;
 }
 
-function Step({ number, icon: Icon, title, children }: { number: string; icon: typeof UserPlus; title: string; children: ReactNode }) {
-  return <article className={styles.step}><div className={styles.stepIcon}><Icon size={30} /><span>{number}</span></div><h3>{title}</h3><p>{children}</p></article>;
+function SignalList({ title, items }: { title: string; tone: "collected"; items: Array<{ icon: typeof AppWindow; text: string }> }) {
+  return (
+    <div className={`${styles.signalList} ${styles.collectedList}`}>
+      <h3>{title}</h3>
+      <ul>{items.map(({ icon: Icon, text }) => <li key={text}><Icon size={18} />{text}</li>)}</ul>
+    </div>
+  );
+}
+
+function ControlItem({ avatarIndex, icon, text }: { avatarIndex: number; icon: ReactNode; text: string }) {
+  return <article><MarketingAvatar index={avatarIndex} label="WorkMap employee avatar" size="small" /><span className={styles.controlIcon}>{icon}</span><p>{text}</p></article>;
+}
+
+function MarketingAvatar({ index, label, size = "medium" }: { index: number; label: string; size?: "small" | "medium" | "large" }) {
+  return (
+    <Image
+      className={`${styles.marketingAvatar} ${styles[`avatar${size[0].toUpperCase()}${size.slice(1)}`]}`}
+      src={`/marketing/avatars/avatar-${String(index + 1).padStart(2, "0")}.png`}
+      alt={label}
+      width={64}
+      height={96}
+    />
+  );
 }

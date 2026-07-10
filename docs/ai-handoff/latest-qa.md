@@ -1,5 +1,107 @@
 # Latest QA Handoff
 
+## 2026-07-10 Homepage Hero Panorama V4 QA
+
+### Reviewed Implementation
+
+- Source panorama dimensions and content.
+- Desktop and mobile V4 Hero replacement.
+- Preservation of all non-Hero V3 sections.
+
+### Findings
+
+- Hero media now shows the complete real Virtual Office panorama without cropping or generated text.
+- Desktop replacement stays within the original Hero boundary.
+- Mobile adds Hero height and shifts later sections without redesigning them.
+- No blocking visual finding in the scoped replacement.
+
+### Verification Status
+
+- Source panorama: pass (`1904x949`).
+- Desktop V4: pass (`785x2003`).
+- Mobile V4: pass (`749x2262`).
+- `git diff --check`: pass; line-ending warnings only.
+- Scoped changed-text secret scan: pass.
+- Application checks: not applicable; no runtime code changed.
+
+### Manual QA Status
+
+- Full image artifact inspection: completed.
+- Implemented browser QA: not run; this remains a visual-design artifact.
+
+### Recommendation
+
+- Pass the scoped V4 Hero revision for user review.
+
+## 2026-07-10 Services Homepage Visual V3 QA
+
+### Reviewed Implementation
+
+- Desktop/mobile V3 composition, FAQ order and scrolling, service spacing, system-flow clarity, and real DIY avatar reference.
+
+### Findings
+
+- V2's repeated generated character is removed from the design specification; V3 references eight exact repository-layer combinations.
+- Flow direction and the Agent branch/merge are explicit; avatars remain outside nodes and connectors.
+- FAQ precedes Consent/CTA. Desktop right-side questions scroll independently while left content stays sticky, then scrolling chains to the page.
+- Work Visibility no longer has the reported upper-right blank area.
+
+### Verification Status
+
+- Desktop V3 PNG exists and is non-empty: pass (`785x2003`).
+- Mobile V3 PNG exists and is non-empty: pass (`749x2100`).
+- DIY avatar composition reference exists and is non-empty: pass (`912x176`).
+- `git diff --check`: pass; line-ending warnings only.
+- Scoped changed-text secret scan: pass.
+- Application checks: not applicable; no runtime code changed.
+
+### Manual QA Status
+
+- Visual artifact and avatar reference inspection: completed.
+- Implemented browser/responsive QA: not run; no implementation exists in this design-only round.
+
+### Recommendation
+
+- Pass V3 for user design review; do not begin implementation until approved.
+
+## 2026-07-10 Services and Employee Privacy Homepage Visual V2 QA
+
+### Reviewed Implementation
+
+- Full desktop and mobile homepage references.
+- Services tabs, system flow, employee privacy, consent, sticky FAQ, and footer specification.
+- Repository truth for Reports, Compliance, policy acknowledgement, Virtual Office screenshots, and pixel assets.
+
+### Findings
+
+- No blocking visual-design finding in the V2 composition.
+- Reports and Virtual Office tab requirements prohibit fictional screenshots and values.
+- Policy acknowledgement exists but is not currently an enforced tracking gate; marketing copy must not overstate this behaviour.
+- FAQ uses native page scrolling with a sticky left column, not wheel interception.
+
+### Verification Status
+
+- Desktop PNG exists and is non-empty: pass.
+- Mobile PNG exists and is non-empty: pass.
+- Desktop/mobile, motion, hover, focus, reduced-motion, and FAQ scroll specification: pass.
+- `git diff --check`: pass; line-ending warnings only.
+- Scoped changed-text secret scan: pass.
+- Application typecheck/lint/build: not applicable; no runtime source changed.
+
+### Manual QA Status
+
+- Artifact visual review: completed.
+- Implemented browser and responsive QA: not run; no implementation exists in this design-only round.
+
+### Risks
+
+- Generated microcopy is not implementation copy; the V2 specification is authoritative.
+- Real authenticated Reports and additional Virtual Office screenshots remain unavailable.
+
+### Recommendation
+
+- Pass the visual-design artifact round for user review. Do not begin frontend implementation until V2 is approved.
+
 ## 2026-07-10 Desktop Agent 0.5.7 Windows File-Lock Recovery QA
 
 ### Reviewed Implementation

@@ -1,5 +1,138 @@
 # Latest Implementation Handoff
 
+## 2026-07-10 Homepage Hero Panorama V4
+
+### Original Task Brief
+
+- Keep the approved V3 homepage unchanged except for the Hero Virtual Office media.
+- Replace the cropped/incorrect Hero screenshot with the supplied real full panorama, preserving its labels, UI positions, characters, and complete map view.
+
+### Changed Files
+
+- `docs/designs/workmap-virtual-office-panorama.png`
+- `docs/designs/workmap-home-services-privacy-desktop-v4.png`
+- `docs/designs/workmap-home-services-privacy-mobile-v4.png`
+- `docs/designs/workmap-home-services-privacy-v4-spec.md`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Copied the supplied `1904 x 949` real Virtual Office panorama into the repository without reconstruction.
+- Replaced only the desktop Hero media area; all non-Hero pixels remain inherited from V3.
+- Increased only the mobile Hero height, inserted the full panorama at its original aspect ratio, and shifted every later section down unchanged.
+- V4 forbids cropping, stretching, relabelling, UI rearrangement, or AI-redrawing of the Hero bitmap.
+- No application runtime, routing, authentication, API, schema, tracking, or component code changed.
+
+### Verification
+
+- Source panorama: `1904x949`, non-empty.
+- Desktop V4 PNG: `785x2003`, non-empty and visually inspected.
+- Mobile V4 PNG: `749x2262`, non-empty and visually inspected.
+- Exact source bitmap used for Hero media; internal screenshot text and controls were not regenerated.
+- `git diff --check`: pass; line-ending warnings only.
+- Scoped changed-text secret scan: pass.
+
+### Remaining Risks
+
+- Full-panorama text is naturally smaller on mobile. V4 preserves geometry and source pixels rather than inventing a mobile rearrangement of the product UI.
+
+### Suggested Next Step
+
+- Review only the V4 Hero media placement; all other V3 sections are intentionally unchanged.
+
+## 2026-07-10 Services Homepage Visual V3 Corrections
+
+### Original Task Brief
+
+- Move FAQ before Consent/CTA, equalize FAQ typography, and make the question pane scroll while the left panel stays fixed.
+- Replace the repeated generated character with varied avatars assembled from the repository's real DIY layers.
+- Clarify the Web/pairing/two-Agent/recovery/report flow and remove misplaced avatars.
+- Turn the four Work Visibility benefits into a `2 x 2` layout to remove empty space.
+
+### Changed Files
+
+- `docs/designs/workmap-home-services-privacy-desktop-v3.png`
+- `docs/designs/workmap-home-services-privacy-mobile-v3.png`
+- `docs/designs/workmap-home-services-privacy-v3-spec.md`
+- `docs/designs/workmap-avatar-combinations-reference.png`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Reordered the page to Employee Privacy, FAQ, Consent/CTA, then Footer.
+- Defined a desktop FAQ with equal `22px` primary typography, sticky left content, a scrollable right accordion, and normal scroll chaining after the final question. Mobile uses a single column without an inner scroll pane.
+- Built an exact reference sheet of eight distinct avatars from repository DIY body, eyes, outfit, and hairstyle layers; V3 assigns different avatars to meaningful roles without placing them on connector lines.
+- Reworked the flow into one directed path with only Desktop Agent and Browser Extension as a parallel branch.
+- Rebalanced Work Visibility into a `2 x 2` feature grid aligned with the signal ledger.
+- No application runtime, routing, auth, API, schema, tracking, or component code changed.
+
+### Verification
+
+- Desktop V3 PNG: `785x2003`, non-empty.
+- Mobile V3 PNG: `749x2100`, non-empty.
+- DIY avatar reference: `912x176`, non-empty and visually inspected.
+- `git diff --check`: pass; line-ending warnings only.
+- Scoped changed-text secret scan: pass.
+- Browser implementation QA was not run because this remains a visual-design round.
+
+### Remaining Risks
+
+- Generated microcopy may be visually distorted; the V3 specification is authoritative. The final desktop revision also reduces the left FAQ primary line and enlarges right questions so both use the same visual scale.
+- Reports and additional Virtual Office interaction screenshots still require capture from the real authenticated product.
+
+### Suggested Next Step
+
+- Obtain user approval or marked-up revisions on V3 before frontend implementation.
+
+## 2026-07-10 Services and Employee Privacy Homepage Visual V2
+
+### Original Task Brief
+
+- Redesign the homepage around a split Hero with the real Virtual Office, a three-tab services theatre, WorkMap Web/Desktop Agent/Browser Extension flow, employee-facing privacy boundaries, consent, sticky FAQ, and footer.
+- Keep copy short, use only repository pixel assets, avoid fictional product UI, and provide desktop/mobile compositions for later pixel-accurate implementation.
+
+### Changed Files
+
+- `docs/designs/workmap-home-services-privacy-desktop-v2.png`
+- `docs/designs/workmap-home-services-privacy-mobile-v2.png`
+- `docs/designs/workmap-home-services-privacy-v2-spec.md`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Produced complete desktop and mobile visual references using the approved Ink Navy, Signal Jade, and Civic Amber direction.
+- Added exact copy, real asset paths, tab states, FAQ answers, sticky-scroll behaviour, section motion, hover/press/focus feedback, reduced-motion rules, and responsive acceptance criteria.
+- Reports and additional Virtual Office interaction screenshots remain subject to a real-capture requirement; no fictional report data or extra product screenshots were introduced.
+- No application runtime, routing, auth, API, schema, tracking, or component code changed.
+
+### Product Truth Note
+
+- Current code records policy acknowledgement but does not enforce acknowledgement as a gate before pairing or ingestion. The V2 specification uses `The monitoring policy can be reviewed and acknowledged` until a separately approved functional change exists.
+
+### Manual QA
+
+- Desktop and mobile artifacts were inspected for complete-page hierarchy and content order.
+- Implemented browser/responsive QA was not run because this remains a design-only round.
+
+### Verification
+
+- Desktop PNG: `748x2103`, non-empty.
+- Mobile composition PNG: `756x2081`, non-empty.
+- `git diff --check`: pass; line-ending warnings only.
+- Scoped changed-text secret scan: pass.
+
+### Remaining Risks
+
+- Generated microcopy and FAQ indexes may contain visual distortion. The V2 specification is authoritative.
+- Real authenticated Reports and wave/busy/avatar-builder screenshots are not available in the repository and must be captured from the running product before use.
+
+### Suggested Next Step
+
+- Obtain user approval or marked-up revisions on V2, then implement the approved presentation without changing product logic.
+
 ## 2026-07-10 Desktop Agent 0.5.7 Windows File-Lock Recovery
 
 ### Original Task Brief
