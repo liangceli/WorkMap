@@ -8,7 +8,6 @@ import {
   BarChart3,
   BookOpenCheck,
   Building2,
-  Check,
   ChevronRight,
   CircleStop,
   Clock3,
@@ -325,10 +324,6 @@ export default function HomePage() {
 
             <div className={styles.privacyDiagram}>
               <SignalList title="Collected signals" tone="collected" items={collectedSignals} />
-              <div className={styles.privacyGate} aria-label="WorkMap privacy filter">
-                <span /><span /><span /><span /><span /><span /><span /><span /><span />
-                <Check size={45} strokeWidth={2.5} />
-              </div>
               <div className={`${styles.signalList} ${styles.excludedList}`}>
                 <h3>Not collected</h3>
                 <ul>{excludedSignals.map((item) => <li key={item}><XCircle size={18} />{item}</li>)}</ul>

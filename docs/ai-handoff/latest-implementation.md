@@ -1,5 +1,36 @@
 # Latest Implementation Handoff
 
+## 2026-07-10 Employee Privacy Two-Panel Layout
+
+### Original Task Brief
+
+- Remove the centre privacy-filter box from the Employee Privacy section and rebalance the remaining content into a coordinated layout.
+
+### Changed Files
+
+- `workmap/apps/web/app/page.tsx`
+- `workmap/apps/web/app/home.module.css`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Removed the centre filter illustration and its unused `Check` icon import.
+- Rebuilt the privacy comparison as two equal-width, equal-height panels for collected and not-collected signals.
+- Added restrained Jade and Coral surface tints while preserving the established Ink Navy section background.
+- Kept the employee-control strip aligned below both panels; mobile collapses directly to a single column without an empty intermediary block.
+
+### Verification
+
+- Homepage-scoped TypeScript check: pass.
+- Direct homepage ESLint: pass.
+- Homepage mobile-menu source tests: pass (`3/3`).
+- `git diff --check`: pass.
+
+### Intentionally Not Changed
+
+- Copy, employee-control behaviour, page routing, auth, API, backend, tracking, reports, compliance, and Virtual Office logic.
+
 ## 2026-07-10 Homepage Contrast And Spacing Refinement
 
 ### Original Task Brief

@@ -1,5 +1,28 @@
 # Latest QA Handoff
 
+## 2026-07-10 Employee Privacy Two-Panel QA
+
+### Reviewed Implementation
+
+- Removal of the centre filter block, desktop comparison balance, mobile collapse behaviour, and unused source cleanup.
+
+### Findings
+
+- The section now presents a direct collected/not-collected comparison with symmetrical panel geometry.
+- No empty centre column or obsolete filter styling remains.
+- Mobile becomes a straightforward stacked comparison while retaining the four employee controls.
+
+### Verification Status
+
+- Homepage-scoped TypeScript: pass.
+- Direct homepage ESLint: pass.
+- Homepage mobile-menu source tests: pass (`3/3`).
+- `git diff --check`: pass.
+
+### Recommendation
+
+- Pass the scoped privacy-section layout revision.
+
 ## 2026-07-10 Homepage Contrast And Spacing QA
 
 ### Reviewed Implementation
