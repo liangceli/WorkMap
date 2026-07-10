@@ -1,5 +1,45 @@
 # Latest QA Handoff
 
+## 2026-07-10 Approved Homepage V4 Implementation QA
+
+### Reviewed Implementation
+
+- Public homepage runtime composition, responsive rules, service tabs, FAQ interaction, motion/accessibility states, and real marketing assets.
+- Preservation of existing account destinations and the mobile navigation contract.
+
+### Findings
+
+- The homepage now uses the approved visual direction and real WorkMap product imagery; no fictional dashboard values or generated product interface were introduced.
+- The full Virtual Office panorama is displayed with its original geometry, and pixel avatars come from repository DIY layers.
+- Service tabs, FAQ accordion, mobile menu, anchor navigation, and account links remain functional in source and targeted tests.
+- One current-change regression in the mobile menu source contract was found, fixed, and verified (`3/3`).
+- No frontend implementation finding remains from the scoped static checks.
+
+### Verification Status
+
+- Homepage-scoped TypeScript: pass.
+- Direct homepage ESLint: pass.
+- Homepage mobile-menu source tests: pass (`3/3`).
+- Full Web tests: initial run `31/35`; the three homepage failures were fixed. The remaining transform failure is external to this change and originates from NUL bytes in `workmap/apps/web/lib/api/authApi.ts`.
+- Full Web typecheck/lint/build: blocked by that same pre-existing file corruption.
+- Asset dimensions/non-empty checks: pass.
+- `git diff --check`: pass; line-ending warnings only.
+- Scoped secret and local-machine-path scan: pass.
+- Dev server readiness: pass at `http://localhost:3010`.
+
+### Manual QA Status
+
+- Implemented browser QA: not run. The in-app browser policy rejected localhost navigation, and no workaround was used.
+
+### Risks
+
+- Responsive composition and animation timing are not browser-screenshot verified.
+- Package-wide verification remains incomplete until the unrelated `authApi.ts` corruption is resolved.
+
+### Recommendation
+
+- The scoped homepage implementation passes source-level QA. Do not label the full Web package release-ready until the external auth file corruption is resolved and browser QA is completed.
+
 ## 2026-07-10 Homepage Hero Panorama V4 QA
 
 ### Reviewed Implementation

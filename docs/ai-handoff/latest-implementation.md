@@ -1,5 +1,65 @@
 # Latest Implementation Handoff
 
+## 2026-07-10 Approved Homepage V4 Frontend Implementation
+
+### Original Task Brief
+
+- Implement the approved V4 homepage design at pixel-level fidelity.
+- Use the real full Virtual Office panorama and only repository-derived DIY avatars.
+- Keep authentication, routing, API, tracking, reporting, compliance, tenant, and backend behaviour unchanged.
+
+### Changed Files
+
+- `workmap/apps/web/app/page.tsx`
+- `workmap/apps/web/app/home.module.css`
+- `workmap/apps/web/public/marketing/workmap-virtual-office-panorama.png`
+- `workmap/apps/web/public/marketing/avatars/avatar-01.png` through `avatar-08.png`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Rebuilt the public homepage around the approved Ink Navy, Signal Jade, and Civic Amber system.
+- Added the split Hero with the exact `1904 x 949` real Virtual Office panorama, preserved sign-in/create-account destinations, and retained single-page anchor navigation.
+- Added real interactive service tabs for Work visibility, Reports, and Virtual Office without fabricated metrics or dashboard data.
+- Added the Web/pairing/Desktop Agent/Browser Extension/recovery/reports flow, using eight avatars assembled from existing DIY layer sheets.
+- Added employee-facing collected/not-collected boundaries, visible-control statements, sticky/scrollable desktop FAQ, mobile accordion, consent CTA, footer, section reveal motion, hover/press/focus states, and reduced-motion support.
+- Restored the existing mobile-menu DOM contract (`home-mobile-navigation`, `Login`, `Get started`) after its source tests identified a compatibility regression.
+
+### Role And Access Behaviour
+
+- Existing `/login?mode=signin`, `/login?mode=signup`, `/reports`, `/virtual-office`, and `/compliance` destinations are unchanged.
+- No authentication, RBAC, tenant, data-fetching, report calculation, compliance calculation, realtime, API, schema, or tracking logic changed.
+
+### Verification
+
+- Homepage-scoped TypeScript check: pass.
+- Direct ESLint check for `app/page.tsx`: pass.
+- Mobile-menu homepage source tests: pass (`3/3`).
+- Full Web test run before the compatibility fix: `31/35` passed; all three homepage source failures were then fixed and passed in the targeted rerun. The remaining unrelated test transform failure is caused by the pre-existing NUL-filled `workmap/apps/web/lib/api/authApi.ts`.
+- Full Web typecheck/lint/build: blocked by the same pre-existing `authApi.ts` invalid-character corruption; this file was not modified because it is outside the approved visual scope.
+- Marketing assets: panorama `1904 x 949`; eight avatar files `64 x 96`; all non-empty.
+- `git diff --check`: pass; line-ending warnings only.
+- Scoped secret and machine-path scan: pass.
+- Dev server: ready at `http://localhost:3010` in 7.5 seconds.
+
+### Manual QA
+
+- Browser visual/responsive QA was not completed because the in-app browser policy rejected local URL navigation. No alternate browser or raw-navigation workaround was attempted.
+
+### Intentionally Not Changed
+
+- Backend, auth implementation, API contracts, schemas, routing behaviour, tracking, reports, compliance, Virtual Office behaviour, and authenticated application styling.
+
+### Remaining Risks
+
+- Desktop/mobile browser rendering still needs visual inspection once local browser navigation is permitted.
+- Repository-wide Web verification cannot pass until the existing `authApi.ts` NUL corruption is resolved under a separate, explicitly approved code-recovery action.
+
+### Suggested Next Step
+
+- Resolve the corrupted `authApi.ts` working-tree file without overwriting intentional user work, then rerun full Web typecheck/lint/test/build and consolidated visual QA.
+
 ## 2026-07-10 Homepage Hero Panorama V4
 
 ### Original Task Brief
