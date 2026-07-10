@@ -1,5 +1,28 @@
 # Latest QA Handoff
 
+## 2026-07-10 Homepage Contrast And Spacing QA
+
+### Reviewed Implementation
+
+- Hero heading contrast, final CTA/Footer separation, Employee Privacy vertical spacing, and the source of the four pixel-asset candidates.
+
+### Findings
+
+- Hero heading now uses two explicit high-contrast colours from the approved palette.
+- The CTA is separated from the Footer by an Amber lower gutter and no longer shares an uninterrupted Ink Navy edge.
+- Employee Privacy desktop and mobile padding is vertically symmetrical.
+- Candidate pixel previews are exact crops from the repository's Modern Office tileset; runtime artwork is intentionally unchanged pending selection.
+
+### Verification Status
+
+- Homepage mobile-menu source tests: pass (`3/3`).
+- `git diff --check`: pass; line-ending warning only.
+- Browser visual QA: not run because localhost navigation is blocked by the current in-app browser policy.
+
+### Recommendation
+
+- Pass the three implemented refinements. Keep the privacy centre replacement open until the user chooses candidate `01`–`04`.
+
 ## 2026-07-10 Approved Homepage V4 Implementation QA
 
 ### Reviewed Implementation

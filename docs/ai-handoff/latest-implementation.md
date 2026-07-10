@@ -1,5 +1,46 @@
 # Latest Implementation Handoff
 
+## 2026-07-10 Homepage Contrast And Spacing Refinement
+
+### Original Task Brief
+
+- Visually separate the final CTA strip from the Footer.
+- Increase Hero heading contrast using colours from the approved WorkMap palette.
+- Make the Employee Privacy section bottom padding equal its top padding.
+- Present real repository pixel-asset candidates for the privacy filter centre, but do not replace it until the user selects one.
+
+### Changed Files
+
+- `workmap/apps/web/app/home.module.css`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Set the Hero heading to white with the second line in `--jade-light` for explicit, accessible hierarchy on Ink Navy.
+- Changed Employee Privacy spacing from `82px 0 34px` to `82px 0`; mobile now uses `68px 0`.
+- Added Amber space below the CTA strip and changed it to a complete four-corner surface, so it no longer merges visually with the Ink Navy Footer.
+- Extracted four temporary candidate previews directly from `Modern_Office_32x32.png`: server pair, terminal hub, operator desk, and monitor pod. These previews stay outside the repository and no candidate is used in runtime pending user selection.
+
+### Verification
+
+- Homepage mobile-menu source tests: pass (`3/3`).
+- `git diff --check`: pass; line-ending warning only.
+- Dev server remains available at `http://localhost:3010`.
+
+### Manual QA
+
+- Source and supplied screenshot comparison completed.
+- Browser screenshot QA remains unavailable under the current in-app localhost navigation policy.
+
+### Intentionally Not Changed
+
+- Privacy centre artwork, page content, component behaviour, routing, auth, API, backend, tracking, reports, and compliance logic.
+
+### Remaining Risk
+
+- The final privacy centre composition and its responsive sizing remain pending the user's asset selection.
+
 ## 2026-07-10 Approved Homepage V4 Frontend Implementation
 
 ### Original Task Brief

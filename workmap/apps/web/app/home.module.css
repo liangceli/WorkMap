@@ -166,13 +166,14 @@
 .eyebrowLight { color: var(--jade); }
 .hero h1 {
   margin: 0;
+  color: var(--white);
   font-size: clamp(46px, 5.2vw, 76px);
   line-height: 1.02;
   font-weight: 800;
   letter-spacing: 0;
   animation: heroTextIn 600ms cubic-bezier(.22, 1, .36, 1) both;
 }
-.hero h1 span { display: block; }
+.hero h1 span { display: block; color: var(--jade-light); }
 .heroLead { max-width: 510px; margin: 0; color: rgba(255, 255, 255, .72); font-size: 17px; line-height: 1.62; animation: heroTextIn 600ms 160ms cubic-bezier(.22, 1, .36, 1) both; }
 .heroActions { display: flex; flex-wrap: wrap; gap: 12px; animation: heroTextIn 600ms 240ms cubic-bezier(.22, 1, .36, 1) both; }
 .heroProof { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-top: 18px; animation: heroTextIn 600ms 320ms cubic-bezier(.22, 1, .36, 1) both; }
@@ -254,7 +255,7 @@
 .avatarMedium { width: 42px; height: 63px; }
 .avatarLarge { width: 56px; height: 84px; }
 
-.privacySection { padding: 82px 0 34px; background: var(--ink); color: var(--white); scroll-margin-top: 72px; }
+.privacySection { padding: 82px 0; background: var(--ink); color: var(--white); scroll-margin-top: 72px; }
 .privacyHeading { display: grid; gap: 10px; margin-bottom: 28px; }
 .privacyHeading h2 { max-width: 920px; color: var(--white); }
 .privacyDiagram { display: grid; grid-template-columns: 1fr 210px 1fr; align-items: stretch; gap: 24px; }
@@ -303,12 +304,12 @@
 .faqAnswer { padding: 0 64px 18px; background: #fbfcf9; }
 .faqAnswer p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
 
-.consentSection { background: var(--amber); padding: 30px max(32px, calc((100vw - 1280px) / 2)) 0; }
+.consentSection { background: var(--amber); padding: 30px max(32px, calc((100vw - 1280px) / 2)); }
 .consentInner { min-height: 150px; display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; align-items: center; gap: 28px; }
 .consentInner blockquote { position: relative; margin: 0; padding-left: 48px; font-size: 22px; line-height: 1.35; font-weight: 750; }
 .consentInner blockquote::before { content: "\201C"; position: absolute; top: -20px; left: 0; font-size: 64px; line-height: 1; }
 .consentInner > p { margin: 0; border-left: 1px dashed rgba(8, 13, 34, .48); padding-left: 28px; font-size: 15px; line-height: 1.45; }
-.ctaBar { min-height: 84px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-radius: 6px 6px 0 0; background: var(--ink); padding: 16px 28px; color: var(--white); }
+.ctaBar { min-height: 84px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-radius: 6px; background: var(--ink); padding: 16px 28px; color: var(--white); }
 .ctaBar > strong { font-size: 15px; }
 .ctaBar > div { display: flex; gap: 12px; }
 
@@ -417,7 +418,7 @@
   .agentBranch { grid-template-columns: 1fr 1fr; }
   .agentBranch .flowNode { min-height: 160px; grid-template-columns: 1fr; }
   .flowAvatars { right: -4px; bottom: -48px; }
-  .privacySection { padding-top: 68px; }
+  .privacySection { padding: 68px 0; }
   .signalList { padding: 20px; }
   .controlStrip article { min-height: 112px; grid-template-columns: 32px 1fr; padding: 12px; }
   .faqItem button { grid-template-columns: 34px 1fr 30px; padding: 9px 10px; }
