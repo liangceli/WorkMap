@@ -13,6 +13,8 @@ import { DEFAULT_IDLE_THRESHOLD_SECONDS, WindowsForegroundAdapter } from "./wind
 
 export const DEFAULT_SAMPLE_INTERVAL_MS = 100;
 
+type StatusWriter = (status: AgentStatus) => Promise<unknown>;
+
 export class DesktopAgentRuntime {
   private readonly tracking = new AppTrackingState({
     runtimeSegmentMs: readPositiveNumber("WORKMAP_AGENT_RUNTIME_SEGMENT_MS", 10_000),
@@ -23,14 +25,16 @@ export class DesktopAgentRuntime {
   private finalized = false;
   private runPromise: Promise<void> | null = null;
   private status: AgentStatus;
+  private readonly statusWriter: StatusWriter;
   private sessionId: string | null = null;
 
   constructor(
     private readonly config: AgentConfig,
-    options: { adapter?: WindowsForegroundAdapter; queue?: FileEventQueue } = {},
+    options: { adapter?: WindowsForegroundAdapter; queue?: FileEventQueue; statusWriter?: StatusWriter } = {},
   ) {
     this.adapter = options.adapter ?? new WindowsForegroundAdapter(readPositiveNumber("WORKMAP_AGENT_IDLE_SECONDS", DEFAULT_IDLE_THRESHOLD_SECONDS));
     this.queue = options.queue ?? new FileEventQueue();
+    this.statusWriter = options.statusWriter ?? writeAgentStatus;
     this.status = { state: "offline", deviceId: config.deviceId, queuedEvents: 0 };
   }
 
@@ -177,7 +181,11 @@ export class DesktopAgentRuntime {
     this.status.queuedEvents = this.queue.size();
     this.status.sessionId = this.sessionId ?? undefined;
     this.status.currentActivity = this.tracking.currentActivity();
-    await writeAgentStatus(this.status);
+    try {
+      await this.statusWriter(this.status);
+    } catch {
+      // Local UI status writes are diagnostic only. They must never stop heartbeat or upload loops.
+    }
   }
 }
 

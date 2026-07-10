@@ -122,12 +122,14 @@ async function startRuntime() {
   if (!config) return;
   runtime = new DesktopAgentRuntime(config);
   runtimePromise = runtime.run()
-    .catch((error) => writeAgentStatus({
-      state: "error",
-      deviceId: config.deviceId,
-      queuedEvents: 0,
-      error: safeRuntimeError(error),
-    }))
+    .catch(async (error) => {
+      await writeAgentStatus({
+        state: "error",
+        deviceId: config.deviceId,
+        queuedEvents: 0,
+        error: safeRuntimeError(error),
+      });
+    })
     .finally(() => {
       runtime = null;
       runtimePromise = null;
@@ -153,11 +155,49 @@ async function quitAgent() {
 
 function removeLegacyAutoStart() {
   if (process.platform !== "win32") return Promise.resolve();
+  return Promise.allSettled([removeLegacyRunKey(), stopLegacyNodeAgents()]).then(() => undefined);
+}
+
+function removeLegacyRunKey() {
   return new Promise<void>((resolvePromise) => {
     execFile(
       "reg.exe",
       ["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "WorkMapDesktopAgent", "/f"],
       { windowsHide: true },
+      () => resolvePromise(),
+    );
+  });
+}
+
+function stopLegacyNodeAgents() {
+  const script = `
+$ErrorActionPreference = "SilentlyContinue"
+$ownPid = ${process.pid}
+$shellPid = $PID
+Get-CimInstance Win32_Process | Where-Object {
+  $_.ProcessId -notin @($ownPid, $shellPid) -and
+  @("node.exe", "cmd.exe", "powershell.exe", "pwsh.exe") -contains $_.Name -and
+  $_.CommandLine -and
+  (
+    $_.CommandLine -match "WorkMap Desktop Agent" -or
+    $_.CommandLine -match "run-workmap-agent" -or
+    $_.CommandLine -match "apps[\\\\/]desktop-agent" -or
+    $_.CommandLine -match "DesktopAgent"
+  ) -and
+  (
+    $_.CommandLine -match "dist[\\\\/]index\\.js\\s+run" -or
+    $_.CommandLine -match "run-workmap-agent"
+  )
+} | ForEach-Object {
+  Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+}
+`;
+
+  return new Promise<void>((resolvePromise) => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+      { windowsHide: true, timeout: 5_000 },
       () => resolvePromise(),
     );
   });

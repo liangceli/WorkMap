@@ -1,5 +1,183 @@
 # Latest Implementation Handoff
 
+## 2026-07-10 Desktop Agent 0.5.7 Windows File-Lock Recovery
+
+### Original Task Brief
+
+- Implement Desktop Agent 0.5.7 after the employee PC showed `EPERM: operation not permitted, rename ...status.json.tmp -> status.json` on the morning after restart.
+- Prioritize functional continuity: status-file failures must not stop app sampling, heartbeats, queued uploads, or restart recovery.
+- Package a Windows installer suitable for a GitHub Release.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/src/pairing.ts`
+- `workmap/apps/desktop-agent/src/fileStore.ts`
+- `workmap/apps/desktop-agent/src/runtime.ts`
+- `workmap/apps/desktop-agent/src/electron/main.ts`
+- `workmap/apps/desktop-agent/test/file-store.test.ts`
+- `workmap/apps/desktop-agent/test/queue-api.test.ts`
+- `workmap/apps/desktop-agent/test/gui-release.test.ts`
+- Generated release artifact: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.7.exe`
+
+### Implementation Summary
+
+- Bumped the package and device-reported agent version to `0.5.7` / `desktop-agent-windows/0.5.7`.
+- Replaced the shared fixed `status.json.tmp` path with a unique process/time/UUID temporary file for every atomic JSON write. This removes collisions when sampling and heartbeat paths update local JSON concurrently.
+- Added bounded retries for transient Windows file errors (`EPERM`, `EACCES`, `EBUSY`, `ENOENT`) and best-effort temporary-file cleanup.
+- Made `status.json` diagnostic writes non-fatal. Even if Windows keeps the local UI status file locked, the runtime continues foreground sampling, heartbeat submission, session recovery, and queue uploads.
+- On packaged-app startup, removes the old current-user Run-key entry and stops narrowly matched legacy Node/script agent processes so an upgraded install does not leave the old harness competing for local files or sending duplicate activity.
+- The cleanup PowerShell process excludes both the Electron PID and its own PowerShell PID, and has a five-second timeout.
+
+### Role And Access Behavior
+
+- No auth, RBAC, API, schema, tenant-isolation, credential, or ownership behavior changed.
+- Existing device-scoped credential behavior remains in force: the installed agent continues to submit only for its paired WorkMap employee/device identity.
+
+### Verification And Manual QA
+
+- `pnpm.CMD --filter @workmap/desktop-agent typecheck` — pass.
+- `pnpm.CMD --filter @workmap/desktop-agent test` — pass, 28/28 tests.
+- `pnpm.CMD --filter @workmap/desktop-agent build` — pass.
+- `npm.cmd run release:windows` — pass; NSIS x64 installer generated.
+- Installer size: 91,939,576 bytes.
+- Installer SHA-256: `587C90996C124015AAF51BCF706ABD10FCA9879E2E9ED96F48899C6A6418D9C3`.
+- Manual install/reboot QA on a second Windows employee PC was not run in this coding environment.
+
+### Intentionally Not Changed
+
+- No owner web-page display, API endpoint, report aggregation, browser extension, deployment, or database changes.
+- No change to app/domain privacy collection boundaries.
+- No claim that an automated test substitutes for a real overnight Windows shutdown/sign-in test.
+
+### Remaining Risks And Suggested Next Step
+
+- Before broad rollout, install 0.5.7 over 0.5.6 on the affected employee PC and perform a real shutdown/sign-in test. Confirm one WorkMap tray entry, a fresh `/devices.lastSeenAt`, and new app usage in the owner report.
+- The generated installer is not confirmed to carry a trusted public code-signing certificate; Windows may still show publisher/SmartScreen warnings.
+- Next round can proceed to employee-PC acceptance testing and GitHub Release publication.
+
+## 2026-07-09 Virtual Office Mobile Chrome Cleanup
+
+- Original task: user reported that `/virtual-office` on mobile is visually messy and requested a clean responsive layout where secondary controls collapse or hide when appropriate.
+- Changed files:
+  - `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx`
+  - `workmap/apps/web/components/office/OfficeBottomDock.tsx`
+  - `workmap/apps/web/test/virtual-office-mobile-chrome-source.test.ts`
+  - `design-qa.md`
+  - `docs/ai-handoff/latest-implementation.md`
+  - `docs/ai-handoff/latest-qa.md`
+- Implementation summary:
+  - Added mobile-only chrome overrides at `max-width: 640px` for the virtual office shell.
+  - Top mobile layout now stacks the workspace pill, area selector, and status/search strip into compact full-width cards.
+  - The brand caption, realtime/sync pill, left rail, and mini map are hidden on mobile to keep the map area clean.
+  - Search text and the status divider collapse on mobile while keeping the search button, current virtual-map status, and current-user avatar accessible.
+  - The map zoom controls shrink and move above the mobile dock.
+  - Side panel, room card, interaction drawer, command palette, and toast receive bounded mobile sizing so they behave like bottom sheets or contained overlays instead of spilling across the viewport.
+  - Bottom dock now becomes a single compact 5-action row on mobile. It hides the large identity/status block, divider, duplicate dock search, Outlook, and disabled 3CX entry while retaining Status, Wave, Emote, Notes/People, and Schedule.
+  - Added source-level regression tests for the mobile chrome hiding/stacking rules, compact dock rules, and bounded mobile panel sizing.
+- Role/access behavior:
+  - No Owner / Employee / Platform Admin access behavior changed.
+  - No auth, API, schema, reports, agent, browser extension, tenant isolation, or virtual-office data logic changed.
+  - Existing role-aware `/virtual-office` menu item filtering remains unchanged.
+- Verification commands and results:
+  - `..\..\node_modules\.bin\tsx.CMD --test test\virtual-office-mobile-chrome-source.test.ts` from `workmap/apps/web`: passed 3/3.
+  - `..\..\node_modules\.bin\eslint.CMD components\office\VirtualOfficeTopBar.tsx components\office\OfficeBottomDock.tsx test\virtual-office-mobile-chrome-source.test.ts` from `workmap/apps/web`: passed.
+  - `..\..\node_modules\.bin\tsc.CMD --noEmit` from `workmap/apps/web`: blocked by the pre-existing `workmap/apps/web/lib/api/authApi.ts` NUL/invalid-character corruption.
+  - `..\..\node_modules\.bin\eslint.CMD .` from `workmap/apps/web`: blocked by the same pre-existing `authApi.ts` parse failure.
+  - `.\node_modules\.bin\next.CMD build` from `workmap/apps/web`: blocked by the same pre-existing `authApi.ts` parse failure.
+  - `git diff --check`: passed with LF-to-CRLF working-copy warnings only.
+  - Scoped secret scan excluding env/generated/dependency/reference/artifact paths: no matches found.
+  - Attempted `pnpm.cmd --filter @workmap/web ...` was blocked because the runtime tried to run `pnpm install` and fetch registry metadata under restricted network; local `tsx/tsc/eslint/next` binaries were used instead.
+- Manual QA results:
+  - Not run in a browser. Rendered mobile QA is blocked until the pre-existing corrupted `authApi.ts` file is restored and the Web app can build/run locally.
+- Intentionally not changed:
+  - No map canvas rendering, movement, realtime presence, room/person data, auth, route access, backend, Desktop Agent, Browser Extension, or homepage code was changed in this round.
+  - Existing uncommitted homepage mobile-menu and hero-proof changes from earlier rounds were preserved.
+- Remaining risks:
+  - Source-level tests verify the intended responsive rules, but exact mobile pixel fit still needs browser visual QA at the screenshot-sized viewport after the Web build blocker is fixed.
+  - Hiding sync/realtime text on mobile reduces visible diagnostic information; this is intentional for cleanliness but should be validated against product needs.
+- Suggested next steps:
+  - Restore `workmap/apps/web/lib/api/authApi.ts`, rerun full Web typecheck/lint/build, then open `/virtual-office` on a phone-width viewport and verify the top chrome, bottom dock, zoom controls, and overlays against the supplied screenshot.
+
+---
+
+## 2026-07-09 Home Mobile Hero Proof Horizontal Layout
+
+- Original task: user reported that on the home page small-screen view, the three hero proof items `Support your team`, `Privacy by design`, and `Clear boundaries` are stacked vertically and requested these three lines/items to be displayed horizontally.
+- Changed files:
+  - `workmap/apps/web/app/home.module.css`
+  - `workmap/apps/web/test/home-mobile-menu-source.test.ts`
+  - `design-qa.md`
+  - `docs/ai-handoff/latest-implementation.md`
+  - `docs/ai-handoff/latest-qa.md`
+- Implementation summary:
+  - Changed the mobile `@media (max-width: 820px)` `.heroProof` override from a single-column stack to `repeat(3, minmax(0, 1fr))`.
+  - Kept each proof item internally aligned as icon + text through `grid-template-columns: 22px minmax(0, 1fr)`.
+  - Reduced the mobile proof row gap to keep all three items fitting horizontally in the small-screen hero area.
+  - Added source/CSS regression coverage so the mobile override does not regress back to `grid-template-columns: 1fr`.
+- Role/access behavior:
+  - No Owner / Employee / Platform Admin behavior changed.
+  - No auth, backend, API, schema, reports, virtual office, Desktop Agent, Browser Extension, deployment, or tenant isolation behavior changed.
+- Verification commands and results:
+  - `..\..\node_modules\.bin\tsx.CMD --test test\home-mobile-menu-source.test.ts` from `workmap/apps/web`: passed 3/3.
+  - `..\..\node_modules\.bin\eslint.CMD app\page.tsx test\home-mobile-menu-source.test.ts` from `workmap/apps/web`: passed.
+  - `npm.cmd run typecheck` from `workmap/apps/web`: blocked by the pre-existing `workmap/apps/web/lib/api/authApi.ts` NUL/invalid-character corruption.
+  - `npm.cmd run build` from `workmap/apps/web`: blocked by the same pre-existing `authApi.ts` parse failure.
+  - `git diff --check`: passed with LF-to-CRLF working-copy warnings only.
+  - Scoped secret scan excluding env/generated/dependency/reference/artifact paths: no new secret found; matches were existing documentation/example references to `WORKMAP_JWT_SECRET=qa-local-secret`.
+- Manual QA results:
+  - Not run in a browser. Rendered visual QA is blocked until the pre-existing `authApi.ts` corruption is restored and the Web app can build/run locally.
+- Intentionally not changed:
+  - No hero copy, buttons, landing-page desktop layout, mobile menu behavior, backend/API, auth, RBAC, schema, or tracking code changed.
+  - Existing uncommitted homepage mobile-menu changes from the previous round were preserved.
+- Remaining risks:
+  - Source/CSS verifies horizontal layout intent, but real pixel fit at very narrow widths still needs browser visual QA after `authApi.ts` is repaired.
+- Suggested next steps:
+  - Restore `workmap/apps/web/lib/api/authApi.ts`, rerun full Web checks, then inspect the home page at the screenshot-sized mobile viewport to confirm the three proof items sit in one horizontal row.
+
+---
+
+## 2026-07-09 Home Mobile Menu Redesign
+
+- Original task: user reported the small-screen opened home-page menu layout is poor and requested a Gather-style mobile menu like the provided reference screenshot: brand at top left, compact close button at top right, left-aligned vertical navigation items, and Login / Get started actions near the bottom of the menu card.
+- Changed files:
+  - `workmap/apps/web/app/page.tsx`
+  - `workmap/apps/web/app/home.module.css`
+  - `workmap/apps/web/test/home-mobile-menu-source.test.ts`
+  - `design-qa.md`
+  - `docs/ai-handoff/latest-implementation.md`
+  - `docs/ai-handoff/latest-qa.md`
+- Implementation summary:
+  - Added an explicit open-state class to the home header so the card-style mobile treatment applies only while the menu is open.
+  - Added `aria-controls` and a stable `home-mobile-navigation` id for the mobile navigation toggle relationship.
+  - Kept the existing Product / Privacy / How it works / Company destinations, but changed the mobile-open layout from a centered/narrow stack with dividers to a full-width, left-aligned vertical list inside the top card.
+  - Added mobile-only `Login` and `Get started` actions inside the opened menu, matching the reference structure while preserving the existing desktop header actions.
+  - Styled the open mobile card with a white background, thin border, rounded corners, compact close button, left-aligned grey menu items, and a blue primary CTA.
+  - Added a source-level regression test so the mobile menu keeps the open-state class, navigation id, account actions, left-aligned/stretch layout, and primary CTA hook.
+- Role/access behavior:
+  - No Owner / Employee / Platform Admin access behavior changed.
+  - No auth, route guard, backend, schema, API, tenant isolation, Desktop Agent, or Browser Extension behavior changed.
+- Verification commands and results:
+  - `..\..\node_modules\.bin\tsx.CMD --test test\home-mobile-menu-source.test.ts` from `workmap/apps/web`: passed 2/2.
+  - `..\..\node_modules\.bin\eslint.CMD app\page.tsx test\home-mobile-menu-source.test.ts` from `workmap/apps/web`: passed.
+  - `node --check workmap/apps/web/app/page.tsx`: not applicable because Node cannot parse `.tsx` directly (`ERR_UNKNOWN_FILE_EXTENSION`).
+  - `npm.cmd run typecheck` from `workmap/apps/web`: blocked by the pre-existing `workmap/apps/web/lib/api/authApi.ts` NUL/invalid-character corruption.
+  - `npm.cmd run build` from `workmap/apps/web`: blocked by the same pre-existing `authApi.ts` parse failure.
+  - `git diff --check`: passed with LF-to-CRLF working-copy warnings only.
+  - Scoped secret scan excluding env/generated/dependency/reference/artifact paths: no new secret found; matches were existing documentation/example references to `WORKMAP_JWT_SECRET=qa-local-secret`.
+- Manual QA results:
+  - Not run in a browser. Rendered Product Design visual QA is blocked until the pre-existing `authApi.ts` corruption is restored and the Web app can build/run locally.
+- Intentionally not changed:
+  - No Desktop Agent, Browser Extension, API, reports, employees, dashboard, virtual-office, auth, schema, RBAC, deployment, or company/employee isolation code changed.
+  - The desktop navigation layout and existing desktop Login / Get started actions were preserved.
+- Remaining risks:
+  - The source and CSS structure are verified, but final pixel spacing still needs a real small-screen browser check after the existing Web build blocker is fixed.
+  - If the desired reference should replace the whole mobile header even while the menu is closed, that would be a separate visual decision; this round scopes the redesign to the opened menu state shown in the screenshot.
+- Suggested next steps:
+  - Restore `workmap/apps/web/lib/api/authApi.ts`, rerun full Web typecheck/lint/build, then open the home page at a small viewport and visually verify the opened menu against the provided reference.
+
+---
+
 ## 2026-07-09 Browser Extension 0.4.2 Pairing Feedback Fix
 
 - Original task: user reported that Edge Browser Extension `Pair extension` click had no visible feedback; DevTools showed no `/device-client/pair` network request after clicking.

@@ -71,6 +71,7 @@
 
 .navActions { display: flex; align-items: center; gap: 20px; }
 .menuButton { display: none; border: 0; background: transparent; color: #292d4c; cursor: pointer; }
+.mobileMenuActions { display: none; }
 
 .primaryButton,
 .primaryButtonLarge,
@@ -290,14 +291,82 @@
 
 @media (max-width: 820px) {
   .nav { grid-template-columns: auto auto; justify-content: space-between; }
-  .menuButton { display: grid; place-items: center; width: 44px; height: 44px; }
-  .navLinks { position: absolute; top: 72px; right: 0; left: 0; display: none; align-items: stretch; gap: 0; border-bottom: 1px solid #d8e1dc; background: #fffdf8; padding: 10px 20px 18px; box-shadow: 0 18px 34px rgba(16,32,51,.08); }
+  .headerMenuOpen { padding: 7px 0; border-bottom: 0; background: transparent; backdrop-filter: none; }
+  .headerMenuOpen .nav {
+    align-items: start;
+    border: 1px solid #d8e1dc;
+    border-radius: 8px;
+    background: #fffdf8;
+    padding: 15px 24px 18px;
+    box-shadow: 0 18px 34px rgba(16,32,51,.08);
+  }
+  .menuButton {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+  }
+  .headerMenuOpen .menuButton { border-color: #292d4c; background: #fffdf8; }
+  .navLinks {
+    position: absolute;
+    top: 72px;
+    right: 0;
+    left: 0;
+    display: none;
+    justify-content: stretch;
+    justify-items: stretch;
+    align-items: stretch;
+    gap: 0;
+    border-bottom: 1px solid #d8e1dc;
+    background: #fffdf8;
+    padding: 10px 20px 18px;
+    box-shadow: 0 18px 34px rgba(16,32,51,.08);
+  }
+  .headerMenuOpen .navLinks {
+    position: static;
+    grid-column: 1 / -1;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 34px 0 0;
+    box-shadow: none;
+  }
   .navLinksOpen { display: grid; }
-  .navLinks a { min-height: 46px; display: flex; align-items: center; border-bottom: 1px solid #e6ede8; }
+  .navLinks a {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    border-bottom: 0;
+    color: #67697f;
+    font-size: 18px;
+    font-weight: 500;
+  }
+  .mobileMenuActions {
+    display: grid;
+    gap: 10px;
+    margin-top: 22px;
+  }
+  .mobileMenuActions a {
+    min-height: 40px;
+    justify-content: center;
+    border: 1px solid #d8dce5;
+    border-radius: 10px;
+    color: #292d4c;
+    font-size: 14px;
+    font-weight: 800;
+  }
+  .mobileMenuActions .mobilePrimaryButton {
+    border-color: #333eea;
+    background: #333eea;
+    color: white;
+    box-shadow: 0 8px 18px rgba(51, 62, 234, 0.18);
+  }
   .navActions { display: none; }
   .hero { padding-top: 56px; }
-  .heroProof { grid-template-columns: 1fr; gap: 16px; }
-  .heroProof div { grid-template-columns: auto 1fr; border-left: 0; padding: 0; }
+  .heroProof { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .heroProof div { grid-template-columns: 22px minmax(0, 1fr); align-items: start; gap: 8px; border-left: 0; padding: 0; }
   .tabList { grid-template-columns: 1fr; border: 1px solid #d8e1dc; border-radius: 14px; overflow: hidden; }
   .tab { min-height: 84px; border-right: 0; border-bottom: 1px solid #e6ede8; border-radius: 0 !important; }
   .tab:last-child { border-bottom: 0; }

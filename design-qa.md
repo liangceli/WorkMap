@@ -1,23 +1,57 @@
 # Design QA
 
-- Source visual truth: user-confirmed pixel walker candidate generated from existing Virtual Office layered avatar assets: `Body_1`, `Eyes_Blue`, `Outfit_Braces_Brown`, and `Hairstyle_Short_Brown_Dark`.
+## 2026-07-09 Virtual Office Mobile Chrome Cleanup
+
+- Source visual truth: user-provided `/virtual-office` mobile screenshot showing the top chrome stacked awkwardly, bottom dock wrapping into multiple rows, duplicate controls, and the current-user/status block taking too much vertical space.
+- Target behavior: mobile `/virtual-office` should keep the map as the primary surface, hide or collapse secondary desktop chrome, and keep controls tidy.
 - Implementation screenshot: unavailable.
-- Intended viewport: shared WorkMap full-page and section loading states.
-- State: route/page loading state using `WorkMapLoader`.
+- Intended viewport: phone-width `/virtual-office` viewport similar to the supplied screenshot.
+- State: virtual office loaded, map visible, top workspace/area/status controls visible, bottom dock visible.
 - Full-view comparison evidence: blocked because the local Web app cannot build while `workmap/apps/web/lib/api/authApi.ts` contains NUL/invalid characters.
-- Focused region comparison evidence: blocked for the same reason. Source-level checks verified the asset paths and animation frame coordinates, but no rendered browser screenshot was captured.
+- Focused region comparison evidence: blocked for the same reason. Source-level checks verified the mobile rules that hide left rail, mini map, sync pill, dock identity block, duplicate dock search, Outlook, and disabled 3CX while constraining panels and keeping a compact five-action dock.
+
+### Findings
+
+- No scoped source-level P0/P1/P2 issue found in the mobile chrome cleanup implementation.
+- Visual fidelity remains unverified in browser for exact spacing, safe-area behavior, and real touch hit areas.
+- Product tradeoff: realtime/sync diagnostic text is hidden on mobile to reduce clutter.
+
+### Patches Made
+
+- Added mobile responsive overrides to stack top controls into clean full-width cards.
+- Hid mobile-only secondary chrome: sync pill, left rail, mini map, dock identity block, duplicate dock search, Outlook, and disabled 3CX.
+- Converted the mobile bottom dock into a compact single-row five-action bar.
+- Bounded side panels, room cards, interaction drawers, command palette, toast, and zoom controls for phone-sized layouts.
+- Added source regression coverage for the responsive rules.
+
+### Final Result
+
+final result: blocked
+
+Blocker: rendered implementation capture is unavailable until the pre-existing `workmap/apps/web/lib/api/authApi.ts` NUL/invalid-character corruption is restored and the Web app can build/run locally.
+
+---
+
+## 2026-07-09 Home Mobile Hero Proof Horizontal Layout
+
+- Source visual truth: user-provided small-screen home-page screenshot showing the hero proof items `Support your team`, `Privacy by design`, and `Clear boundaries` stacked vertically.
+- Target behavior: those three proof items should be horizontally arranged on the small-screen home page.
+- Implementation screenshot: unavailable.
+- Intended viewport: small-screen / mobile home page hero section.
+- State: landing page, menu closed, hero proof area visible below the primary/secondary CTAs.
+- Full-view comparison evidence: blocked because the local Web app cannot build while `workmap/apps/web/lib/api/authApi.ts` contains NUL/invalid characters.
+- Focused region comparison evidence: blocked for the same reason. Source-level checks verified the mobile `.heroProof` override uses a three-column grid and no longer regresses to `grid-template-columns: 1fr`.
 
 ## Findings
 
-- No scoped source-level P0/P1/P2 issue found in the loader implementation.
-- Visual fidelity remains unverified in browser for final perceived scale, pixel sharpness, timing, and loader placement across full-page vs section loading states.
+- No scoped source-level P0/P1/P2 issue found in the hero proof horizontal-layout implementation.
+- Visual fidelity remains unverified in browser for exact spacing, text wrapping, and fit at very narrow widths.
 
 ## Patches Made
 
-- Replaced the rotating `WM` loader mark with a four-layer pixel avatar walker.
-- Added CSS animation using the confirmed six down-walk frames from the layered avatar spritesheets.
-- Added reduced-motion handling that disables walking animation.
-- Added source regression tests for loader markup, selected assets, animation timing, frame coordinates, and old logo removal.
+- Changed the mobile `.heroProof` override from one column to three horizontal columns.
+- Kept each proof item internally aligned as icon plus text.
+- Added regression coverage confirming the small-screen proof items remain horizontal and do not revert to a vertical stack.
 
 ## Final Result
 

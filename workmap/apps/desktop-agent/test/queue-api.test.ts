@@ -141,6 +141,44 @@ test("runtime keeps sending heartbeat when foreground sampling fails after start
   });
 });
 
+test("runtime keeps heartbeat alive when local status writes are locked", async () => {
+  await withRuntimeEnvironment(async (directory) => {
+    const originalFetch = globalThis.fetch;
+    let heartbeatCalls = 0;
+    globalThis.fetch = async (input) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/device-client/session/start") {
+        return jsonResponse({ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", startedAt: new Date().toISOString() });
+      }
+      if (path === "/device-client/heartbeat") {
+        heartbeatCalls += 1;
+        return jsonResponse({ device: { id: config.deviceId }, sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+      }
+      if (path === "/device-client/session/stop") {
+        return jsonResponse({ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", endedAt: new Date().toISOString() });
+      }
+      return jsonResponse({ accepted: 0 });
+    };
+
+    try {
+      const runtime = new DesktopAgentRuntime(config, {
+        adapter: fakeAdapter(async () => sample("Microsoft Edge")),
+        queue: new FileEventQueue(join(directory, "queue.json")),
+        statusWriter: async () => {
+          throw Object.assign(new Error("status file locked by Windows"), { code: "EPERM" });
+        },
+      });
+      const run = runtime.run();
+      await waitUntil(() => heartbeatCalls > 0);
+      await runtime.shutdown();
+      await run;
+      assert.equal(heartbeatCalls > 0, true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 test("runtime recreates an inactive agent session instead of requiring re-pair", async () => {
   await withRuntimeEnvironment(async (directory) => {
     const originalFetch = globalThis.fetch;

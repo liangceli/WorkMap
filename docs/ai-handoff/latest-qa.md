@@ -1,5 +1,133 @@
 # Latest QA Handoff
 
+## 2026-07-10 Desktop Agent 0.5.7 Windows File-Lock Recovery QA
+
+### Reviewed Implementation
+
+- Reviewed the 0.5.7 version bump, atomic JSON file writer, runtime status-write isolation, legacy startup cleanup, new regression tests, and final NSIS installer output.
+
+### Diff Review Summary And Findings Ordered By Severity
+
+- Critical/high: none found in the scoped desktop-agent diff.
+- Medium: a local `status.json` write can still fail after all retries, but it is now explicitly diagnostic-only and cannot terminate the network/runtime loops. The UI may briefly show stale local text while server heartbeats continue.
+- Low: failed best-effort cleanup can leave a uniquely named temporary JSON file, but it cannot block later writes because each attempt uses a fresh name.
+- Review correction made before final packaging: the legacy-cleanup PowerShell command now excludes its own `$PID`; otherwise its command line could match the same legacy markers it searches for.
+
+### Test And Verification Status
+
+- TypeScript typecheck: pass.
+- Desktop-agent tests: pass, 28/28.
+- New regression coverage passes for transient Windows rename locks, non-throwing status writes, continued heartbeat under persistent status-file failure, and legacy cleanup source guards.
+- Desktop-agent build: pass.
+- Windows NSIS x64 packaging: pass.
+- Final installer SHA-256: `587C90996C124015AAF51BCF706ABD10FCA9879E2E9ED96F48899C6A6418D9C3`.
+- `git diff --check` — pass (line-ending conversion warnings only; no whitespace errors).
+- Scoped secret scan excluding environment, dependency, build, artifact, and reference directories — pass; no matches.
+
+### Manual QA Status
+
+- Installer creation and artifact metadata inspection completed.
+- A real install-over-0.5.6, full Windows shutdown, next-day sign-in, and owner-report observation were not run because they require the affected employee machine and elapsed lifecycle testing.
+
+### Risks And Recommendation
+
+- Functional automated QA passes and the installer is ready for controlled employee-PC acceptance testing.
+- Do not call overnight restart recovery fully proven until the affected PC completes the shutdown/sign-in scenario and the owner account sees a fresh heartbeat plus app activity.
+- Pass for GitHub Release candidate publication; next round can proceed.
+
+## 2026-07-09 Virtual Office Mobile Chrome Cleanup QA
+
+- Reviewed implementation: mobile responsive CSS/markup changes in `VirtualOfficeTopBar.tsx`, `OfficeBottomDock.tsx`, and source-level regression coverage for `/virtual-office` mobile chrome.
+- Diff review summary:
+  - Mobile top controls are now constrained to three clean full-width strips: workspace, area selector, and status/search.
+  - Secondary desktop chrome is hidden on phone widths: sync pill, left rail, and mini map.
+  - Bottom dock no longer wraps into multiple rows on mobile. It hides the large identity block plus duplicate/unavailable controls and keeps a compact five-action row.
+  - Mobile side panel, room card, interaction drawer, command palette, map controls, and toast are bounded to avoid overflow and reduce visual clutter.
+  - No virtual-office data fetching, movement, realtime, auth, API, or RBAC behavior changed.
+- Findings ordered by severity:
+  - No blocking scoped source finding found in the virtual-office mobile chrome diff.
+  - Medium remaining visual risk: rendered mobile acceptance could not be captured because the Web app is currently blocked by corrupted `workmap/apps/web/lib/api/authApi.ts`.
+  - Low product tradeoff: mobile hides the realtime/sync diagnostic pill to keep the map clean; this matches the current cleanliness request but should be confirmed in real QA.
+- Test/verification status:
+  - `..\..\node_modules\.bin\tsx.CMD --test test\virtual-office-mobile-chrome-source.test.ts`: passed 3/3.
+  - `..\..\node_modules\.bin\eslint.CMD components\office\VirtualOfficeTopBar.tsx components\office\OfficeBottomDock.tsx test\virtual-office-mobile-chrome-source.test.ts`: passed.
+  - `..\..\node_modules\.bin\tsc.CMD --noEmit`: failed on pre-existing `lib/api/authApi.ts` NUL/invalid-character corruption.
+  - `..\..\node_modules\.bin\eslint.CMD .`: failed on the same pre-existing `authApi.ts` parser error.
+  - `.\node_modules\.bin\next.CMD build`: failed on the same pre-existing `authApi.ts` webpack parse error.
+  - `git diff --check`: passed with LF-to-CRLF working-copy warnings only.
+  - Scoped secret scan excluding env/generated/dependency/reference/artifact paths: no matches found.
+- Manual QA status:
+  - Not run. Required manual check after restoring `authApi.ts`: open `/virtual-office` at the screenshot-sized mobile viewport and confirm top controls are clean, left rail/mini map/sync pill are hidden, bottom dock is one row, zoom controls do not overlap the dock, and opened panels behave as bounded bottom sheets.
+- Risks:
+  - Source tests are not pixel tests. Actual phone-browser safe-area behavior, touch hit size, and long-label wrapping still require visual/touch QA.
+  - If product later requires realtime connection text visible on mobile, a small collapsed indicator may need to be added.
+- Pass/fail recommendation:
+  - Pass for scoped source implementation and targeted automated coverage.
+  - Do not claim final mobile visual acceptance until Web build and real browser QA are available.
+- Whether the next round can proceed: yes, but deployment readiness still requires fixing the existing `authApi.ts` blocker first.
+
+---
+
+## 2026-07-09 Home Mobile Hero Proof Horizontal Layout QA
+
+- Reviewed implementation: home page hero proof mobile CSS override and source regression coverage.
+- Diff review summary:
+  - The mobile `@media (max-width: 820px)` proof area no longer forces the three proof items into one vertical column.
+  - The three proof items now remain in a three-column horizontal grid on small screens.
+  - Each proof item keeps icon + text alignment inside its own column.
+  - No desktop hero proof layout or hero content copy changed.
+- Findings ordered by severity:
+  - No blocking scoped finding found in the source diff or targeted checks.
+  - Medium remaining visual risk: no rendered mobile browser screenshot was captured because the existing Web build is blocked by `workmap/apps/web/lib/api/authApi.ts` NUL/invalid-character corruption.
+  - Low expected limitation: a very narrow viewport may wrap text inside each proof item, but the three items remain horizontally arranged.
+- Test/verification status:
+  - `..\..\node_modules\.bin\tsx.CMD --test test\home-mobile-menu-source.test.ts`: passed 3/3.
+  - `..\..\node_modules\.bin\eslint.CMD app\page.tsx test\home-mobile-menu-source.test.ts`: passed.
+  - `npm.cmd run typecheck` from `workmap/apps/web`: failed on the pre-existing corrupted `lib/api/authApi.ts`.
+  - `npm.cmd run build` from `workmap/apps/web`: failed on the same pre-existing corrupted `lib/api/authApi.ts`.
+  - `git diff --check`: passed with LF-to-CRLF working-copy warnings only.
+  - Scoped secret scan excluding env/generated/dependency/reference/artifact paths: no new secret found; matches were existing documentation/example references to `WORKMAP_JWT_SECRET=qa-local-secret`.
+- Manual QA status:
+  - Not run. Required manual check after restoring `authApi.ts`: open the home page at the screenshot-sized mobile viewport and confirm `Support your team`, `Privacy by design`, and `Clear boundaries` appear in one horizontal row.
+- Risks:
+  - Exact visual fit and line wrapping need browser verification after the build blocker is removed.
+- Pass/fail recommendation:
+  - Pass for scoped CSS/source implementation and targeted automated coverage.
+  - Do not claim final pixel-perfect mobile acceptance until full Web build and mobile browser QA are available.
+- Whether the next round can proceed: yes, with the known build blocker still outstanding.
+
+---
+
+## 2026-07-09 Home Mobile Menu Redesign QA
+
+- Reviewed implementation: home page header/menu markup, mobile navigation open state, mobile account actions, mobile CSS card layout, and source-level regression test.
+- Diff review summary:
+  - The opened mobile menu now uses the reference-style top card instead of a centered narrow menu stack.
+  - The visual change is gated by the `headerMenuOpen` state, so the closed mobile header and desktop navigation do not receive the card/open-menu overrides.
+  - `Login` and `Get started` are rendered only inside the mobile menu while desktop actions remain in the existing `navActions` area.
+  - Accessibility wiring is improved by connecting the toggle button to the menu with `aria-controls`.
+- Findings ordered by severity:
+  - No blocking scoped finding found in the source diff or targeted checks.
+  - Medium remaining visual risk: no real browser screenshot was captured because the existing Web build is blocked by `workmap/apps/web/lib/api/authApi.ts` NUL/invalid-character corruption.
+  - Low expected limitation: the test is source/CSS-structure coverage, not a pixel comparison.
+- Test/verification status:
+  - `..\..\node_modules\.bin\tsx.CMD --test test\home-mobile-menu-source.test.ts`: passed 2/2.
+  - `..\..\node_modules\.bin\eslint.CMD app\page.tsx test\home-mobile-menu-source.test.ts`: passed.
+  - `node --check workmap/apps/web/app/page.tsx`: not applicable for `.tsx` files.
+  - Full Web typecheck/build remain blocked by the existing corrupted `authApi.ts`, not by this menu change.
+  - `git diff --check`: passed with LF-to-CRLF working-copy warnings only.
+  - Scoped secret scan excluding env/generated/dependency/reference/artifact paths: no new secret found; matches were existing documentation/example references to `WORKMAP_JWT_SECRET=qa-local-secret`.
+- Manual QA status:
+  - Not run. Required manual check after restoring `authApi.ts`: open the home page at a mobile width, open the menu, and compare the top-card layout, left-aligned links, compact close button, and bottom CTA buttons with the supplied Gather reference.
+- Risks:
+  - Exact spacing, font rendering, and small-screen viewport height behavior are not visually accepted until browser QA runs.
+- Pass/fail recommendation:
+  - Pass for scoped source implementation and targeted automated coverage.
+  - Do not claim final pixel-perfect acceptance until full Web build and mobile browser QA are available.
+- Whether the next round can proceed: yes, but deployment readiness requires fixing the existing `authApi.ts` blocker first.
+
+---
+
 ## 2026-07-09 Browser Extension 0.4.2 Pairing Feedback Fix QA
 
 - Reviewed implementation: Browser Extension Options pairing flow, Edge optional host-permission request handling, content-script registration wrappers, API error detail handling, version identity, generated unpacked manifest/CSS, and release ZIP metadata.

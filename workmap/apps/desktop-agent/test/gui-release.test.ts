@@ -14,7 +14,7 @@ test("Windows release is a visual NSIS installer", async () => {
   const preload = await readFile(new URL("../renderer/preload.cjs", import.meta.url), "utf8");
   const pairing = await readFile(new URL("../src/pairing.ts", import.meta.url), "utf8");
 
-  assert.equal(packageJson.version, "0.5.6");
+  assert.equal(packageJson.version, "0.5.7");
   assert.equal(packageJson.main, "dist/electron/main.js");
   assert.match(packageJson.scripts?.["release:windows"] ?? "", /electron-builder --win nsis --x64/);
   assert.equal(packageJson.build?.win?.target, "nsis");
@@ -27,7 +27,7 @@ test("Windows release is a visual NSIS installer", async () => {
   assert.match(renderer, /Signal stale/);
   assert.match(renderer, /Last server-confirmed heartbeat/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
-  assert.match(pairing, /desktop-agent-windows\/0\.5\.6/);
+  assert.match(pairing, /desktop-agent-windows\/0\.5\.7/);
   assert.doesNotMatch(html, /nodeIntegration/);
 });
 
@@ -39,6 +39,10 @@ test("runtime startup does not silently preserve stale connected state", async (
   assert.doesNotMatch(runtime, /this\.status = \{ state: "connected"/);
   assert.doesNotMatch(electronMain, /\.catch\(\(\) => undefined\)/);
   assert.match(electronMain, /safeRuntimeError/);
+  assert.match(electronMain, /stopLegacyNodeAgents/);
+  assert.match(electronMain, /Get-CimInstance Win32_Process/);
+  assert.match(electronMain, /run-workmap-agent/);
+  assert.match(electronMain, /\$shellPid = \$PID/);
 });
 
 test("pairing errors are safe and actionable", () => {

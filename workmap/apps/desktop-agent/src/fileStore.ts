@@ -1,9 +1,26 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import type { AgentStatus, QueuedEvent, TrackingCheckpoint } from "./types.js";
 
 const MAX_QUEUE_SIZE = 1_000;
 const MAX_QUEUE_AGE_MS = 31 * 24 * 60 * 60 * 1000;
+const DEFAULT_JSON_WRITE_ATTEMPTS = 5;
+const DEFAULT_JSON_WRITE_RETRY_MS = 40;
+const TRANSIENT_WRITE_ERROR_CODES = new Set(["EACCES", "EBUSY", "ENOENT", "EPERM"]);
+
+type WriteFileImpl = typeof writeFile;
+type RenameImpl = typeof rename;
+type UnlinkImpl = typeof unlink;
+
+export type JsonWriteOptions = {
+  attempts?: number;
+  retryDelayMs?: number;
+  writeFileImpl?: WriteFileImpl;
+  renameImpl?: RenameImpl;
+  unlinkImpl?: UnlinkImpl;
+  tempName?: () => string;
+};
 
 export function getAgentDataDirectory() {
   const root = process.env.LOCALAPPDATA?.trim() || join(process.env.USERPROFILE?.trim() || process.cwd(), "AppData", "Local");
@@ -69,8 +86,17 @@ export class FileEventQueue {
   private async save() { await writeJsonAtomic(this.filePath, this.events); }
 }
 
-export async function writeAgentStatus(status: AgentStatus, filePath = join(getAgentDataDirectory(), "status.json")) {
-  await writeJsonAtomic(filePath, status);
+export async function writeAgentStatus(status: AgentStatus, filePath = join(getAgentDataDirectory(), "status.json"), options: JsonWriteOptions = {}) {
+  try {
+    await writeJsonAtomic(filePath, status, {
+      attempts: 3,
+      retryDelayMs: 25,
+      ...options,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function readTrackingCheckpoint(filePath = join(getAgentDataDirectory(), "tracking-state.json")) {
@@ -85,11 +111,66 @@ export async function readJson<T>(filePath: string, fallback: T): Promise<T> {
   try { return JSON.parse(await readFile(filePath, "utf8")) as T; } catch { return fallback; }
 }
 
-export async function writeJsonAtomic(filePath: string, value: unknown) {
+export async function writeJsonAtomic(filePath: string, value: unknown, options: JsonWriteOptions = {}) {
   await mkdir(dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  await rename(temporary, filePath);
+
+  const attempts = Math.max(1, options.attempts ?? DEFAULT_JSON_WRITE_ATTEMPTS);
+  const retryDelayMs = Math.max(0, options.retryDelayMs ?? DEFAULT_JSON_WRITE_RETRY_MS);
+  const writeFileImpl = options.writeFileImpl ?? writeFile;
+  const renameImpl = options.renameImpl ?? rename;
+  const unlinkImpl = options.unlinkImpl ?? unlink;
+  const serialized = `${JSON.stringify(value, null, 2)}\n`;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const temporary = join(dirname(filePath), options.tempName?.() ?? createTemporaryJsonFileName(filePath));
+
+    try {
+      await writeFileImpl(temporary, serialized, { encoding: "utf8", mode: 0o600 });
+      await renameImpl(temporary, filePath);
+      return;
+    } catch (error) {
+      lastError = error;
+      await removeTemporaryFile(temporary, unlinkImpl);
+
+      if (!isTransientWriteError(error) || attempt === attempts) {
+        throw error;
+      }
+
+      await sleep(retryDelayMs * attempt);
+    }
+  }
+
+  throw lastError;
 }
 
 export const EVENT_QUEUE_CAPACITY = MAX_QUEUE_SIZE;
+
+function createTemporaryJsonFileName(filePath: string) {
+  return `.${basename(filePath)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+}
+
+async function removeTemporaryFile(filePath: string, unlinkImpl: UnlinkImpl) {
+  try {
+    await unlinkImpl(filePath);
+  } catch {
+    // Best effort cleanup. The next write uses a unique temp file, so a stale temp file cannot block writes.
+  }
+}
+
+function isTransientWriteError(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return false;
+  }
+
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && TRANSIENT_WRITE_ERROR_CODES.has(code);
+}
+
+async function sleep(ms: number) {
+  if (ms <= 0) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}

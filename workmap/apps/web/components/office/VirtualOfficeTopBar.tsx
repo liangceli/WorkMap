@@ -56,6 +56,194 @@ export function VirtualOfficeTopBar({
 
   return (
     <>
+      <style>{`
+        @media (max-width: 640px) {
+          .wm-office-top-brand {
+            top: max(10px, env(safe-area-inset-top)) !important;
+            left: 12px !important;
+            right: 12px !important;
+            width: auto !important;
+            min-height: 58px !important;
+            padding: 8px 12px 8px 8px !important;
+            border-radius: 20px !important;
+            z-index: 62 !important;
+          }
+
+          .wm-office-brand-logo {
+            width: 42px !important;
+            height: 42px !important;
+            border-radius: 15px !important;
+          }
+
+          .wm-office-brand-title {
+            font-size: 15px !important;
+          }
+
+          .wm-office-brand-caption,
+          .wm-office-sync-pill,
+          .wm-office-left-rail,
+          .wm-office-minimap {
+            display: none !important;
+          }
+
+          .wm-office-navigation-menu {
+            top: calc(max(10px, env(safe-area-inset-top)) + 66px) !important;
+            left: 12px !important;
+            right: 12px !important;
+            width: auto !important;
+            max-height: min(56vh, 360px) !important;
+            overflow-y: auto !important;
+            z-index: 72 !important;
+          }
+
+          .wm-office-area-pill {
+            top: calc(max(10px, env(safe-area-inset-top)) + 66px) !important;
+            left: 12px !important;
+            right: 12px !important;
+            width: auto !important;
+            min-height: 44px !important;
+            justify-content: center !important;
+            padding: 0 14px !important;
+            border-radius: 18px !important;
+            font-size: 15px !important;
+            z-index: 45 !important;
+          }
+
+          .wm-office-status-pill {
+            top: calc(max(10px, env(safe-area-inset-top)) + 118px) !important;
+            left: 12px !important;
+            right: 12px !important;
+            width: auto !important;
+            min-height: 48px !important;
+            padding: 6px 8px !important;
+            gap: 8px !important;
+            border-radius: 18px !important;
+            justify-content: space-between !important;
+            z-index: 44 !important;
+          }
+
+          .wm-office-search-label,
+          .wm-office-status-divider {
+            display: none !important;
+          }
+
+          .wm-office-search-button {
+            min-width: 44px !important;
+            min-height: 40px !important;
+            padding: 0 12px !important;
+            justify-content: center !important;
+          }
+
+          .wm-office-status-text {
+            flex: 1 1 auto !important;
+            justify-content: center !important;
+            font-size: 13px !important;
+          }
+
+          .wm-office-avatar-button {
+            width: 42px !important;
+            height: 42px !important;
+            font-size: 10px !important;
+          }
+
+          .wm-office-map-controls {
+            right: 12px !important;
+            bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+            width: 48px !important;
+            gap: 6px !important;
+            padding: 6px 5px 8px !important;
+            border-radius: 18px !important;
+            z-index: 36 !important;
+          }
+
+          .wm-office-map-controls button {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 12px !important;
+          }
+
+          .wm-office-map-controls span {
+            font-size: 11px !important;
+          }
+
+          .wm-office-side-panel {
+            top: auto !important;
+            left: 12px !important;
+            right: 12px !important;
+            bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+            width: auto !important;
+            max-height: min(58vh, 420px) !important;
+            border-radius: 22px !important;
+            z-index: 58 !important;
+          }
+
+          .wm-office-room-card,
+          .wm-office-interaction-drawer {
+            top: auto !important;
+            left: 12px !important;
+            right: 12px !important;
+            bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+            width: auto !important;
+            max-height: min(56vh, 420px) !important;
+            overflow: auto !important;
+            border-radius: 22px !important;
+            z-index: 59 !important;
+          }
+
+          .wm-office-interaction-drawer {
+            grid-template-columns: 1fr !important;
+            gap: 14px !important;
+            min-height: 0 !important;
+            padding: 18px 18px 18px !important;
+          }
+
+          .wm-office-command-backdrop {
+            padding: calc(max(10px, env(safe-area-inset-top)) + 12px) 12px 12px !important;
+            place-items: start stretch !important;
+          }
+
+          .wm-office-command-palette {
+            width: auto !important;
+            max-height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+            border-radius: 22px !important;
+          }
+
+          .wm-command-result-row {
+            grid-template-columns: 38px minmax(0, 1fr) !important;
+          }
+
+          .wm-command-result-row > span:nth-last-child(-n + 2) {
+            justify-self: start !important;
+          }
+
+          .wm-office-toast {
+            top: calc(max(10px, env(safe-area-inset-top)) + 174px) !important;
+            left: 12px !important;
+            right: 12px !important;
+            transform: none !important;
+            width: auto !important;
+            text-align: center !important;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .wm-office-top-brand,
+          .wm-office-area-pill,
+          .wm-office-status-pill {
+            left: 10px !important;
+            right: 10px !important;
+          }
+
+          .wm-office-navigation-menu {
+            left: 10px !important;
+            right: 10px !important;
+          }
+
+          .wm-office-status-pill {
+            top: calc(max(10px, env(safe-area-inset-top)) + 114px) !important;
+          }
+        }
+      `}</style>
       <div ref={navigationRef} style={styles.navigationRoot}>
         <button
           type="button"
@@ -66,10 +254,10 @@ export function VirtualOfficeTopBar({
           aria-controls="virtual-office-navigation"
           onClick={() => setNavigationOpen((open) => !open)}
         >
-          <div style={styles.logo} aria-hidden="true">WM</div>
-          <div style={styles.titleWrap}>
-            <span style={styles.title}>Virtual Office</span>
-            <span style={styles.caption}>Live team presence</span>
+          <div className="wm-office-brand-logo" style={styles.logo} aria-hidden="true">WM</div>
+          <div className="wm-office-brand-title-wrap" style={styles.titleWrap}>
+            <span className="wm-office-brand-title" style={styles.title}>Virtual Office</span>
+            <span className="wm-office-brand-caption" style={styles.caption}>Live team presence</span>
           </div>
           <span style={{ ...styles.chevron, transform: navigationOpen ? "rotate(180deg)" : "none" }}>
             <OfficeIcon name="chevronDown" size={18} />
@@ -103,16 +291,16 @@ export function VirtualOfficeTopBar({
       </div>
 
       <div className="wm-office-status-pill" style={styles.statusPill}>
-        <button type="button" style={styles.searchButton} onClick={onSearch} aria-label="Find people, rooms, or actions">
+        <button type="button" className="wm-office-search-button" style={styles.searchButton} onClick={onSearch} aria-label="Find people, rooms, or actions">
           <OfficeIcon name="search" size={20} />
-          <span>Search</span>
+          <span className="wm-office-search-label">Search</span>
         </button>
-        <span style={styles.statusDivider} />
-        <span style={styles.statusText}>
+        <span className="wm-office-status-divider" style={styles.statusDivider} />
+        <span className="wm-office-status-text" style={styles.statusText}>
           <span style={{ ...styles.statusDot, background: statusColors[status] }} />
           {labelStatus(status)}
         </span>
-        <button aria-label="Current user" style={styles.avatarButton} type="button">
+        <button className="wm-office-avatar-button" aria-label="Current user" style={styles.avatarButton} type="button">
           You
           <span style={styles.avatarDot} />
         </button>

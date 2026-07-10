@@ -75,7 +75,7 @@ export default function HomePage() {
         Skip to main content
       </a>
 
-      <header className={styles.header}>
+      <header className={`${styles.header} ${menuOpen ? styles.headerMenuOpen : ""}`}>
         <nav className={styles.nav} aria-label="Main navigation">
           <a className={styles.brand} href="#top" aria-label="WorkMap home">
             <span className={styles.brandMark} aria-hidden="true">
@@ -91,16 +91,21 @@ export default function HomePage() {
             type="button"
             aria-label={menuOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={menuOpen}
+            aria-controls="home-mobile-navigation"
             onClick={() => setMenuOpen((open) => !open)}
           >
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
 
-          <div className={`${styles.navLinks} ${menuOpen ? styles.navLinksOpen : ""}`}>
+          <div id="home-mobile-navigation" className={`${styles.navLinks} ${menuOpen ? styles.navLinksOpen : ""}`}>
             <a href="#product" onClick={() => setMenuOpen(false)}>Product</a>
             <a href="#privacy" onClick={() => setMenuOpen(false)}>Privacy</a>
             <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
             <a href="#company" onClick={() => setMenuOpen(false)}>Company</a>
+            <div className={styles.mobileMenuActions} aria-label="Account actions">
+              <a className={styles.mobileLoginButton} href="/login?mode=signin" onClick={() => setMenuOpen(false)}>Login</a>
+              <a className={styles.mobilePrimaryButton} href="/login?mode=signup" onClick={() => setMenuOpen(false)}>Get started</a>
+            </div>
           </div>
 
           <div className={styles.navActions}>

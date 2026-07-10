@@ -48,6 +48,71 @@ export function OfficeBottomDock({
           background: rgba(31, 122, 120, 0.1) !important;
           color: ${wm.colors.primary} !important;
         }
+
+        @media (max-width: 640px) {
+          .wm-office-bottom-dock {
+            left: 12px !important;
+            right: 12px !important;
+            bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+            width: auto !important;
+            max-width: none !important;
+            min-height: 56px !important;
+            transform: none !important;
+            justify-content: center !important;
+            gap: 0 !important;
+            padding: 7px 8px !important;
+            border-radius: 22px !important;
+            overflow: hidden !important;
+            z-index: 64 !important;
+          }
+
+          .wm-office-dock-identity,
+          .wm-office-dock-divider,
+          .office-dock-mobile-hidden {
+            display: none !important;
+          }
+
+          .wm-office-dock-actions {
+            display: grid !important;
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            align-items: center !important;
+            justify-items: center !important;
+            width: 100% !important;
+            gap: 4px !important;
+          }
+
+          .office-dock-action {
+            min-width: 40px !important;
+            min-height: 40px !important;
+            width: 40px !important;
+            height: 40px !important;
+            padding: 0 !important;
+            border-radius: 14px !important;
+          }
+
+          .office-dock-action svg {
+            width: 22px !important;
+            height: 22px !important;
+          }
+
+          .office-dock-tooltip {
+            display: none !important;
+          }
+
+          .wm-office-emoji-wrap {
+            width: 40px !important;
+            height: 40px !important;
+          }
+
+          .wm-office-emoji-menu {
+            left: auto !important;
+            right: 0 !important;
+            bottom: calc(100% + 10px) !important;
+            max-width: calc(100vw - 40px) !important;
+            overflow-x: auto !important;
+            transform: none !important;
+          }
+        }
       `}</style>
       <div className="wm-office-dock-identity" style={styles.identity}>
         <div style={styles.avatar}>
@@ -71,9 +136,9 @@ export function OfficeBottomDock({
           <OfficeIcon name="wave" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Wave</span>
         </button>
-        <span style={styles.emojiWrap}>
+        <span className="wm-office-emoji-wrap" style={styles.emojiWrap}>
           {emojiOpen ? (
-            <span style={styles.emojiMenu} aria-label="Choose reaction">
+            <span className="wm-office-emoji-menu" style={styles.emojiMenu} aria-label="Choose reaction">
               {reactionOptions.map((option) => (
                 <button
                   key={option.key}
@@ -96,7 +161,7 @@ export function OfficeBottomDock({
             <span className="office-dock-tooltip" style={styles.tooltip}>Emote</span>
           </button>
         </span>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={onSearch} aria-label="Search">
+        <button type="button" className="office-dock-action office-dock-mobile-hidden" style={styles.action} onClick={onSearch} aria-label="Search">
           <OfficeIcon name="search" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Search</span>
         </button>
@@ -104,11 +169,11 @@ export function OfficeBottomDock({
           <OfficeIcon name="people" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Notes</span>
         </button>
-        <button type="button" className="office-dock-action" style={styles.action} onClick={() => onToast("Choose a teammate from People or the contact drawer to open Outlook.")} aria-label="Outlook">
+        <button type="button" className="office-dock-action office-dock-mobile-hidden" style={styles.action} onClick={() => onToast("Choose a teammate from People or the contact drawer to open Outlook.")} aria-label="Outlook">
           <OfficeIcon name="mail" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>Outlook</span>
         </button>
-        <button type="button" className="office-dock-action" style={{ ...styles.action, ...styles.actionDisabled }} disabled onClick={() => onToast("3CX calling is coming later.")} aria-label="3CX coming later">
+        <button type="button" className="office-dock-action office-dock-mobile-hidden" style={{ ...styles.action, ...styles.actionDisabled }} disabled onClick={() => onToast("3CX calling is coming later.")} aria-label="3CX coming later">
           <OfficeIcon name="phone" size={28} />
           <span className="office-dock-tooltip" style={styles.tooltip}>3CX later</span>
         </button>
