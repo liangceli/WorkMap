@@ -1,5 +1,48 @@
 # Latest Implementation Handoff
 
+## 2026-07-11 Product Pages Visual Direction V1
+
+### Original Task Brief
+
+- Create one visual design for every remaining WorkMap frontend page using the approved homepage identity.
+
+### Changed Files
+
+- `docs/designs/workmap-product-pages-v1.html`
+- `docs/designs/workmap-product-pages-v1-spec.md`
+- `docs/designs/workmap-product-pages-v1/*.png`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Produced 17 desktop visual designs covering every non-homepage route, plus three overview boards.
+- Defined three related layouts: editorial authentication/onboarding, compact authenticated workspace, and full-bleed Virtual Office.
+- Used only existing repository development fallback data, real layered avatar composites, the real Virtual Office panorama, and real empty/unavailable states.
+- Kept Platform Admin visually and conceptually separate from tenant Owner pages.
+- No application runtime source, backend, auth, routing, API, schema, tracking, reports, compliance, realtime, or Virtual Office behavior changed.
+
+### Verification
+
+- Embedded design-source JavaScript syntax: pass.
+- All 17 page PNGs: `1440 x 1000`, non-empty.
+- Visual inspection: completed for all overview boards and the Login, Device Setup, Dashboard, Employees, Reports, Compliance, Virtual Office, Platform Admin, and debug compositions.
+- Corrected malformed select-field markup found during visual QA and re-rendered affected invitation, employees, and reports pages.
+- `git diff --check`: pass.
+
+### Manual QA
+
+- Design artifacts were visually reviewed; implemented browser QA is not applicable because runtime code was not changed.
+
+### Remaining Risks
+
+- These are desktop V1 designs. Mobile behavior is specified but separate mobile artboards have not been produced.
+- No authenticated application styling has been implemented yet.
+
+### Suggested Next Step
+
+- Collect route-by-route visual approval before implementing the shared shell and page styles.
+
 ## 2026-07-10 Employee Privacy Two-Panel Layout
 
 ### Original Task Brief
@@ -2402,3 +2445,55 @@ Implement the confirmed Browser Extension rules without unrelated changes: trust
 - Calculation begins at exact observed timestamps, but persisted API values/display remain whole seconds; active checkpoints, upload/network time, and the existing ten-second Reports poll bound Owner display freshness.
 - Load `workmap/apps/browser-extension/alpha-unpacked` separately in current Chrome and Edge, pair it to the deployed/current API, then run the agreed timed matrix: normal interaction, wheel/touchpad, different-domain transfer, three same-domain tabs, Chrome+Edge overlap, 30-second idle/resume, navigation/final close, minimize/background, permission denial, lock/sleep, offline retry, worker/browser restart, disable/re-enable/remove, and Owner/Employee card comparison.
 - The code and automated checks can proceed to that manual acceptance round; do not describe store distribution or production accuracy as passed yet.
+
+---
+
+## 2026-07-11 Product Pages Visual System Implementation
+
+### Original Task Brief
+
+Apply the approved homepage visual direction to the remaining WorkMap frontend pages, including strong responsive behavior, without changing APIs, auth, routing, state, events, forms, RBAC, tenant behavior, or other product logic. Review and test the result, stopping any finite command that exceeds five minutes.
+
+### Changed Files
+
+- Shared visual tokens and cross-page styling: `workmap/apps/web/lib/theme/workmapTheme.ts`, `workmap/apps/web/app/globals.css`, and `workmap/apps/web/app/workspace-redesign.css`.
+- Styling hooks only: Avatar Debug, Employee Detail, Integrations, Invitation Acceptance, Cognito Callback, Company/Avatar/Device/Invite onboarding, Platform Admin, and Settings page components.
+- Device Setup received one presentation-only wrapper around its two existing pairing panels; all handlers, conditions, payloads, and copy remain unchanged.
+- Existing product-page visual specifications and route boards under `docs/designs/workmap-product-pages-v1*` remain the approved visual reference.
+
+### Implementation Summary
+
+- Replaced the previous navy/mint generic SaaS treatment with the approved Ink Navy `#080D22`, Signal Jade `#27E0A2`, Civic Amber `#F7B731`, paper, coral, and calm neutral system.
+- Converted authenticated pages to a compact Ink desktop sidebar with role-aware existing navigation; tablet uses a compact grid and phone layouts use a horizontal scroll navigation strip.
+- Unified Dashboard, Employees, Employee Detail, Reports, Compliance, Integrations, Settings, Invite Management, Platform Admin, login/callback, invitation acceptance, all onboarding screens, Avatar Debug, and Virtual Office chrome.
+- Removed gradients, oversized radii, heavy shadows, and marketing-like floating card treatment from the product system. Panels use 4-8px radii, restrained borders, denser tables, and role/status accents.
+- Login uses the real `public/marketing/workmap-virtual-office-panorama.png` asset. No fake dashboard, employee, report, compliance result, or product statistic was introduced.
+- Added explicit responsive composition at 1024px, 760px, and 420px plus reduced-motion handling. Tables remain scrollable rather than shrinking text below readable sizes.
+
+### Role And Behavior Boundaries
+
+- No API, backend, Prisma, auth/Cognito, invitation, tenant, RBAC, Platform Admin, report calculation, compliance calculation, data-fetching, state-management, event-handler, routing, or form-submission behavior changed.
+- Existing role-aware navigation and Platform Admin privacy separation are preserved.
+
+### Verification
+
+- Changed TSX/theme source parse: passed for 12 files.
+- CSS parse and static design assertions: passed; desktop/tablet/mobile/reduced-motion rules exist, no gradient remains in the new product stylesheet, the real map asset is referenced, and new radii remain bounded.
+- Targeted ESLint for all changed TSX/theme files: passed.
+- Isolated QA copy using the Git HEAD `authApi.ts`: web typecheck passed, web lint passed, 38/38 web tests passed, and the final Next production build passed with 19 routes.
+- Source worktree full typecheck/lint/test/build are blocked only by the pre-existing `workmap/apps/web/lib/api/authApi.ts` file containing 410 NUL bytes. That unknown file was not overwritten.
+- `git diff --check`: passed during implementation closeout.
+
+### Manual And Visual QA
+
+- Browser capture at desktop/mobile viewports was attempted against the isolated successful build, but the in-app Browser security policy rejected the local target. No alternate browser or policy bypass was used.
+- Rendered pixel fidelity and interactive visual QA therefore remain blocked, not passed. Source-level responsive review and production compilation do not replace the final rendered inspection.
+
+### Intentionally Not Changed
+
+- Homepage runtime/markup, backend services, API contracts, Prisma, auth, business logic, package versions, and cloud deployment were not changed.
+- The pre-existing `authApi.ts` NUL corruption was preserved in the source worktree.
+
+### Remaining Risk
+
+- Exact rendered spacing, text wrapping, focus appearance, and map chrome at 360/390/768/1024/1440 still require a browser session that permits the local application URL, after the existing `authApi.ts` corruption is resolved or explicitly approved for restoration.

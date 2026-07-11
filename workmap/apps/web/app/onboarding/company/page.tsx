@@ -83,13 +83,13 @@ export default function CompanyOnboardingPage() {
   }
 
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
+    <main className="wm-onboarding-page wm-company-onboarding" style={styles.page}>
+      <section className="wm-onboarding-shell" style={styles.shell}>
         <p style={styles.eyebrow}>Owner onboarding</p>
         <h1 style={styles.title}>Create your WorkMap workspace</h1>
         <p style={styles.subtitle}>Create the company workspace, confirm your profile, then invite employees into the same tenant.</p>
 
-        <section style={styles.card}>
+        <section className="wm-onboarding-card" style={styles.card}>
           <label style={styles.label}>
             <span>Company name</span>
             <input value={companyName} onChange={(event) => setCompanyName(event.target.value)} style={styles.input} />

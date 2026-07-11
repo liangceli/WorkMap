@@ -1,32 +1,34 @@
 :root {
-  --wm-bg: #eef4ef;
-  --wm-background: #f6f8f3;
-  --wm-surface: #fffdf8;
-  --wm-surface-low: #f4f8f4;
-  --wm-surface-container: #e8f1ed;
-  --wm-surface-high: #d9e8e2;
-  --wm-text: #292d4c;
-  --wm-text-heading: #292d4c;
-  --wm-text-secondary: #67697f;
-  --wm-text-muted: #85889a;
-  --wm-text-subtle: #9ca0ad;
-  --wm-primary: #292d4c;
-  --wm-primary-container: #34385e;
-  --wm-secondary: #247f7a;
-  --wm-secondary-container: #2e928c;
-  --wm-success: #19a564;
-  --wm-warning: #ad6b14;
-  --wm-focus: #3478f6;
-  --wm-border: #d8e1dc;
-  --wm-border-subtle: #e6ede8;
-  --wm-border-strong: #becbc5;
-  --wm-radius-md: 8px;
-  --wm-radius-xl: 14px;
-  --wm-radius-2xl: 18px;
-  --wm-shadow-card: 0 1px 2px rgba(16, 32, 51, 0.05), 0 12px 28px rgba(16, 32, 51, 0.06);
-  --wm-shadow-elevated: 0 1px 2px rgba(16, 32, 51, 0.06), 0 22px 54px rgba(16, 32, 51, 0.12);
+  --wm-bg: #f6f7f2;
+  --wm-background: #f6f7f2;
+  --wm-surface: #ffffff;
+  --wm-surface-low: #f1f3ef;
+  --wm-surface-container: #e9ede8;
+  --wm-surface-high: #dfe5e0;
+  --wm-text: #080d22;
+  --wm-text-heading: #080d22;
+  --wm-text-secondary: #62697a;
+  --wm-text-muted: #7b8392;
+  --wm-text-subtle: #949ba5;
+  --wm-primary: #080d22;
+  --wm-primary-container: #121932;
+  --wm-secondary: #27e0a2;
+  --wm-secondary-container: #55e9b8;
+  --wm-success: #17865c;
+  --wm-warning: #8b570b;
+  --wm-focus: #276ee8;
+  --wm-border: #dde1db;
+  --wm-border-subtle: #e9ece8;
+  --wm-border-strong: #bfc8c3;
+  --wm-civic-amber: #f7b731;
+  --wm-coral: #ff645e;
+  --wm-radius-md: 4px;
+  --wm-radius-xl: 6px;
+  --wm-radius-2xl: 8px;
+  --wm-shadow-card: 0 1px 2px rgba(8, 13, 34, 0.05);
+  --wm-shadow-elevated: 0 12px 32px rgba(8, 13, 34, 0.11);
   --wm-shell-inline: 24px;
-  --wm-shell-block: 112px;
+  --wm-shell-block: 0px;
   --wm-font-body: Inter, "Segoe UI", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   --wm-font-display: Inter, "Segoe UI", "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   color-scheme: light;
@@ -40,8 +42,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background:
-    linear-gradient(180deg, rgba(255, 253, 248, 0.78) 0%, rgba(238, 244, 239, 0.96) 44%, #eef4ef 100%);
+  background: var(--wm-background);
   color: var(--wm-text);
   font-family: var(--wm-font-body);
   text-rendering: geometricPrecision;
@@ -56,7 +57,7 @@ h5,
 h6 {
   color: var(--wm-text-heading);
   font-family: var(--wm-font-display);
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
   font-weight: 750;
 }
 
@@ -110,29 +111,29 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid rgba(31, 122, 120, 0.22);
+  outline: 3px solid rgba(39, 224, 162, 0.34);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: rgba(31, 122, 120, 0.2);
+  background: rgba(39, 224, 162, 0.28);
 }
 
 @media (max-width: 900px) {
   :root {
     --wm-shell-inline: 18px;
-    --wm-shell-block: 158px;
+    --wm-shell-block: 0px;
   }
 }
 
 @media (max-width: 640px) {
   :root {
     --wm-shell-inline: 14px;
-    --wm-shell-block: 270px;
+    --wm-shell-block: 0px;
   }
 
   body {
-    background: #f4f8f4;
+    background: var(--wm-background);
   }
 }
 
@@ -158,10 +159,7 @@ a {
   -webkit-overflow-scrolling: touch;
 }
 
-.wm-app-shell {
-  background:
-    linear-gradient(180deg, rgba(255, 253, 248, 0.76) 0%, rgba(238, 244, 239, 0.95) 42%, #eef4ef 100%) !important;
-}
+.wm-app-shell { background: var(--wm-background) !important; }
 
 .wm-app-top-nav,
 .wm-app-notice,
@@ -171,8 +169,8 @@ a {
 }
 
 .wm-app-nav-link:hover {
-  border-color: rgba(31, 122, 120, 0.24) !important;
-  background: rgba(31, 122, 120, 0.08) !important;
+  border-color: rgba(39, 224, 162, 0.34) !important;
+  background: rgba(39, 224, 162, 0.1) !important;
 }
 
 .wm-app-brand:hover {
@@ -207,15 +205,14 @@ a {
   z-index: 9999;
   inset: 0;
   min-height: 100vh;
-  background: rgba(255, 253, 248, 0.96);
-  backdrop-filter: blur(10px);
+  background: rgba(246, 247, 242, 0.97);
 }
 
 .wm-loader-section {
   min-height: 260px;
   border: 1px solid var(--wm-border);
   border-radius: var(--wm-radius-xl);
-  background: rgba(255, 253, 248, 0.72);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .wm-loader-walker {

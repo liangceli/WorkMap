@@ -182,8 +182,8 @@ export default function InviteAcceptancePage() {
   };
 
   return (
-    <main style={styles.page}>
-      <section style={styles.card}>
+    <main className="wm-invitation-page" style={styles.page}>
+      <section className="wm-invitation-card" style={styles.card}>
         <p style={styles.eyebrow}>WorkMap invitation</p>
         <h1 style={styles.title}>Join workspace</h1>
         <p style={styles.text}>{status}</p>

@@ -93,8 +93,8 @@ export default function CognitoCallbackPage() {
   }, [router]);
 
   return (
-    <main style={styles.page}>
-      <section style={styles.card}>
+    <main className="wm-auth-callback-page" style={styles.page}>
+      <section className="wm-auth-callback-card" style={styles.card}>
         <p style={styles.eyebrow}>Cognito callback</p>
         <h1 style={styles.title}>Signing in</h1>
         <p style={styles.text}>{status}</p>

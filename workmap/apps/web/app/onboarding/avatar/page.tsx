@@ -131,9 +131,9 @@ export default function AvatarOnboardingPage() {
   }
 
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
-        <div style={styles.header}>
+    <main className="wm-onboarding-page wm-avatar-onboarding" style={styles.page}>
+      <section className="wm-onboarding-shell" style={styles.shell}>
+        <div className="wm-onboarding-header" style={styles.header}>
           <p style={styles.eyebrow}>Choose your avatar</p>
           <h1 style={styles.title}>Create your WorkMap avatar</h1>
           <p style={styles.subtitle}>Choose how you appear in the virtual office.</p>
@@ -145,8 +145,8 @@ export default function AvatarOnboardingPage() {
             <p style={styles.bodyText}>Add body layer assets before users can create an avatar.</p>
           </section>
         ) : (
-          <div style={styles.layout}>
-            <section style={styles.panel}>
+          <div className="wm-avatar-layout" style={styles.layout}>
+            <section className="wm-avatar-builder" style={styles.panel}>
               <h2 style={styles.sectionTitle}>Build your avatar</h2>
               <p style={styles.bodyText}>Pick a body, eyes, hairstyle, outfit, and optional accessory.</p>
 
@@ -176,7 +176,7 @@ export default function AvatarOnboardingPage() {
               </div>
             </section>
 
-            <aside style={styles.panel}>
+            <aside className="wm-avatar-preview-panel" style={styles.panel}>
               <div style={styles.previewWrap}>
                 <LayeredAvatarPreview config={config} size={176} />
               </div>
@@ -208,7 +208,7 @@ function LayerGroup({
   const assets = avatarLayersByType[group.type];
 
   return (
-    <section style={styles.layerGroup}>
+    <section className="wm-avatar-layer-group" style={styles.layerGroup}>
       <div style={styles.groupHeader}>
         <h3 style={styles.groupTitle}>{group.title}</h3>
         {group.optional ? (
@@ -217,7 +217,7 @@ function LayerGroup({
           </button>
         ) : null}
       </div>
-      <div style={styles.optionGrid}>
+      <div className="wm-avatar-option-grid" style={styles.optionGrid}>
         {assets.map((asset) => {
           const selected = isSelected(config, asset);
           return (

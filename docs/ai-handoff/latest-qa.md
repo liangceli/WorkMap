@@ -1,5 +1,37 @@
 # Latest QA Handoff
 
+## 2026-07-11 Product Pages Visual Direction V1 QA
+
+### Reviewed Implementation
+
+- Seventeen route-specific desktop designs, three overview boards, real asset usage, route coverage, role/privacy boundaries, and high-density page layout.
+
+### Findings
+
+- All known non-homepage routes have a corresponding visual.
+- No fictional tenant, employee profile, Platform Admin tenant record, report API result, or integration state was introduced.
+- Existing development fallback data is clearly labeled on Dashboard, Employees, and Reports.
+- Employee Detail and Platform Admin use honest unavailable/empty states.
+- One select-field template defect was found during visual inspection, fixed, and affected images were regenerated.
+
+### Verification Status
+
+- Design-source JavaScript syntax: pass.
+- PNG count: pass (`17/17` route visuals plus `3` overview boards).
+- Dimensions: pass (`1440 x 1000` for every route visual).
+- Non-empty file validation: pass.
+- `git diff --check`: pass.
+- Scoped secret scan: pass.
+
+### Manual QA Status
+
+- Visual artifact inspection: completed.
+- Runtime browser QA: not run because no runtime application code changed.
+
+### Recommendation
+
+- Pass V1 for user visual review. Do not begin whole-application frontend implementation until the user approves or marks up the route designs.
+
 ## 2026-07-10 Employee Privacy Two-Panel QA
 
 ### Reviewed Implementation
@@ -1563,3 +1595,43 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 - Pass for scoped implementation and automated verification.
 - Proceed to a dedicated Chrome + Edge manual acceptance round using `workmap/apps/browser-extension/alpha-unpacked`.
 - Do not proceed to store publication/production accuracy claims until the timed multi-tab, cross-browser, idle, runtime-close, offline/restart, permission, and coverage-loss matrix passes on an Employee computer and matches Owner Reports.
+
+---
+
+## 2026-07-11 Product Pages Visual Refactor QA
+
+### Reviewed Implementation
+
+- Reviewed the shared token update, authenticated app shell, login/auth surfaces, onboarding layouts, data-heavy pages, Platform Admin treatment, Virtual Office chrome, and responsive rules against the approved 17-route visual boards.
+- Reviewed all TSX diffs to confirm they contain styling hooks and one presentation-only Device Setup wrapper, with no functional changes.
+
+### Findings Ordered By Severity
+
+- Remaining - High/existing: source `workmap/apps/web/lib/api/authApi.ts` is 410 NUL bytes. It blocks source-worktree web typecheck, lint, one imported test, production build, and normal local rendering. It was not modified because it is outside this visual-only scope and is not reported as a normal Git change.
+- Remaining - Medium: in-app Browser security policy rejected the isolated local QA URL, so desktop/mobile rendered comparison and click/keyboard inspection are blocked.
+- Fixed - Medium: authenticated pages previously used a marketing-like fixed top navigation, broad gradients, large radii, and inconsistent density. They now share a compact desktop sidebar and responsive tablet/mobile navigation.
+- Fixed - Medium: login, callback, invitations, onboarding, business pages, Platform Admin, and Virtual Office chrome previously lacked one durable product language. They now share the approved Ink/Jade/Amber tokens and restrained geometry.
+- Fixed - Low: phone navigation no longer expands into a tall multi-row block; it uses a compact horizontal strip with readable fixed-width targets.
+
+### Test And Verification Status
+
+- TSX/theme parse: passed, 12 changed source files.
+- CSS parse/static assertions: passed for both global stylesheets; breakpoint, reduced-motion, no-gradient, real-asset, and bounded-radius checks passed.
+- Targeted ESLint: passed for every changed TSX/theme file.
+- Isolated QA typecheck: passed.
+- Isolated QA lint: passed.
+- Isolated QA tests: passed, 38/38.
+- Isolated QA final build: passed, 19 routes generated.
+- Source-worktree typecheck/lint/test/build: blocked only by the existing NUL `authApi.ts`; the source test run passed 34 tests before the imported report test hit that file.
+- `git diff --check`: passed.
+
+### Manual QA Status
+
+- Rendered browser QA: blocked by in-app Browser local-target security policy.
+- No claim is made that desktop/mobile pixel fidelity, keyboard flow, or final visual acceptance passed.
+
+### Risks And Recommendation
+
+- The frontend style refactor is code-complete and passes full automated verification in an isolated copy with the valid tracked auth client.
+- Do not treat rendered visual QA as complete until `authApi.ts` is explicitly restored/fixed and a permitted browser session checks 360/390/768/1024/1440 layouts.
+- Functional boundaries are preserved; the next round may proceed only after acknowledging the existing auth-client corruption and the blocked rendered QA.

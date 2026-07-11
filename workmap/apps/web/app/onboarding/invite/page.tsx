@@ -99,14 +99,14 @@ export default function OwnerInvitePage() {
 
   return (
     <AppShell>
-      <section style={styles.shell}>
-        <div style={styles.header}>
+      <section className="wm-invite-admin-page" style={styles.shell}>
+        <div className="wm-invite-admin-header" style={styles.header}>
           <p style={styles.eyebrow}>Owner onboarding</p>
           <h1 style={styles.title}>Invite employees</h1>
           <p style={styles.subtitle}>Create tenant-scoped invitation links for employees to join this WorkMap workspace.</p>
         </div>
 
-        <section style={styles.panel}>
+        <section className="wm-invite-create-panel" style={styles.panel}>
           <label style={styles.label}>
             <span>Employee email</span>
             <input value={email} onChange={(event) => setEmail(event.target.value)} style={styles.input} />
@@ -133,7 +133,7 @@ export default function OwnerInvitePage() {
           {status ? <p style={styles.status}>{status}</p> : null}
         </section>
 
-        <section style={styles.list}>
+        <section className="wm-invite-list-panel" style={styles.list}>
           <h2 style={styles.sectionTitle}>Recent invitations</h2>
           {invitations.length === 0 ? (
             <p style={styles.empty}>No invitations yet.</p>

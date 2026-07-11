@@ -131,15 +131,15 @@ export default function DeviceSetupPage() {
   }
 
   return (
-    <main style={styles.page}>
-      <section style={styles.shell}>
+    <main className="wm-onboarding-page wm-device-onboarding" style={styles.page}>
+      <section className="wm-onboarding-shell" style={styles.shell}>
         <p style={styles.eyebrow}>Device setup</p>
         <h1 style={styles.title}>Connect WorkMap presence tools</h1>
         <p style={styles.subtitle}>
           Review what the paired Desktop Agent and Browser Extension collect before enabling transparent activity summaries.
         </p>
 
-        <div style={styles.grid}>
+        <div className="wm-device-boundary-grid" style={styles.grid}>
           <InfoCard title="Desktop Agent" items={desktopItems} />
           <InfoCard title="Browser Extension" items={extensionItems} />
           <InfoCard title="Not collected" items={notCollectedItems} />
@@ -150,62 +150,64 @@ export default function DeviceSetupPage() {
           <span>Employees should see these boundaries before device metadata collection is enabled.</span>
         </section>
 
-        <section style={styles.pairingPanel}>
-          <div>
-            <p style={styles.panelEyebrow}>Windows application monitoring</p>
-            <h2 style={styles.cardTitle}>Desktop Agent</h2>
-            <p style={styles.subtitle}>Install the Windows Agent once, then connect it with a one-time code. After pairing, it starts automatically at Windows sign-in.</p>
-          </div>
-          <ol style={styles.setupSteps}>
-            <li>Download and open the Windows installer on this employee computer.</li>
-            <li>Generate a Desktop Agent code below and enter it in the Agent window.</li>
-            <li>Wait for the connected confirmation. Future Windows sign-ins start the Agent automatically.</li>
-          </ol>
-          <div style={styles.actions}>
-            {desktopAgentDownloadUrl ? (
-              <a href={desktopAgentDownloadUrl} download style={styles.downloadButton}>Download Windows installer</a>
-            ) : (
-              <span style={styles.downloadUnavailable}>Windows download pending release configuration</span>
-            )}
-            <button type="button" onClick={() => void createPairing("DESKTOP_AGENT")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
-              Generate Agent code
-            </button>
-          </div>
-          <p style={hasPairedDesktopAgent ? styles.readyMessage : styles.requirementMessage}>
-            {hasPairedDesktopAgent
-              ? "Desktop Agent connected."
-              : "Download, install, and pair the Desktop Agent to continue."}
-          </p>
-        </section>
+        <div className="wm-device-pairing-grid">
+          <section className="wm-device-pairing-panel" style={styles.pairingPanel}>
+            <div>
+              <p style={styles.panelEyebrow}>Windows application monitoring</p>
+              <h2 style={styles.cardTitle}>Desktop Agent</h2>
+              <p style={styles.subtitle}>Install the Windows Agent once, then connect it with a one-time code. After pairing, it starts automatically at Windows sign-in.</p>
+            </div>
+            <ol style={styles.setupSteps}>
+              <li>Download and open the Windows installer on this employee computer.</li>
+              <li>Generate a Desktop Agent code below and enter it in the Agent window.</li>
+              <li>Wait for the connected confirmation. Future Windows sign-ins start the Agent automatically.</li>
+            </ol>
+            <div style={styles.actions}>
+              {desktopAgentDownloadUrl ? (
+                <a href={desktopAgentDownloadUrl} download style={styles.downloadButton}>Download Windows installer</a>
+              ) : (
+                <span style={styles.downloadUnavailable}>Windows download pending release configuration</span>
+              )}
+              <button type="button" onClick={() => void createPairing("DESKTOP_AGENT")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
+                Generate Agent code
+              </button>
+            </div>
+            <p style={hasPairedDesktopAgent ? styles.readyMessage : styles.requirementMessage}>
+              {hasPairedDesktopAgent
+                ? "Desktop Agent connected."
+                : "Download, install, and pair the Desktop Agent to continue."}
+            </p>
+          </section>
 
-        <section style={styles.pairingPanel}>
-          <div>
-            <p style={styles.panelEyebrow}>Browser domain monitoring - Alpha</p>
-            <h2 style={styles.cardTitle}>Browser Extension manual setup</h2>
-            <p style={styles.subtitle}>Use this Developer mode installation only for the current controlled Chrome or Edge test.</p>
-          </div>
-          <ol style={styles.setupSteps}>
-            <li>Download the ZIP, extract it to a permanent folder, and do not move or delete that folder.</li>
-            <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code>, enable Developer mode, then choose Load unpacked and select the extracted folder.</li>
-            <li>Open the extension details and allow site access, then generate a code below and enter it on the extension Options page.</li>
-            <li>Keep the extension enabled. Future Alpha updates require replacing the files and selecting Reload on the extensions page.</li>
-          </ol>
-          <div style={styles.actions}>
-            {browserExtensionDownloadUrl ? (
-              <a href={browserExtensionDownloadUrl} download style={styles.downloadButton}>Download extension ZIP</a>
-            ) : (
-              <span style={styles.downloadUnavailable}>Extension ZIP pending release configuration</span>
-            )}
-            <button type="button" onClick={() => void createPairing("BROWSER_EXTENSION")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
-              Generate Extension code
-            </button>
-          </div>
-          <p style={hasPairedBrowserExtension ? styles.readyMessage : styles.requirementMessage}>
-            {hasPairedBrowserExtension
-              ? "Browser Extension paired. Keep Developer mode and the extension enabled during the Alpha test."
-              : "The Browser Extension is optional for continuing, but it must be paired before domain monitoring starts."}
-          </p>
-        </section>
+          <section className="wm-device-pairing-panel" style={styles.pairingPanel}>
+            <div>
+              <p style={styles.panelEyebrow}>Browser domain monitoring - Alpha</p>
+              <h2 style={styles.cardTitle}>Browser Extension manual setup</h2>
+              <p style={styles.subtitle}>Use this Developer mode installation only for the current controlled Chrome or Edge test.</p>
+            </div>
+            <ol style={styles.setupSteps}>
+              <li>Download the ZIP, extract it to a permanent folder, and do not move or delete that folder.</li>
+              <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code>, enable Developer mode, then choose Load unpacked and select the extracted folder.</li>
+              <li>Open the extension details and allow site access, then generate a code below and enter it on the extension Options page.</li>
+              <li>Keep the extension enabled. Future Alpha updates require replacing the files and selecting Reload on the extensions page.</li>
+            </ol>
+            <div style={styles.actions}>
+              {browserExtensionDownloadUrl ? (
+                <a href={browserExtensionDownloadUrl} download style={styles.downloadButton}>Download extension ZIP</a>
+              ) : (
+                <span style={styles.downloadUnavailable}>Extension ZIP pending release configuration</span>
+              )}
+              <button type="button" onClick={() => void createPairing("BROWSER_EXTENSION")} disabled={pairingState === "loading"} style={styles.secondaryButton}>
+                Generate Extension code
+              </button>
+            </div>
+            <p style={hasPairedBrowserExtension ? styles.readyMessage : styles.requirementMessage}>
+              {hasPairedBrowserExtension
+                ? "Browser Extension paired. Keep Developer mode and the extension enabled during the Alpha test."
+                : "The Browser Extension is optional for continuing, but it must be paired before domain monitoring starts."}
+            </p>
+          </section>
+        </div>
 
         {pairing ? (
           <section style={styles.pairingResult} aria-live="polite">
@@ -241,7 +243,7 @@ export default function DeviceSetupPage() {
 
 function InfoCard({ title, items }: { title: string; items: string[] }) {
   return (
-    <section style={styles.card}>
+    <section className="wm-device-boundary-card" style={styles.card}>
       <h2 style={styles.cardTitle}>{title}</h2>
       <ul style={styles.list}>
         {items.map((item) => (

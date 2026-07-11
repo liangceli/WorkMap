@@ -94,7 +94,7 @@ export default function PlatformAdminPage() {
 
   return (
     <AppShell>
-      <section style={styles.header}>
+      <section className="wm-platform-page-header" style={styles.header}>
         <div>
           <p style={styles.eyebrow}>Platform Admin</p>
           <h1 style={styles.title}>Platform health overview</h1>
@@ -120,7 +120,7 @@ export default function PlatformAdminPage() {
       ) : null}
 
       {state.status === "ready" ? (
-        <div style={styles.grid}>
+        <div className="wm-platform-grid" style={styles.grid}>
           <section style={styles.panel}>
             <div style={styles.panelHeader}>
               <h2 style={styles.panelTitle}>Tenant list</h2>

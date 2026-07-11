@@ -9,7 +9,7 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 export default function IntegrationsPage() {
   return (
     <AppShell>
-      <section style={styles.shell}>
+      <section className="wm-redesign-page wm-integrations-page" style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="Admin settings"
           title="Integrations"
@@ -28,7 +28,7 @@ export default function IntegrationsPage() {
           content, read email bodies, or record call audio.
         </WorkMapPrivacyNotice>
 
-        <section style={styles.grid}>
+        <section className="wm-integrations-grid" style={styles.grid}>
           {integrationItems.map((integration) => (
             <IntegrationButton key={integration.id} integration={integration} />
           ))}

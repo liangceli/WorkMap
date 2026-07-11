@@ -32,6 +32,29 @@ Blocker: rendered implementation capture is unavailable until the pre-existing `
 
 ---
 
+## 2026-07-11 WorkMap Product Pages Visual System
+
+- Source visual truth: the approved 17-route desktop visual boards under `docs/designs/workmap-product-pages-v1/` and the approved Ink Navy, Signal Jade, Civic Amber system.
+- Implementation scope: authenticated app shell, login/callback, invitation/onboarding flows, Dashboard, Employees, Employee Detail, Reports, Compliance, Integrations, Settings, Platform Admin, Virtual Office chrome, and Avatar Debug.
+- Intended comparison viewports: 1440x1000 desktop plus 1024px, 768px, 390px, and 360px responsive states.
+- Implementation compilation: passed in an isolated QA copy using the valid tracked `authApi.ts`; 19 routes generated.
+- Implementation screenshot: unavailable. The in-app Browser security policy rejected the local QA target and prohibited switching to a workaround browser path.
+
+### Source-Level Findings
+
+- No scoped P0/P1/P2 logic or contract regression found. TSX diffs only add styling hooks and one presentation-only grouping wrapper.
+- Responsive rules explicitly cover desktop sidebar, tablet navigation, phone horizontal navigation, single-column data/settings/onboarding layouts, scrollable tables, Virtual Office bottom sheets, and reduced motion.
+- The new product stylesheet contains no gradients, uses the real Virtual Office panorama asset, and keeps new panel radii at 8px or less.
+- Full typecheck, lint, 38/38 tests, and final production build pass in the isolated QA copy.
+
+### Final Result
+
+final result: blocked
+
+Blocker: browser-rendered desktop/mobile comparison could not be captured because the Browser security policy rejected the local target. The source worktree also retains the pre-existing 410-NUL `workmap/apps/web/lib/api/authApi.ts`, which was intentionally not overwritten in this visual-only round.
+
+---
+
 ## 2026-07-09 Home Mobile Hero Proof Horizontal Layout
 
 - Source visual truth: user-provided small-screen home-page screenshot showing the hero proof items `Support your team`, `Privacy by design`, and `Clear boundaries` stacked vertically.

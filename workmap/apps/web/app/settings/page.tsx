@@ -38,7 +38,7 @@ const settingsSections = [
 export default function SettingsPage() {
   return (
     <AppShell>
-      <section style={styles.shell}>
+      <section className="wm-redesign-page wm-settings-page" style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="Admin"
           title="Settings"
@@ -46,7 +46,7 @@ export default function SettingsPage() {
           actions={<WorkMapButton href="/dashboard" tone="primary">Dashboard</WorkMapButton>}
         />
 
-        <section style={styles.grid}>
+        <section className="wm-settings-grid" style={styles.grid}>
           {settingsSections.map((section) => (
             <WorkMapCard key={section.title} as="article" style={styles.card}>
               <WorkMapBadge tone="info" style={{ justifySelf: "start" }}>{section.status}</WorkMapBadge>

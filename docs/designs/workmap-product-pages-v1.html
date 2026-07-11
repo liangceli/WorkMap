@@ -1,0 +1,309 @@
+<div id="workmap-design-root"></div>
+<style>
+  :root {
+    --ink: #080d22;
+    --ink-soft: #121932;
+    --jade: #27e0a2;
+    --jade-light: #55e9b8;
+    --amber: #f7b731;
+    --paper: #f6f7f2;
+    --white: #ffffff;
+    --muted: #62697a;
+    --rule: #dde1db;
+    --coral: #ff645e;
+    --green: #20a76f;
+    --blue: #3478f6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #d9ddda; font-family: Inter, "Segoe UI", Arial, sans-serif; }
+  body { width: 1440px; height: 1000px; overflow: hidden; }
+  button, input, select { font: inherit; }
+  .screen { width: 1440px; height: 1000px; overflow: hidden; background: var(--paper); color: var(--ink); }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; }
+  .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 5px; font-size: 11px; font-weight: 900; }
+  .eyebrow { margin: 0 0 9px; color: #087b5f; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .page-title { margin: 0; font-size: 42px; line-height: 1.04; font-weight: 800; }
+  .subtitle { max-width: 710px; margin: 11px 0 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+  .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #aeb7b4; border-radius: 4px; background: var(--white); color: var(--ink); padding: 0 16px; font-size: 12px; font-weight: 800; }
+  .btn.primary { border-color: var(--jade); background: var(--jade); }
+  .btn.ink { border-color: var(--ink); background: var(--ink); color: var(--white); }
+  .btn.disabled { color: #92999b; background: #eceeeb; }
+  .actions { display: flex; align-items: center; gap: 8px; }
+  .badge { min-height: 24px; display: inline-flex; align-items: center; gap: 6px; width: fit-content; border: 1px solid var(--rule); border-radius: 999px; background: var(--white); padding: 0 9px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+  .badge.jade { border-color: rgba(39,224,162,.55); background: rgba(39,224,162,.1); color: #087b5f; }
+  .badge.amber { border-color: rgba(247,183,49,.8); background: rgba(247,183,49,.12); color: #76520a; }
+  .badge.coral { border-color: rgba(255,100,94,.55); background: rgba(255,100,94,.08); color: #a5312c; }
+  .panel { border: 1px solid var(--rule); border-radius: 6px; background: var(--white); }
+  .panel-title { margin: 0; font-size: 18px; line-height: 1.25; }
+  .small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .rule { height: 1px; background: var(--rule); }
+  .field { display: grid; gap: 7px; }
+  .field label { color: var(--muted); font-size: 11px; font-weight: 800; }
+  .field input, .field select { width: 100%; height: 44px; border: 1px solid #bdc6c2; border-radius: 4px; background: var(--white); padding: 0 12px; color: var(--ink); }
+  .pixel { image-rendering: pixelated; object-fit: contain; }
+  .avatar { width: 42px; height: 63px; }
+  .avatar-lg { width: 96px; height: 144px; }
+  .avatar-row { display: flex; align-items: end; gap: 8px; }
+  .notice { display: flex; align-items: flex-start; gap: 12px; border-left: 4px solid var(--amber); background: #fff8e5; padding: 13px 16px; color: #5f4a1e; font-size: 12px; line-height: 1.45; }
+  .notice.jade { border-left-color: var(--jade); background: #ecfbf5; color: #155e4b; }
+  .empty { min-height: 210px; display: grid; place-items: center; border: 1px dashed #bfc7c3; color: var(--muted); text-align: center; padding: 30px; }
+  .bar { height: 7px; background: #e7ebe8; }
+  .bar > span { height: 100%; display: block; background: var(--jade); }
+  .dot { width: 8px; height: 8px; display: inline-block; border-radius: 50%; background: var(--green); }
+
+  .app-shell { display: grid; grid-template-columns: 238px 1fr; }
+  .sidebar { height: 1000px; display: grid; grid-template-rows: auto auto 1fr auto; gap: 28px; background: var(--ink); color: var(--white); padding: 24px 18px; }
+  .sidebar .brand { padding: 0 8px; }
+  .workspace-label { border-left: 3px solid var(--amber); padding: 2px 10px; }
+  .workspace-label strong { display: block; font-size: 12px; }
+  .workspace-label span { color: rgba(255,255,255,.62); font-size: 10px; }
+  .nav-group { display: grid; gap: 6px; margin-bottom: 20px; }
+  .nav-group > strong { padding: 0 10px 5px; color: rgba(255,255,255,.42); font-size: 9px; text-transform: uppercase; }
+  .nav-item { min-height: 39px; display: flex; align-items: center; justify-content: space-between; border: 1px solid transparent; border-radius: 4px; padding: 0 10px; color: rgba(255,255,255,.72); font-size: 12px; font-weight: 700; }
+  .nav-item.active { border-color: rgba(39,224,162,.45); background: rgba(39,224,162,.11); color: var(--jade-light); }
+  .nav-item span { color: rgba(255,255,255,.35); font-size: 9px; }
+  .side-session { border-top: 1px solid rgba(255,255,255,.14); padding: 18px 8px 0; }
+  .side-session strong { display: block; font-size: 11px; }
+  .side-session span { color: rgba(255,255,255,.5); font-size: 10px; }
+  .app-main { min-width: 0; height: 1000px; overflow: hidden; }
+  .topbar { height: 62px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--rule); background: var(--white); padding: 0 34px; }
+  .crumb { color: var(--muted); font-size: 11px; }
+  .context { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 700; }
+  .content { height: 938px; overflow: hidden; padding: 32px 36px 42px; }
+  .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+
+  .auth-shell { display: grid; grid-template-columns: 44% 56%; background: var(--paper); }
+  .auth-story { position: relative; height: 1000px; overflow: hidden; display: grid; align-content: space-between; background: var(--ink); color: var(--white); padding: 42px 52px; }
+  .auth-story h1 { max-width: 520px; margin: 52px 0 18px; font-size: 54px; line-height: 1.02; }
+  .auth-story h1 span { display: block; color: var(--jade-light); }
+  .auth-story p { max-width: 500px; color: rgba(255,255,255,.7); font-size: 15px; line-height: 1.6; }
+  .auth-proof { display: grid; grid-template-columns: repeat(3,1fr); border-top: 1px solid rgba(255,255,255,.16); padding-top: 18px; color: rgba(255,255,255,.76); font-size: 10px; }
+  .auth-map { position: absolute; right: -165px; bottom: 130px; width: 630px; border: 1px solid rgba(255,255,255,.28); opacity: .35; }
+  .auth-form-side { height: 1000px; display: grid; place-items: center; padding: 52px; }
+  .auth-card { width: min(500px, 100%); display: grid; gap: 20px; border-top: 5px solid var(--jade); background: var(--white); padding: 34px; box-shadow: 0 20px 56px rgba(8,13,34,.11); }
+  .auth-card h2 { margin: 0; font-size: 30px; }
+  .auth-card .form-grid { display: grid; gap: 14px; }
+
+  .step-layout { display: grid; grid-template-columns: 260px 1fr; gap: 28px; }
+  .steps { border-top: 4px solid var(--amber); background: var(--ink); color: var(--white); padding: 24px; }
+  .steps h2 { margin: 0 0 20px; font-size: 19px; }
+  .step { display: grid; grid-template-columns: 28px 1fr; gap: 9px; padding: 13px 0; border-top: 1px solid rgba(255,255,255,.12); color: rgba(255,255,255,.58); font-size: 11px; }
+  .step:first-of-type { border-top: 0; }
+  .step b { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.3); border-radius: 50%; }
+  .step.active { color: var(--white); }
+  .step.active b { border-color: var(--jade); background: var(--jade); color: var(--ink); }
+
+  .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); border: 1px solid var(--rule); background: var(--white); }
+  .metric { min-height: 96px; border-right: 1px solid var(--rule); padding: 16px; }
+  .metric:last-child { border-right: 0; }
+  .metric span { color: var(--muted); font-size: 10px; }
+  .metric strong { display: block; margin: 9px 0 5px; font-size: 23px; }
+  .metric small { color: var(--muted); font-size: 9px; }
+  .table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .table th { border-bottom: 1px solid var(--rule); padding: 11px 12px; color: var(--muted); text-align: left; font-size: 9px; text-transform: uppercase; }
+  .table td { border-bottom: 1px solid #ebeeeb; padding: 11px 12px; }
+  .person { display: flex; align-items: center; gap: 10px; }
+  .mini-avatar { width: 28px; height: 42px; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .thirds { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+  .list-panel { padding: 20px; }
+  .list-panel ul { display: grid; gap: 11px; margin: 14px 0 0; padding: 0; list-style: none; font-size: 11px; }
+  .list-panel li { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid #edf0ed; padding-bottom: 9px; }
+  .list-panel li:last-child { border-bottom: 0; }
+
+  .office-screen { position: relative; background: var(--ink); }
+  .office-global { height: 54px; display: flex; align-items: center; justify-content: space-between; background: var(--ink); color: var(--white); padding: 0 24px; }
+  .office-global nav { display: flex; gap: 22px; color: rgba(255,255,255,.68); font-size: 11px; }
+  .office-global nav b { color: var(--jade-light); }
+  .office-visual { width: 1440px; height: 946px; object-fit: cover; object-position: center; display: block; }
+  .office-brand-strip { position: absolute; right: 24px; bottom: 22px; display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255,255,255,.55); border-radius: 4px; background: rgba(8,13,34,.9); color: var(--white); padding: 10px 14px; font-size: 10px; }
+
+  .utility-screen { display: grid; place-items: center; background: var(--ink); color: var(--white); }
+  .utility-card { width: 520px; display: grid; gap: 18px; border-top: 5px solid var(--jade); background: var(--white); color: var(--ink); padding: 34px; }
+  .loader-line { height: 6px; overflow: hidden; background: #e7ebe8; }
+  .loader-line span { width: 42%; height: 100%; display: block; background: var(--jade); }
+
+  .debug-screen { background: #10141f; color: #e9edf4; padding: 28px; }
+  .debug-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #303848; padding-bottom: 18px; }
+  .debug-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; margin-top: 22px; }
+  .debug-panel { min-height: 350px; border: 1px solid #303848; background: #171d2a; padding: 18px; }
+  .debug-panel img { width: 100%; height: 270px; object-fit: contain; image-rendering: pixelated; }
+</style>
+<script>
+  (function () {
+    var A = "../../workmap/apps/web/public/marketing/avatars/avatar-";
+    var MAP = "workmap-virtual-office-panorama.png";
+    function avatar(index, cls) {
+      return '<img class="pixel ' + (cls || "avatar") + '" src="' + A + String(index).padStart(2, "0") + '.png" alt="">';
+    }
+    function badge(text, tone) { return '<span class="badge ' + (tone || "") + '">' + text + '</span>'; }
+    function button(text, tone) { return '<button class="btn ' + (tone || "") + '">' + text + '</button>'; }
+    function header(eyebrow, title, subtitle, actions) {
+      return '<div class="page-head"><div><p class="eyebrow">' + eyebrow + '</p><h1 class="page-title">' + title + '</h1><p class="subtitle">' + subtitle + '</p></div><div class="actions">' + (actions || "") + '</div></div>';
+    }
+    function navItem(label, route, active) {
+      return '<div class="nav-item ' + (active === route ? "active" : "") + '">' + label + '<span>›</span></div>';
+    }
+    function appShell(active, title, body, role, platform) {
+      var nav = platform
+        ? '<div class="nav-group"><strong>Platform</strong>' + navItem("Platform Admin", "platform", active) + '</div>'
+        : '<div class="nav-group"><strong>Workspace</strong>' +
+          navItem("Employees", "employees", active) + navItem("Virtual Office", "office", active) +
+          '</div><div class="nav-group"><strong>Insights</strong>' +
+          navItem("Dashboard", "dashboard", active) + navItem("Reports", "reports", active) + navItem("Compliance", "compliance", active) +
+          '</div><div class="nav-group"><strong>Admin</strong>' +
+          navItem("Invites", "invites", active) + navItem("Integrations", "integrations", active) + navItem("Settings", "settings", active) + '</div>';
+      return '<div class="screen app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">WM</span>WorkMap</div>' +
+        '<div class="workspace-label"><strong>' + (platform ? "Platform context" : "Demo workspace") + '</strong><span>' + (platform ? "Independent access boundary" : "Current workspace") + '</span></div>' +
+        '<nav>' + nav + '</nav><div class="side-session"><strong>' + (role || "Owner") + '</strong><span>Signed in · Log out</span></div></aside>' +
+        '<main class="app-main"><div class="topbar"><span class="crumb">WorkMap / ' + title + '</span><span class="context"><i class="dot"></i>' + (platform ? "Platform access" : "Workspace connected") + '</span></div><div class="content">' + body + '</div></main></div>';
+    }
+    function authShell(title, accent, intro, card) {
+      return '<div class="screen auth-shell"><section class="auth-story"><div><div class="brand"><span class="brand-mark">WM</span>WorkMap</div><h1>' + title + '<span>' + accent + '</span></h1><p>' + intro + '</p><div class="avatar-row">' + avatar(1) + avatar(3) + avatar(5) + avatar(7) + '</div></div><img class="auth-map" src="' + MAP + '" alt=""><div class="auth-proof"><span>Transparent signals</span><span>Clear boundaries</span><span>People first</span></div></section><section class="auth-form-side">' + card + '</section></div>';
+    }
+    function field(label, placeholder, type) {
+      return '<div class="field"><label>' + label + '</label>' + (type === "select" ? '<select><option>' + placeholder + '</option></select>' : '<input placeholder="' + placeholder + '">') + '</div>';
+    }
+    function stepList(active) {
+      var steps = ["Workspace", "Transparency", "Avatar", "Devices", "Invite team"];
+      return '<aside class="steps"><h2>Workspace setup</h2>' + steps.map(function (s, i) { return '<div class="step ' + (i === active ? "active" : "") + '"><b>' + (i + 1) + '</b><span>' + s + '</span></div>'; }).join("") + '</aside>';
+    }
+    function metric(label, value, detail) { return '<div class="metric"><span>' + label + '</span><strong>' + value + '</strong><small>' + detail + '</small></div>'; }
+    function personRow(index, name, role, status, active, idle) {
+      return '<tr><td><div class="person">' + avatar(index, "mini-avatar") + '<div><strong>' + name + '</strong><div class="small">' + role + '</div></div></div></td><td><span class="dot"></span> ' + status + '</td><td>' + active + '</td><td>' + idle + '</td><td><button class="btn">View</button></td></tr>';
+    }
+
+    var screens = {};
+    screens.login = function () {
+      var card = '<div class="auth-card"><div>' + badge("Secure account access", "jade") + '<h2 style="margin-top:14px">Sign in to WorkMap</h2><p class="small">Use the same account for your workspace and invitation.</p></div><div class="form-grid">' +
+        field("Email", "name@company.com") + field("Password", "Enter your password") +
+        '<div style="display:flex;justify-content:space-between" class="small"><span>Remember this device</span><span>Forgot password?</span></div>' +
+        button("Sign in →", "primary") + '</div><div class="rule"></div><div class="small">New Owner? <strong>Create an Owner account</strong></div></div>';
+      return authShell("Start with your workspace.", "Bring the team in clearly.", "Create an Owner workspace first, then invite employees through tenant-scoped links. Private content always stays outside WorkMap.", card);
+    };
+    screens.callback = function () {
+      return '<div class="screen utility-screen"><div class="utility-card"><div class="brand"><span class="brand-mark">WM</span>WorkMap</div><div>' + badge("Cognito callback", "jade") + '<h1 style="margin:16px 0 8px;font-size:34px">Signing in</h1><p class="subtitle">Verifying your account and resolving the correct workspace.</p></div><div class="loader-line"><span></span></div><div class="small">You will continue automatically. <strong>Back to login</strong></div></div></div>';
+    };
+    screens.company = function () {
+      var form = '<div class="step-layout">' + stepList(0) + '<section class="panel" style="padding:28px"><div style="display:grid;gap:18px">' +
+        '<div><h2 class="panel-title">Workspace details</h2><p class="small">Create the company workspace and confirm how teammates see you.</p></div>' +
+        '<div class="split">' + field("Company name", "Your company") + field("Workspace name", "Main workspace") + '</div>' +
+        field("Your display name", "How teammates should see you") +
+        '<div class="notice jade"><strong>Privacy-forward setup</strong><span>Tracking boundaries are reviewed before employees join.</span></div>' +
+        '<div class="actions" style="justify-content:flex-end">' + button("Create workspace →", "primary") + '</div></div></section></div>';
+      return appShell("", "Create workspace", header("Owner onboarding", "Create your WorkMap workspace", "Create the company workspace, confirm your profile, then invite employees into the same tenant.") + form, "Owner");
+    };
+    screens["invite-owner"] = function () {
+      var body = header("Owner onboarding", "Invite employees", "Create tenant-scoped invitation links for employees to join this WorkMap workspace.", button("Open office", "primary")) +
+        '<div class="split"><section class="panel" style="padding:24px"><h2 class="panel-title">Create invitation</h2><div style="display:grid;gap:14px;margin-top:18px">' +
+        field("Employee email", "employee@company.com") + field("Role", "Employee", "select") + button("Create invite link →", "primary") +
+        '<div class="notice"><strong>One workspace only</strong><span>The verified Cognito email must match this invitation.</span></div></div></section>' +
+        '<section class="panel" style="padding:24px"><div style="display:flex;justify-content:space-between"><h2 class="panel-title">Recent invitations</h2>' + badge("Live API", "jade") + '</div><div class="empty"><div><strong>No invitations yet</strong><p class="small">Created links will appear here with role and expiry.</p></div></div></section></div>';
+      return appShell("invites", "Invites", body, "Owner");
+    };
+    screens["invite-token"] = function () {
+      var card = '<div class="auth-card"><div>' + badge("WorkMap invitation", "amber") + '<h2 style="margin-top:14px">Join workspace</h2><p class="small">Use the exact verified email address that received this invitation.</p></div><div class="form-grid">' +
+        '<div class="field"><label>Invited account</label><input value="Verified invited email" disabled></div>' +
+        field("Your display name", "How teammates should see you") +
+        '<div class="notice jade"><strong>What happens next</strong><span>Review transparency, create your avatar, then connect your devices.</span></div>' +
+        button("Accept and continue →", "primary") + '</div></div>';
+      return authShell("One invitation.", "One clear workspace.", "WorkMap binds each invitation to the verified employee account and the intended tenant.", card);
+    };
+    screens.avatar = function () {
+      var optionRows = ["Body", "Eyes", "Hairstyle", "Outfit", "Accessory"].map(function (label, i) {
+        return '<div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:12px;border-top:1px solid var(--rule);padding:13px 0"><strong style="font-size:11px">' + label + '</strong><div class="avatar-row">' + avatar(i + 1, "mini-avatar") + avatar(i + 2, "mini-avatar") + avatar(i + 3, "mini-avatar") + avatar(i + 4, "mini-avatar") + '</div></div>';
+      }).join("");
+      var body = header("Choose your avatar", "Create your WorkMap avatar", "Choose how you appear in the Virtual Office.") +
+        '<div class="step-layout">' + stepList(2) + '<div class="split" style="grid-template-columns:1.35fr .65fr"><section class="panel" style="padding:22px"><h2 class="panel-title">Build your avatar</h2>' +
+        '<div style="margin-top:12px">' + optionRows + '</div></section><section class="panel" style="display:grid;align-content:center;justify-items:center;gap:18px;padding:24px;background:var(--ink-soft);color:var(--white)">' +
+        badge("Your avatar", "jade") + avatar(6, "avatar-lg") + '<strong>Preview in office</strong>' + button("Save and continue →", "primary") + '</section></div></div>';
+      return appShell("", "Avatar setup", body, "Workspace member");
+    };
+    screens.device = function () {
+      var lane = '<div class="thirds" style="margin-bottom:18px"><div class="notice jade"><strong>Desktop Agent</strong><span>App name + duration. Stops while idle or locked.</span></div><div class="notice jade"><strong>Browser Extension</strong><span>Hostname + duration. No URL path or page content.</span></div><div class="notice"><strong>Not collected</strong><span>No screenshots, keystrokes, clipboard, camera, or microphone.</span></div></div>';
+      var desktop = '<section class="panel" style="padding:24px"><div style="display:flex;justify-content:space-between">' + badge("Windows", "jade") + badge("Not paired") + '</div><h2 class="panel-title" style="margin-top:16px">Desktop Agent</h2><p class="small">Install once, then connect this computer with a short-lived code.</p><ol class="small" style="line-height:1.8;padding-left:18px"><li>Download and open the installer.</li><li>Generate a one-time code.</li><li>Wait for connected confirmation.</li></ol><div class="actions">' + button("Download installer", "ink") + button("Generate code", "primary") + '</div></section>';
+      var extension = '<section class="panel" style="padding:24px"><div style="display:flex;justify-content:space-between">' + badge("Chrome / Edge", "amber") + badge("Alpha") + '</div><h2 class="panel-title" style="margin-top:16px">Browser Extension</h2><p class="small">Load the unpacked extension, then connect it with its own code.</p><ol class="small" style="line-height:1.8;padding-left:18px"><li>Download and extract the ZIP.</li><li>Load unpacked in Developer mode.</li><li>Generate a one-time code.</li></ol><div class="actions">' + button("Download ZIP", "ink") + button("Generate code", "primary") + '</div></section>';
+      var body = header("Device setup", "Connect WorkMap presence tools", "Pair each visible client separately. Employees can pause or stop either client.", button("Continue later")) + lane + '<div class="split">' + desktop + extension + '</div>';
+      return appShell("", "Device setup", body, "Workspace member");
+    };
+    screens.dashboard = function () {
+      var metrics = '<div class="metric-grid">' + metric("Team active time", "32h 40m", "8 active employees today") + metric("Focus room usage", "6h 15m", "Engineering and Finance") + metric("Idle time", "3h 05m", "Normal daily range") + metric("Devices online", "11 / 12", "One delayed") + '</div>';
+      var people = '<section class="panel" style="padding:20px"><div style="display:flex;justify-content:space-between;margin-bottom:10px"><h2 class="panel-title">Team presence</h2>' + badge("Development fallback", "amber") + '</div><table class="table"><thead><tr><th>Employee</th><th>Status</th><th>Active</th><th>Idle</th><th></th></tr></thead><tbody>' +
+        personRow(1,"Mia Manager","Engineering Manager","Busy","5h 20m","22m") + personRow(2,"Ethan Engineer","Software Engineer","Focus","6h 05m","18m") + personRow(3,"Sofia Sales","Account Executive","Available","4h 45m","31m") + '</tbody></table></section>';
+      var usage = '<section class="panel list-panel"><h2 class="panel-title">Top apps</h2><ul><li><span>Visual Studio Code</span><strong>8h 25m</strong></li><li><span>Microsoft Teams</span><strong>5h 10m</strong></li><li><span>Figma</span><strong>3h 35m</strong></li></ul></section><section class="panel list-panel"><h2 class="panel-title">Top domains</h2><ul><li><span>github.com</span><strong>4h 55m</strong></li><li><span>office.com</span><strong>3h 20m</strong></li><li><span>figma.com</span><strong>2h 50m</strong></li></ul></section>';
+      var body = header("Workspace overview", "Your team at a glance", "Presence, setup coverage, device health, and role-aware activity summaries.", button("Open office", "primary")) +
+        '<div class="notice jade" style="margin-bottom:16px"><strong>Data source</strong><span>This composition uses the repository development fallback dataset and labels it explicitly.</span></div>' + metrics + '<div class="split" style="margin-top:16px;grid-template-columns:1.35fr .65fr"><div>' + people + '</div><div style="display:grid;gap:14px">' + usage + '</div></div>';
+      return appShell("dashboard", "Dashboard", body, "Owner");
+    };
+    screens.employees = function () {
+      var filters = '<section class="panel" style="display:grid;grid-template-columns:1.4fr repeat(3,1fr) auto;gap:10px;padding:14px;margin-bottom:14px">' + field("Search","Name, role, or department") + field("Department","All departments","select") + field("Virtual map","All statuses","select") + field("Device status","All devices","select") + button("Clear") + '</section>';
+      var table = '<section class="panel" style="padding:18px"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><h2 class="panel-title">People directory</h2>' + badge("Development fallback", "amber") + '</div><table class="table"><thead><tr><th>Employee</th><th>Status</th><th>Department</th><th>Contact</th><th>Today</th></tr></thead><tbody>' +
+        personRow(1,"Mia Manager","Engineering Manager","Busy","5h 20m","22m") + personRow(2,"Ethan Engineer","Software Engineer","Focus","6h 05m","18m") + personRow(3,"Sofia Sales","Account Executive","Available","4h 45m","31m") + personRow(4,"Nora Finance","Finance Analyst","Idle","3h 55m","48m") + personRow(5,"Leo Support","Customer Support Lead","On call","5h 10m","14m") + '</tbody></table></section>';
+      var body = header("People directory", "Employees", "Find teammates, check presence, and launch contact actions from one quiet workspace.", button("Open office", "primary")) + filters + table;
+      return appShell("employees", "Employees", body, "Owner");
+    };
+    screens["employee-detail"] = function () {
+      var body = header("People directory", "Employee profile", "Employee detail pages require backend-backed profile data before role-scoped summaries can be shown.", button("Back to employees")) +
+        '<section class="panel" style="display:grid;grid-template-columns:240px 1fr;min-height:500px;overflow:hidden"><div style="display:grid;place-items:center;background:var(--ink-soft);color:var(--white);padding:30px">' +
+        '<div style="text-align:center">' + avatar(2,"avatar-lg") + '<h2 style="margin:12px 0 4px">Profile unavailable</h2><p class="small" style="color:rgba(255,255,255,.62)">No verified employee record loaded</p></div></div><div style="display:grid;align-content:center;gap:18px;padding:46px">' +
+        badge("Privacy-safe state", "amber") + '<h2 style="margin:0;font-size:30px">Employee detail unavailable</h2><p class="subtitle">WorkMap will not display a mock employee profile for an API-backed UUID. Return to the directory or open the Virtual Office.</p><div class="notice"><strong>Why this is blocked</strong><span>Profile and activity summaries require tenant-scoped backend data and role permission.</span></div><div class="actions">' + button("Employees") + button("Open office", "primary") + '</div></div></section>';
+      return appShell("employees", "Employee profile", body, "Owner");
+    };
+    screens.reports = function () {
+      var filters = '<section class="panel" style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr auto;gap:10px;padding:16px;margin-bottom:14px">' + field("Report view","Company aggregate","select") + field("Department","All departments","select") + field("From","2026-07-11") + field("To","2026-07-11") + button("Apply", "primary") + '</section>';
+      var metrics = '<div class="metric-grid">' + metric("Active time","32h 40m","Current mock team") + metric("Idle time","3h 05m","Normal range") + metric("Online devices","11 / 12","One delayed") + metric("Focus usage","6h 15m","Focus statuses") + '</div>';
+      var rows = '<section class="panel" style="padding:20px"><div style="display:flex;justify-content:space-between"><h2 class="panel-title">Company aggregate</h2>' + badge("Development fallback", "amber") + '</div><table class="table" style="margin-top:8px"><thead><tr><th>Department</th><th>Active</th><th>Idle</th><th>Top app</th><th>Top domain</th></tr></thead><tbody><tr><td>Engineering</td><td>14h 05m</td><td>1h 25m</td><td>VS Code</td><td>github.com</td></tr><tr><td>Sales</td><td>4h 45m</td><td>31m</td><td>Outlook</td><td>office.com</td></tr><tr><td>Finance</td><td>3h 55m</td><td>48m</td><td>Excel</td><td>office.com</td></tr><tr><td>Design</td><td>4h 30m</td><td>20m</td><td>Figma</td><td>figma.com</td></tr></tbody></table></section>';
+      var body = header("Reports", "Work summaries", "Review role-appropriate app and domain summaries with a clear privacy boundary.", button("Compliance", "primary")) +
+        '<div class="notice jade" style="margin-bottom:14px"><strong>Report privacy boundary</strong><span>Company summaries are aggregated. Full URLs and private content never enter reports.</span></div>' + filters + metrics + '<div style="margin-top:14px">' + rows + '</div>';
+      return appShell("reports", "Reports", body, "Owner");
+    };
+    screens.compliance = function () {
+      var collected = ["Desktop app name","Browser hostname","Usage duration and timestamps","Device heartbeat status","Avatar room or office area"];
+      var excluded = ["Screenshots or recordings","Keystrokes or clipboard","Full URL paths or queries","Page, form, email or message content","Camera or microphone"];
+      function policy(title, tone, items) { return '<section class="panel list-panel" style="border-color:' + (tone === "jade" ? "var(--jade)" : "var(--coral)") + '"><div style="display:flex;justify-content:space-between"><h2 class="panel-title">' + title + '</h2>' + badge(tone === "jade" ? "Visible" : "Never collected", tone) + '</div><ul>' + items.map(function(x){return '<li><span>' + x + '</span><strong>' + (tone === "jade" ? "✓" : "×") + '</strong></li>';}).join("") + '</ul></section>'; }
+      var role = '<section class="panel" style="padding:20px;margin-top:16px"><h2 class="panel-title">Role visibility boundary</h2><div class="thirds" style="margin-top:16px"><div class="notice jade"><strong>Employee</strong><span>Own activity and device state.</span></div><div class="notice"><strong>Owner / Manager</strong><span>Company aggregate and allowed views.</span></div><div class="notice"><strong>Platform Admin</strong><span>No employee activity detail.</span></div></div></section>';
+      var cta = '<section style="display:flex;align-items:center;justify-content:space-between;background:var(--amber);padding:18px 22px;margin-top:16px"><div><strong>Ready to continue?</strong><p class="small" style="margin:4px 0 0;color:#4d3b13">Review and acknowledge the transparency policy.</p></div>' + button("I understand and agree", "ink") + '</section>';
+      var body = header("Compliance", "Transparency policy", "Make WorkMap activity summaries explicit, role-based, and easy for employees to understand.", button("Employees", "primary")) +
+        '<div class="notice jade" style="margin-bottom:16px"><strong>Workspace transparency boundary</strong><span>Employees can review what WorkMap collects and what stays outside the product.</span></div><div class="split">' + policy("Visible in WorkMap","jade",collected) + policy("Not monitored","coral",excluded) + '</div>' + role + cta;
+      return appShell("compliance", "Compliance", body, "Workspace member");
+    };
+    screens.integrations = function () {
+      var items = [
+        ["Microsoft Teams","Communication","Link launcher","Open a teammate chat. No Graph permissions."],
+        ["Outlook Email","Communication","Ready","Launch a pre-addressed email. No body access."],
+        ["Outlook Calendar","Calendar","Link launcher","Open scheduling. No calendar API access."],
+        ["3CX","Calling","Needs setup","Link launch only. No call audio recording."]
+      ];
+      var list = items.map(function(x,i){return '<div style="display:grid;grid-template-columns:180px 160px 1fr 120px;align-items:center;gap:14px;border-top:1px solid var(--rule);padding:18px 0"><div><strong>' + x[0] + '</strong><div class="small">' + x[1] + '</div></div>' + badge(x[2], i===3 ? "coral" : i===1 ? "jade" : "amber") + '<span class="small">' + x[3] + '</span>' + button(i===3 ? "Coming later" : "Open", i===3 ? "disabled" : "") + '</div>';}).join("");
+      var body = header("Admin settings", "Integrations", "Configure lightweight contact launchers without reading Teams, email, calendar, or call content.", button("Open office", "primary")) +
+        '<div class="notice jade" style="margin-bottom:16px"><strong>Current scope</strong><span>These are link-based entry points, not connected account integrations.</span></div><section class="panel" style="padding:0 22px"><div style="display:grid;grid-template-columns:180px 160px 1fr 120px;gap:14px;padding:13px 0;color:var(--muted);font-size:9px;text-transform:uppercase"><span>Integration</span><span>Status</span><span>Privacy boundary</span><span>Action</span></div>' + list + '</section>';
+      return appShell("integrations", "Integrations", body, "Owner");
+    };
+    screens.settings = function () {
+      var sections = [
+        ["Compliance","Policy","Review transparency, collected metadata, and acknowledgement copy."],
+        ["Integrations","Link-based MVP","Manage Teams, Outlook, calendar, and 3CX launchers."],
+        ["Avatar","Profile","Update the workspace profile avatar."],
+        ["Virtual Office","Canvas MVP","Open the current interactive office map."]
+      ];
+      var rows = sections.map(function(x,i){return '<div style="display:grid;grid-template-columns:180px 150px 1fr 80px;align-items:center;gap:14px;border-top:1px solid var(--rule);padding:20px 0"><strong>' + x[0] + '</strong>' + badge(x[1], i===0 ? "jade" : i===1 ? "amber" : "") + '<span class="small">' + x[2] + '</span>' + button("Open") + '</div>';}).join("");
+      var body = header("Admin", "Settings", "Central settings entry points for the current WorkMap product.", button("Dashboard", "primary")) +
+        '<section class="panel" style="padding:0 24px"><div style="display:grid;grid-template-columns:180px 150px 1fr 80px;gap:14px;padding:14px 0;color:var(--muted);font-size:9px;text-transform:uppercase"><span>Area</span><span>State</span><span>Description</span><span></span></div>' + rows + '</section><div class="notice" style="margin-top:16px"><strong>Backend boundary</strong><span>Owner and admin settings continue to use backend RBAC and tenant boundaries.</span></div>';
+      return appShell("settings", "Settings", body, "Owner");
+    };
+    screens.office = function () {
+      return '<div class="screen office-screen"><div class="office-global"><div class="brand"><span class="brand-mark">WM</span>WorkMap</div><nav><span>Employees</span><span>Dashboard</span><span>Reports</span><span>Compliance</span><b>Virtual Office</b></nav><div class="badge jade"><i class="dot"></i>Connected</div></div><img class="office-visual" src="' + MAP + '" alt=""><div class="office-brand-strip"><span class="brand-mark">WM</span><span><strong>Virtual Office</strong><br>Real map · real presence</span></div></div>';
+    };
+    screens.platform = function () {
+      var body = header("Platform Admin", "Platform health overview", "Review privacy-safe tenant readiness and platform audit summaries.", badge("Platform-only context", "amber")) +
+        '<div class="notice" style="margin-bottom:16px"><strong>Independent access boundary</strong><span>Tenant Owner roles do not grant access here.</span></div><div style="display:grid;grid-template-columns:320px 1fr;gap:16px"><section class="panel" style="padding:20px"><div style="display:flex;justify-content:space-between"><h2 class="panel-title">Tenant list</h2>' + badge("Safe metadata") + '</div><div class="empty" style="min-height:430px"><div><strong>No tenant selected</strong><p class="small">Tenant names and readiness metadata appear after the platform API responds.</p></div></div></section><div style="display:grid;gap:16px"><section class="panel" style="padding:20px"><div style="display:flex;justify-content:space-between"><h2 class="panel-title">Tenant readiness</h2>' + badge("Safe summary", "jade") + '</div><div class="empty" style="min-height:210px"><span>Select a tenant to inspect setup readiness.</span></div></section><section class="panel" style="padding:20px"><h2 class="panel-title">Platform audit</h2><div class="empty" style="min-height:180px"><span>No platform audit events returned yet.</span></div></section></div></div>';
+      return appShell("platform", "Platform Admin", body, "Platform Admin", true);
+    };
+    screens.debug = function () {
+      var base = "../../workmap/apps/web/public/assets/avatars/debug/";
+      return '<div class="screen debug-screen"><div class="debug-head"><div><span class="badge amber">Internal tool</span><h1 style="margin:12px 0 4px">Avatar Debug Frames</h1><p class="small">Review current Body 2 frame choices and crop behavior.</p></div><div class="brand"><span class="brand-mark">WM</span>WorkMap Dev</div></div><div class="debug-grid"><section class="debug-panel"><h2>Active state frames</h2><img src="' + base + 'body2-active-state-frames.png"></section><section class="debug-panel"><h2>Visible candidates</h2><img src="' + base + 'body2-visible-candidates.png"></section><section class="debug-panel"><h2>Crop check</h2><img src="' + base + 'body2-crop-check.png"></section></div></div>';
+    };
+    var key = new URLSearchParams(location.search).get("screen") || "dashboard";
+    document.getElementById("workmap-design-root").innerHTML = (screens[key] || screens.dashboard)();
+  })();
+</script>

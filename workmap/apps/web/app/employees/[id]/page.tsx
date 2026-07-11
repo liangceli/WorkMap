@@ -7,7 +7,7 @@ import { wmStyles } from "../../../lib/theme/workmapTheme";
 export default function EmployeeDetailPage() {
   return (
     <AppShell>
-      <section style={styles.shell}>
+      <section className="wm-redesign-page wm-employee-detail-page" style={styles.shell}>
         <WorkMapPageHeader
           eyebrow="People directory"
           title="Employee profile"
