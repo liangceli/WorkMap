@@ -291,23 +291,23 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  min-height: 292px;
-  padding: clamp(26px, 4vw, 46px) !important;
+  min-height: 342px;
+  padding: clamp(30px, 4vw, 52px) !important;
   display: grid !important;
-  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr) !important;
+  grid-template-columns: minmax(0, 0.96fr) minmax(360px, 1.04fr) !important;
   align-items: center !important;
-  gap: clamp(24px, 4vw, 58px) !important;
-  border-color: var(--wm-primary) !important;
+  gap: clamp(30px, 5vw, 76px) !important;
+  border-color: var(--wm-border) !important;
   border-radius: 8px !important;
-  background: var(--wm-primary) !important;
-  color: #fff !important;
+  background: #fffdf8 !important;
+  box-shadow: 0 14px 32px rgba(7, 17, 35, 0.07) !important;
+  color: var(--wm-primary) !important;
 }
 
 .wm-redesign-page > .wm-dashboard-hero::before {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: -1;
   width: 88px;
   height: 5px;
   background: var(--wm-civic-amber);
@@ -318,7 +318,6 @@
   position: absolute;
   top: 0;
   right: 0;
-  z-index: -1;
   width: 6px;
   height: 100%;
   background: var(--wm-civic-amber);
@@ -338,14 +337,16 @@
 
 .wm-dashboard-hero .wm-dashboard-hero-copy h1 {
   max-width: 640px;
-  color: #fff !important;
-  font-size: clamp(34px, 4vw, 56px) !important;
-  line-height: 1.02 !important;
+  color: var(--wm-primary) !important;
+  font-size: clamp(36px, 4.3vw, 60px) !important;
+  line-height: 1.04 !important;
 }
 
 .wm-dashboard-hero .wm-dashboard-hero-copy > p:not(:first-child) {
-  max-width: 650px;
-  color: rgba(255, 255, 255, 0.72) !important;
+  max-width: 590px;
+  color: var(--wm-text-secondary) !important;
+  font-size: 16px !important;
+  line-height: 1.58 !important;
 }
 
 .wm-dashboard-hero-actions {
@@ -375,36 +376,78 @@
 }
 
 .wm-dashboard-hero-action-secondary {
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  background: transparent !important;
-  color: #fff !important;
+  border-color: var(--wm-primary) !important;
+  background: #fffdf8 !important;
+  color: var(--wm-primary) !important;
 }
 
 .wm-dashboard-hero-action-secondary:hover {
   border-color: var(--wm-secondary) !important;
-  background: rgba(39, 224, 162, 0.12) !important;
+  background: rgba(39, 224, 162, 0.1) !important;
 }
 
 .wm-dashboard-hero-signals {
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(39, 224, 162, 0.36);
+  gap: 12px;
+  padding: clamp(18px, 2.4vw, 28px);
+  border: 1px solid rgba(16, 143, 112, 0.28);
   border-radius: 8px;
-  background: #121932;
+  background: #eef8f3;
+  box-shadow: inset 0 0 0 7px rgba(255, 253, 248, 0.88);
+}
+
+.wm-dashboard-hero-signals::before,
+.wm-dashboard-hero-signals::after {
+  position: absolute;
+  z-index: 0;
+  border: 1px dashed rgba(16, 143, 112, 0.28);
+  border-radius: 0;
+  content: "";
+  pointer-events: none;
+}
+
+.wm-dashboard-hero-signals::before {
+  top: 18px;
+  right: 18px;
+  width: 132px;
+  height: 84px;
+  border-bottom: 0;
+  border-left: 0;
+  transform: rotate(-10deg);
+}
+
+.wm-dashboard-hero-signals::after {
+  bottom: 18px;
+  left: 18px;
+  width: 104px;
+  height: 66px;
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-10deg);
 }
 
 .wm-dashboard-hero-signal {
+  position: relative;
+  z-index: 1;
   min-width: 0;
-  min-height: 104px;
+  min-height: 114px;
   display: grid;
   align-content: start;
   gap: 6px;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  padding: 16px;
+  border: 1px solid rgba(7, 17, 35, 0.13);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
+  background: #fffdf8;
+  box-shadow: 0 6px 16px rgba(7, 17, 35, 0.04);
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.wm-dashboard-hero-signal:hover {
+  border-color: rgba(16, 143, 112, 0.55);
+  transform: translateY(-2px);
 }
 
 .wm-dashboard-hero-signal span {
@@ -416,17 +459,28 @@
 }
 
 .wm-dashboard-hero-signal strong {
-  color: #fff;
+  color: var(--wm-primary);
   font-size: clamp(16px, 1.8vw, 22px);
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
 .wm-dashboard-hero-signal small {
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--wm-text-secondary);
   font-size: 11px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 1024px) {
+  .wm-redesign-page > .wm-dashboard-hero {
+    grid-template-columns: 1fr !important;
+    min-height: 0;
+  }
+
+  .wm-dashboard-hero .wm-dashboard-hero-copy > p:not(:first-child) {
+    max-width: 700px;
+  }
 }
 
 .wm-report-summary,
@@ -446,6 +500,15 @@
 .wm-compliance-policy section {
   border-radius: 6px !important;
   box-shadow: none !important;
+}
+
+.wm-usage-table-toggle {
+  min-width: 0;
+}
+
+.wm-usage-table-toggle button {
+  max-width: 100%;
+  white-space: normal;
 }
 
 .wm-employees-page .wm-employee-directory,
@@ -510,6 +573,109 @@
 .wm-invite-create-panel,
 .wm-invite-list-panel {
   min-width: 0;
+}
+
+.wm-invite-list-panel {
+  position: relative;
+  display: grid !important;
+  align-content: start;
+  gap: 10px !important;
+  min-height: 100%;
+  overflow: hidden;
+  border-color: var(--wm-primary) !important;
+  border-radius: 8px !important;
+  background: var(--wm-primary) !important;
+  box-shadow: none !important;
+}
+
+.wm-invite-list-panel::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 72px;
+  height: 5px;
+  background: var(--wm-civic-amber);
+  content: "";
+}
+
+.wm-invite-list-heading {
+  display: grid;
+  gap: 5px;
+  padding: 8px 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.wm-invite-list-eyebrow {
+  margin: 0;
+  color: var(--wm-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.wm-invite-list-panel h2 {
+  color: #fff !important;
+  font-size: clamp(20px, 2vw, 26px) !important;
+  line-height: 1.1 !important;
+}
+
+.wm-invitation-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "email status"
+    "expiry expiry";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, 0.055) !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.wm-invitation-row:hover {
+  border-color: rgba(39, 224, 162, 0.62) !important;
+  background: rgba(39, 224, 162, 0.08) !important;
+}
+
+.wm-invitation-email {
+  grid-area: email;
+  min-width: 0;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.wm-invitation-status {
+  grid-area: status;
+  max-width: 100%;
+  border: 1px solid rgba(39, 224, 162, 0.42);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--wm-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.wm-invitation-expiry {
+  grid-area: expiry;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.wm-invite-list-empty {
+  padding: 14px 4px;
+  color: rgba(255, 255, 255, 0.62) !important;
 }
 
 .wm-platform-page-header {
@@ -1014,6 +1180,23 @@
     grid-template-columns: 1fr !important;
   }
 
+  .wm-invite-list-panel {
+    min-height: 0;
+  }
+
+  .wm-invitation-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "email"
+      "status"
+      "expiry";
+    justify-items: start;
+  }
+
+  .wm-invitation-status {
+    text-align: left;
+  }
+
   .wm-settings-grid > *,
   .wm-integrations-grid > * {
     min-height: 0 !important;
@@ -1048,6 +1231,28 @@
 }
 
 @media (max-width: 420px) {
+  .wm-usage-table-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-areas:
+      "details duration"
+      "details share";
+    row-gap: 6px !important;
+  }
+
+  .wm-usage-table-row > div {
+    grid-area: details;
+    min-width: 0;
+  }
+
+  .wm-usage-table-row > strong {
+    grid-area: duration;
+  }
+
+  .wm-usage-table-row > span {
+    grid-area: share;
+    justify-self: end;
+  }
+
   .wm-app-shell .wm-app-session-wrap,
   .wm-app-shell-editorial .wm-app-session-wrap {
     display: grid !important;

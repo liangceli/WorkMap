@@ -134,15 +134,18 @@ export default function OwnerInvitePage() {
         </section>
 
         <section className="wm-invite-list-panel" style={styles.list}>
-          <h2 style={styles.sectionTitle}>Recent invitations</h2>
+          <div className="wm-invite-list-heading">
+            <p className="wm-invite-list-eyebrow">Workspace access</p>
+            <h2 style={styles.sectionTitle}>Recent invitations</h2>
+          </div>
           {invitations.length === 0 ? (
-            <p style={styles.empty}>No invitations yet.</p>
+            <p className="wm-invite-list-empty" style={styles.empty}>No invitations yet.</p>
           ) : (
             invitations.map((invitation) => (
-              <article key={invitation.id} style={styles.invitationRow}>
-                <strong>{invitation.invitedEmail}</strong>
-                <span>{invitation.role.replace("_", " ")} / {invitation.status.toLowerCase()}</span>
-                <span>Expires {new Date(invitation.expiresAt).toLocaleString()}</span>
+              <article key={invitation.id} className="wm-invitation-row" style={styles.invitationRow}>
+                <strong className="wm-invitation-email">{invitation.invitedEmail}</strong>
+                <span className="wm-invitation-status">{invitation.role.replace("_", " ")} / {invitation.status.toLowerCase()}</span>
+                <span className="wm-invitation-expiry">Expires {new Date(invitation.expiresAt).toLocaleString()}</span>
               </article>
             ))
           )}
@@ -237,9 +240,6 @@ const styles = {
   invitationRow: {
     display: "grid",
     gap: "4px",
-    border: `1px solid ${wm.colors.border}`,
-    borderRadius: wm.radius.lg,
-    background: wm.colors.surface,
     padding: "12px",
     color: wm.colors.textSecondary,
     fontSize: "13px",

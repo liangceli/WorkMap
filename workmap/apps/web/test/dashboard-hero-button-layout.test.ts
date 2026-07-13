@@ -21,8 +21,12 @@ test("dashboard hero contains only current workspace signals and responsive acti
   assert.match(dashboardSource, /wm-dashboard-hero-signal/);
 });
 
-test("dashboard hero and shared action controls keep text inside rounded controls on narrow screens", () => {
+test("dashboard hero uses the light workspace signal-map treatment without changing its responsive action controls", () => {
   assert.match(redesignStyles, /\.wm-redesign-page > \.wm-dashboard-hero/);
+  assert.match(redesignStyles, /\.wm-redesign-page > \.wm-dashboard-hero[\s\S]*?background:\s*#fffdf8\s*!important/);
+  assert.match(redesignStyles, /\.wm-dashboard-hero-signals[\s\S]*?background:\s*#eef8f3/);
+  assert.match(redesignStyles, /\.wm-dashboard-hero-signals::before/);
+  assert.match(redesignStyles, /@media \(max-width: 1024px\)[\s\S]*?\.wm-redesign-page > \.wm-dashboard-hero[\s\S]*?grid-template-columns:\s*1fr/);
   assert.match(redesignStyles, /\.wm-dashboard-hero-actions a[\s\S]*?max-width:\s*100%/);
   assert.match(redesignStyles, /\.wm-dashboard-hero-actions a[\s\S]*?overflow-wrap:\s*anywhere/);
   assert.match(redesignStyles, /@media \(max-width: 760px\)[\s\S]*?\.wm-dashboard-hero-actions[\s\S]*?grid-template-columns:\s*1fr/);

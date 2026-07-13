@@ -7,5 +7,5 @@ type WebsiteUsageTableProps = {
 };
 
 export function WebsiteUsageTable({ rows, title = "Top domains today" }: WebsiteUsageTableProps) {
-  return <UsageTable title={title} rows={rows} />;
+  return <UsageTable title={title} rows={rows} initialVisibleRows={6} />;
 }

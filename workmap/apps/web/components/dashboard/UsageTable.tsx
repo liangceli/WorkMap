@@ -1,20 +1,29 @@
+"use client";
+
+import { useId, useState } from "react";
 import type { UsageRow } from "./mockDashboardData";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 type UsageTableProps = {
   title: string;
   rows: UsageRow[];
+  initialVisibleRows?: number;
 };
 
-export function UsageTable({ title, rows }: UsageTableProps) {
+export function UsageTable({ title, rows, initialVisibleRows }: UsageTableProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const tableId = useId();
+  const canCollapse = typeof initialVisibleRows === "number" && rows.length > initialVisibleRows;
+  const visibleRows = canCollapse && !isExpanded ? rows.slice(0, initialVisibleRows) : rows;
+
   return (
-    <section style={styles.card}>
+    <section className="wm-usage-table" style={styles.card}>
       <h2 style={styles.title}>{title}</h2>
-      <div style={styles.table}>
+      <div id={tableId} style={styles.table}>
         {rows.length === 0 ? (
           <p style={styles.emptyText}>No usage rows yet. Connect tracking clients and submit app/domain events to populate this section.</p>
-        ) : rows.map((row) => (
-          <div key={row.name} style={styles.row}>
+        ) : visibleRows.map((row) => (
+          <div key={row.name} className="wm-usage-table-row" style={styles.row}>
             <div>
               <p style={styles.name}>{row.name}</p>
               <p style={styles.category}>{row.category}</p>
@@ -24,6 +33,19 @@ export function UsageTable({ title, rows }: UsageTableProps) {
           </div>
         ))}
       </div>
+      {canCollapse ? (
+        <div className="wm-usage-table-toggle" style={styles.toggle}>
+          <button
+            type="button"
+            aria-controls={tableId}
+            aria-expanded={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+            style={styles.toggleButton}
+          >
+            {isExpanded ? "Show less" : "Show more"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -77,5 +99,17 @@ const styles = {
     paddingTop: "10px",
     fontSize: "13px",
     lineHeight: 1.45,
+  },
+  toggle: {
+    display: "flex",
+    justifyContent: "flex-start",
+    paddingTop: "12px",
+  },
+  toggleButton: {
+    ...wmStyles.secondaryButton,
+    minHeight: "38px",
+    padding: "8px 12px",
+    fontSize: "12px",
+    fontWeight: 800,
   },
 };

@@ -7,5 +7,5 @@ type AppUsageTableProps = {
 };
 
 export function AppUsageTable({ rows, title = "Top apps today" }: AppUsageTableProps) {
-  return <UsageTable title={title} rows={rows} />;
+  return <UsageTable title={title} rows={rows} initialVisibleRows={6} />;
 }

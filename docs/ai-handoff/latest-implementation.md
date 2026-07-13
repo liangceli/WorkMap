@@ -2594,3 +2594,168 @@ Redesign the empty Dashboard banner using only genuine current workspace data. M
 ### Remaining Risk
 
 - The automated responsive contract prevents button-label overflow in the shared design paths. Exact visual spacing on all supported physical devices still requires the final browser viewport QA session.
+
+---
+
+## 2026-07-13 Invite Ledger Visual Refinement
+
+### Original Task Brief
+
+Redesign the `/onboarding/invite` Recent invitations area so it no longer uses a white background, while preserving the invitation workflow and providing a safe responsive layout.
+
+### Changed Files
+
+- `workmap/apps/web/app/onboarding/invite/page.tsx`
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/invite-list-panel-layout.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Replaced the generic white Recent invitations card with a dedicated Ink Navy workspace-access ledger, including an Amber rule, Jade label, and darker invitation records.
+- Each invitation now uses semantic visual hooks for the email, existing role/status text, and existing expiry text. No invitation payload, formatting source, action, request, or permission behavior changed.
+- Long emails and status text can wrap safely. At `760px` and below, the existing invite page becomes one column and each ledger row changes to a readable email/status/expiry stack.
+
+### Verification
+
+- Invite-page lint passed for `page.tsx` and its new responsive-layout test.
+- Focused Dashboard and invitation responsive contract tests passed, 4/4.
+- Source-worktree typecheck remains blocked by the existing 410-NUL `apps/web/lib/api/authApi.ts` file; it was not modified.
+
+### Manual QA
+
+- Not run. Rendered local-browser verification remains blocked by the existing in-app Browser local-target policy.
+
+### Intentionally Not Changed
+
+- No invitation creation, list retrieval, error handling, authentication, owner-only authorization, API contract, routing, or data model behavior changed.
+
+### Remaining Risk
+
+- Exact rendered spacing and hover feedback at physical device widths still need the deferred browser visual QA session after the existing source corruption/browser policy limitations are resolved.
+
+---
+
+## 2026-07-13 Dashboard Light Signal-Map Banner
+
+### Original Task Brief
+
+Redesign the `/dashboard` banner to follow the provided light workspace-reference composition while remaining consistent with WorkMap's Ink/Jade/Amber visual system and responsive behavior.
+
+### Changed Files
+
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/dashboard-hero-button-layout.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Reworked the existing Dashboard hero into a light editorial workspace surface: dark Ink title/copy, Jade primary action, Amber structural rules, and a right-hand Signal Map.
+- The Signal Map still renders only the existing Session, Presence, Device coverage, and Policy values. It now uses a pale Jade field, restrained map-path guides, and readable light cards instead of the previous dark block.
+- The desktop composition becomes one column at `1024px`; action controls retain full-width stacking at `760px`, and signal cards remain single-column at `420px`.
+
+### Role And Behavior Boundaries
+
+- The existing role-specific title, subtitle, actions, status derivation, navigation targets, API reads, and authorization behavior remain unchanged.
+- No illustration asset, fake workspace metric, backend field, API contract, or state-management logic was added.
+
+### Verification
+
+- Targeted Dashboard/Invite lint passed.
+- Focused cache, Dashboard, and Invite responsive contract tests passed, 6/6.
+- `git diff --check` passed.
+- Source-worktree typecheck remains blocked by the pre-existing 410-NUL `apps/web/lib/api/authApi.ts` file; it was not modified.
+
+### Manual QA
+
+- Not run. Rendered local-browser verification remains blocked by the existing in-app Browser local-target policy.
+
+### Intentionally Not Changed
+
+- No Dashboard data, loading behavior, authentication, access control, report calculation, navigation behavior, or button action changed.
+
+### Remaining Risk
+
+- Exact rendered spacing, hover behavior, and 360/390/768/1024/1440 visual fidelity require the deferred browser visual QA session.
+
+---
+
+## 2026-07-13 Dashboard Top Apps Progressive Disclosure
+
+### Original Task Brief
+
+Change the Dashboard Top apps list into a collapsed card that initially shows six rows and expands all rows only after the user clicks Show more.
+
+### Changed Files
+
+- `workmap/apps/web/components/dashboard/UsageTable.tsx`
+- `workmap/apps/web/components/dashboard/AppUsageTable.tsx`
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/usage-table-collapse.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added optional progressive disclosure to the shared usage table. It renders the first six rows by default, displays a rounded Show more control only when additional rows exist, and Show less restores the compact view.
+- The initial change enabled `AppUsageTable`; the immediately following Domain follow-up enables the same behavior for `WebsiteUsageTable`.
+- The control changes local presentation state only. It does not fetch, sort, filter, mutate, or hide any report data from the underlying Dashboard state.
+- Added `aria-expanded` and `aria-controls`; narrow usage rows keep name, duration, and share readable at `420px` and below.
+
+### Verification
+
+- Targeted Dashboard lint passed.
+- Focused cache, Dashboard, Invite, and usage-table tests passed, 8/8.
+- Source-worktree typecheck remains blocked by the existing 410-NUL `apps/web/lib/api/authApi.ts` file; it was not modified.
+
+### Manual QA
+
+- Not run. Rendered local-browser verification remains blocked by the existing in-app Browser local-target policy.
+
+### Intentionally Not Changed
+
+- No reports API request, report calculation, ordering, activity record, Dashboard authorization, tenant scope, or domain list behavior changed.
+
+### Remaining Risk
+
+- Exact button and list expansion motion at physical viewport sizes require the deferred browser visual QA session.
+
+---
+
+## 2026-07-13 Dashboard Top Domains Progressive Disclosure
+
+### Original Task Brief
+
+Make the Dashboard Top domains from Reports API card use the same collapsed-card behavior as Top apps.
+
+### Changed Files
+
+- `workmap/apps/web/components/dashboard/WebsiteUsageTable.tsx`
+- `workmap/apps/web/test/usage-table-collapse.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Enabled the existing shared UsageTable six-row progressive-disclosure option for `WebsiteUsageTable`.
+- Top domains now defaults to six rows and uses the same rounded Show more/Show less control, accessibility attributes, data order, and responsive row layout as Top apps.
+
+### Verification
+
+- Targeted Dashboard lint passed.
+- Focused Dashboard, Invite, and usage-table tests passed, 6/6.
+- Source-worktree typecheck remains blocked by the existing 410-NUL `apps/web/lib/api/authApi.ts` file; it was not modified.
+
+### Manual QA
+
+- Not run. Rendered local-browser verification remains blocked by the existing in-app Browser local-target policy.
+
+### Intentionally Not Changed
+
+- No domain data, API request, query, calculation, sorting, tenant scope, or Dashboard authorization behavior changed.
+
+### Remaining Risk
+
+- Exact rendered expand/collapse behavior remains subject to the deferred browser visual QA session.

@@ -1697,3 +1697,116 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 
 - Pass for the scoped UI/refactoring change. The dashboard shows only actual state and all action behavior remains unchanged.
 - The next round can proceed. Final visual/device QA remains pending the existing browser-access limitation.
+
+---
+
+## 2026-07-13 Invite Ledger Visual Refinement QA
+
+### Reviewed Implementation
+
+- Reviewed the invitation page markup hooks, the Recent invitations ledger styling, long-text safeguards, and the existing small-screen single-column layout.
+
+### Findings Ordered By Severity
+
+- Fixed - Low: Recent invitations inherited the generic white product-card surface and visual language. It now has its own dark workspace-access ledger with non-white rows and clear status hierarchy.
+- Fixed - Low: long email/status values could become difficult to scan in a two-column row. The ledger uses bounded grid columns and switches to a stacked record at the existing `760px` breakpoint.
+- Remaining - High/existing: source `apps/web/lib/api/authApi.ts` is NUL-corrupted and blocks full web typecheck. It was not part of this visual-only change.
+
+### Test And Verification Status
+
+- Targeted invite page lint: passed.
+- Focused Dashboard and invitation responsive contract tests: passed, 4/4.
+- Source worktree web typecheck: blocked solely by the existing NUL bytes at `authApi.ts:1`.
+
+### Manual QA Status
+
+- Browser desktop/mobile screenshot and interaction review: not run because the current in-app Browser policy rejects the local target.
+
+### Risks And Recommendation
+
+- Pass for the scoped frontend-only refinement. The invitation data, Owner authorization, and create/list behavior remain unchanged.
+- The next round can proceed; rendered visual QA remains deferred pending the existing browser-access limitation.
+
+---
+
+## 2026-07-13 Dashboard Light Signal-Map Banner QA
+
+### Reviewed Implementation
+
+- Reviewed the Dashboard hero style overrides, existing real-status signal rendering, desktop/tablet/mobile breakpoints, and shared action constraints.
+
+### Findings Ordered By Severity
+
+- Fixed - Medium: the prior dark Banner did not provide the requested welcome/workspace composition and could read as an isolated status block. It now has a coherent light workspace presentation with a WorkMap-specific Signal Map.
+- Fixed - Low: the hero could become cramped at tablet widths. It now switches to one column at `1024px`, while existing action and signal card protections remain active for narrow screens.
+- Remaining - High/existing: source `apps/web/lib/api/authApi.ts` remains NUL-corrupted and blocks full web typecheck; it was not changed.
+
+### Test And Verification Status
+
+- Targeted Dashboard/Invite lint: passed.
+- Focused cache, Dashboard, and Invite responsive contract tests: passed, 6/6.
+- `git diff --check`: passed.
+
+### Manual QA Status
+
+- Browser desktop/mobile screenshot and interaction review: not run because the current in-app Browser policy rejects the local target.
+
+### Risks And Recommendation
+
+- Pass for the scoped frontend-only Banner redesign. All rendered status values and action behavior remain sourced from the original Dashboard implementation.
+- The next round can proceed; final rendered visual QA remains deferred pending the existing browser-access limitation.
+
+---
+
+## 2026-07-13 Dashboard Top Apps Progressive Disclosure QA
+
+### Reviewed Implementation
+
+- Reviewed the shared usage-table presentation state, App-only opt-in, accessibility attributes, data preservation, and narrow row layout.
+
+### Findings Ordered By Severity
+
+- Fixed - Low: long Top apps datasets forced every report row into the Dashboard side stack. The list now defaults to six rows and allows an explicit Show more expansion.
+- Fixed - Low: narrow usage rows could compress duration/share beside an application name. The `420px` layout assigns stable row areas for details, duration, and share.
+- Remaining - High/existing: source `apps/web/lib/api/authApi.ts` remains NUL-corrupted and blocks full web typecheck; it was not changed.
+
+### Test And Verification Status
+
+- Targeted Dashboard lint: passed.
+- Focused cache, Dashboard, Invite, and usage-table tests: passed, 8/8.
+
+### Manual QA Status
+
+- Browser desktop/mobile screenshot and interactive expansion review: not run because the current in-app Browser policy rejects the local target.
+
+### Risks And Recommendation
+
+- Pass for the scoped frontend-only interaction. Reports data is unchanged; the immediately following Domain follow-up aligns the Website usage table with the same behavior.
+- The next round can proceed; final rendered visual QA remains deferred pending the existing browser-access limitation.
+
+---
+
+## 2026-07-13 Dashboard Top Domains Progressive Disclosure QA
+
+### Reviewed Implementation
+
+- Reviewed the WebsiteUsageTable opt-in to the existing shared collapse behavior and the updated regression contract.
+
+### Findings Ordered By Severity
+
+- Fixed - Low: Top domains expanded every row even though Top apps was compact by default. Both cards now have the same six-row progressive-disclosure behavior.
+- Remaining - High/existing: source `apps/web/lib/api/authApi.ts` remains NUL-corrupted and blocks full web typecheck; it was not changed.
+
+### Test And Verification Status
+
+- Targeted Dashboard lint: passed.
+- Focused Dashboard, Invite, and usage-table tests: passed, 6/6.
+
+### Manual QA Status
+
+- Browser desktop/mobile screenshot and interactive expansion review: not run because the current in-app Browser policy rejects the local target.
+
+### Risks And Recommendation
+
+- Pass for the scoped frontend-only refinement. No reporting data or behavior changed beyond local list presentation.
+- The next round can proceed; final rendered visual QA remains deferred pending the existing browser-access limitation.
