@@ -156,7 +156,7 @@
 .wm-app-shell-editorial .wm-app-session-wrap > * {
   width: 100% !important;
   min-width: 0 !important;
-  border-radius: 4px !important;
+  border-radius: 12px !important;
   border-color: rgba(255, 255, 255, 0.16) !important;
   background: rgba(255, 255, 255, 0.07) !important;
   color: rgba(255, 255, 255, 0.78) !important;
@@ -242,7 +242,7 @@
 .wm-onboarding-page a,
 .wm-invitation-page button,
 .wm-auth-callback-page button {
-  border-radius: 4px !important;
+  border-radius: 12px !important;
 }
 
 .wm-redesign-page input,
@@ -287,40 +287,146 @@
 }
 
 /* Dashboard and insight surfaces */
-.wm-dashboard-page > section:first-of-type {
+.wm-redesign-page > .wm-dashboard-hero {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
-  padding: clamp(24px, 4vw, 42px) !important;
+  min-height: 292px;
+  padding: clamp(26px, 4vw, 46px) !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr) !important;
+  align-items: center !important;
+  gap: clamp(24px, 4vw, 58px) !important;
   border-color: var(--wm-primary) !important;
-  border-radius: 6px !important;
+  border-radius: 8px !important;
   background: var(--wm-primary) !important;
   color: #fff !important;
 }
 
-.wm-dashboard-page > section:first-of-type::after {
+.wm-redesign-page > .wm-dashboard-hero::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  width: 88px;
+  height: 5px;
+  background: var(--wm-civic-amber);
+  content: "";
+}
+
+.wm-redesign-page > .wm-dashboard-hero::after {
   position: absolute;
   top: 0;
   right: 0;
-  width: 7px;
+  z-index: -1;
+  width: 6px;
   height: 100%;
   background: var(--wm-civic-amber);
   content: "";
 }
 
-.wm-dashboard-page > section:first-of-type h1,
-.wm-dashboard-page > section:first-of-type h2,
-.wm-dashboard-page > section:first-of-type h3,
-.wm-dashboard-page > section:first-of-type p,
-.wm-dashboard-page > section:first-of-type span,
-.wm-dashboard-page > section:first-of-type strong {
-  color: inherit !important;
+.wm-dashboard-hero-copy,
+.wm-dashboard-hero-signals {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
 }
 
-.wm-dashboard-page > section:first-of-type a,
-.wm-dashboard-page > section:first-of-type button {
+.wm-dashboard-hero .wm-dashboard-hero-copy > p:first-child {
+  color: var(--wm-secondary) !important;
+}
+
+.wm-dashboard-hero .wm-dashboard-hero-copy h1 {
+  max-width: 640px;
+  color: #fff !important;
+  font-size: clamp(34px, 4vw, 56px) !important;
+  line-height: 1.02 !important;
+}
+
+.wm-dashboard-hero .wm-dashboard-hero-copy > p:not(:first-child) {
+  max-width: 650px;
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.wm-dashboard-hero-actions {
+  margin-top: 22px;
+  min-width: 0;
+  justify-content: flex-start !important;
+}
+
+.wm-dashboard-hero-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: 12px !important;
+  padding: 10px 14px;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
+}
+
+.wm-dashboard-hero-action-primary {
   border-color: var(--wm-secondary) !important;
   background: var(--wm-secondary) !important;
   color: var(--wm-primary) !important;
+}
+
+.wm-dashboard-hero-action-secondary {
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  background: transparent !important;
+  color: #fff !important;
+}
+
+.wm-dashboard-hero-action-secondary:hover {
+  border-color: var(--wm-secondary) !important;
+  background: rgba(39, 224, 162, 0.12) !important;
+}
+
+.wm-dashboard-hero-signals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(39, 224, 162, 0.36);
+  border-radius: 8px;
+  background: #121932;
+}
+
+.wm-dashboard-hero-signal {
+  min-width: 0;
+  min-height: 104px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.wm-dashboard-hero-signal span {
+  color: var(--wm-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.wm-dashboard-hero-signal strong {
+  color: #fff;
+  font-size: clamp(16px, 1.8vw, 22px);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.wm-dashboard-hero-signal small {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .wm-report-summary,
@@ -518,7 +624,7 @@
 .wm-auth-form select,
 .wm-auth-form button {
   min-height: 46px !important;
-  border-radius: 4px !important;
+  border-radius: 12px !important;
 }
 
 .wm-auth-form button {
@@ -607,7 +713,7 @@
 
 .wm-avatar-option-grid button {
   min-width: 0 !important;
-  border-radius: 4px !important;
+  border-radius: 12px !important;
 }
 
 .wm-device-boundary-grid {
@@ -878,6 +984,27 @@
     justify-content: center !important;
   }
 
+  .wm-redesign-page > .wm-dashboard-hero {
+    grid-template-columns: 1fr !important;
+    min-height: 0;
+    gap: 22px !important;
+    padding: 26px 20px !important;
+  }
+
+  .wm-dashboard-hero-actions {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    width: 100%;
+  }
+
+  .wm-dashboard-hero-actions a {
+    width: 100%;
+  }
+
+  .wm-dashboard-hero-signals {
+    width: 100%;
+  }
+
   .wm-settings-grid,
   .wm-integrations-grid,
   .wm-invite-admin-page,
@@ -948,6 +1075,10 @@
 
   .wm-avatar-option-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .wm-dashboard-hero-signals {
+    grid-template-columns: 1fr;
   }
 }
 

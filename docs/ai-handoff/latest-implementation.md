@@ -2497,3 +2497,100 @@ Apply the approved homepage visual direction to the remaining WorkMap frontend p
 ### Remaining Risk
 
 - Exact rendered spacing, text wrapping, focus appearance, and map chrome at 360/390/768/1024/1440 still require a browser session that permits the local application URL, after the existing `authApi.ts` corruption is resolved or explicitly approved for restoration.
+
+---
+
+## 2026-07-13 Workspace Navigation Loading Reduction
+
+### Original Task Brief
+
+Investigate and, only if it does not affect functionality, remove the multi-second full-page `Opening your workspace` loader shown when switching authenticated workspace tabs.
+
+### Changed Files
+
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/components/layout/appShellCache.ts`
+- `workmap/apps/web/test/app-shell-cache.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Identified two causes: `AppShell` always initialized its loading state to `true`, even when the cache already held a summary for the current Cognito subject; workspace navigation also used native anchors, forcing full document navigation.
+- A warm, current-subject cache now dismisses the AppShell loader in `useLayoutEffect` before the shell paints. The existing async authentication, current-company, current-user, platform-context, redirect, and cache-refresh flows still run unchanged in the background.
+- Replaced internal AppShell anchors with Next `Link` components. They preserve the same URLs, active-state logic, role filtering, browser link semantics, and logout behavior while allowing route prefetch/client navigation.
+- First visit, missing cache, expired/missing Cognito session, unsuccessful backend mapping, and sign-out continue to use their existing loader/redirect behavior.
+
+### Role And Access Behavior
+
+- No authorization result is sourced from the cache. Existing API auth and role/company validation remain authoritative and run on every AppShell mount.
+- No API, backend, Cognito, RBAC, tenant, navigation visibility, state payload, or business-rule behavior changed.
+
+### Verification
+
+- Focused new cache test: passed, 2/2.
+- Isolated QA copy with the valid tracked `authApi.ts`: web typecheck passed, lint passed, 40/40 web tests passed, and production build passed with 19 routes.
+- The source worktree still contains the pre-existing 410-NUL `authApi.ts` corruption, so its package-wide typecheck/lint/test/build remain independently blocked; that file was not modified.
+
+### Manual QA
+
+- Not run. The observed symptom is addressed through deterministic cache/render and internal-link behavior; browser visual QA remains subject to the existing local-browser policy block.
+
+### Intentionally Not Changed
+
+- No data requests were removed, deferred, or changed. No page-level loader, report/employee loading behavior, Virtual Office gate, or authentication redirect was altered.
+
+### Remaining Risk
+
+- A first workspace visit still correctly displays the loader while the required initial auth/context read resolves. Any remaining wait on first visit is a real authentication/network cost, not the repeated cached-tab wait addressed here.
+
+---
+
+
+---
+
+## 2026-07-13 Dashboard Hero And Rounded Button Responsive Pass
+
+### Original Task Brief
+
+Redesign the empty Dashboard banner using only genuine current workspace data. Make buttons consistently rounded across the website and prevent button text from overflowing at every responsive size, without changing product functionality.
+
+### Changed Files
+
+- `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx`
+- `workmap/apps/web/lib/theme/workmapTheme.ts`
+- `workmap/apps/web/components/ui/WorkMapButton.tsx`
+- `workmap/apps/web/app/globals.css`
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/dashboard-hero-button-layout.test.ts`
+- Handoff files.
+
+### Implementation Summary
+
+- Rebuilt the Dashboard hero as an Ink Navy workspace overview with a real signal board: Session, Presence, Device coverage, and Policy. Values are derived from the existing Dashboard state; unavailable data is labelled honestly instead of being replaced with examples.
+- Hero internal navigation now uses existing Next client routing. No action URL or role-dependent action list changed.
+- Added a shared 12px button radius token, applied it to primary/secondary/ghost/danger buttons, native button controls, styled action anchors, and mobile action layouts.
+- Added shared max-width, minimum-width, wrapping, and overflow rules for action labels. Dashboard hero actions stack to full width on narrow screens; its signal board collapses to one column at 420px.
+
+### Role And Behavior Boundaries
+
+- No Dashboard request, report calculation, permission check, data field, API call, tenant scope, route, or action handler changed.
+- The hero exposes only the same session, positions, coverage, and policy state already loaded for the Dashboard.
+
+### Verification
+
+- Focused cache and Dashboard/button responsive tests: passed, 4/4.
+- Isolated QA copy using valid tracked auth client: web typecheck passed, lint passed, 42/42 tests passed, and production build passed with 19 routes.
+- Source worktree full verification remains blocked by the existing 410-NUL `authApi.ts`; that file was not changed.
+
+### Manual QA
+
+- Not run. Browser-rendered viewport inspection remains blocked by the existing in-app local-target policy.
+
+### Intentionally Not Changed
+
+- No fake metrics, illustration, backend, auth, API, data-fetching, state-management, RBAC, or mobile business workflow was added or changed.
+
+### Remaining Risk
+
+- The automated responsive contract prevents button-label overflow in the shared design paths. Exact visual spacing on all supported physical devices still requires the final browser viewport QA session.

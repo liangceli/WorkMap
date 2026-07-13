@@ -43,9 +43,13 @@ const baseStyle = {
   alignItems: "center",
   justifyContent: "center",
   minHeight: wm.sizes.buttonHeight,
-  borderRadius: wm.radius.md,
+  borderRadius: wm.radius.button,
   padding: "10px 14px",
   textAlign: "center" as const,
+  maxWidth: "100%",
+  minWidth: 0,
+  overflowWrap: "anywhere" as const,
+  whiteSpace: "normal" as const,
   boxShadow: "none",
 };
 
@@ -54,7 +58,7 @@ const toneStyles = {
   secondary: wmStyles.secondaryButton,
   ghost: {
     border: `1px solid ${wm.colors.borderSubtle}`,
-    borderRadius: wm.radius.md,
+    borderRadius: wm.radius.button,
     background: "rgba(255, 253, 248, 0.66)",
     color: wm.colors.textSecondary,
     textDecoration: "none",
@@ -64,7 +68,7 @@ const toneStyles = {
   },
   danger: {
     border: `1px solid ${wm.colors.error}`,
-    borderRadius: wm.radius.md,
+    borderRadius: wm.radius.button,
     background: wm.colors.errorBg,
     color: wm.colors.errorText,
     textDecoration: "none",

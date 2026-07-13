@@ -1635,3 +1635,65 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 - The frontend style refactor is code-complete and passes full automated verification in an isolated copy with the valid tracked auth client.
 - Do not treat rendered visual QA as complete until `authApi.ts` is explicitly restored/fixed and a permitted browser session checks 360/390/768/1024/1440 layouts.
 - Functional boundaries are preserved; the next round may proceed only after acknowledging the existing auth-client corruption and the blocked rendered QA.
+
+---
+
+## 2026-07-13 Workspace Navigation Loading Reduction QA
+
+### Reviewed Implementation
+
+- Reviewed AppShell cache initialization, asynchronous auth/context refresh, redirect paths, role-aware navigation, and internal workspace link behavior.
+
+### Findings Ordered By Severity
+
+- Fixed - Medium: the AppShell showed a full-screen loader for every remount even when its cache had a valid summary tied to the current Cognito subject.
+- Fixed - Medium: workspace navigation used native anchors, producing a document navigation instead of the existing Next client navigation path.
+- Remaining - High/existing: `workmap/apps/web/lib/api/authApi.ts` remains 410 NUL bytes in the source worktree. It blocks normal full-package verification but is unrelated to this change and was not overwritten.
+
+### Test And Verification Status
+
+- New focused cache tests: passed, 2/2; they prove first visits retain the loader and cached tenant/platform summaries can render immediately.
+- Isolated QA web typecheck: passed.
+- Isolated QA web lint: passed.
+- Isolated QA web tests: passed, 40/40.
+- Isolated QA production build: passed, 19 routes.
+
+### Manual QA Status
+
+- Not run. No claim is made that the local browser policy block has been removed.
+
+### Risks And Recommendation
+
+- Pass for the scoped performance/UI behavior change. Existing authorization and refresh requests are still authoritative and run unchanged.
+- The next round can proceed. A first uncached visit may still show the loader by design; the repeated cached-tab loader should no longer appear.
+
+---
+
+## 2026-07-13 Dashboard Hero And Rounded Button Responsive QA
+
+### Reviewed Implementation
+
+- Reviewed Dashboard signal derivation, hero-only presentation markup, shared button tokens, global button overflow rules, and narrow-screen action/signal layout rules.
+
+### Findings Ordered By Severity
+
+- Fixed - Medium: the Dashboard hero could render as a visually empty panel because it depended on generic first-section styling. It now has an explicit hero class and a contentful real-data signal board.
+- Fixed - Medium: button geometry was inconsistent across shared and inline action paths, and narrow labels could exceed available width. Shared tokens and global safeguards now use rounded controls with bounded, wrapping labels.
+- Remaining - High/existing: source `authApi.ts` remains NUL-corrupted and blocks normal worktree full-package verification; it was not part of this change.
+
+### Test And Verification Status
+
+- Focused Dashboard/button and AppShell cache tests: passed, 4/4.
+- Isolated QA typecheck: passed.
+- Isolated QA lint: passed.
+- Isolated QA tests: passed, 42/42.
+- Isolated QA production build: passed, 19 routes.
+
+### Manual QA Status
+
+- Browser desktop/mobile screenshot and interaction review: not run because the current in-app Browser policy rejects the local target.
+
+### Risks And Recommendation
+
+- Pass for the scoped UI/refactoring change. The dashboard shows only actual state and all action behavior remains unchanged.
+- The next round can proceed. Final visual/device QA remains pending the existing browser-access limitation.

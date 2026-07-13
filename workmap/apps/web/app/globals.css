@@ -81,6 +81,18 @@ textarea {
 }
 
 button,
+input[type="button"],
+input[type="submit"],
+a[role="button"],
+a[class*="button" i] {
+  border-radius: 12px !important;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+button,
 a,
 input,
 select,

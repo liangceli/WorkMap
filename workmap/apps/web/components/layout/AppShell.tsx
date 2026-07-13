@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { getCurrentCompany } from "../../lib/api/companiesApi";
@@ -16,6 +17,7 @@ import { redirectToRootForMissingCognitoSession } from "../../lib/auth/cognitoRe
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { getUserSetupState, resetUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
+import { hasWarmAppShellCache } from "./appShellCache";
 
 type AppShellProps = {
   children: ReactNode;
@@ -72,6 +74,9 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     setApiSummary(cached?.apiSummary ?? null);
     setPlatformSummary(cached?.platformSummary ?? null);
     setCachedRole(cached?.apiSummary?.role ? toWorkflowRole(cached.apiSummary.role) : setup?.role ?? null);
+    if (hasWarmAppShellCache(cached)) {
+      setShellLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -189,17 +194,17 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
   return (
     <main className={`wm-app-shell${variant === "editorial" ? " wm-app-shell-editorial" : ""}`} style={styles.page}>
       <header className="wm-app-top-nav" style={styles.topNav}>
-        <a href="/" className="wm-app-brand" style={styles.brand}>
+        <Link href="/" className="wm-app-brand" style={styles.brand}>
           <span style={styles.logo}>WM</span>
           <span>
             <strong style={styles.brandTitle}>WorkMap</strong>
             <span style={styles.brandSub}>{contextLabel}</span>
           </span>
-        </a>
+        </Link>
 
         <nav className="wm-app-nav-links" style={styles.navLinks} aria-label="WorkMap navigation">
           {visibleItems.map((item) => (
-            <a
+            <Link
               key={item.href}
               className="wm-app-nav-link"
               href={item.href}
@@ -212,7 +217,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
             >
               <span style={styles.navGroupLabel}>{formatNavGroup(item.group)}</span>
               {item.label}
-            </a>
+            </Link>
           ))}
         </nav>
 

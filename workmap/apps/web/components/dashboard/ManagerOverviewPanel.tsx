@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { EmployeeCard } from "./EmployeeCard";
 import { AppUsageTable } from "./AppUsageTable";
 import { PrivacyNoticeCard } from "./PrivacyNoticeCard";
@@ -239,20 +240,65 @@ export function ManagerOverviewPanel() {
     ],
     [dashboardState, presenceCounts],
   );
+  const heroSignals = useMemo(
+    () => [
+      {
+        label: "Session",
+        value: dashboardState.loading
+          ? "Checking"
+          : dashboardState.authSource
+            ? formatAuthSource(dashboardState.authSource)
+            : "Sign in required",
+        detail: dashboardState.role ? `${dashboardState.role.replace(/_/g, " ")} workspace` : "Workspace access pending",
+      },
+      {
+        label: "Presence",
+        value: dashboardState.positions.length > 0 ? `${presenceCounts.active} active` : "No team rows",
+        detail: dashboardState.positions.length > 0 ? `${presenceCounts.idle} idle · ${presenceCounts.offline} offline` : "Office presence is not available yet",
+      },
+      {
+        label: "Device coverage",
+        value: dashboardState.usageSummary?.deviceCoverage
+          ? `${dashboardState.usageSummary.deviceCoverage.activeDevices24h}/${dashboardState.usageSummary.deviceCoverage.registeredDevices}`
+          : "No device rows",
+        detail: "Active / registered in the current report scope",
+      },
+      {
+        label: "Policy",
+        value: dashboardState.policyVersion ? `v${dashboardState.policyVersion}` : "Checking",
+        detail: dashboardState.policyVersion ? "Transparency policy available" : "Policy status is loading",
+      },
+    ],
+    [dashboardState, presenceCounts],
+  );
 
   return (
     <div className="wm-redesign-page wm-dashboard-page" style={styles.stack}>
-      <section style={styles.hero}>
-        <div>
+      <section className="wm-dashboard-hero" style={styles.hero}>
+        <div className="wm-dashboard-hero-copy">
           <p style={styles.eyebrow}>{journey.eyebrow}</p>
           <h1 style={styles.title}>{journey.title}</h1>
           <p style={styles.subtitle}>{journey.subtitle}</p>
+          <div className="wm-dashboard-hero-actions" style={styles.heroActions}>
+            {journey.actions.map((action) => (
+              <Link
+                key={action.href}
+                className={action.primary ? "wm-dashboard-hero-action-primary" : "wm-dashboard-hero-action-secondary"}
+                href={action.href}
+                style={action.primary ? styles.officeLink : styles.secondaryLink}
+              >
+                {action.label}
+              </Link>
+            ))}
+          </div>
         </div>
-        <div style={styles.heroActions}>
-          {journey.actions.map((action) => (
-            <a key={action.href} href={action.href} style={action.primary ? styles.officeLink : styles.secondaryLink}>
-              {action.label}
-            </a>
+        <div className="wm-dashboard-hero-signals" aria-label="Workspace signal overview">
+          {heroSignals.map((signal) => (
+            <article key={signal.label} className="wm-dashboard-hero-signal">
+              <span>{signal.label}</span>
+              <strong>{signal.value}</strong>
+              <small>{signal.detail}</small>
+            </article>
           ))}
         </div>
       </section>
