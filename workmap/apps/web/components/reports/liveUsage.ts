@@ -15,8 +15,8 @@ export function mergeLiveUsage(
   }
   if (summary.scope === "user" && liveStatus.scope === "user" && summary.userId === liveStatus.userId) {
     const status = liveStatus.agentStatus;
-    const currentActiveSeconds = status?.state === "online" ? status.currentAppActiveSeconds ?? 0 : 0;
-    const currentIdleSeconds = status?.state === "online" ? status.currentAppFocusedIdleSeconds ?? 0 : 0;
+    const currentActiveSeconds = status?.state === "running" ? status.currentAppActiveSeconds ?? 0 : 0;
+    const currentIdleSeconds = status?.state === "running" ? status.currentAppFocusedIdleSeconds ?? 0 : 0;
     const apps = status?.currentAppName && Math.max(currentActiveSeconds, currentIdleSeconds) >= MINIMUM_LIVE_DURATION_SECONDS
       ? [{ appName: status.currentAppName, activeSeconds: currentActiveSeconds, focusedIdleSeconds: currentIdleSeconds }]
       : [];

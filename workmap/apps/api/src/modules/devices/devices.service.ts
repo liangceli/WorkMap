@@ -1,5 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { ActivityEventSource, ActivityEventType, AgentSessionEndReason, DeviceClientType, DeviceOS } from "@prisma/client";
+import {
+  ActivityEventSource,
+  ActivityEventType,
+  AgentSessionEndReason,
+  DeviceClientType,
+  DeviceOS,
+  DeviceStatus,
+  DeviceStatusConfidence,
+  DeviceStatusReason,
+} from "@prisma/client";
 import { canViewDeviceHealth, type RequestContext } from "@workmap/auth";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -7,7 +16,13 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const DEVICE_OS_VALUES = new Set<string>(Object.values(DeviceOS));
 const MAX_HOSTNAME_LENGTH = 120;
 const MAX_AGENT_VERSION_LENGTH = 80;
+const MAX_TIME_ZONE_LENGTH = 80;
+const MAX_STATUS_METADATA_KEYS = new Set(["operation", "networkState", "agentVersion"]);
+const MAX_STATUS_METADATA_VALUE_LENGTH = 120;
 export const BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS = 90_000;
+
+const DEVICE_STATUS_VALUES = new Set<string>(Object.values(DeviceStatus));
+const DEVICE_STATUS_REASON_VALUES = new Set<string>(Object.values(DeviceStatusReason));
 
 @Injectable()
 export class DevicesService {
@@ -137,6 +152,7 @@ export class DevicesService {
       if (!session) throw new ForbiddenException("Agent session is not active for this device.");
 
       const currentActivity = readCurrentActivity(body.currentActivity);
+      const sequenceNumber = readOptionalSequenceNumber(body.sequenceNumber);
       await this.prisma.agentSession.update({
         where: { id: session.id },
         data: {
@@ -145,8 +161,21 @@ export class DevicesService {
           currentAppStartedAt: currentActivity?.startedAt ?? null,
           currentAppLastObservedAt: currentActivity?.lastObservedAt ?? null,
           currentAppIsIdle: currentActivity?.isIdle ?? false,
+          timeZone: readOptionalTimeZone(body.timeZone) ?? undefined,
         },
       });
+      if (sequenceNumber !== null) {
+        await this.prisma.agentSession.updateMany({
+          where: {
+            id: session.id,
+            OR: [
+              { lastSequenceNumber: null },
+              { lastSequenceNumber: { lt: sequenceNumber } },
+            ],
+          },
+          data: { lastSequenceNumber: sequenceNumber },
+        });
+      }
     }
 
     return { ...toDeviceRegistrationResponse(updatedDevice), sessionId: sessionId ?? null };
@@ -167,19 +196,54 @@ export class DevicesService {
       if (previous) {
         await tx.agentSession.update({
           where: { id: previous.id },
-          data: { endedAt: previous.lastHeartbeatAt, endReason: AgentSessionEndReason.UNEXPECTED_STOP },
+          data: { endedAt: previous.lastHeartbeatAt, endReason: AgentSessionEndReason.UNKNOWN_INTERRUPTED },
+        });
+        await tx.deviceStatusEvent.create({
+          data: {
+            companyId: context.companyId,
+            userId: context.userId,
+            deviceId,
+            agentSessionId: previous.id,
+            status: DeviceStatus.UNKNOWN_INTERRUPTED,
+            reason: DeviceStatusReason.AGENT_RESTART,
+            startedAt: previous.lastHeartbeatAt,
+            endedAt: previous.lastHeartbeatAt,
+            lastHeartbeatAt: previous.lastHeartbeatAt,
+            recordedAt: now,
+            source: DeviceClientType.DESKTOP_AGENT,
+            confidence: DeviceStatusConfidence.INFERRED,
+          },
         });
       }
-      return tx.agentSession.create({
+      const created = await tx.agentSession.create({
         data: {
           companyId: context.companyId,
           userId: context.userId,
           deviceId,
           agentVersion: sanitizeOptionalText(body.agentVersion, MAX_AGENT_VERSION_LENGTH) ?? device.agentVersion,
+          clientSessionId: readOptionalUuid(body.clientSessionId, "clientSessionId"),
+          timeZone: readOptionalTimeZone(body.timeZone),
           startedAt: now,
           lastHeartbeatAt: now,
         },
       });
+      await tx.deviceStatusEvent.create({
+        data: {
+          companyId: context.companyId,
+          userId: context.userId,
+          deviceId,
+          agentSessionId: created.id,
+          status: previous ? DeviceStatus.RESTARTED : DeviceStatus.RUNNING,
+          reason: previous ? DeviceStatusReason.AGENT_RESTART : DeviceStatusReason.AGENT_STARTED,
+          startedAt: now,
+          lastHeartbeatAt: now,
+          recordedAt: now,
+          source: DeviceClientType.DESKTOP_AGENT,
+          timeZone: created.timeZone,
+          confidence: DeviceStatusConfidence.CONFIRMED,
+        },
+      });
+      return created;
     });
 
     return { sessionId: session.id, startedAt: session.startedAt.toISOString() };
@@ -197,19 +261,114 @@ export class DevicesService {
     if (session.endedAt) return { sessionId, endedAt: session.endedAt.toISOString(), endReason: session.endReason };
 
     const endedAt = new Date();
+    const stop = readStopReason(body.reason);
     const updated = await this.prisma.agentSession.update({
       where: { id: session.id },
       data: {
         endedAt,
         lastHeartbeatAt: endedAt,
-        endReason: AgentSessionEndReason.GRACEFUL_SHUTDOWN,
+        endReason: stop.endReason,
         currentAppName: null,
         currentAppStartedAt: null,
         currentAppLastObservedAt: null,
         currentAppIsIdle: false,
       },
     });
+    await this.prisma.deviceStatusEvent.create({
+      data: {
+        companyId: context.companyId,
+        userId: context.userId,
+        deviceId,
+        agentSessionId: session.id,
+        status: stop.status,
+        reason: stop.reason,
+        startedAt: endedAt,
+        endedAt,
+        lastHeartbeatAt: endedAt,
+        recordedAt: endedAt,
+        source: DeviceClientType.DESKTOP_AGENT,
+        timeZone: readOptionalTimeZone(body.timeZone) ?? session.timeZone,
+        confidence: stop.confidence,
+      },
+    });
     return { sessionId, endedAt: updated.endedAt?.toISOString() ?? endedAt.toISOString(), endReason: updated.endReason };
+  }
+
+  async recordDeviceStatus(context: RequestContext, input: unknown, clientType: DeviceClientType) {
+    const body = readObject(input, "Device status body must be an object.");
+    const deviceId = readRequiredUuid(body.deviceId, "deviceId");
+    await this.findActiveDevice(context, deviceId);
+    const status = readDeviceStatus(body.status);
+    const reason = readDeviceStatusReason(body.reason);
+    const now = new Date();
+    const recordedAt = readOptionalDate(body.recordedAt, "recordedAt") ?? now;
+    const startedAt = readOptionalDate(body.startedAt, "startedAt") ?? recordedAt;
+    const endedAt = readOptionalDate(body.endedAt, "endedAt");
+    const lastHeartbeatAt = readOptionalDate(body.lastHeartbeatAt, "lastHeartbeatAt");
+    assertStatusTiming({ now, startedAt, endedAt, recordedAt, lastHeartbeatAt });
+    const agentSessionId = readOptionalUuid(body.sessionId, "sessionId");
+    const clientEventId = readOptionalUuid(body.clientEventId, "clientEventId");
+
+    const session = agentSessionId
+      ? await this.prisma.agentSession.findFirst({
+        where: { id: agentSessionId, companyId: context.companyId, userId: context.userId, deviceId },
+        select: { id: true, endedAt: true, endReason: true },
+      })
+      : null;
+    if (agentSessionId && !session) throw new ForbiddenException("Agent session is not visible for this device.");
+
+    let event;
+    try {
+      event = await this.prisma.deviceStatusEvent.create({
+        data: {
+          companyId: context.companyId,
+          userId: context.userId,
+          deviceId,
+          agentSessionId,
+          clientEventId,
+          status,
+          reason,
+          startedAt,
+          endedAt,
+          lastHeartbeatAt,
+          recordedAt,
+          source: clientType,
+          timeZone: readOptionalTimeZone(body.timeZone),
+          confidence: body.confidence === "INFERRED" ? DeviceStatusConfidence.INFERRED : DeviceStatusConfidence.CONFIRMED,
+          metadata: readStatusMetadata(body.metadata),
+        },
+      });
+    } catch (error) {
+      if (!clientEventId || !isPrismaUniqueError(error)) throw error;
+      const existing = await this.prisma.deviceStatusEvent.findFirst({
+        where: { companyId: context.companyId, source: clientType, clientEventId },
+      });
+      if (!existing) throw error;
+      event = existing;
+    }
+
+    if (status === DeviceStatus.RUNNING || status === DeviceStatus.RECONNECTED) {
+      await this.prisma.device.update({ where: { id: deviceId }, data: { lastSeenAt: now } });
+    }
+
+    const endReason = sessionEndReasonForDeviceStatus(status);
+    if (session && endReason && (!session.endedAt || session.endReason === AgentSessionEndReason.UNKNOWN_INTERRUPTED)) {
+      const finalAt = endedAt ?? recordedAt;
+      await this.prisma.agentSession.update({
+        where: { id: session.id },
+        data: {
+          endedAt: session.endedAt ?? finalAt,
+          lastHeartbeatAt: session.endedAt ? undefined : lastHeartbeatAt ?? finalAt,
+          endReason,
+          currentAppName: null,
+          currentAppStartedAt: null,
+          currentAppLastObservedAt: null,
+          currentAppIsIdle: false,
+        },
+      });
+    }
+
+    return toStatusEventResponse(event);
   }
 
   private async findActiveDevice(context: RequestContext, deviceId: string) {
@@ -266,6 +425,14 @@ function readOptionalUuid(value: unknown, label: string) {
   return readRequiredUuid(value, label);
 }
 
+function readOptionalSequenceNumber(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 2_147_483_647) {
+    throw new BadRequestException("sequenceNumber must be a non-negative integer.");
+  }
+  return value;
+}
+
 function readRequiredUuid(value: unknown, label: string) {
   if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
     throw new BadRequestException(`${label} must be a UUID.`);
@@ -285,6 +452,160 @@ function sanitizeOptionalText(value: unknown, maxLength: number) {
 
   const sanitized = replaceControlCharacters(value).replace(/\s+/g, " ").trim();
   return sanitized ? sanitized.slice(0, maxLength) : undefined;
+}
+
+function readOptionalTimeZone(value: unknown) {
+  const timeZone = sanitizeOptionalText(value, MAX_TIME_ZONE_LENGTH);
+  if (!timeZone) return undefined;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone });
+    return timeZone;
+  } catch {
+    throw new BadRequestException("timeZone must be a valid IANA time zone.");
+  }
+}
+
+function readOptionalDate(value: unknown, label: string) {
+  if (value === undefined || value === null || value === "") return null;
+  return readRequiredDate(value, label);
+}
+
+function readDeviceStatus(value: unknown) {
+  if (typeof value !== "string" || !DEVICE_STATUS_VALUES.has(value)) {
+    throw new BadRequestException("status must be a supported device status.");
+  }
+  return value as DeviceStatus;
+}
+
+function readDeviceStatusReason(value: unknown) {
+  if (typeof value !== "string" || !DEVICE_STATUS_REASON_VALUES.has(value)) {
+    throw new BadRequestException("reason must be a supported device status reason.");
+  }
+  return value as DeviceStatusReason;
+}
+
+function readStatusMetadata(value: unknown) {
+  if (value === undefined || value === null) return undefined;
+  const body = readObject(value, "metadata must be an object.");
+  const metadata: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(body)) {
+    if (!MAX_STATUS_METADATA_KEYS.has(key) || typeof entry !== "string") continue;
+    const safe = sanitizeOptionalText(entry, MAX_STATUS_METADATA_VALUE_LENGTH);
+    if (safe) metadata[key] = safe;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function assertStatusTiming(input: {
+  now: Date;
+  startedAt: Date;
+  endedAt: Date | null;
+  recordedAt: Date;
+  lastHeartbeatAt: Date | null;
+}) {
+  const maxFutureMs = input.now.getTime() + 5 * 60_000;
+  const minAgeMs = input.now.getTime() - 31 * 24 * 60 * 60 * 1_000;
+  for (const value of [input.startedAt, input.endedAt, input.recordedAt, input.lastHeartbeatAt]) {
+    if (!value) continue;
+    if (value.getTime() < minAgeMs || value.getTime() > maxFutureMs) {
+      throw new BadRequestException("Device status timestamp is outside the accepted clock window.");
+    }
+  }
+  if (input.endedAt && input.endedAt.getTime() < input.startedAt.getTime()) {
+    throw new BadRequestException("Device status endedAt cannot precede startedAt.");
+  }
+}
+
+function sessionEndReasonForDeviceStatus(status: DeviceStatus) {
+  switch (status) {
+    case DeviceStatus.STOPPED_BY_USER: return AgentSessionEndReason.USER_STOP;
+    case DeviceStatus.DEVICE_SHUTDOWN: return AgentSessionEndReason.DEVICE_SHUTDOWN;
+    case DeviceStatus.AGENT_CRASHED: return AgentSessionEndReason.AGENT_CRASHED;
+    case DeviceStatus.AGENT_TERMINATED: return AgentSessionEndReason.AGENT_TERMINATED;
+    case DeviceStatus.UNKNOWN_INTERRUPTED: return AgentSessionEndReason.UNKNOWN_INTERRUPTED;
+    default: return null;
+  }
+}
+
+function readStopReason(value: unknown) {
+  switch (value) {
+    case "USER_STOP":
+      return {
+        endReason: AgentSessionEndReason.USER_STOP,
+        status: DeviceStatus.STOPPED_BY_USER,
+        reason: DeviceStatusReason.USER_STOP,
+        confidence: DeviceStatusConfidence.CONFIRMED,
+      };
+    case "DEVICE_SHUTDOWN":
+      return {
+        endReason: AgentSessionEndReason.DEVICE_SHUTDOWN,
+        status: DeviceStatus.DEVICE_SHUTDOWN,
+        reason: DeviceStatusReason.SYSTEM_SHUTDOWN,
+        confidence: DeviceStatusConfidence.CONFIRMED,
+      };
+    case "SUSPENDED":
+      return {
+        endReason: AgentSessionEndReason.SUSPENDED,
+        status: DeviceStatus.SLEEPING,
+        reason: DeviceStatusReason.SYSTEM_SUSPEND,
+        confidence: DeviceStatusConfidence.CONFIRMED,
+      };
+    case "AGENT_CRASHED":
+      return {
+        endReason: AgentSessionEndReason.AGENT_CRASHED,
+        status: DeviceStatus.AGENT_CRASHED,
+        reason: DeviceStatusReason.PROCESS_CRASH,
+        confidence: DeviceStatusConfidence.CONFIRMED,
+      };
+    case "AGENT_TERMINATED":
+      return {
+        endReason: AgentSessionEndReason.AGENT_TERMINATED,
+        status: DeviceStatus.AGENT_TERMINATED,
+        reason: DeviceStatusReason.PROCESS_TERMINATED,
+        confidence: DeviceStatusConfidence.CONFIRMED,
+      };
+    default:
+      return {
+        endReason: AgentSessionEndReason.GRACEFUL_SHUTDOWN,
+        status: DeviceStatus.UNKNOWN_INTERRUPTED,
+        reason: DeviceStatusReason.UNKNOWN,
+        confidence: DeviceStatusConfidence.INFERRED,
+      };
+  }
+}
+
+function toStatusEventResponse(event: {
+  id: string;
+  status: DeviceStatus;
+  reason: DeviceStatusReason;
+  startedAt: Date;
+  endedAt: Date | null;
+  lastHeartbeatAt: Date | null;
+  recordedAt: Date;
+  receivedAt: Date;
+  source: DeviceClientType;
+  timeZone: string | null;
+  confidence: DeviceStatusConfidence;
+}) {
+  return {
+    statusEvent: {
+      id: event.id,
+      status: event.status,
+      reason: event.reason,
+      startedAt: event.startedAt.toISOString(),
+      endedAt: event.endedAt?.toISOString() ?? null,
+      lastHeartbeatAt: event.lastHeartbeatAt?.toISOString() ?? null,
+      recordedAt: event.recordedAt.toISOString(),
+      receivedAt: event.receivedAt.toISOString(),
+      source: event.source,
+      timeZone: event.timeZone,
+      confidence: event.confidence,
+    },
+  };
+}
+
+function isPrismaUniqueError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }
 
 function readCurrentActivity(value: unknown) {

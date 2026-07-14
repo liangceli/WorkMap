@@ -38,7 +38,7 @@ test("live Agent polling sends selected employee and report range", async () => 
   let requestedUrl = "";
   globalThis.fetch = async (input) => {
     requestedUrl = String(input);
-    return new Response(JSON.stringify({ userId: "11111111-1111-4111-8111-111111111111", agentStatus: { state: "online" } }), {
+    return new Response(JSON.stringify({ userId: "11111111-1111-4111-8111-111111111111", agentStatus: { state: "running" } }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

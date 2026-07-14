@@ -1,4 +1,4 @@
-import type { AgentConfig, AppUsageEvent, CurrentAppActivity } from "./types.js";
+import type { AgentConfig, AppUsageEvent, CurrentAppActivity, DeviceStatusEvent } from "./types.js";
 
 export class AgentApiError extends Error {
   constructor(message: string, readonly status?: number, readonly responseMessage?: string) { super(message); }
@@ -31,25 +31,43 @@ export async function exchangePairingCode(apiBaseUrl: string, code: string, agen
   }, 30_000);
 }
 
-export function startAgentSession(config: AgentConfig) {
+export function startAgentSession(config: AgentConfig, clientSessionId?: string, timeZone?: string) {
   return requestJson<{ sessionId: string; startedAt: string }>(config.apiBaseUrl, "/device-client/session/start", config.credential, {
     agentVersion: config.agentVersion,
+    ...(clientSessionId ? { clientSessionId } : {}),
+    ...(timeZone ? { timeZone } : {}),
   }, 10_000, { retries: 2 });
 }
 
-export function stopAgentSession(config: AgentConfig, sessionId: string) {
-  return requestJson(config.apiBaseUrl, "/device-client/session/stop", config.credential, { sessionId }, 10_000, { retries: 1 });
+export function stopAgentSession(config: AgentConfig, sessionId: string, reason?: string, timeZone?: string) {
+  return requestJson(config.apiBaseUrl, "/device-client/session/stop", config.credential, {
+    sessionId,
+    ...(reason ? { reason } : {}),
+    ...(timeZone ? { timeZone } : {}),
+  }, 10_000, { retries: 1 });
 }
 
-export function sendHeartbeat(config: AgentConfig, sessionId?: string, currentActivity?: CurrentAppActivity | null) {
+export function sendHeartbeat(
+  config: AgentConfig,
+  sessionId?: string,
+  currentActivity?: CurrentAppActivity | null,
+  sequenceNumber?: number,
+  timeZone?: string,
+) {
   return requestJson(config.apiBaseUrl, "/device-client/heartbeat", config.credential, {
     agentVersion: config.agentVersion,
     ...(sessionId ? { sessionId, currentActivity: currentActivity ?? null } : {}),
+    ...(sequenceNumber !== undefined ? { sequenceNumber } : {}),
+    ...(timeZone ? { timeZone } : {}),
   }, 10_000, { retries: 2 });
 }
 
 export function sendAppUsage(config: AgentConfig, events: AppUsageEvent[]) {
   return requestJson<{ accepted: number }>(config.apiBaseUrl, "/device-client/app-usage", config.credential, { events }, 10_000, { retries: 2 });
+}
+
+export function sendDeviceStatus(config: AgentConfig, event: DeviceStatusEvent) {
+  return requestJson(config.apiBaseUrl, "/device-client/status-event", config.credential, event, 10_000, { retries: 1 });
 }
 
 export function isInactiveAgentSessionError(error: unknown) {

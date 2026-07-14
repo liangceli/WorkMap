@@ -283,15 +283,31 @@ export type WorkMapApiUsageSummary = {
     coverageRestoredAt: string | null;
   }>;
   agentStatus: null | {
-    state: "not_paired" | "online" | "stopped" | "interrupted";
+    state:
+      | "not_paired"
+      | "running"
+      | "stopped_by_user"
+      | "network_offline"
+      | "device_shutdown"
+      | "sleeping"
+      | "locked"
+      | "agent_crashed"
+      | "agent_terminated"
+      | "server_unreachable"
+      | "unknown_interrupted";
     sessionId?: string;
     deviceId?: string;
     hostname?: string | null;
     agentVersion?: string | null;
     startedAt?: string;
     lastHeartbeatAt?: string;
+    heartbeatAgeSeconds?: number;
+    isFresh?: boolean;
     endedAt?: string | null;
-    endReason?: "GRACEFUL_SHUTDOWN" | "UNEXPECTED_STOP" | null;
+    endReason?: "GRACEFUL_SHUTDOWN" | "UNEXPECTED_STOP" | "USER_STOP" | "DEVICE_SHUTDOWN" | "SUSPENDED" | "AGENT_CRASHED" | "AGENT_TERMINATED" | "UNKNOWN_INTERRUPTED" | null;
+    statusReason?: "AGENT_STARTED" | "USER_STOP" | "SYSTEM_SHUTDOWN" | "SYSTEM_SUSPEND" | "SYSTEM_RESUME" | "SYSTEM_LOCK" | "SYSTEM_UNLOCK" | "NETWORK_UNAVAILABLE" | "SERVER_REQUEST_FAILED" | "PROCESS_CRASH" | "PROCESS_TERMINATED" | "HEARTBEAT_TIMEOUT" | "AGENT_RESTART" | "UNKNOWN" | null;
+    statusConfidence?: "CONFIRMED" | "INFERRED" | null;
+    statusRecordedAt?: string | null;
     currentAppName?: string | null;
     currentAppStartedAt?: string | null;
     currentAppActiveSeconds?: number;
@@ -303,7 +319,22 @@ export type WorkMapApiUsageSummary = {
     startedAt: string;
     lastHeartbeatAt: string;
     endedAt: string | null;
-    endReason: "GRACEFUL_SHUTDOWN" | "UNEXPECTED_STOP" | null;
+    endReason: "GRACEFUL_SHUTDOWN" | "UNEXPECTED_STOP" | "USER_STOP" | "DEVICE_SHUTDOWN" | "SUSPENDED" | "AGENT_CRASHED" | "AGENT_TERMINATED" | "UNKNOWN_INTERRUPTED" | null;
+  }>;
+  deviceStatusHistory: Array<{
+    id: string;
+    deviceId: string;
+    agentSessionId: string | null;
+    status: "RUNNING" | "STOPPED_BY_USER" | "NETWORK_OFFLINE" | "DEVICE_SHUTDOWN" | "SLEEPING" | "LOCKED" | "AGENT_CRASHED" | "AGENT_TERMINATED" | "SERVER_UNREACHABLE" | "UNKNOWN_INTERRUPTED" | "RECONNECTED" | "RESTARTED";
+    reason: "AGENT_STARTED" | "USER_STOP" | "SYSTEM_SHUTDOWN" | "SYSTEM_SUSPEND" | "SYSTEM_RESUME" | "SYSTEM_LOCK" | "SYSTEM_UNLOCK" | "NETWORK_UNAVAILABLE" | "SERVER_REQUEST_FAILED" | "PROCESS_CRASH" | "PROCESS_TERMINATED" | "HEARTBEAT_TIMEOUT" | "AGENT_RESTART" | "UNKNOWN";
+    startedAt: string;
+    endedAt: string | null;
+    lastHeartbeatAt: string | null;
+    recordedAt: string;
+    receivedAt: string;
+    source: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+    timeZone: string | null;
+    confidence: "CONFIRMED" | "INFERRED";
   }>;
   appTimeline: Array<{
     appName: string;

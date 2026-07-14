@@ -41,6 +41,49 @@ enum DeviceClientType {
 enum AgentSessionEndReason {
   GRACEFUL_SHUTDOWN
   UNEXPECTED_STOP
+  USER_STOP
+  DEVICE_SHUTDOWN
+  SUSPENDED
+  AGENT_CRASHED
+  AGENT_TERMINATED
+  UNKNOWN_INTERRUPTED
+}
+
+enum DeviceStatus {
+  RUNNING
+  STOPPED_BY_USER
+  NETWORK_OFFLINE
+  DEVICE_SHUTDOWN
+  SLEEPING
+  LOCKED
+  AGENT_CRASHED
+  AGENT_TERMINATED
+  SERVER_UNREACHABLE
+  UNKNOWN_INTERRUPTED
+  RECONNECTED
+  RESTARTED
+}
+
+enum DeviceStatusReason {
+  AGENT_STARTED
+  USER_STOP
+  SYSTEM_SHUTDOWN
+  SYSTEM_SUSPEND
+  SYSTEM_RESUME
+  SYSTEM_LOCK
+  SYSTEM_UNLOCK
+  NETWORK_UNAVAILABLE
+  SERVER_REQUEST_FAILED
+  PROCESS_CRASH
+  PROCESS_TERMINATED
+  HEARTBEAT_TIMEOUT
+  AGENT_RESTART
+  UNKNOWN
+}
+
+enum DeviceStatusConfidence {
+  CONFIRMED
+  INFERRED
 }
 
 enum ActivityEventType {
@@ -132,6 +175,7 @@ model Company {
   devicePairingCodes DevicePairingCode[]
   deviceCredentials  DeviceCredential[]
   agentSessions      AgentSession[]
+  deviceStatusEvents DeviceStatusEvent[]
   notices            Notice[]
 }
 
@@ -176,6 +220,7 @@ model User {
   devicePairingCodes     DevicePairingCode[]
   deviceCredentials      DeviceCredential[]
   agentSessions          AgentSession[]
+  deviceStatusEvents     DeviceStatusEvent[]
   noticesSent            Notice[]                @relation("NoticeActor")
   noticesReceived        Notice[]                @relation("NoticeRecipient")
 
@@ -239,6 +284,7 @@ model Device {
   pairingCodes   DevicePairingCode[]
   credentials    DeviceCredential[]
   agentSessions  AgentSession[]
+  statusEvents   DeviceStatusEvent[]
 
   @@index([companyId, userId])
   @@index([companyId, lastSeenAt])
@@ -288,6 +334,9 @@ model AgentSession {
   userId                   String                 @db.Uuid
   deviceId                 String                 @db.Uuid
   agentVersion             String?
+  clientSessionId          String?
+  timeZone                 String?
+  lastSequenceNumber       Int?
   startedAt                DateTime               @default(now())
   lastHeartbeatAt          DateTime               @default(now())
   endedAt                  DateTime?
@@ -301,10 +350,13 @@ model AgentSession {
   company                  Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user                     User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   device                   Device                 @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  activityEvents           ActivityEvent[]
+  statusEvents             DeviceStatusEvent[]
 
   @@index([companyId, userId, startedAt])
   @@index([companyId, deviceId, endedAt])
   @@index([companyId, lastHeartbeatAt])
+  @@index([companyId, deviceId, clientSessionId])
 }
 
 model ActivityEvent {
@@ -312,7 +364,12 @@ model ActivityEvent {
   companyId       String              @db.Uuid
   userId          String              @db.Uuid
   deviceId        String              @db.Uuid
+  agentSessionId  String?             @db.Uuid
   clientEventId   String?
+  clientInstanceId String?
+  sequenceNumber  Int?
+  clientMonotonicMs BigInt?
+  timeZone        String?
   source          ActivityEventSource @default(DESKTOP_AGENT)
   eventType       ActivityEventType
   appName         String?
@@ -323,17 +380,52 @@ model ActivityEvent {
   startedAt       DateTime
   endedAt         DateTime?
   durationSeconds Int?
+  receivedAt      DateTime            @default(now())
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   device          Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  agentSession    AgentSession?       @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, source, clientEventId])
   @@index([companyId, userId, startedAt])
   @@index([companyId, deviceId, startedAt])
   @@index([companyId, source, startedAt])
   @@index([companyId, eventType, startedAt])
+  @@index([companyId, userId, deviceId, agentSessionId, startedAt])
+  @@index([companyId, deviceId, source, sequenceNumber])
+}
+
+model DeviceStatusEvent {
+  id              String                 @id @default(uuid()) @db.Uuid
+  companyId       String                 @db.Uuid
+  userId          String                 @db.Uuid
+  deviceId        String                 @db.Uuid
+  agentSessionId  String?                @db.Uuid
+  clientEventId   String?
+  status          DeviceStatus
+  reason          DeviceStatusReason
+  startedAt       DateTime
+  endedAt         DateTime?
+  lastHeartbeatAt DateTime?
+  recordedAt      DateTime
+  receivedAt      DateTime               @default(now())
+  source          DeviceClientType
+  timeZone        String?
+  confidence      DeviceStatusConfidence @default(CONFIRMED)
+  metadata        Json?
+  createdAt       DateTime               @default(now())
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device          Device                 @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  agentSession    AgentSession?          @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, userId, recordedAt])
+  @@index([companyId, deviceId, recordedAt])
+  @@index([companyId, agentSessionId, recordedAt])
+  @@index([companyId, status, recordedAt])
+  @@unique([companyId, source, clientEventId])
 }
 
 model AppUsageSummary {

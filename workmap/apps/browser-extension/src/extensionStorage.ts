@@ -15,24 +15,63 @@ export type ExtensionStatus = {
   state: "unpaired" | "pairing" | "connected" | "offline" | "auth_required" | "error";
   lastHeartbeatAt?: string;
   lastUploadAt?: string;
+  lastStatusUploadAt?: string;
   queuedEvents: number;
+  queuedStatusEvents?: number;
+  deviceStatus?: ExtensionDeviceStatusName;
   error?: string;
 };
 
 export type QueuedDomainEvent = { event: DomainUsageEvent; attempts: number; nextAttemptAtMs: number; createdAtMs: number };
+
+export type ExtensionDeviceStatusName =
+  | "RUNNING"
+  | "NETWORK_OFFLINE"
+  | "LOCKED"
+  | "SERVER_UNREACHABLE"
+  | "RECONNECTED";
+
+export type ExtensionDeviceStatusReason =
+  | "AGENT_STARTED"
+  | "NETWORK_UNAVAILABLE"
+  | "SYSTEM_LOCK"
+  | "SYSTEM_UNLOCK"
+  | "SERVER_REQUEST_FAILED"
+  | "UNKNOWN";
+
+export type ExtensionDeviceStatusEvent = {
+  clientEventId: string;
+  deviceId: string;
+  status: ExtensionDeviceStatusName;
+  reason: ExtensionDeviceStatusReason;
+  startedAt: string;
+  recordedAt: string;
+  lastHeartbeatAt?: string;
+  timeZone: string;
+  confidence: "CONFIRMED" | "INFERRED";
+  metadata?: { operation?: string; networkState?: string; agentVersion?: string };
+};
+
+export type QueuedExtensionStatusEvent = {
+  event: ExtensionDeviceStatusEvent;
+  attempts: number;
+  nextAttemptAtMs: number;
+  createdAtMs: number;
+};
 
 type StoredState = {
   workmapConfig?: PersistedExtensionConfig;
   workmapStatus?: ExtensionStatus;
   workmapTracker?: DomainTrackerSnapshot;
   workmapQueue?: QueuedDomainEvent[];
+  workmapStatusQueue?: QueuedExtensionStatusEvent[];
 };
 
 declare const chrome: {
   storage: { local: { get(keys: string[] | string, callback: (items: StoredState) => void): void; set(items: StoredState, callback?: () => void): void } };
 };
 
-export function readStoredState(keys: (keyof StoredState)[]) {
+export function readStoredState(keys: readonly (keyof StoredState)[]) {
   return new Promise<StoredState>((resolve) => chrome.storage.local.get(keys as string[], resolve));
 }
 
@@ -87,6 +126,29 @@ export function enqueueDomainEvents(queue: QueuedDomainEvent[], events: DomainUs
 }
 
 export function retryDomainEvents(queue: QueuedDomainEvent[], ids: Set<string>, nowMs = Date.now()) {
+  return queue.map((item) => {
+    if (!ids.has(item.event.clientEventId)) return item;
+    const attempts = item.attempts + 1;
+    return { ...item, attempts, nextAttemptAtMs: nowMs + Math.min(5 * 60_000, 5_000 * 2 ** Math.min(attempts, 6)) };
+  });
+}
+
+export function normalizeStatusQueue(queue: QueuedExtensionStatusEvent[] | undefined, nowMs = Date.now()) {
+  return (queue ?? []).filter((item) => item.createdAtMs >= nowMs - MAX_EXTENSION_QUEUE_AGE_MS).slice(-MAX_EXTENSION_QUEUE);
+}
+
+export function enqueueStatusEvent(
+  queue: QueuedExtensionStatusEvent[],
+  event: ExtensionDeviceStatusEvent,
+  nowMs = Date.now(),
+) {
+  if (!queue.some((item) => item.event.clientEventId === event.clientEventId)) {
+    queue.push({ event, attempts: 0, nextAttemptAtMs: nowMs, createdAtMs: nowMs });
+  }
+  return queue.slice(-MAX_EXTENSION_QUEUE);
+}
+
+export function retryStatusEvents(queue: QueuedExtensionStatusEvent[], ids: Set<string>, nowMs = Date.now()) {
   return queue.map((item) => {
     if (!ids.has(item.event.clientEventId)) return item;
     const attempts = item.attempts + 1;

@@ -32,6 +32,16 @@ export class DeviceClientController {
     return this.devices.recordHeartbeat(toRequestContext(context), { ...readBody(body), deviceId: context.deviceId }, context.clientType);
   }
 
+  @Post("status-event")
+  @UseGuards(DeviceCredentialGuard)
+  statusEvent(@CurrentDeviceContext() context: DeviceRequestContext, @Body() body: unknown) {
+    return this.devices.recordDeviceStatus(
+      toRequestContext(context),
+      { ...readBody(body), deviceId: context.deviceId },
+      context.clientType,
+    );
+  }
+
   @Post("session/start")
   @UseGuards(DeviceCredentialGuard)
   startSession(@CurrentDeviceContext() context: DeviceRequestContext, @Body() body: unknown) {

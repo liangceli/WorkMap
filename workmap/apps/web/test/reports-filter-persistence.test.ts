@@ -17,7 +17,7 @@ test("new company reports default to the UTC reporting day and all departments",
   });
 });
 
-test("report filters survive remounts and stay isolated per signed-in user", () => {
+test("report scope and department survive remounts while dates reset to the current reporting day", () => {
   withLocalStorage(() => {
     const saved = {
       view: "company" as const,
@@ -33,7 +33,11 @@ test("report filters survive remounts and stay isolated per signed-in user", () 
         userIds: [],
         departmentIds: ["department-1"],
       }),
-      saved,
+      {
+        ...saved,
+        from: "2026-07-07",
+        to: "2026-07-07",
+      },
     );
     assert.deepEqual(
       restoreReportFilters("owner-2", defaultReportFilters("company", "2026-07-07"), {
@@ -58,16 +62,15 @@ test("stored views outside the current role or directory fall back safely", () =
   });
 });
 
-test("a locally persisted next-day filter falls back before the UTC reporting day starts", () => {
+test("a historical persisted date range never carries forward to a newly opened report", () => {
   withLocalStorage(() => {
-    const fallback = defaultReportFilters("company", "2026-07-13");
-    persistReportFilters("owner-utc", { view: "company", departmentId: "", from: "2026-07-14", to: "2026-07-14" });
+    const fallback = defaultReportFilters("company", "2026-07-14");
+    persistReportFilters("owner-utc", { view: "company", departmentId: "", from: "2026-07-01", to: "2026-07-07" });
 
     assert.deepEqual(
       restoreReportFilters("owner-utc", fallback, {
         canViewCompany: true,
         userIds: [],
-        reportingDate: "2026-07-13",
       }),
       fallback,
     );

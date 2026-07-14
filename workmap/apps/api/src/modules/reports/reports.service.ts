@@ -1,5 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { ActivityEventSource, ActivityEventType } from "@prisma/client";
+import {
+  ActivityEventSource,
+  ActivityEventType,
+  AgentSessionEndReason,
+  DeviceClientType,
+  DeviceStatus,
+  DeviceStatusConfidence,
+  DeviceStatusReason,
+} from "@prisma/client";
 import { canViewEmployeeActivity, canViewOwnReports, canViewTeamReports, type RequestContext } from "@workmap/auth";
 import { AuditService } from "../audit/audit.service.js";
 import { BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS } from "../devices/devices.service.js";
@@ -19,10 +27,23 @@ type UsageFilter = { companyId: string; userId?: string; userIds?: string[]; ran
 type LiveAppSegment = { userId: string; displayName: string; appName: string; activeSeconds: number; focusedIdleSeconds: number };
 type UsageInterval = { startedAt: Date; endedAt: Date };
 type DomainMetricTotals = { focusActiveSeconds: number; focusedIdleSeconds: number; openRuntimeSeconds: number };
+type ReportedAgentState =
+  | "not_paired"
+  | "running"
+  | "stopped_by_user"
+  | "network_offline"
+  | "device_shutdown"
+  | "sleeping"
+  | "locked"
+  | "agent_crashed"
+  | "agent_terminated"
+  | "server_unreachable"
+  | "unknown_interrupted";
 
 const DEFAULT_REPORT_DAYS = 30;
 const MAX_REPORT_DAYS = 366;
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const AGENT_HEARTBEAT_FRESH_MS = 30_000;
 
 @Injectable()
 export class ReportsService {
@@ -56,12 +77,13 @@ export class ReportsService {
     }
 
     const filter = { companyId: context.companyId, userId, range };
-    const [summary, deviceCoverage, browserExtensionCoverage, agentStatus, agentSessions, appTimeline, activityRevision] = await Promise.all([
+    const [summary, deviceCoverage, browserExtensionCoverage, agentStatus, agentSessions, deviceStatusHistory, appTimeline, activityRevision] = await Promise.all([
       this.getUsageRows(filter),
       this.getDeviceCoverage(filter),
       this.getBrowserExtensionCoverage(filter),
       this.getAgentStatus(filter),
       this.getAgentSessions(filter),
+      this.getDeviceStatusHistory(filter),
       this.getAppTimeline(filter),
       this.getActivityRevision(filter),
     ]);
@@ -76,6 +98,7 @@ export class ReportsService {
       browserExtensionCoverage,
       agentStatus,
       agentSessions,
+      deviceStatusHistory,
       appTimeline,
       employeeUsage: [],
       activityRevision,
@@ -166,6 +189,7 @@ export class ReportsService {
       browserExtensionCoverage,
       agentStatus: null,
       agentSessions: [],
+      deviceStatusHistory: [],
       appTimeline: [],
       employeeUsage,
       activityRevision,
@@ -416,10 +440,17 @@ export class ReportsService {
 
     const now = Date.now();
     const heartbeatAgeMs = now - session.lastHeartbeatAt.getTime();
-    const isFresh = !session.endedAt && heartbeatAgeMs <= 30_000;
-    const state = isFresh
-      ? "online"
-      : session.endReason === "GRACEFUL_SHUTDOWN" ? "stopped" : "interrupted";
+    const isFresh = !session.endedAt && heartbeatAgeMs <= AGENT_HEARTBEAT_FRESH_MS;
+    const latestStatusEvent = await this.prisma.deviceStatusEvent.findFirst({
+      where: {
+        companyId: filter.companyId,
+        userId: filter.userId,
+        deviceId: session.deviceId,
+        source: DeviceClientType.DESKTOP_AGENT,
+      },
+      orderBy: { recordedAt: "desc" },
+    });
+    const state = resolveReportedAgentState(session, latestStatusEvent, isFresh);
     const currentAppDurationSeconds = isFresh && session.currentAppName && session.currentAppStartedAt
       ? Math.max(0, Math.round((Math.min(now, session.lastHeartbeatAt.getTime() + 15_000) - session.currentAppStartedAt.getTime()) / 1000))
       : 0;
@@ -439,8 +470,13 @@ export class ReportsService {
       agentVersion: session.agentVersion ?? session.device.agentVersion,
       startedAt: session.startedAt.toISOString(),
       lastHeartbeatAt: session.lastHeartbeatAt.toISOString(),
+      heartbeatAgeSeconds: Math.max(0, Math.round(heartbeatAgeMs / 1000)),
+      isFresh,
       endedAt: session.endedAt?.toISOString() ?? null,
       endReason: session.endReason,
+      statusReason: latestStatusEvent?.reason ?? null,
+      statusConfidence: latestStatusEvent?.confidence ?? null,
+      statusRecordedAt: latestStatusEvent?.recordedAt.toISOString() ?? null,
       currentAppName: isFresh ? session.currentAppName : null,
       currentAppStartedAt: isFresh ? session.currentAppStartedAt?.toISOString() ?? null : null,
       currentAppActiveSeconds,
@@ -483,16 +519,29 @@ export class ReportsService {
   }
 
   private async getActivityRevision(filter: UsageFilter) {
-    const latest = await this.prisma.activityEvent.aggregate({
-      where: {
-        companyId: filter.companyId,
-        ...identityFilter(filter),
-        eventType: { in: [ActivityEventType.APP, ActivityEventType.BROWSER] },
-        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
-      },
-      _max: { createdAt: true },
-    });
-    return latest._max.createdAt?.toISOString() ?? null;
+    const [activity, status] = await Promise.all([
+      this.prisma.activityEvent.aggregate({
+        where: {
+          companyId: filter.companyId,
+          ...identityFilter(filter),
+          eventType: { in: [ActivityEventType.APP, ActivityEventType.BROWSER] },
+          startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+        },
+        _max: { createdAt: true },
+      }),
+      this.prisma.deviceStatusEvent.aggregate({
+        where: {
+          companyId: filter.companyId,
+          ...identityFilter(filter),
+          recordedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+        },
+        _max: { receivedAt: true },
+      }),
+    ]);
+    const latest = [activity._max.createdAt, status._max.receivedAt]
+      .filter((value): value is Date => Boolean(value))
+      .sort((left, right) => right.getTime() - left.getTime())[0];
+    return latest?.toISOString() ?? null;
   }
 
   private async getAgentSessions(filter: UsageFilter) {
@@ -510,15 +559,59 @@ export class ReportsService {
     });
     const now = Date.now();
     return sessions.map((session) => {
-      const staleOpenSession = !session.endedAt && now - session.lastHeartbeatAt.getTime() > 30_000;
+      const staleOpenSession = !session.endedAt && now - session.lastHeartbeatAt.getTime() > AGENT_HEARTBEAT_FRESH_MS;
       return {
         id: session.id,
         startedAt: session.startedAt.toISOString(),
         lastHeartbeatAt: session.lastHeartbeatAt.toISOString(),
         endedAt: session.endedAt?.toISOString() ?? (staleOpenSession ? session.lastHeartbeatAt.toISOString() : null),
-        endReason: session.endReason ?? (staleOpenSession ? "UNEXPECTED_STOP" : null),
+        endReason: session.endReason ?? (staleOpenSession ? "UNKNOWN_INTERRUPTED" : null),
       };
     });
+  }
+
+  private async getDeviceStatusHistory(filter: UsageFilter) {
+    if (!filter.userId) return [];
+    const events = await this.prisma.deviceStatusEvent.findMany({
+      where: {
+        companyId: filter.companyId,
+        userId: filter.userId,
+        source: DeviceClientType.DESKTOP_AGENT,
+        recordedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+      },
+      orderBy: { recordedAt: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        deviceId: true,
+        agentSessionId: true,
+        status: true,
+        reason: true,
+        startedAt: true,
+        endedAt: true,
+        lastHeartbeatAt: true,
+        recordedAt: true,
+        receivedAt: true,
+        source: true,
+        timeZone: true,
+        confidence: true,
+      },
+    });
+    return events.map((event) => ({
+      id: event.id,
+      deviceId: event.deviceId,
+      agentSessionId: event.agentSessionId,
+      status: event.status,
+      reason: event.reason,
+      startedAt: event.startedAt.toISOString(),
+      endedAt: event.endedAt?.toISOString() ?? null,
+      lastHeartbeatAt: event.lastHeartbeatAt?.toISOString() ?? null,
+      recordedAt: event.recordedAt.toISOString(),
+      receivedAt: event.receivedAt.toISOString(),
+      source: event.source,
+      timeZone: event.timeZone,
+      confidence: event.confidence,
+    }));
   }
 
   private async getEmployeeUsage(filter: UsageFilter) {
@@ -612,6 +705,45 @@ export class ReportsService {
     });
     if (!target) throw new NotFoundException("Report target not found.");
     return target.id;
+  }
+}
+
+function resolveReportedAgentState(
+  session: { endedAt: Date | null; endReason: AgentSessionEndReason | null },
+  latestStatusEvent: {
+    status: DeviceStatus;
+    reason: DeviceStatusReason;
+    confidence: DeviceStatusConfidence;
+    recordedAt: Date;
+  } | null,
+  isFresh: boolean,
+): ReportedAgentState {
+  if (isFresh) {
+    if (latestStatusEvent?.status === DeviceStatus.LOCKED) return "locked";
+    if (latestStatusEvent?.status === DeviceStatus.SLEEPING) return "sleeping";
+    return "running";
+  }
+
+  switch (latestStatusEvent?.status) {
+    case DeviceStatus.STOPPED_BY_USER: return "stopped_by_user";
+    case DeviceStatus.NETWORK_OFFLINE: return "network_offline";
+    case DeviceStatus.DEVICE_SHUTDOWN: return "device_shutdown";
+    case DeviceStatus.SLEEPING: return "sleeping";
+    case DeviceStatus.LOCKED: return "locked";
+    case DeviceStatus.AGENT_CRASHED: return "agent_crashed";
+    case DeviceStatus.AGENT_TERMINATED: return "agent_terminated";
+    case DeviceStatus.SERVER_UNREACHABLE: return "server_unreachable";
+    case DeviceStatus.UNKNOWN_INTERRUPTED: return "unknown_interrupted";
+    default: break;
+  }
+
+  switch (session.endReason) {
+    case AgentSessionEndReason.USER_STOP: return "stopped_by_user";
+    case AgentSessionEndReason.DEVICE_SHUTDOWN: return "device_shutdown";
+    case AgentSessionEndReason.SUSPENDED: return "sleeping";
+    case AgentSessionEndReason.AGENT_CRASHED: return "agent_crashed";
+    case AgentSessionEndReason.AGENT_TERMINATED: return "agent_terminated";
+    default: return "unknown_interrupted";
   }
 }
 

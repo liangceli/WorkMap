@@ -34,7 +34,7 @@ test("user report merges current focused idle without adding focus active time",
     userId: "employee-1",
     departmentId: null,
     agentStatus: {
-      state: "online",
+      state: "running",
       currentAppName: "Visual Studio Code",
       currentAppActiveSeconds: 0,
       currentAppFocusedIdleSeconds: 45,
@@ -57,7 +57,7 @@ test("user report excludes idle, minimized or background state from active total
     userId: "employee-1",
     departmentId: null,
     agentStatus: {
-      state: "online",
+      state: "running",
       currentAppName: null,
       currentAppActiveSeconds: 0,
       todayActiveSeconds: 60,
@@ -84,6 +84,7 @@ function baseSummary(scope: "user" | "company"): WorkMapApiUsageSummary {
     browserExtensionCoverage: [],
     agentStatus: null,
     agentSessions: [],
+    deviceStatusHistory: [],
     appTimeline: [],
     employeeUsage: scope === "company"
       ? [{ userId: "employee-1", displayName: "Employee", activeSeconds: 60, idleSeconds: 0 }]

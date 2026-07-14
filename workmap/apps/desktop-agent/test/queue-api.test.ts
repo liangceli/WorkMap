@@ -12,9 +12,9 @@ import {
   stopAgentSession,
   waitForApiReady,
 } from "../src/apiClient.js";
-import { EVENT_QUEUE_CAPACITY, FileEventQueue } from "../src/fileStore.js";
-import { DesktopAgentRuntime, shouldSendHeartbeat } from "../src/runtime.js";
-import type { AgentConfig, AppUsageEvent, ForegroundSample } from "../src/types.js";
+import { EVENT_QUEUE_CAPACITY, FileEventQueue, FileStatusEventQueue } from "../src/fileStore.js";
+import { bindActivityEventToSession, DesktopAgentRuntime, shouldSendHeartbeat } from "../src/runtime.js";
+import type { AgentConfig, AppUsageEvent, DeviceStatusEvent, ForegroundSample } from "../src/types.js";
 import type { WindowsForegroundAdapter } from "../src/windowsForeground.js";
 
 const config: AgentConfig = {
@@ -104,6 +104,43 @@ test("an app transition triggers an immediate heartbeat before the next schedule
   assert.equal(shouldSendHeartbeat(1, 5_000, 10_000), true);
   assert.equal(shouldSendHeartbeat(0, 5_000, 10_000), false);
   assert.equal(shouldSendHeartbeat(0, 10_000, 10_000), true);
+});
+
+test("offline activity binds to the recovered Agent session without changing event identity", () => {
+  const queued = {
+    ...event(42),
+    clientInstanceId: config.deviceId,
+    sequenceNumber: 17,
+    clientMonotonicMs: 123_456,
+    timeZone: "Australia/Adelaide",
+  };
+  const bound = bindActivityEventToSession(queued, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+
+  assert.equal(bound.clientEventId, queued.clientEventId);
+  assert.equal(bound.sequenceNumber, 17);
+  assert.equal(bound.agentSessionId, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  assert.equal(bindActivityEventToSession(bound, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), bound);
+});
+
+test("persistent status queue survives restart and retains stable event identity", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "workmap-agent-status-test-"));
+  const filePath = join(directory, "status-queue.json");
+  const status = statusEvent(1);
+  try {
+    const queue = new FileStatusEventQueue(filePath);
+    await queue.load(1_000);
+    await queue.enqueue(status, 1_000);
+    await queue.enqueue(status, 1_000);
+    await queue.retry([status.clientEventId], 1_000);
+    assert.equal(queue.size(), 1);
+    assert.equal(queue.listReady(1_001).length, 0);
+
+    const restarted = new FileStatusEventQueue(filePath);
+    await restarted.load(100_000);
+    assert.equal(restarted.size(), 1);
+    await restarted.acknowledge([status.clientEventId]);
+    assert.equal(restarted.size(), 0);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test("runtime keeps sending heartbeat when foreground sampling fails after startup or wake", async () => {
@@ -270,6 +307,21 @@ function event(index: number): AppUsageEvent {
     durationSeconds: 5,
     isIdle: false,
     isActiveWindow: true,
+  };
+}
+
+function statusEvent(index: number): DeviceStatusEvent {
+  const timestamp = "2026-06-18T00:00:00.000Z";
+  return {
+    clientEventId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    deviceId: config.deviceId,
+    status: "STOPPED_BY_USER",
+    reason: "USER_STOP",
+    startedAt: timestamp,
+    endedAt: timestamp,
+    recordedAt: timestamp,
+    timeZone: "Australia/Adelaide",
+    confidence: "CONFIRMED",
   };
 }
 

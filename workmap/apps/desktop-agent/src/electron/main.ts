@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, shell, Tray } from "electron";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -33,6 +33,7 @@ async function startApplication() {
   createWindow();
   createTray();
   registerIpc();
+  registerPowerEvents();
 
   if (paired) {
     configureAutoStart();
@@ -148,9 +149,27 @@ function showWindow() {
 }
 
 async function quitAgent() {
-  if (runtime) await runtime.shutdown();
+  if (runtime) await runtime.shutdown("USER_STOP");
   allowQuit = true;
   app.quit();
+}
+
+function registerPowerEvents() {
+  powerMonitor.on("suspend", () => void reportPowerStatus("SLEEPING", "SYSTEM_SUSPEND"));
+  powerMonitor.on("resume", () => void reportPowerStatus("RECONNECTED", "SYSTEM_RESUME"));
+  powerMonitor.on("lock-screen", () => void reportPowerStatus("LOCKED", "SYSTEM_LOCK"));
+  powerMonitor.on("unlock-screen", () => void reportPowerStatus("RECONNECTED", "SYSTEM_UNLOCK"));
+}
+
+async function reportPowerStatus(
+  status: "SLEEPING" | "LOCKED" | "RECONNECTED",
+  reason: "SYSTEM_SUSPEND" | "SYSTEM_RESUME" | "SYSTEM_LOCK" | "SYSTEM_UNLOCK",
+) {
+  try {
+    await runtime?.reportDeviceStatus(status, reason, { operation: "electron-power-monitor" });
+  } catch {
+    // The runtime durable status queue retains a best-effort lifecycle signal when the API is unavailable.
+  }
 }
 
 function removeLegacyAutoStart() {

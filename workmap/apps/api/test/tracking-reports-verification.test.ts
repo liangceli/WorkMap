@@ -25,6 +25,7 @@ const OTHER_USER_ID = "33333333-3333-4333-8333-333333333333";
 const DEVICE_ID = "44444444-4444-4444-8444-444444444444";
 const OTHER_DEVICE_ID = "55555555-5555-4555-8555-555555555555";
 const DEPARTMENT_ID = "66666666-6666-4666-8666-666666666666";
+const AGENT_SESSION_ID = "77777777-7777-4777-8777-777777777777";
 
 const employeeContext: RequestContext = {
   companyId: COMPANY_ID,
@@ -59,6 +60,7 @@ async function main() {
   await testBrowserUsageUpdatesReportRevision();
   await testOwnerSeesLiveForegroundUsageBeforeAppSwitch();
   await testCrossMidnightUsageIsSplitPrecisely();
+  await testLateActivitySequenceDoesNotRegressSessionCursor();
   await testReportAccessBoundaries();
   await testPlatformAdminAggregateBoundary();
 
@@ -471,6 +473,7 @@ class MockPrisma {
   appSummaries: AppSummaryRow[] = [];
   websiteSummaries: WebsiteSummaryRow[] = [];
   agentSessions: any[] = [];
+  deviceStatusEvents: any[] = [];
   platformAuditLogs: unknown[] = [];
 
   device = {
@@ -617,6 +620,25 @@ class MockPrisma {
       .map((session) => include?.user
         ? { ...session, user: { displayName: this.users.find((user) => user.id === session.userId)?.displayName ?? "Employee" } }
         : session),
+    updateMany: async ({ where, data }: any) => {
+      const nextSequence = data.lastSequenceNumber;
+      const matchingSessions = this.agentSessions.filter((session) => session.id === where.id
+        && (session.lastSequenceNumber === null
+          || session.lastSequenceNumber === undefined
+          || session.lastSequenceNumber < nextSequence));
+      for (const session of matchingSessions) Object.assign(session, data);
+      return { count: matchingSessions.length };
+    },
+  };
+
+  deviceStatusEvent = {
+    findFirst: async ({ where }: any = {}) => this.deviceStatusEvents.find((event) => matchesWhere(event, where)) ?? null,
+    findMany: async ({ where }: any = {}) => this.deviceStatusEvents.filter((event) => matchesWhere(event, where)),
+    aggregate: async ({ where }: any = {}) => {
+      const rows = this.deviceStatusEvents.filter((event) => matchesWhere(event, where));
+      const latest = rows.reduce<Date | null>((current, row) => maxDate(current, row.receivedAt), null);
+      return { _max: { receivedAt: latest } };
+    },
   };
 
   department = {
@@ -842,6 +864,45 @@ function groupUserAppSummaries(rows: AppSummaryRow[]) {
     grouped.set(row.userId, item);
   }
   return Array.from(grouped.values()).sort((left, right) => right._sum.activeSeconds - left._sum.activeSeconds);
+}
+
+async function testLateActivitySequenceDoesNotRegressSessionCursor() {
+  const prisma = new MockPrisma();
+  prisma.seedDevice({ id: DEVICE_ID, companyId: COMPANY_ID, userId: EMPLOYEE_ID });
+  prisma.agentSessions.push({
+    id: AGENT_SESSION_ID,
+    companyId: COMPANY_ID,
+    userId: EMPLOYEE_ID,
+    deviceId: DEVICE_ID,
+    lastSequenceNumber: 10,
+  });
+  const activity = new ActivityService(prisma as any);
+  const endedAt = new Date(Date.now() - 1_000);
+  const startedAt = new Date(endedAt.getTime() - 5_000);
+
+  const lateResult = await activity.ingestAppUsage(employeeContext, {
+    deviceId: DEVICE_ID,
+    agentSessionId: AGENT_SESSION_ID,
+    clientEventId: "88888888-8888-4888-8888-888888888888",
+    sequenceNumber: 5,
+    appName: "Visual Studio Code",
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+  });
+  assert.equal(lateResult.accepted, 1);
+  assert.equal(prisma.agentSessions[0]?.lastSequenceNumber, 10);
+
+  const newerResult = await activity.ingestAppUsage(employeeContext, {
+    deviceId: DEVICE_ID,
+    agentSessionId: AGENT_SESSION_ID,
+    clientEventId: "99999999-9999-4999-8999-999999999999",
+    sequenceNumber: 11,
+    appName: "Visual Studio Code",
+    startedAt: new Date(endedAt.getTime() - 500).toISOString(),
+    endedAt: new Date(endedAt.getTime() + 500).toISOString(),
+  });
+  assert.equal(newerResult.accepted, 1);
+  assert.equal(prisma.agentSessions[0]?.lastSequenceNumber, 11);
 }
 
 async function testBrowserUsageUpdatesReportRevision() {

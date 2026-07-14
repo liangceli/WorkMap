@@ -34,16 +34,17 @@ async function pair() {
     setBusy(true, "Registering tracker...");
     showProgress("Registering WorkMap domain tracker in Edge...");
     await ensureDomainContentScriptRegistered(true);
-    await writeStoredState({ workmapStatus: { state: "pairing", queuedEvents: 0 } });
+    await writeStoredState({ workmapStatus: { state: "pairing", queuedEvents: 0, queuedStatusEvents: 0 } });
     await refreshStatus();
     setBusy(true, "Pairing with WorkMap...");
     showProgress("Pairing with WorkMap API...");
     const result = await exchangePairingCode(apiBaseUrl, code, browserSelect.value);
     await savePairedConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, browserName: browserSelect.value });
     await writeStoredState({
-      workmapStatus: { state: "offline", queuedEvents: 0 },
-      workmapTracker: { version: 2, focus: null, focusTabId: null, lastInputAt: null, openTabs: {}, runtimeByDomain: {} },
+      workmapStatus: { state: "offline", queuedEvents: 0, queuedStatusEvents: 0 },
+      workmapTracker: { version: 3, activeByTab: {}, openTabs: {}, runtimeByDomain: {}, focusedWindowId: null },
       workmapQueue: [],
+      workmapStatusQueue: [],
     });
     chrome.runtime.sendMessage({ type: "workmap:extension-paired" }, () => void chrome.runtime.lastError);
     codeInput.value = "";
@@ -51,7 +52,7 @@ async function pair() {
     await refreshStatus();
   } catch (error) {
     const messageText = error instanceof Error ? error.message : "Pairing failed.";
-    await writeStoredState({ workmapStatus: { state: "unpaired", queuedEvents: 0, error: messageText } });
+    await writeStoredState({ workmapStatus: { state: "unpaired", queuedEvents: 0, queuedStatusEvents: 0, error: messageText } });
     await refreshStatus();
     show(messageText, true);
   }
@@ -65,7 +66,7 @@ async function refreshStatus() {
   const current = stored.workmapStatus;
   const health = deriveStatusHealth(current);
   status.textContent = stored.workmapConfig
-    ? `Paired | ${health.label} | queued ${current?.queuedEvents ?? 0} | heartbeat ${formatTime(current?.lastHeartbeatAt)} | upload ${formatTime(current?.lastUploadAt)}${health.detail ? ` | ${health.detail}` : ""}${current?.error ? ` | ${current.error}` : ""}`
+    ? `Paired | ${health.label} | activity queued ${current?.queuedEvents ?? 0} | status queued ${current?.queuedStatusEvents ?? 0} | heartbeat ${formatTime(current?.lastHeartbeatAt)} | upload ${formatTime(current?.lastUploadAt)}${health.detail ? ` | ${health.detail}` : ""}${current?.error ? ` | ${current.error}` : ""}`
     : current
       ? `${health.label}${current.error ? ` | ${current.error}` : ""}`
       : "Not paired";

@@ -4,15 +4,31 @@ import { DomainTrackingState } from "../src/domainState.js";
 
 const DEVICE_ID = "22222222-2222-4222-8222-222222222222";
 
-test("trusted interaction transfers focus between different domains without overlap", () => {
+test("trusted interactions keep a bounded parallel grace period across domains", () => {
   const tracker = createTracker();
   assert.deepEqual(tracker.recordInteraction(1, "a.example", 1_000, DEVICE_ID, "CHROME"), []);
-  const switched = tracker.recordInteraction(2, "b.example", 11_000, DEVICE_ID, "CHROME");
-  const focusA = switched.find((event) => event.domain === "a.example" && event.isActiveWindow);
+  assert.deepEqual(tracker.recordInteraction(2, "b.example", 11_000, DEVICE_ID, "CHROME", 2), []);
+  const switched = tracker.checkpoint(31_000, DEVICE_ID, "CHROME");
+  const focusA = switched.find((event) => event.domain === "a.example" && event.isActiveWindow && !event.isIdle);
   assert.equal(focusA?.startedAt, "1970-01-01T00:00:01.000Z");
-  assert.equal(focusA?.endedAt, "1970-01-01T00:00:11.000Z");
-  assert.equal(focusA?.durationSeconds, 10);
+  assert.equal(focusA?.endedAt, "1970-01-01T00:00:31.000Z");
+  assert.equal(focusA?.durationSeconds, 30);
   assert.equal(focusA?.isIdle, false);
+
+  const focusB = switched.find((event) => event.domain === "b.example" && event.isActiveWindow && !event.isIdle);
+  assert.equal(focusB?.durationSeconds, 20);
+});
+
+test("browser focus loss seals every focus-active tab without waiting for a checkpoint", () => {
+  const tracker = createTracker();
+  tracker.recordInteraction(1, "a.example", 1_000, DEVICE_ID, "CHROME", 10);
+  tracker.recordInteraction(2, "b.example", 11_000, DEVICE_ID, "CHROME", 20);
+  const sealed = tracker.stopFocus(15_000, DEVICE_ID, "CHROME").filter((event) => event.isActiveWindow && !event.isIdle);
+
+  assert.equal(sealed.length, 2);
+  assert.deepEqual(sealed.map((event) => event.domain).sort(), ["a.example", "b.example"]);
+  assert.deepEqual(sealed.map((event) => event.durationSeconds).sort((left, right) => left - right), [4, 14]);
+  assert.deepEqual(tracker.checkpoint(20_000, DEVICE_ID, "CHROME").filter((event) => event.isActiveWindow), []);
 });
 
 test("same-domain tabs share one open runtime and do not multiply duration", () => {
@@ -53,7 +69,7 @@ test("persisted state checkpoints focus and de-duplicated runtime with stable ev
   const events = restored.checkpoint(11_000, DEVICE_ID, "CHROME");
   assert.equal(events.filter((event) => event.isActiveWindow).length, 1);
   assert.equal(events.filter((event) => !event.isActiveWindow).length, 1);
-  assert.equal(events[0]?.clientEventId, tracker.snapshot().focus?.clientEventId);
+  assert.equal(events[0]?.clientEventId, tracker.snapshot().activeByTab["9"]?.clientEventId);
 });
 
 function createTracker(snapshot?: ConstructorParameters<typeof DomainTrackingState>[0], maximumSampleGapMs = 120_000) {

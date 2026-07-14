@@ -1,6 +1,6 @@
 import { exchangePairingCode, waitForApiReady } from "./apiClient.js";
 import { loadAgentConfig, saveAgentConfig } from "./credentialStore.js";
-import { FileEventQueue, writeAgentStatus, writeTrackingCheckpoint } from "./fileStore.js";
+import { FileEventQueue, FileStatusEventQueue, writeAgentStatus, writeTrackingCheckpoint } from "./fileStore.js";
 
 export const DESKTOP_AGENT_VERSION = "desktop-agent-windows/0.5.7";
 export const DEFAULT_API_BASE_URL = "https://workmap-api.onrender.com";
@@ -34,6 +34,9 @@ export async function pairDesktopAgent(
       const queue = new FileEventQueue();
       await queue.load();
       await queue.clear();
+      const statusQueue = new FileStatusEventQueue();
+      await statusQueue.load();
+      await statusQueue.clear();
       await writeTrackingCheckpoint(null);
     }
     await saveAgentConfig({

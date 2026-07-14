@@ -2827,3 +2827,221 @@ Investigate the production `/reports` failure seen in the morning, then strictly
 
 - The UTC fix prevents the verified timezone mismatch. A device with an incorrectly configured system clock can still submit invalid date selections; the safe validation detail makes that condition visible.
 - The source fix must be deployed before the already-deployed `/reports` page changes behavior.
+
+---
+
+## 2026-07-14 Login Secondary Action Link Treatment
+
+### Original Task Brief
+
+Replace the green `Forgot password?` button with a muted grey underlined text link, without changing Cognito password-recovery behavior.
+
+### Changed Files
+
+- `workmap/apps/web/components/login/CognitoAuthForm.tsx`
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/login-secondary-actions-style.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added the `wm-auth-text-link` presentation hook to the existing Forgot password, resend confirmation, and back-to-sign-in actions.
+- The shared treatment is transparent, muted grey, bottom-underlined, compact, keyboard-focusable, disabled-safe, and uses `overflow-wrap` for narrow screens.
+- All existing button callbacks, Cognito workflows, form fields, routes, and submit behavior remain unchanged.
+
+### Verification
+
+- Focused login secondary-action style regression test: passed.
+- `pnpm.CMD --filter @workmap/web typecheck`: passed.
+- `pnpm.CMD --filter @workmap/web lint`: passed.
+- `pnpm.CMD --filter @workmap/web build`: passed, 19 routes.
+
+### Manual QA
+
+- Not run. No browser session or production deployment was started for this presentation-only change.
+
+### Intentionally Not Changed
+
+- No Cognito configuration, password-reset request, verification-code flow, account creation, routing, API, authentication, or backend behavior changed.
+
+### Remaining Risk And Next Step
+
+- The visual change is covered by source-level regression and production build checks. The next round can proceed; final physical browser visual QA remains deferred.
+
+---
+
+## 2026-07-14 Login Password Visibility Toggle Alignment
+
+### Original Task Brief
+
+Correct the password visibility eye button so it aligns inside the right edge of the password input.
+
+### Changed Files
+
+- `workmap/apps/web/components/login/CognitoAuthForm.tsx`
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/login-secondary-actions-style.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added the `wm-auth-password-toggle` hook to the existing show/hide password button.
+- The toggle now explicitly remains `40px` square with a `2px` top/right inset inside the `44px` input, overriding the shared `46px` form-button minimum height that caused the vertical overflow.
+- Password visibility behavior, input padding, labels, accessibility names, and Cognito authentication flows are unchanged.
+
+### Verification
+
+- Focused login style tests: passed, 2/2.
+- `pnpm.CMD --filter @workmap/web typecheck`: passed.
+- `pnpm.CMD --filter @workmap/web lint`: passed.
+- `pnpm.CMD --filter @workmap/web build`: passed, 19 routes.
+
+### Manual QA
+
+- Not run. No browser session or production deployment was started for this presentation-only fix.
+
+### Intentionally Not Changed
+
+- No password handling, show/hide event behavior, Cognito configuration, API, routing, or backend behavior changed.
+
+### Remaining Risk And Next Step
+
+- Source-level geometry and build checks pass. The next round can proceed; final physical-browser visual QA remains deferred.
+
+---
+
+## 2026-07-14 Reports Current-Day Default
+
+### Original Task Brief
+
+- When `/reports` is opened, set both From and To to the current reporting day instead of restoring a prior date range from browser storage.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/reportFilters.ts`
+- `workmap/apps/web/test/reports-filter-persistence.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- A newly opened Reports page now always uses the current UTC reporting date for both From and To.
+- The stored report view and authorized department preference are still restored after their existing role and directory checks.
+- Historical date ranges, including a previously selected 7/30/90-day range, are deliberately not restored on a new page open; the current-day default is persisted again once initialization completes.
+- No report API request shape, report calculation, Cognito behavior, tenant/RBAC boundary, or Desktop Agent behavior changed.
+
+### Verification
+
+- Focused report-filter regression test: passed, 4/4.
+- `pnpm.cmd --filter @workmap/web test`: passed, 50/50.
+- `pnpm.cmd --filter @workmap/web typecheck`: passed.
+- `pnpm.cmd --filter @workmap/web lint`: passed.
+- `pnpm.cmd --filter @workmap/web build`: passed, 19 routes.
+
+### Manual QA
+
+- Not run. No browser session or production deployment was started for this source change.
+
+### Intentionally Not Changed
+
+- No API endpoint, persisted activity data, Desktop Agent/Browser Extension runtime, authentication, permissions, date-range query contract, or visual layout changed.
+
+### Remaining Risk And Next Step
+
+- The default follows the existing UTC reporting-date contract shown in the page UI. Final browser and deployed verification remain pending; the next round can proceed.
+
+---
+
+## 2026-07-14 Activity Tracking Architecture Review (Analysis Only)
+
+### Original Task Brief
+
+- Perform a code-grounded architecture review of Desktop Agent, Browser Extension, activity ingestion, device/session status, database aggregation, and Owner Reports before any tracking-system rewrite.
+
+### Reviewed Runtime Surface
+
+- `workmap/apps/desktop-agent/src/{runtime.ts,trackingState.ts,windowsForeground.ts,fileStore.ts,apiClient.ts}` and the Windows PowerShell adapter.
+- `workmap/apps/browser-extension/src/{background.ts,domainState.ts,contentScript.ts,extensionStorage.ts,extensionApi.ts}` and `manifest.json`.
+- `workmap/apps/api/src/modules/{activity,devices,reports}` plus `workmap/prisma/schema.prisma`.
+- `workmap/apps/web/components/reports/{ReportSummaryPanel.tsx,liveUsage.ts,reportFilters.ts}` and report API types.
+
+### Findings Summary
+
+- The Windows Agent records one foreground application for Focus Active time and separately enumerates visible top-level windows for non-active Open/runtime context. It does not discover every process or attribute keyboard/mouse input to individual applications.
+- The Extension has an MV3 service worker, optional host permission, trusted page-interaction signals, durable storage, alarms, queue retry, and hostname-only ingestion. Its Focus Active state remains a single focused tab/domain, not a multi-window parallel-active model.
+- Activity retry idempotency, UTC day splitting, credential device binding, tenant isolation, and revoke enforcement exist. The durable queues are bounded at 1,000 items / 31 days and intentionally drop older items when full or expired.
+- Current device session data supports only `GRACEFUL_SHUTDOWN` and `UNEXPECTED_STOP`. Reports derive `online`, `stopped`, and `interrupted` from heartbeat freshness and those two values; there is no durable status-event history or reliable reason classification for network loss, sleep, shutdown, crash, or forced termination.
+- Reports keep app and domain totals separate, but have no explicit cross-client correlation model, no per-window/process/tab identity, and no labelled parallel-activity/union total.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/desktop-agent test`: passed, 29/29.
+- `pnpm.cmd --filter @workmap/browser-extension test`: passed, 15/15.
+- `pnpm.cmd --filter @workmap/api test`: passed, 11/11.
+
+### Intentionally Not Changed
+
+- No runtime, API, Prisma schema, database migration, auth/RBAC, report calculation, or client behavior was modified in this analysis round.
+
+### Next Decision Required
+
+- Confirm the proposed unified Activity Session and Device Status model before implementing the staged tracking redesign. The full code-grounded architecture report and proposed phases were delivered in the Codex response for review.
+
+---
+
+## 2026-07-14 Activity Tracking Reliability Implementation
+
+### Original Task Brief
+
+- Implement the approved reliability design across the real Windows Desktop Agent, MV3 Browser Extension, activity ingestion, device-status lifecycle, and Owner Reports without changing Cognito, tenant/RBAC, or unrelated product behavior.
+
+### Changed Files
+
+- Desktop Agent runtime, tracking state, durable storage, client API, Electron lifecycle, and focused tracking/queue tests under `workmap/apps/desktop-agent/`.
+- MV3 background runtime, persisted domain state, durable queues, options status UI, client API, and tests under `workmap/apps/browser-extension/`.
+- Activity ingestion, device-status handling, report aggregation, and integration tests under `workmap/apps/api/`.
+- `workmap/prisma/schema.prisma` and `workmap/prisma/migrations/20260714090000_activity_status_history/`.
+- Reports API types, live report presentation, and report regressions under `workmap/apps/web/`.
+
+### Runtime Implementation Summary
+
+- The Windows runtime continues to use the real User32 foreground/last-input/visible-window adapter. Tracking now persists bounded per-app Focus Active segments, retains separate visible/open runtime context, closes at the precise idle/lock/no-window boundary, survives restart recovery, filters short slices, and does not collect titles or content.
+- A recent input can keep more than one recently interacted application Focus Active for a bounded 30-second grace window. Legacy adapter output without precise input retains single-foreground behavior and sampling-gap protection rather than inventing parallel activity.
+- Desktop device status now records a durable lifecycle with reason, timestamps, source, timezone, heartbeat freshness, session, and confidence. Graceful shutdown is no longer represented as a network failure; authentication failure and ambiguous termination remain interruption states rather than false user stops.
+- The MV3 service worker persists tab/domain state and activity/status queues, restores state through storage and alarms, re-registers its guarded interaction listener into already-open permitted HTTP(S) tabs after worker recovery, handles focus and idle/locked changes, and uploads hostnames only.
+- Backend activity and heartbeat ingestion now preserves the maximum accepted client sequence per agent session, so a late retry cannot regress the session cursor. Reports expose precise device status/freshness/history while keeping desktop app totals and browser-domain totals separate instead of adding them together.
+- Pairing, device-bound hash-only credentials, revoke enforcement, bounded durable queues, retry/backoff, stable event IDs, and duplicate-safe ingestion remain in the same Cognito/tenant/RBAC architecture.
+
+### Build Artifacts
+
+- Windows Alpha installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.7.exe` (non-empty automated package output).
+- Load-unpacked MV3 directory: `workmap/apps/browser-extension/alpha-unpacked/`.
+- MV3 archive: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.4.2-stage4.zip`.
+
+### Verification
+
+- Shared types typecheck: passed.
+- Web tests: passed, 50 tests; typecheck, lint, and build: passed.
+- API tests: passed, 12 tests; typecheck, lint, and build: passed.
+- Desktop Agent tests: passed, 33 tests; typecheck, lint, build, and Windows installer packaging: passed.
+- Browser Extension tests: passed, 17 tests; typecheck, lint, and MV3 build: passed.
+- Prisma schema validation: passed with an ephemeral non-secret validation URL; no database migration was applied and no database was changed.
+- `git diff --check`: passed.
+- Source and unpacked-extension credential scan: passed; no credential-shaped value or development-machine absolute path was found.
+- `pnpm smoke:stage4`: environment-blocked. The workspace has neither `DATABASE_URL` nor a local API on port 3001, so the smoke script could not begin its database-backed assertions. It did not contact production or modify cloud state.
+
+### Manual QA
+
+- Deferred by user, pending final consolidated manual QA. No physical Windows installation, browser load-unpacked session, multi-monitor interaction run, or production deployment is claimed as completed.
+
+### Intentionally Not Changed
+
+- Cognito, auth behavior, tenant isolation, RBAC, Platform Admin boundaries, existing report permissions, realtime office behavior, 3CX, Clerk, and prohibited private-content collection remain unchanged.
+
+### Remaining Risk
+
+- Windows can reliably provide global last-input and foreground/visible-window context, but it cannot prove keyboard or pointer attribution to every visible application. The bounded grace model is explicit about that limitation and must be manually exercised on real multi-monitor workflows.
+- A forced process termination or sudden power loss cannot always be classified locally at the instant it happens; the server records it as an interruption until a later reconnect/recovery provides more evidence.
+- A disposable local database plus API process is still required to run the existing end-to-end `smoke:stage4` script. This is an environment gap, not a passed smoke result.

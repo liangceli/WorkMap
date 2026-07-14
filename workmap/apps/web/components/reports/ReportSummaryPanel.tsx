@@ -260,6 +260,8 @@ export function ReportSummaryPanel() {
 
       {summary?.scope === "user" && summary.agentSessions.length > 0 ? <AgentSessionHistory rows={summary.agentSessions} /> : null}
 
+      {summary?.scope === "user" && summary.deviceStatusHistory.length > 0 ? <DeviceStatusHistory rows={summary.deviceStatusHistory} /> : null}
+
       {summary ? (
         <section style={styles.apiPanel}>
           <div style={styles.apiHeader}>
@@ -299,24 +301,24 @@ function AgentStatusPanel({ summary }: { summary: WorkMapApiUsageSummary }) {
       </section>
     );
   }
-  const online = status.state === "online";
-  const interrupted = status.state === "interrupted";
+  const running = status.state === "running";
+  const attention = isAttentionAgentState(status.state);
   return (
-    <section style={{ ...styles.agentPanel, ...(interrupted ? styles.agentInterrupted : online ? styles.agentOnline : {}) }} aria-label="Desktop Agent status">
-      {interrupted ? <AlertTriangle size={20} aria-hidden /> : online ? <Activity size={20} aria-hidden /> : <Power size={20} aria-hidden />}
+    <section style={{ ...styles.agentPanel, ...(attention ? styles.agentInterrupted : running ? styles.agentOnline : {}) }} aria-label="Desktop Agent status">
+      {attention ? <AlertTriangle size={20} aria-hidden /> : running ? <Activity size={20} aria-hidden /> : <Power size={20} aria-hidden />}
       <div style={styles.agentBody}>
         <div style={styles.agentHeader}>
           <div>
             <p style={styles.panelLabel}>Desktop Agent now</p>
-            <h2 style={styles.panelTitle}>{online ? "Connected" : interrupted ? "Connection interrupted" : "Stopped normally"}</h2>
+            <h2 style={styles.panelTitle}>{describeAgentState(status.state)}</h2>
           </div>
-          <span style={styles.agentTimestamp}>{status.lastHeartbeatAt ? `Last signal ${formatDateTime(status.lastHeartbeatAt)}` : "No heartbeat"}</span>
+          <span style={styles.agentTimestamp}>{status.lastHeartbeatAt ? `Last heartbeat ${formatDateTime(status.lastHeartbeatAt)}${status.heartbeatAgeSeconds !== undefined ? ` (${formatDuration(status.heartbeatAgeSeconds)} ago)` : ""}` : "No heartbeat"}</span>
         </div>
         <div style={styles.currentAppRow}>
           <span style={styles.currentAppLabel}>Current foreground app</span>
-          <strong style={styles.currentAppName}>{online ? status.currentAppName ?? "No active foreground app" : "Not available"}</strong>
+          <strong style={styles.currentAppName}>{running ? status.currentAppName ?? "No active foreground app" : "Not available"}</strong>
           <span style={styles.currentAppDuration}>
-            {online && status.currentAppName
+            {running && status.currentAppName
               ? status.currentAppFocusedIdleSeconds
                 ? "No recent input"
                 : `${formatDuration(status.currentAppActiveSeconds ?? 0)} focus active`
@@ -391,15 +393,36 @@ function AgentSessionHistory({ rows }: { rows: WorkMapApiUsageSummary["agentSess
       <div><p style={styles.panelLabel}>Agent audit</p><h2 style={styles.panelTitle}>Start, stop and interruption history</h2></div>
       <div style={styles.sessionRows}>
         {rows.slice(0, 30).map((row) => {
-          const interrupted = row.endReason === "UNEXPECTED_STOP";
+          const interrupted = row.endReason === "UNEXPECTED_STOP" || row.endReason === "UNKNOWN_INTERRUPTED" || row.endReason === "AGENT_CRASHED" || row.endReason === "AGENT_TERMINATED";
           return (
             <div key={row.id} style={styles.sessionRow}>
-              <span style={{ ...styles.sessionState, ...(interrupted ? styles.sessionInterrupted : {}) }}>{row.endedAt ? interrupted ? "Interrupted" : "Stopped" : "Running"}</span>
+              <span style={{ ...styles.sessionState, ...(interrupted ? styles.sessionInterrupted : {}) }}>{row.endedAt ? describeSessionEnd(row.endReason) : "Running"}</span>
               <span>Started {formatDateTime(row.startedAt)}</span>
               <span>{row.endedAt ? `Ended ${formatDateTime(row.endedAt)}` : `Last signal ${formatDateTime(row.lastHeartbeatAt)}`}</span>
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function DeviceStatusHistory({ rows }: { rows: WorkMapApiUsageSummary["deviceStatusHistory"] }) {
+  return (
+    <section style={styles.trendPanel} aria-label="Device status history">
+      <div>
+        <p style={styles.panelLabel}>Device status audit</p>
+        <h2 style={styles.panelTitle}>Reported lifecycle and connectivity events</h2>
+        <p style={styles.panelText}>Client-confirmed states are separated from inferred interruption records.</p>
+      </div>
+      <div style={styles.sessionRows}>
+        {rows.slice(0, 50).map((row) => (
+          <div key={row.id} style={styles.sessionRow}>
+            <span style={{ ...styles.sessionState, ...(isAttentionDeviceStatus(row.status) ? styles.sessionInterrupted : {}) }}>{formatDeviceStatus(row.status)}</span>
+            <span>{formatDeviceStatusReason(row.reason)}{row.confidence === "INFERRED" ? " (inferred)" : ""}</span>
+            <span>Recorded {formatDateTime(row.recordedAt)}</span>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -753,6 +776,51 @@ function addUtcDays(value: string, days: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function describeAgentState(state: NonNullable<WorkMapApiUsageSummary["agentStatus"]>["state"]) {
+  switch (state) {
+    case "running": return "Running";
+    case "stopped_by_user": return "Stopped by user";
+    case "network_offline": return "Network offline";
+    case "device_shutdown": return "Device shut down";
+    case "sleeping": return "Device sleeping";
+    case "locked": return "Device locked";
+    case "agent_crashed": return "Agent crashed";
+    case "agent_terminated": return "Agent terminated";
+    case "server_unreachable": return "WorkMap service unreachable";
+    case "unknown_interrupted": return "Interrupted (reason unknown)";
+    case "not_paired": return "No paired Agent";
+  }
+}
+
+function isAttentionAgentState(state: NonNullable<WorkMapApiUsageSummary["agentStatus"]>["state"]) {
+  return ["network_offline", "agent_crashed", "agent_terminated", "server_unreachable", "unknown_interrupted"].includes(state);
+}
+
+function formatDeviceStatus(status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"]) {
+  return status.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function isAttentionDeviceStatus(status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"]) {
+  return ["NETWORK_OFFLINE", "AGENT_CRASHED", "AGENT_TERMINATED", "SERVER_UNREACHABLE", "UNKNOWN_INTERRUPTED"].includes(status);
+}
+
+function formatDeviceStatusReason(reason: WorkMapApiUsageSummary["deviceStatusHistory"][number]["reason"]) {
+  return reason.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function describeSessionEnd(endReason: WorkMapApiUsageSummary["agentSessions"][number]["endReason"]) {
+  switch (endReason) {
+    case "USER_STOP": return "Stopped by user";
+    case "DEVICE_SHUTDOWN": return "Device shut down";
+    case "SUSPENDED": return "Suspended";
+    case "AGENT_CRASHED": return "Agent crashed";
+    case "AGENT_TERMINATED": return "Agent terminated";
+    case "UNEXPECTED_STOP":
+    case "UNKNOWN_INTERRUPTED": return "Interrupted";
+    default: return "Stopped";
+  }
 }
 
 const styles = {

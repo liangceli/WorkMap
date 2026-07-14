@@ -31,6 +31,9 @@ test("local extension status does not preserve stale connected state", async () 
   assert.match(api, /browser-extension-mv3\/0\.4\.2/);
   assert.match(background, /status\?\.state \?\? "offline"/);
   assert.doesNotMatch(background, /status\?\.state \?\? "connected"/);
+  assert.match(background, /workmapStatusQueue/);
+  assert.match(background, /sendExtensionStatus/);
+  assert.match(background, /ensureDomainContentScriptRegistered\(true\)/);
   assert.match(options, /deriveStatusHealth/);
   assert.match(options, /Signal stale/);
   assert.match(options, /Last server-confirmed heartbeat/);

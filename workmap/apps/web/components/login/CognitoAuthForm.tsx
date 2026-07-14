@@ -376,17 +376,17 @@ export function CognitoAuthForm({
 
         <div style={styles.secondaryActions}>
           {screen === "sign_in" ? (
-            <button type="button" onClick={() => switchScreen("forgot_password")} style={styles.textButton}>
+            <button type="button" className="wm-auth-text-link" onClick={() => switchScreen("forgot_password")} style={styles.textButton}>
               Forgot password?
             </button>
           ) : null}
           {screen === "confirm_sign_up" ? (
-            <button type="button" onClick={resendConfirmation} disabled={busy} style={styles.textButton}>
+            <button type="button" className="wm-auth-text-link" onClick={resendConfirmation} disabled={busy} style={styles.textButton}>
               Resend confirmation code
             </button>
           ) : null}
           {screen !== "sign_in" && screen !== "sign_up" ? (
-            <button type="button" onClick={() => switchScreen("sign_in")} style={styles.textButton}>
+            <button type="button" className="wm-auth-text-link" onClick={() => switchScreen("sign_in")} style={styles.textButton}>
               Back to sign in
             </button>
           ) : null}
@@ -472,7 +472,7 @@ function PasswordField({
           required
           style={{ ...styles.input, paddingRight: "44px" }}
         />
-        <button type="button" onClick={onToggle} aria-label={visible ? "Hide password" : "Show password"} style={styles.visibilityButton}>
+        <button type="button" className="wm-auth-password-toggle" onClick={onToggle} aria-label={visible ? "Hide password" : "Show password"} style={styles.visibilityButton}>
           {visible ? <EyeOff size={17} /> : <Eye size={17} />}
         </button>
       </span>

@@ -1,5 +1,5 @@
 import type { DomainUsageEvent } from "./domainTracking.js";
-import type { ExtensionConfig } from "./extensionStorage.js";
+import type { ExtensionConfig, ExtensionDeviceStatusEvent } from "./extensionStorage.js";
 
 export class ExtensionApiError extends Error {
   constructor(message: string, readonly status?: number) { super(message); }
@@ -21,6 +21,10 @@ export function sendExtensionHeartbeat(config: ExtensionConfig) {
 
 export function sendDomainUsage(config: ExtensionConfig, events: DomainUsageEvent[]) {
   return requestJson<{ accepted: number }>(config.apiBaseUrl, "/device-client/domain-usage", config.credential, { events });
+}
+
+export function sendExtensionStatus(config: ExtensionConfig, event: ExtensionDeviceStatusEvent) {
+  return requestJson(config.apiBaseUrl, "/device-client/status-event", config.credential, event);
 }
 
 async function requestJson<T>(baseUrl: string, path: string, credential: string | undefined, body: unknown): Promise<T> {

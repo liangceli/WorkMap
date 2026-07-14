@@ -1851,3 +1851,165 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 
 - Pass for source-level release preparation: the reported morning UTC mismatch and the identified stale-revision/local-status reliability gaps are covered by regression tests.
 - The next round can proceed after source deployment is authorized. Final manual QA and a configured local Stage 4 smoke remain pending environment access.
+
+---
+
+## 2026-07-14 Login Secondary Action Link Treatment QA
+
+### Reviewed Implementation
+
+- Reviewed the existing sign-in, password-reset, confirmation resend, and return-to-sign-in actions plus the CSS cascade that previously applied the green button surface.
+
+### Findings Ordered By Severity
+
+- Fixed - Low: global `.wm-auth-form button` styling made the Forgot password helper action appear as a green CTA.
+- Fixed - Low: the secondary-action treatment now has an explicit class with transparent background, muted grey text, a bottom rule, and visible keyboard focus.
+
+### Test And Verification Status
+
+- New focused login secondary-action style test: passed.
+- Web typecheck: passed.
+- Web lint: passed.
+- Web production build: passed, 19 routes.
+
+### Manual QA Status
+
+- Not run. No claim is made that a browser-rendered or deployed page was manually inspected.
+
+### Risks And Recommendation
+
+- Pass. This is a presentation-only change; Cognito password recovery and all authentication behavior are unchanged.
+- The next round can proceed.
+
+---
+
+## 2026-07-14 Login Password Visibility Toggle Alignment QA
+
+### Reviewed Implementation
+
+- Reviewed the password input geometry, the globally inherited form-button minimum height, and the existing show/hide password event path.
+
+### Findings Ordered By Severity
+
+- Fixed - Low: the shared `46px` button minimum height overrode the password toggle's intended `40px` size, pushing the eye control outside its `44px` input alignment.
+- Fixed - Low: the password toggle now has a dedicated class that locks its inset and square dimensions without changing its interaction.
+
+### Test And Verification Status
+
+- Focused login style tests: passed, 2/2.
+- Web typecheck: passed.
+- Web lint: passed.
+- Web production build: passed, 19 routes.
+
+### Manual QA Status
+
+- Not run. No claim is made that a browser-rendered or deployed page was manually inspected.
+
+### Risks And Recommendation
+
+- Pass. This is a presentation-only geometry correction; authentication and password handling are unchanged.
+- The next round can proceed.
+
+---
+
+## 2026-07-14 Reports Current-Day Default QA
+
+### Reviewed Implementation
+
+- Reviewed Reports initialization, browser-storage restoration, current UTC reporting-date fallback, and the date values forwarded to report and live-status requests.
+
+### Findings Ordered By Severity
+
+- Fixed - Medium: a prior Reports date range persisted in browser storage and was restored on a later page open, requiring the user to manually reset From and To.
+- Verified - Low: only the date range is reset. Valid role-aware report scope and department preferences remain available after reload.
+
+### Test And Verification Status
+
+- Report filter regression tests: passed, 4/4, including historical range reset.
+- Full Web tests: passed, 50/50.
+- Web typecheck: passed.
+- Web lint: passed.
+- Web production build: passed, 19 routes.
+- Build-generated `tsconfig.tsbuildinfo` was restored to its tracked content before diff review.
+
+### Manual QA Status
+
+- Not run. No browser-rendered or deployed page is claimed as manually inspected.
+
+### Risks And Recommendation
+
+- Pass. The behavior is scoped to initial browser-filter restoration and continues to use the existing UTC report-date contract.
+- The next round can proceed; final deployed browser QA remains deferred.
+
+---
+
+## 2026-07-14 Activity Tracking Architecture Review QA (Analysis Only)
+
+### Reviewed Implementation
+
+- Reviewed the real Desktop Agent foreground/window sampler, tracking state machine, local durable queue, heartbeat/session flow, MV3 Extension service worker and content script, activity ingestion, Prisma models, reports aggregation, and reports live overlay.
+
+### Findings Ordered By Severity
+
+- High: `GRACEFUL_SHUTDOWN` is presented as `Stopped`, but it is sent for any successful application quit path and does not prove that a user deliberately stopped monitoring.
+- High: a backend heartbeat timeout cannot distinguish network loss, sleep, device shutdown, Agent crash, forced termination, or server unreachability; no durable device-status-event history exists.
+- High: Desktop Focus Active is derived from global Windows last-input state plus one foreground window. It cannot reliably prove per-app interaction or support the requested multi-monitor parallel Focus Active semantics.
+- Medium: the Desktop Agent stores only an active foreground checkpoint; visible/open runtime segments are not checkpointed. Queue capacity/age expiration can intentionally discard undelivered activity without a server-side reconciliation record.
+- Medium: Extension Focus Active is single-tab/domain. Browser-window focus changes are handled only indirectly; parallel domain activity and cross-browser correlation are not modelled.
+- Medium: app and domain totals are separately displayed, but the data model has no correlation/session layer for an explicit Browser App Total-to-Domain Breakdown relationship.
+
+### Test And Verification Status
+
+- Desktop Agent package tests: passed, 29/29.
+- Browser Extension package tests: passed, 15/15.
+- API package tests: passed, 11/11.
+- These automated tests validate current contracts and regression rules. They do not constitute a real Windows multi-monitor, sleep, forced-termination, or browser-profile acceptance test.
+
+### Manual QA Status
+
+- Not run. No physical employee machine, browser profile, real multi-monitor session, network interruption, or production deployment was exercised in this analysis-only round.
+
+### Risks And Recommendation
+
+- Do not treat the current tracking semantics as satisfying the requested parallel-active and detailed interruption-reason requirements.
+- Proceed only after architecture approval, then implement the proposed staged changes with real-device and integration tests.
+
+---
+
+## 2026-07-14 Activity Tracking Reliability Implementation QA
+
+### Reviewed Implementation
+
+- Reviewed the rewritten Desktop Agent tracking state, restart persistence, status queue, graceful shutdown behavior, and real Windows adapter integration.
+- Reviewed MV3 tab/window/idle recovery, persistent queue behavior, domain-only payload minimisation, guarded reinjection after service-worker recovery, and options status surface.
+- Reviewed backend activity/heartbeat sequence guards, durable device-status history, report aggregation and current-status rendering, plus tenant/device credential boundaries.
+
+### Findings Ordered By Severity
+
+- Fixed - High: a late or retried app/domain activity event could overwrite an AgentSession sequence cursor with an older value. Conditional maximum-sequence updates now prevent cursor regression for both activity and heartbeat writes.
+- Fixed - High: stale last-input information could be clamped into a current sample and manufacture Focus Active time. Precise-input mode now closes the session at the actual inactivity boundary; legacy mode keeps the existing sampling-gap cap.
+- Fixed - Medium: an MV3 service-worker restart could leave already-open permitted tabs without the guarded interaction listener until another tab event occurred. Startup recovery now injects the existing dynamic script into applicable current tabs.
+- Verified - Medium: browser domain events and desktop application events remain separately aggregated and rendered; the Reports UI does not silently sum domain time into desktop browser-app total time.
+- Remaining - Medium/environment: `smoke:stage4` cannot run in this checkout because `DATABASE_URL` and a local API on port 3001 are absent. No production or cloud database was used as a substitute.
+- Remaining - Informational: true per-application interaction attribution and forced-termination cause detection have operating-system limits; the implementation records bounded, explainable signals rather than asserting certainty it does not have.
+
+### Test And Verification Status
+
+- Desktop Agent tests: passed, 33/33; typecheck, lint, build, and Windows installer package: passed.
+- Browser Extension tests: passed, 17/17; typecheck, lint, and MV3 build: passed.
+- API tests: passed, 12/12; typecheck, lint, and build: passed.
+- Web tests: passed, 50/50; typecheck, lint, and build: passed.
+- Shared types typecheck: passed.
+- Prisma schema validation: passed using an ephemeral non-secret validation URL; the migration file was not applied because no local database was configured.
+- `git diff --check`: passed.
+- Credential-pattern and extension build-path scans: passed.
+- `smoke:stage4`: blocked before assertions by missing local environment configuration, not treated as passed.
+
+### Manual QA Status
+
+- Deferred by user, pending final consolidated manual QA. Automated results are not a claim of real Windows, browser-profile, multi-monitor, offline, sleep, or deployed acceptance testing.
+
+### Risks And Recommendation
+
+- Pass for the implemented source-level runtime, package, and regression suite. The current source can proceed to a configured isolated local integration environment and the user's consolidated manual QA.
+- Do not mark final end-to-end smoke, production deployment, or human acceptance as complete until a disposable local database/API environment and the deferred manual checks are available.

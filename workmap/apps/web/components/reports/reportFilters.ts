@@ -12,7 +12,7 @@ export function defaultReportFilters(view: ViewFilter, today = utcToday()): Repo
 export function restoreReportFilters(
   userId: string,
   fallback: ReportFilters,
-  options: { canViewCompany: boolean; userIds: string[]; departmentIds?: string[]; reportingDate?: string },
+  options: { canViewCompany: boolean; userIds: string[]; departmentIds?: string[] },
 ) {
   if (typeof window === "undefined") return fallback;
 
@@ -20,13 +20,16 @@ export function restoreReportFilters(
     const raw = window.localStorage.getItem(reportFilterStorageKey(userId));
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as unknown;
-    const reportingDate = options.reportingDate ?? utcToday();
-    if (!isReportFilters(parsed) || parsed.from > parsed.to || parsed.to > reportingDate) return fallback;
+    if (!isReportFilters(parsed) || parsed.from > parsed.to) return fallback;
     if (parsed.view === "company" && !options.canViewCompany) return fallback;
     if (parsed.view.startsWith("user:") && !options.userIds.includes(parsed.view.slice(5))) return fallback;
 
     return {
       ...parsed,
+      // A new Reports page always opens on the current UTC reporting day. Persisted
+      // scope and department preferences remain useful, but a historical range is not.
+      from: fallback.from,
+      to: fallback.to,
       departmentId:
         parsed.view === "company" &&
         (!options.departmentIds || !parsed.departmentId || options.departmentIds.includes(parsed.departmentId))

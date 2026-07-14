@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { AgentStatus, QueuedEvent, TrackingCheckpoint } from "./types.js";
+import type { AgentStatus, QueuedEvent, QueuedStatusEvent, TrackingCheckpoint } from "./types.js";
 
 const MAX_QUEUE_SIZE = 1_000;
 const MAX_QUEUE_AGE_MS = 31 * 24 * 60 * 60 * 1000;
@@ -97,6 +97,59 @@ export async function writeAgentStatus(status: AgentStatus, filePath = join(getA
   } catch {
     return false;
   }
+}
+
+export class FileStatusEventQueue {
+  private events: QueuedStatusEvent[] = [];
+  constructor(private readonly filePath = join(getAgentDataDirectory(), "status-queue.json")) {}
+
+  async load(nowMs = Date.now()) {
+    this.events = (await readJson<QueuedStatusEvent[]>(this.filePath, []))
+      .filter((item) => item.createdAtMs >= nowMs - MAX_QUEUE_AGE_MS)
+      .slice(-MAX_QUEUE_SIZE);
+    await this.save();
+  }
+
+  listReady(nowMs = Date.now(), limit = 50) {
+    return this.events.filter((item) => item.nextAttemptAtMs <= nowMs).slice(0, limit);
+  }
+
+  async enqueue(event: QueuedStatusEvent["event"], nowMs = Date.now()) {
+    if (this.events.some((item) => item.event.clientEventId === event.clientEventId)) return;
+    this.events.push({ event, attempts: 0, nextAttemptAtMs: nowMs, createdAtMs: nowMs });
+    if (this.events.length > MAX_QUEUE_SIZE) this.events.splice(0, this.events.length - MAX_QUEUE_SIZE);
+    await this.save();
+  }
+
+  async acknowledge(ids: string[]) {
+    const sent = new Set(ids);
+    this.events = this.events.filter((item) => !sent.has(item.event.clientEventId));
+    await this.save();
+  }
+
+  async discard(ids: string[]) {
+    return this.acknowledge(ids);
+  }
+
+  async retry(ids: string[], nowMs = Date.now()) {
+    const retrying = new Set(ids);
+    for (const item of this.events) {
+      if (!retrying.has(item.event.clientEventId)) continue;
+      item.attempts += 1;
+      const delay = Math.min(5 * 60_000, 5_000 * 2 ** Math.min(item.attempts, 6));
+      item.nextAttemptAtMs = nowMs + delay;
+    }
+    await this.save();
+  }
+
+  size() { return this.events.length; }
+
+  async clear() {
+    this.events = [];
+    await this.save();
+  }
+
+  private async save() { await writeJsonAtomic(this.filePath, this.events); }
 }
 
 export function readTrackingCheckpoint(filePath = join(getAgentDataDirectory(), "tracking-state.json")) {

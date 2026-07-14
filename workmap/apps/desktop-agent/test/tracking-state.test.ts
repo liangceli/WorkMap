@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AppTrackingState, recoverTrackingCheckpoint } from "../src/trackingState.js";
+import { AppTrackingState, recoverTrackingCheckpoint, recoverTrackingCheckpoints } from "../src/trackingState.js";
 
 const DEVICE_ID = "11111111-1111-4111-8111-111111111111";
 const base = Date.parse("2026-06-18T00:00:00.000Z");
@@ -109,6 +109,42 @@ test("uses the exact 30-second idle boundary and exact resume input time", () =>
   assert.equal(resumed[0]?.endedAt, "2026-06-18T00:00:35.250Z");
   assert.equal(state.currentActivity()?.startedAt, "2026-06-18T00:00:35.250Z");
   assert.equal(state.currentActivity()?.isIdle, false);
+});
+
+test("keeps recent cross-application collaboration bounded by the input grace period", () => {
+  let id = 50;
+  const state = new AppTrackingState({
+    createEventId: () => `00000000-0000-4000-8000-${String(++id).padStart(12, "0")}`,
+  });
+  state.observe({ ...sample("Visual Studio Code", 0), lastInputAtMs: base }, DEVICE_ID);
+  state.observe({ ...sample("Microsoft Teams", 10_000), lastInputAtMs: base + 10_000 }, DEVICE_ID);
+
+  const expired = state.observe({ ...sample("Microsoft Teams", 31_000), lastInputAtMs: base + 10_000 }, DEVICE_ID);
+  const code = expired.find((event) => event.appName === "Visual Studio Code" && event.isActiveWindow);
+  assert.equal(code?.durationSeconds, 30);
+  assert.equal(state.currentActivity()?.appName, "Microsoft Teams");
+  assert.equal(state.currentActivity()?.activeSeconds, 21);
+
+  const finished = state.shutdown(DEVICE_ID, base + 41_000).filter((event) => event.isActiveWindow && !event.isIdle);
+  assert.deepEqual(finished.map((event) => [event.appName, event.durationSeconds]), [["Microsoft Teams", 30]]);
+});
+
+test("crash recovery preserves every persisted focus-active segment without duplication", () => {
+  const state = new AppTrackingState();
+  state.observe({ ...sample("Code", 0), lastInputAtMs: base }, DEVICE_ID);
+  state.observe({ ...sample("Teams", 10_000), lastInputAtMs: base + 10_000 }, DEVICE_ID);
+  state.observe({ ...sample("Teams", 21_000), lastInputAtMs: base + 10_000 }, DEVICE_ID);
+
+  const checkpoint = state.checkpoint();
+  const recovered = recoverTrackingCheckpoints(checkpoint, DEVICE_ID, {
+    createEventId: (() => {
+      let id = 60;
+      return () => `00000000-0000-4000-8000-${String(++id).padStart(12, "0")}`;
+    })(),
+  });
+
+  assert.deepEqual(recovered.map((event) => [event.appName, event.durationSeconds]).sort(), [["Code", 21], ["Teams", 11]]);
+  assert.equal(recoverTrackingCheckpoint(checkpoint, DEVICE_ID)?.appName, "Code");
 });
 
 test("records detected foreground and open runtime without the old five-second delay", () => {

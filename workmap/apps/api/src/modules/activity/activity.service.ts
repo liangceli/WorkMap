@@ -22,6 +22,11 @@ type ParsedTiming = {
 type ParsedEventBase = ParsedTiming & {
   deviceId: string;
   clientEventId: string | null;
+  agentSessionId: string | null;
+  clientInstanceId: string | null;
+  sequenceNumber: number | null;
+  clientMonotonicMs: bigint | null;
+  timeZone: string | null;
   isIdle: boolean;
   isActiveWindow: boolean;
 };
@@ -45,6 +50,7 @@ export class ActivityService {
 
     for (const event of events) {
       await this.assertDeviceBoundToContext(context, event.deviceId);
+      await this.assertAgentSessionBoundToContext(context, event.deviceId, event.agentSessionId);
       for (const fragment of splitUsageEventByUtcDay(event)) {
         accepted += (await this.storeAppUsageEvent(context, fragment)) ? 1 : 0;
       }
@@ -63,6 +69,7 @@ export class ActivityService {
 
     for (const event of events) {
       await this.assertDeviceBoundToContext(context, event.deviceId);
+      await this.assertAgentSessionBoundToContext(context, event.deviceId, event.agentSessionId);
       for (const fragment of splitUsageEventByUtcDay(event)) {
         accepted += (await this.storeDomainUsageEvent(context, fragment)) ? 1 : 0;
       }
@@ -91,6 +98,15 @@ export class ActivityService {
     }
   }
 
+  private async assertAgentSessionBoundToContext(context: RequestContext, deviceId: string, agentSessionId: string | null) {
+    if (!agentSessionId) return;
+    const session = await this.prisma.agentSession.findFirst({
+      where: { id: agentSessionId, companyId: context.companyId, userId: context.userId, deviceId },
+      select: { id: true },
+    });
+    if (!session) throw new ForbiddenException("Activity event agent session is not visible for this device.");
+  }
+
   private async storeAppUsageEvent(context: RequestContext, event: ParsedAppUsageEvent) {
     if (await this.hasDuplicateAppUsageEvent(context, event)) {
       return false;
@@ -108,7 +124,12 @@ export class ActivityService {
           companyId: context.companyId,
           userId: context.userId,
           deviceId: event.deviceId,
+          agentSessionId: event.agentSessionId,
           clientEventId: event.clientEventId,
+          clientInstanceId: event.clientInstanceId,
+          sequenceNumber: event.sequenceNumber,
+          clientMonotonicMs: event.clientMonotonicMs,
+          timeZone: event.timeZone,
           source: ActivityEventSource.DESKTOP_AGENT,
           eventType: ActivityEventType.APP,
           appName: event.appName,
@@ -154,6 +175,22 @@ export class ActivityService {
       }));
     }
 
+    if (event.agentSessionId && event.sequenceNumber !== null) {
+      operations.push(this.prisma.agentSession.updateMany({
+        // Offline queues can resend older events after newer ones were already
+        // accepted. Keep this diagnostic cursor monotonic instead of letting a
+        // late batch move it backwards.
+        where: {
+          id: event.agentSessionId,
+          OR: [
+            { lastSequenceNumber: null },
+            { lastSequenceNumber: { lt: event.sequenceNumber } },
+          ],
+        },
+        data: { lastSequenceNumber: event.sequenceNumber },
+      }));
+    }
+
     try {
       await this.prisma.$transaction(operations);
     } catch (error) {
@@ -182,7 +219,12 @@ export class ActivityService {
           companyId: context.companyId,
           userId: context.userId,
           deviceId: event.deviceId,
+          agentSessionId: event.agentSessionId,
           clientEventId: event.clientEventId,
+          clientInstanceId: event.clientInstanceId,
+          sequenceNumber: event.sequenceNumber,
+          clientMonotonicMs: event.clientMonotonicMs,
+          timeZone: event.timeZone,
           source: ActivityEventSource.BROWSER_EXTENSION,
           eventType: ActivityEventType.BROWSER,
           browserName: event.browserName,
@@ -226,6 +268,16 @@ export class ActivityService {
         where: { id: event.deviceId },
         data: { lastSeenAt: new Date() },
       }),
+      ...(event.agentSessionId && event.sequenceNumber !== null ? [this.prisma.agentSession.updateMany({
+        where: {
+          id: event.agentSessionId,
+          OR: [
+            { lastSequenceNumber: null },
+            { lastSequenceNumber: { lt: event.sequenceNumber } },
+          ],
+        },
+        data: { lastSequenceNumber: event.sequenceNumber },
+      })] : []),
       ]);
     } catch (error) {
       if (event.clientEventId && isPrismaUniqueError(error)) return false;
@@ -320,6 +372,11 @@ function readCommonEvent(input: Record<string, unknown>): ParsedEventBase {
   return {
     deviceId: readRequiredUuid(input.deviceId, "deviceId"),
     clientEventId: readOptionalClientEventId(input.clientEventId),
+    agentSessionId: readOptionalUuid(input.agentSessionId, "agentSessionId"),
+    clientInstanceId: readOptionalClientInstanceId(input.clientInstanceId),
+    sequenceNumber: readOptionalSequenceNumber(input.sequenceNumber),
+    clientMonotonicMs: readOptionalClientMonotonicMs(input.clientMonotonicMs),
+    timeZone: readOptionalTimeZone(input.timeZone),
     isIdle: readBoolean(input.isIdle, false) || readBoolean(input.active, true) === false,
     isActiveWindow: readBoolean(input.isActiveWindow, true),
     ...readTiming(input),
@@ -334,6 +391,50 @@ function readOptionalClientEventId(value: unknown) {
     throw new BadRequestException("clientEventId must be a UUID when provided.");
   }
   return value.toLowerCase();
+}
+
+function readOptionalUuid(value: unknown, label: string) {
+  if (value === undefined || value === null || value === "") return null;
+  return readRequiredUuid(value, label);
+}
+
+function readOptionalClientInstanceId(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") throw new BadRequestException("clientInstanceId must be a string.");
+  const normalized = replaceControlCharacters(value).replace(/\s+/g, " ").trim();
+  if (!normalized || normalized.length > 120) {
+    throw new BadRequestException("clientInstanceId must contain at most 120 safe characters.");
+  }
+  return normalized;
+}
+
+function readOptionalSequenceNumber(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > 2_147_483_647) {
+    throw new BadRequestException("sequenceNumber must be a non-negative integer.");
+  }
+  return value;
+}
+
+function readOptionalClientMonotonicMs(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new BadRequestException("clientMonotonicMs must be a non-negative safe integer.");
+  }
+  return BigInt(value);
+}
+
+function readOptionalTimeZone(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") throw new BadRequestException("timeZone must be a string.");
+  const timeZone = replaceControlCharacters(value).replace(/\s+/g, " ").trim();
+  if (!timeZone || timeZone.length > 80) throw new BadRequestException("timeZone must contain at most 80 characters.");
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone });
+  } catch {
+    throw new BadRequestException("timeZone must be a valid IANA time zone.");
+  }
+  return timeZone;
 }
 
 function readTiming(input: Record<string, unknown>): ParsedTiming {

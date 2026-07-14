@@ -21,13 +21,13 @@ async function main() {
   if (!config) throw new Error("Desktop Agent is not paired. Run: run-workmap-agent.cmd pair --code XXXX-XXXX --api https://api.example.com");
   const runtime = new DesktopAgentRuntime(config);
   let stopping = false;
-  const stop = () => {
+  const stop = (reason: "USER_STOP" | undefined) => {
     if (stopping) return;
     stopping = true;
-    void runtime.shutdown();
+    void runtime.shutdown(reason);
   };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  process.once("SIGINT", () => stop("USER_STOP"));
+  process.once("SIGTERM", () => stop(undefined));
   console.info(`WorkMap Desktop Agent running for device ${config.deviceId}.`);
   await runtime.run();
 }
