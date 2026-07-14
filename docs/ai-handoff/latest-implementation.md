@@ -2759,3 +2759,71 @@ Make the Dashboard Top domains from Reports API card use the same collapsed-card
 ### Remaining Risk
 
 - Exact rendered expand/collapse behavior remains subject to the deferred browser visual QA session.
+
+---
+
+## 2026-07-14 Reports UTC Boundary And Tracking Reliability Repair
+
+### Original Task Brief
+
+Investigate the production `/reports` failure seen in the morning, then strictly review the Desktop Agent monitoring and reporting path so the identified failure class cannot recur.
+
+### Root Cause
+
+- The Web report filter used the browser's local calendar date while the API validates report ranges against the UTC reporting date.
+- In an Australian early-morning session, the browser submitted the local next day while the API was still on the prior UTC day. Both `/reports/usage-summary` and `/reports/agent-status` correctly rejected that range with HTTP 400.
+- The observed `/platform/me` HTTP 403 is not part of the report failure: an Owner bearer token is correctly denied from the Platform Admin endpoint.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/components/reports/reportFilters.ts`
+- `workmap/apps/web/lib/api/apiClient.ts`
+- `workmap/apps/web/test/reports-api.test.ts`
+- `workmap/apps/web/test/reports-filter-persistence.test.ts`
+- `workmap/apps/api/src/modules/reports/reports.service.ts`
+- `workmap/apps/api/test/report-date-boundary.test.ts`
+- `workmap/apps/api/test/tracking-reports-verification.test.ts`
+- `workmap/apps/desktop-agent/src/runtime.ts`
+- `workmap/apps/desktop-agent/test/queue-api.test.ts`
+
+### Implementation Summary
+
+- Unified Report defaults, quick presets, max selectable date, and persisted-filter validation on the same UTC reporting date used by the API.
+- A locally persisted future range now safely falls back to the current UTC range before any request is sent.
+- The API error surface retains a bounded, credential-redacted validation detail, so a future validation issue is diagnosable instead of only showing a generic HTTP status.
+- Report live revisions now include both Desktop Agent app events and Browser Extension domain events. A currently open report refreshes when either client produces new activity.
+- A graceful Desktop Agent shutdown now writes its final local state as `offline` after session close and queue flush, avoiding a stale `connected` status in the local Agent UI.
+- Restored the locally NUL-corrupted `apps/web/lib/api/authApi.ts` working copy to the valid tracked source. It now has no NUL bytes and matches `HEAD`, so it is intentionally absent from the final source diff while Web typecheck/build run in the shared worktree.
+
+### Tracking And Security Review
+
+- Desktop Agent: foreground segments, idle/locked boundaries, UTC day rollover, queue persistence/capacity, retry classification, inactive-session recreation, shutdown flush, and Windows adapter privacy minimisation were covered by the full package tests.
+- Browser Extension: active-tab/domain lifecycle, focus/idle handling, persistent bounded queue, retry/backoff, credential envelope handling, and hostname-only data minimisation were covered by the full package tests.
+- API: device credential scoping, pairing/revoke behavior, duplicate activity idempotency, tenant/user isolation, report authorization, and Browser/Agent report aggregation were covered by the full package tests.
+- No API contract, database schema, authentication behavior, tenant boundary, role boundary, collection payload shape, or tracking calculation was changed.
+
+### Verification
+
+- `pnpm.CMD --filter @workmap/web test`: passed, 48 tests.
+- `pnpm.CMD --filter @workmap/api test`: passed, 11 tests.
+- `pnpm.CMD --filter @workmap/desktop-agent test`: passed, 29 tests.
+- `pnpm.CMD --filter @workmap/browser-extension test`: passed, 15 tests.
+- Web/API/Desktop Agent/Browser Extension typecheck and lint: passed.
+- Web/API/Desktop Agent/Browser Extension build: passed.
+- `pnpm.CMD --filter @workmap/shared-types typecheck`: passed.
+- `pnpm.CMD smoke:stage4`: blocked before runtime assertions because this workspace has no `DATABASE_URL` and no local API on port 3001. It did not target production or modify cloud state.
+- `git diff --check`: passed before the final documentation check; it is rerun as the final repository verification.
+
+### Manual QA
+
+- Not run. Production deployment and consolidated manual Windows/browser verification remain deferred. This code change has not been deployed to the Render/Vercel environment from this task.
+
+### Intentionally Not Changed
+
+- No production environment, Cognito configuration, Platform Admin access, database, Prisma schema, migration, event payload contract, or tracking permission was changed.
+
+### Remaining Risk
+
+- The UTC fix prevents the verified timezone mismatch. A device with an incorrectly configured system clock can still submit invalid date selections; the safe validation detail makes that condition visible.
+- The source fix must be deployed before the already-deployed `/reports` page changes behavior.

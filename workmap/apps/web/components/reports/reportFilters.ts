@@ -5,14 +5,14 @@ export type ReportFilters = { view: ViewFilter; departmentId: string; from: stri
 
 const REPORT_FILTER_STORAGE_PREFIX = "workmap.reportFilters";
 
-export function defaultReportFilters(view: ViewFilter, today = localToday()): ReportFilters {
+export function defaultReportFilters(view: ViewFilter, today = utcToday()): ReportFilters {
   return { view, departmentId: "", from: today, to: today };
 }
 
 export function restoreReportFilters(
   userId: string,
   fallback: ReportFilters,
-  options: { canViewCompany: boolean; userIds: string[]; departmentIds?: string[] },
+  options: { canViewCompany: boolean; userIds: string[]; departmentIds?: string[]; reportingDate?: string },
 ) {
   if (typeof window === "undefined") return fallback;
 
@@ -20,7 +20,8 @@ export function restoreReportFilters(
     const raw = window.localStorage.getItem(reportFilterStorageKey(userId));
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as unknown;
-    if (!isReportFilters(parsed) || parsed.from > parsed.to || parsed.to > localToday()) return fallback;
+    const reportingDate = options.reportingDate ?? utcToday();
+    if (!isReportFilters(parsed) || parsed.from > parsed.to || parsed.to > reportingDate) return fallback;
     if (parsed.view === "company" && !options.canViewCompany) return fallback;
     if (parsed.view.startsWith("user:") && !options.userIds.includes(parsed.view.slice(5))) return fallback;
 
@@ -46,11 +47,8 @@ export function persistReportFilters(userId: string, filters: ReportFilters) {
   }
 }
 
-export function localToday(now = new Date()) {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+export function utcToday(now = new Date()) {
+  return now.toISOString().slice(0, 10);
 }
 
 function reportFilterStorageKey(userId: string) {

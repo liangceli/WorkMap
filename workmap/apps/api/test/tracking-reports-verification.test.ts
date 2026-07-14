@@ -56,6 +56,7 @@ async function main() {
   await testDeviceRegistrationHeartbeatAndOwnership();
   await testBrowserExtensionCoverageLossAndRestore();
   await testActivityIngestionAndReportsLoop();
+  await testBrowserUsageUpdatesReportRevision();
   await testOwnerSeesLiveForegroundUsageBeforeAppSwitch();
   await testCrossMidnightUsageIsSplitPrecisely();
   await testReportAccessBoundaries();
@@ -841,6 +842,28 @@ function groupUserAppSummaries(rows: AppSummaryRow[]) {
     grouped.set(row.userId, item);
   }
   return Array.from(grouped.values()).sort((left, right) => right._sum.activeSeconds - left._sum.activeSeconds);
+}
+
+async function testBrowserUsageUpdatesReportRevision() {
+  const prisma = new MockPrisma();
+  prisma.seedDevice({ id: DEVICE_ID, companyId: COMPANY_ID, userId: EMPLOYEE_ID });
+  const activity = new ActivityService(prisma as any);
+  const reports = new ReportsService(prisma as any, new MockAuditService() as any);
+
+  await activity.ingestDomainUsage(employeeContext, {
+    deviceId: DEVICE_ID,
+    clientEventId: "88888888-8888-4888-8888-888888888888",
+    domain: "example.com",
+    browserName: "CHROME",
+    startedAt: "2026-06-17T09:00:00.000Z",
+    durationSeconds: 60,
+  });
+  const browserEvent = prisma.activityEvents.find((event) => event.eventType === ActivityEventType.BROWSER);
+  assert(browserEvent);
+  browserEvent.createdAt = new Date("2026-07-14T00:00:02.000Z");
+
+  const live = await reports.getAgentLiveStatus(employeeContext, { from: "2026-06-17", to: "2026-06-17" });
+  assert.equal(live.activityRevision, browserEvent.createdAt.toISOString());
 }
 
 function groupUserAppNameSummaries(rows: AppSummaryRow[]) {

@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   defaultReportFilters,
-  localToday,
   persistReportFilters,
   restoreReportFilters,
+  utcToday,
 } from "../components/reports/reportFilters";
 
-test("new company reports default to the employee's local current day and all departments", () => {
-  assert.equal(localToday(new Date(2026, 6, 7, 23, 30)), "2026-07-07");
+test("new company reports default to the UTC reporting day and all departments", () => {
+  assert.equal(utcToday(new Date("2026-07-13T23:30:00.000Z")), "2026-07-13");
   assert.deepEqual(defaultReportFilters("company", "2026-07-07"), {
     view: "company",
     departmentId: "",
@@ -54,6 +54,22 @@ test("stored views outside the current role or directory fall back safely", () =
         userIds: [],
       }),
       defaultReportFilters("me", "2026-07-07"),
+    );
+  });
+});
+
+test("a locally persisted next-day filter falls back before the UTC reporting day starts", () => {
+  withLocalStorage(() => {
+    const fallback = defaultReportFilters("company", "2026-07-13");
+    persistReportFilters("owner-utc", { view: "company", departmentId: "", from: "2026-07-14", to: "2026-07-14" });
+
+    assert.deepEqual(
+      restoreReportFilters("owner-utc", fallback, {
+        canViewCompany: true,
+        userIds: [],
+        reportingDate: "2026-07-13",
+      }),
+      fallback,
     );
   });
 });

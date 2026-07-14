@@ -113,6 +113,7 @@ export class DesktopAgentRuntime {
       }
     }
     this.sessionId = null;
+    if (this.status.state !== "auth_required") this.status.state = "offline";
     await this.updateStatus();
   }
 

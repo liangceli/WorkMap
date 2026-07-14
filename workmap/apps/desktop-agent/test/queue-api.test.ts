@@ -222,6 +222,44 @@ test("runtime recreates an inactive agent session instead of requiring re-pair",
   });
 });
 
+test("graceful shutdown writes an offline local status after flushing the session", async () => {
+  await withRuntimeEnvironment(async (directory) => {
+    const originalFetch = globalThis.fetch;
+    const statuses: Array<{ state: string; sessionId?: string }> = [];
+    globalThis.fetch = async (input) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/device-client/session/start") {
+        return jsonResponse({ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", startedAt: new Date().toISOString() });
+      }
+      if (path === "/device-client/heartbeat") {
+        return jsonResponse({ device: { id: config.deviceId }, sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+      }
+      if (path === "/device-client/session/stop") {
+        return jsonResponse({ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", endedAt: new Date().toISOString() });
+      }
+      return jsonResponse({ accepted: 0 });
+    };
+
+    try {
+      const runtime = new DesktopAgentRuntime(config, {
+        adapter: fakeAdapter(async () => sample("Microsoft Edge")),
+        queue: new FileEventQueue(join(directory, "queue.json")),
+        statusWriter: async (status) => {
+          statuses.push({ state: status.state, sessionId: status.sessionId });
+        },
+      });
+      const run = runtime.run();
+      await waitUntil(() => statuses.some((status) => status.state === "connected"));
+      await runtime.shutdown();
+      await run;
+
+      assert.deepEqual(statuses.at(-1), { state: "offline", sessionId: undefined });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 function event(index: number): AppUsageEvent {
   return {
     clientEventId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,

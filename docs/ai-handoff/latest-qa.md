@@ -1810,3 +1810,44 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 
 - Pass for the scoped frontend-only refinement. No reporting data or behavior changed beyond local list presentation.
 - The next round can proceed; final rendered visual QA remains deferred pending the existing browser-access limitation.
+
+---
+
+## 2026-07-14 Reports UTC Boundary And Tracking Reliability QA
+
+### Reviewed Implementation
+
+- Reviewed the full report date path from browser defaults, quick presets, persisted filters, API query parsing, and UTC range validation.
+- Reviewed Desktop Agent runtime shutdown/session behavior, foreground privacy minimisation, persistent queue capacity/retry behavior, and report refresh coupling.
+- Reviewed Browser Extension domain-event refresh behavior, queue/batch boundaries, and extension privacy/credential tests.
+
+### Findings Ordered By Severity
+
+- Fixed - High: `/reports` used a local browser date against an API UTC reporting boundary. In Australian mornings this submitted a future UTC date and caused both report endpoints to return HTTP 400.
+- Fixed - Medium: browser-domain activity did not advance the report live revision, so an open Reports page could remain stale until another reload/action.
+- Fixed - Low: a graceful Desktop Agent exit closed the server session but could leave the local status representation as `connected`.
+- Expected - Informational: Owner access to `/platform/me` returns 403 by design because Platform Admin endpoints remain outside tenant Owner scope.
+
+### Test And Verification Status
+
+- New UTC date-boundary API regression test: passed.
+- New persisted future-filter fallback regression test: passed.
+- New safe API validation-detail regression test: passed.
+- New Browser Extension activity-revision integration assertion: passed.
+- New Desktop Agent graceful-shutdown local-status assertion: passed.
+- Full Web tests: passed, 48 tests.
+- Full API tests: passed, 11 tests.
+- Full Desktop Agent tests: passed, 29 tests.
+- Full Browser Extension tests: passed, 15 tests.
+- Shared types and all affected application typechecks: passed.
+- Web/API/Desktop Agent/Browser Extension lint and build: passed.
+- `smoke:stage4`: environment-blocked only. `DATABASE_URL` is absent and no local API listens on port 3001; the command did not run assertions or contact production.
+
+### Manual QA Status
+
+- Not run. No claim is made that the production environment has already received this source change or that a real Windows desktop/manual browser session was performed.
+
+### Risks And Recommendation
+
+- Pass for source-level release preparation: the reported morning UTC mismatch and the identified stale-revision/local-status reliability gaps are covered by regression tests.
+- The next round can proceed after source deployment is authorized. Final manual QA and a configured local Stage 4 smoke remain pending environment access.

@@ -487,8 +487,7 @@ export class ReportsService {
       where: {
         companyId: filter.companyId,
         ...identityFilter(filter),
-        source: ActivityEventSource.DESKTOP_AGENT,
-        eventType: ActivityEventType.APP,
+        eventType: { in: [ActivityEventType.APP, ActivityEventType.BROWSER] },
         startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
       },
       _max: { createdAt: true },
@@ -620,8 +619,8 @@ function normalizeReportScope(scope: string | undefined): ReportScope {
   return scope === "company" ? "company" : "user";
 }
 
-function parseReportRange(fromInput?: string, toInput?: string): ReportRange {
-  const today = utcDateOnly(new Date());
+export function parseReportRange(fromInput?: string, toInput?: string, now = new Date()): ReportRange {
+  const today = utcDateOnly(now);
   const to = toInput ? parseDateOnly(toInput, "to") : today;
   if (to > today) throw new BadRequestException("Report to date cannot be in the future.");
   const from = fromInput ? parseDateOnly(fromInput, "from") : addUtcDays(to, -(DEFAULT_REPORT_DAYS - 1));

@@ -11,7 +11,7 @@ import { WorkMapButton } from "../ui/WorkMapButton";
 import { mergeLiveUsage } from "./liveUsage";
 import {
   defaultReportFilters,
-  localToday,
+  utcToday,
   persistReportFilters,
   restoreReportFilters,
   type ReportFilters,
@@ -152,7 +152,7 @@ export function ReportSummaryPanel() {
   }
 
   function applyPreset(days: number) {
-    const to = localToday();
+    const to = utcToday();
     setFilters((current) => ({ ...current, from: addUtcDays(to, -(days - 1)), to }));
   }
 
@@ -217,7 +217,7 @@ export function ReportSummaryPanel() {
           </label>
           <label style={styles.field}>
             <span style={styles.fieldLabel}>To</span>
-            <input required type="date" value={filters.to} min={filters.from} max={localToday()} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} style={styles.input} />
+            <input required type="date" value={filters.to} min={filters.from} max={utcToday()} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} style={styles.input} />
           </label>
         </div>
 

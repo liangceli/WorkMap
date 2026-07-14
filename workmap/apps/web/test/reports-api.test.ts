@@ -88,6 +88,31 @@ test("company live Agent polling keeps department scope", async () => {
   }
 });
 
+test("reports API keeps a safe backend validation detail for actionable failures", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: "Report to date cannot be in the future." }), {
+    status: 400,
+    headers: { "Content-Type": "application/json" },
+  });
+  try {
+    const result = await getUsageSummary({
+      baseUrl: "https://api.workmap.test",
+      token: "test-token",
+      scope: "company",
+      from: "2026-07-14",
+      to: "2026-07-14",
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.status, 400);
+      assert.match(result.error, /Report to date cannot be in the future/);
+      assert(!result.error.includes("test-token"));
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Reports navigation and page are hidden from employees", async () => {
   const gateSource = await readFile(new URL("../components/reports/ReportsAccessGate.tsx", import.meta.url), "utf8");
   assert.equal(getWorkspaceNavigationItemsForRole("EMPLOYEE").some((item) => item.href === "/reports"), false);

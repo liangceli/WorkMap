@@ -77,7 +77,13 @@ async function workMapApiRequest<T>(
     }
 
     if (!response.ok) {
-      return { ok: false, error: `WorkMap API returned ${response.status}.`, status: response.status, source: "fallback" };
+      const detail = await readApiErrorDetail(response);
+      return {
+        ok: false,
+        error: detail ? `WorkMap API returned ${response.status}: ${detail}` : `WorkMap API returned ${response.status}.`,
+        status: response.status,
+        source: "fallback",
+      };
     }
 
     return { ok: true, data: (await response.json()) as T, source: "api" };
@@ -101,6 +107,41 @@ function sendApiRequest(baseUrl: string, path: string, init: RequestInit, token?
     },
     cache: "no-store",
   });
+}
+
+async function readApiErrorDetail(response: Response) {
+  try {
+    const text = await response.text();
+    if (!text.trim()) return undefined;
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      const message = extractApiErrorMessage(parsed);
+      if (message) return sanitizeApiErrorMessage(message);
+    } catch {
+      // Fall back to the text response below.
+    }
+    return sanitizeApiErrorMessage(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function extractApiErrorMessage(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const body = value as Record<string, unknown>;
+  if (Array.isArray(body.message)) return body.message.filter((item): item is string => typeof item === "string").join(" ");
+  if (typeof body.message === "string") return body.message;
+  if (typeof body.error === "string") return body.error;
+  return undefined;
+}
+
+function sanitizeApiErrorMessage(value: string) {
+  return value
+    .replace(/(?:bearer|device)\s+[A-Za-z0-9._-]+/gi, "[credential]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
 }
 
 async function resolveCognitoToken(forceRefresh: boolean) {
