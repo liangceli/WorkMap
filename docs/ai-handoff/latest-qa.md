@@ -1,5 +1,88 @@
 # Latest QA Handoff
 
+## 2026-07-15 Mobile Workspace Navigation Refinement QA
+
+### Reviewed Implementation
+
+- Mobile-only workspace navigation visual treatment and horizontal-scroll discoverability.
+
+### Findings
+
+- The active tab is an accessible, high-contrast pill with no residual sidebar-style marker.
+- The horizontal overflow area has snap behavior, a visible teal scrollbar, and an explicit `More >` indicator for first-view discoverability.
+- The visual override is scoped to the mobile breakpoint and does not alter link targets or access rules.
+
+### Verification Status
+
+- Web tests: pass (`61/61`), including two mobile-navigation style regression checks.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass.
+
+### Manual QA Status
+
+- Not run in this coding environment.
+
+### Recommendation
+
+- Pass for Web deployment. No backend, database, deployment, Desktop Agent, or Browser Extension update is involved.
+
+## 2026-07-15 Reports Live And Audit Section Spacing QA
+
+### Reviewed Implementation
+
+- The Reports live-signals and connection-audit visual spacing adjustment.
+
+### Findings
+
+- Both affected sections share the same scoped class rather than changing generic report section spacing.
+- Desktop padding is `24px`; the mobile media query reduces it to `16px`.
+- Internal responsive grids and timeline scrolling remain untouched.
+
+### Verification Status
+
+- Web tests: pass (`59/59`), including the responsive spacing regression check.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass.
+
+### Manual QA Status
+
+- Not run in this coding environment.
+
+### Recommendation
+
+- Pass for Web deployment. No backend, database, deployment, Desktop Agent, or Browser Extension change is involved.
+
+## 2026-07-15 Reports Filter Refresh Loading State QA
+
+### Reviewed Implementation
+
+- Reports filter-refresh rendering and the existing pixel-avatar loader.
+
+### Findings
+
+- The previous summary remains available only in component memory while the request is pending; it is no longer rendered.
+- Live signals, audit history, trends, and API summary are gated behind completion of the new request.
+- Export controls are disabled during loading to prevent exporting stale values.
+
+### Verification Status
+
+- Web tests: pass (`58/58`), including the new filter-refresh loader regression test.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass.
+- `git diff --check`: pass (line-ending warnings only).
+- Scoped secret scan: no matches (excluding env files and generated directories).
+
+### Manual QA Status
+
+- Not run in this coding environment.
+
+### Recommendation
+
+- Pass for Web deployment. No Agent, Extension, API, database, or deployment update is required by this frontend-only change.
+
 ## 2026-07-15 Login And Reports Request Latency Stabilisation QA
 
 ### Reviewed Implementation

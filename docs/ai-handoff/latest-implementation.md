@@ -1,5 +1,103 @@
 # Latest Implementation Handoff
 
+## 2026-07-15 Mobile Workspace Navigation Refinement
+
+### Original Task Brief
+
+- Adjust only the mobile workspace navigation styling: replace the selected tab treatment and make horizontal navigation scrollability obvious.
+
+### Changed Files
+
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/mobile-navigation-style.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- At `760px` and below, workspace navigation uses fixed-width, scroll-snapped pill tabs with a visible thin teal scrollbar and a non-interactive `More >` affordance.
+- The selected tab is now a high-contrast light pill; the desktop sidebar marker is hidden only in the mobile treatment.
+- Labels remain centered within bounded tab widths and all navigation links, routes, role filtering, and handlers are unchanged.
+
+### Verification
+
+- `pnpm --filter @workmap/web test`: pass (`61/61`).
+- `pnpm --filter @workmap/web typecheck`: pass.
+- `pnpm --filter @workmap/web lint`: pass.
+- `pnpm --filter @workmap/web build`: pass.
+
+### Intentionally Not Changed
+
+- Navigation data, routes, authentication, backend, API contracts, database, deployment, Desktop Agent, Browser Extension, and tracking behavior.
+
+## 2026-07-15 Reports Live And Audit Section Spacing
+
+### Original Task Brief
+
+- Adjust only the frontend spacing of the Reports live-signals and connection-audit sections so their content no longer sits against the outer frame.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/reports-information-order.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- The two Reports sections now use a dedicated visual class with `24px` desktop padding.
+- Their padding reduces to `16px` at `640px` and below, retaining readable card spacing without constraining the responsive two-column layout or audit-list scroll areas.
+
+### Verification
+
+- `pnpm --filter @workmap/web test`: pass (`59/59`).
+- `pnpm --filter @workmap/web typecheck`: pass.
+- `pnpm --filter @workmap/web lint`: pass.
+- `pnpm --filter @workmap/web build`: pass.
+
+### Intentionally Not Changed
+
+- Reports data, tracking/client behavior, APIs, backend, database, deployment, authentication, and any non-Reports page behavior.
+
+## 2026-07-15 Reports Filter Refresh Loading State
+
+### Original Task Brief
+
+- Change only the Reports frontend so applying filters replaces the old report interface with the existing WorkMap pixel-avatar loading state until the selected report arrives.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/test/reports-information-order.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- During the initial report request or an Apply filters refresh, the area below the controls now renders only the existing `WorkMapLoader` pixel avatar and the label “Loading selected report”.
+- Previous live status, audit, trends, and API summary content is withheld until the new response succeeds, preventing it from being mistaken for the selected range.
+- CSV/TXT export controls are disabled while loading, and the displayed reporting-range text no longer refers to the previous summary.
+
+### Verification
+
+- `pnpm --filter @workmap/web test`: pass (`58/58`).
+- `pnpm --filter @workmap/web typecheck`: pass.
+- `pnpm --filter @workmap/web lint`: pass.
+- `pnpm --filter @workmap/web build`: pass.
+
+### Manual QA
+
+- Not run in this coding environment.
+
+### Intentionally Not Changed
+
+- Backend, API contracts, database/schema/migrations, deployment configuration, authentication, report calculations, Desktop Agent, Browser Extension, and tracking behavior.
+
+### Remaining Risk
+
+- This change deliberately represents the selected-report request as loading; an API failure still replaces the loader with the existing report-error state.
+
 ## 2026-07-15 Login And Reports Request Latency Stabilisation
 
 ### Original Task Brief

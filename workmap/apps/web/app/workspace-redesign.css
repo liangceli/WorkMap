@@ -502,6 +502,10 @@
   box-shadow: none !important;
 }
 
+.wm-report-summary > section.wm-report-detail-section {
+  padding: 24px !important;
+}
+
 .wm-usage-table-toggle {
   min-width: 0;
 }
@@ -1473,19 +1477,88 @@
 
   .wm-app-shell .wm-app-nav-links,
   .wm-app-shell-editorial .wm-app-nav-links {
+    position: relative !important;
     display: flex !important;
     flex-direction: row !important;
-    gap: 6px !important;
+    gap: 8px !important;
+    padding: 4px 48px 10px 0 !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
+    scroll-snap-type: x proximity;
     scrollbar-width: thin;
+    scrollbar-color: rgba(39, 224, 162, 0.8) rgba(255, 255, 255, 0.1);
     -webkit-overflow-scrolling: touch;
+  }
+
+  .wm-app-shell .wm-app-nav-links::after,
+  .wm-app-shell-editorial .wm-app-nav-links::after {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    z-index: 1;
+    transform: translateY(-58%);
+    border: 1px solid rgba(39, 224, 162, 0.42);
+    border-radius: 999px;
+    padding: 4px 7px;
+    background: linear-gradient(90deg, rgba(8, 13, 34, 0.86), rgba(8, 13, 34, 0.98));
+    color: #baf8df;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0;
+    pointer-events: none;
+    content: "More >";
+  }
+
+  .wm-app-shell .wm-app-nav-links::-webkit-scrollbar,
+  .wm-app-shell-editorial .wm-app-nav-links::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  .wm-app-shell .wm-app-nav-links::-webkit-scrollbar-track,
+  .wm-app-shell-editorial .wm-app-nav-links::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .wm-app-shell .wm-app-nav-links::-webkit-scrollbar-thumb,
+  .wm-app-shell-editorial .wm-app-nav-links::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(39, 224, 162, 0.8);
   }
 
   .wm-app-shell .wm-app-nav-link,
   .wm-app-shell-editorial .wm-app-nav-link {
-    flex: 0 0 118px !important;
-    width: 118px !important;
+    flex: 0 0 112px !important;
+    width: 112px !important;
+    min-height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    border-radius: 999px !important;
+    background: rgba(255, 255, 255, 0.045) !important;
+    color: rgba(255, 255, 255, 0.82) !important;
+    scroll-snap-align: start;
+    text-align: center !important;
+  }
+
+  .wm-app-shell .wm-app-nav-link:hover,
+  .wm-app-shell-editorial .wm-app-nav-link:hover {
+    border-color: rgba(39, 224, 162, 0.46) !important;
+    background: rgba(39, 224, 162, 0.14) !important;
+  }
+
+  .wm-app-shell .wm-app-nav-link[aria-current="page"],
+  .wm-app-shell-editorial .wm-app-nav-link[aria-current="page"] {
+    border-color: #fffdf8 !important;
+    background: #fffdf8 !important;
+    color: var(--wm-primary) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18) !important;
+  }
+
+  .wm-app-shell .wm-app-nav-link[aria-current="page"]::before,
+  .wm-app-shell-editorial .wm-app-nav-link[aria-current="page"]::before {
+    display: none !important;
   }
 
   .wm-app-shell .wm-app-nav-link span,
@@ -1687,6 +1760,10 @@
 }
 
 @media (max-width: 640px) {
+  .wm-report-summary > section.wm-report-detail-section {
+    padding: 16px !important;
+  }
+
   .wm-avatar-onboarding {
     background-size: 22px 22px !important;
   }

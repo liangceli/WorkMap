@@ -8,6 +8,7 @@ import { getAgentLiveStatus, getUsageSummary } from "../../lib/api/reportsApi";
 import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
+import { WorkMapLoader } from "../ui/WorkMapLoader";
 import { mergeLiveUsage } from "./liveUsage";
 import {
   defaultReportFilters,
@@ -233,21 +234,25 @@ export function ReportSummaryPanel() {
           <WorkMapButton type="button" tone="primary" onClick={() => void applyFilters()} disabled={!auth || reportState.loading}>
             <RefreshCw size={16} aria-hidden /> {reportState.loading ? "Loading" : "Apply filters"}
           </WorkMapButton>
-          <WorkMapButton type="button" onClick={() => summary && exportSummaryCsv(summary, scopeLabel)} disabled={!summary}>
+          <WorkMapButton type="button" onClick={() => summary && exportSummaryCsv(summary, scopeLabel)} disabled={!summary || reportState.loading}>
             <Download size={16} aria-hidden /> Export CSV
           </WorkMapButton>
-          <WorkMapButton type="button" onClick={() => summary && exportSummaryTxt(summary, scopeLabel)} disabled={!summary}>
+          <WorkMapButton type="button" onClick={() => summary && exportSummaryTxt(summary, scopeLabel)} disabled={!summary || reportState.loading}>
             <FileText size={16} aria-hidden /> Download TXT
           </WorkMapButton>
-          <span style={styles.rangeText}>{summary ? `${summary.range.from} to ${summary.range.to} (${summary.range.timeZone})` : "UTC reporting dates"}</span>
+          <span style={styles.rangeText}>{reportState.loading ? "Loading selected reporting dates" : summary ? `${summary.range.from} to ${summary.range.to} (${summary.range.timeZone})` : "UTC reporting dates"}</span>
         </div>
       </section>
 
-      {reportState.loading || reportState.error || !summary ? (
+      {reportState.loading ? (
+        <section style={styles.loadingPanel} aria-label="Loading selected report">
+          <WorkMapLoader label="Loading selected report" />
+        </section>
+      ) : reportState.error || !summary ? (
         <section style={styles.statusPanel}>
           <div>
             <p style={styles.panelLabel}>Role-aware reporting</p>
-            <h2 style={styles.panelTitle}>{reportState.loading ? "Loading report" : reportState.statusText}</h2>
+            <h2 style={styles.panelTitle}>{reportState.statusText}</h2>
             <p style={styles.panelText}>Reports remain scoped to the signed-in role and selected employee.</p>
             {auth ? <p style={styles.sessionText}>Cognito session / {auth.role} / {scopeLabel}</p> : null}
           </div>
@@ -255,19 +260,19 @@ export function ReportSummaryPanel() {
         </section>
       ) : null}
 
-      {summary?.scope === "user" ? <EmployeeLiveOverview summary={summary} /> : null}
+      {!reportState.loading && summary?.scope === "user" ? <EmployeeLiveOverview summary={summary} /> : null}
 
-      {summary?.scope === "user" ? <EmployeeConnectionAudit summary={summary} /> : null}
+      {!reportState.loading && summary?.scope === "user" ? <EmployeeConnectionAudit summary={summary} /> : null}
 
-      {summary?.scope === "company" && summary.browserExtensionCoverage.length > 0 ? <BrowserExtensionCoveragePanel rows={summary.browserExtensionCoverage} /> : null}
+      {!reportState.loading && summary?.scope === "company" && summary.browserExtensionCoverage.length > 0 ? <BrowserExtensionCoveragePanel rows={summary.browserExtensionCoverage} /> : null}
 
-      {summary?.scope === "company" ? <MetricGrid summary={summary} /> : null}
+      {!reportState.loading && summary?.scope === "company" ? <MetricGrid summary={summary} /> : null}
 
-      {summary && summary.daily.length > 0 ? <DailyTrend rows={summary.daily} /> : null}
+      {!reportState.loading && summary && summary.daily.length > 0 ? <DailyTrend rows={summary.daily} /> : null}
 
-      {summary?.scope === "company" && summary.employeeUsage.length > 0 ? <EmployeeUsageChart rows={summary.employeeUsage} /> : null}
+      {!reportState.loading && summary?.scope === "company" && summary.employeeUsage.length > 0 ? <EmployeeUsageChart rows={summary.employeeUsage} /> : null}
 
-      {summary ? (
+      {!reportState.loading && summary ? (
         <section style={styles.apiPanel}>
           <div style={styles.apiHeader}>
             <div>
@@ -298,7 +303,7 @@ export function ReportSummaryPanel() {
 
 function EmployeeLiveOverview({ summary }: { summary: WorkMapApiUsageSummary }) {
   return (
-    <section style={styles.reportSection} aria-labelledby="employee-live-heading">
+    <section className="wm-report-detail-section" style={styles.reportSection} aria-labelledby="employee-live-heading">
       <div style={styles.sectionHeader}>
         <div>
           <p style={styles.panelLabel}>Live signals</p>
@@ -470,7 +475,7 @@ function EmployeeConnectionAudit({ summary }: { summary: WorkMapApiUsageSummary 
   const desktopEntries = buildDesktopAuditEntries(summary);
   const browserEntries = buildBrowserAuditEntries(summary);
   return (
-    <section style={styles.reportSection} aria-labelledby="connection-audit-heading">
+    <section className="wm-report-detail-section" style={styles.reportSection} aria-labelledby="connection-audit-heading">
       <div style={styles.sectionHeader}>
         <div>
           <p style={styles.panelLabel}>Connection audit</p>
@@ -1010,6 +1015,7 @@ const styles = {
   filterActions: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" as const },
   rangeText: { color: wm.colors.textMuted, fontSize: "12px", fontWeight: 700 },
   statusPanel: { ...wmStyles.infoNotice, display: "flex", justifyContent: "space-between", alignItems: "start", gap: "16px", flexWrap: "wrap" as const, padding: "16px" },
+  loadingPanel: { ...wmStyles.card, minHeight: "280px", display: "grid", placeItems: "center", padding: "24px" },
   reportSection: { display: "grid", gap: "14px", padding: "6px 0" },
   sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", color: wm.colors.infoText },
   sectionTitle: { margin: "2px 0 6px", color: wm.colors.text, fontSize: "22px", lineHeight: 1.25 },
