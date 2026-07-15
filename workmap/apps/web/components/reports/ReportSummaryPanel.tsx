@@ -33,6 +33,7 @@ export function ReportSummaryPanel() {
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [liveStatus, setLiveStatus] = useState<WorkMapApiReportLiveStatus | null>(null);
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
+  const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
     summary: null,
@@ -103,11 +104,17 @@ export function ReportSummaryPanel() {
       });
       if (cancelled || !result.ok) return;
       setLiveStatus(result.data);
-      if (result.data.activityRevision !== activityRevisionRef.current) {
+      if (
+        result.data.activityRevision !== activityRevisionRef.current
+        && result.data.activityRevision !== failedSummaryRevisionRef.current
+      ) {
         const summaryResult = await requestSummary(auth, appliedFilters);
         if (!cancelled && summaryResult.ok) {
+          failedSummaryRevisionRef.current = undefined;
           activityRevisionRef.current = summaryResult.data.activityRevision;
           applyResult(summaryResult, setReportState);
+        } else if (!cancelled) {
+          failedSummaryRevisionRef.current = result.data.activityRevision;
         }
       }
     };
@@ -144,6 +151,7 @@ export function ReportSummaryPanel() {
       return;
     }
     setReportState((current) => ({ ...current, loading: true, error: null, statusText: "Refreshing report..." }));
+    failedSummaryRevisionRef.current = undefined;
     const result = await requestSummary(auth, filters);
     persistReportFilters(auth.userId, filters);
     setLiveStatus(null);

@@ -27,3 +27,9 @@ test("live and audit sections use the responsive two-column grid and real curren
   assert.match(apiTypesSource, /currentDomain: string \| null/);
   assert.match(apiTypesSource, /currentDomainObservedAt: string \| null/);
 });
+
+test("a failed summary revision is not retried on every live poll", () => {
+  assert.match(reportSource, /failedSummaryRevisionRef/);
+  assert.match(reportSource, /result\.data\.activityRevision !== failedSummaryRevisionRef\.current/);
+  assert.match(reportSource, /failedSummaryRevisionRef\.current = result\.data\.activityRevision/);
+});

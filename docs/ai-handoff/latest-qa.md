@@ -2116,3 +2116,28 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 ### Recommendation
 
 - Pass for source, API contract, responsive composition, regression coverage, and build verification. API and Web must both be deployed for the new current-domain field and reordered report UI to appear; no Agent or Extension package update is required for this increment.
+
+---
+
+## 2026-07-15 Reports 500 Regression QA
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: failure of the new optional current Browser Domain query propagated through `Promise.all` and could fail the complete `usage-summary` response. The query is now failure-isolated; core Reports data remains available.
+- Fixed - High: after an initial summary failure, the successful ten-second live-status poll saw a revision mismatch and repeatedly requested the same failing summary. The failed revision is now suppressed until data changes or the user explicitly retries.
+- Fixed - Low: extension coverage queries loaded complete activity rows when only a few fields were needed. The Prisma projections are now minimal.
+
+### Test And Verification Status
+
+- API tests: passed, 14/14. The added test forces the optional Prisma query to reject and verifies a connected coverage response with null current-domain enrichment.
+- Web tests: passed, 53/53. The added test verifies same-revision retry suppression.
+- API and Web typecheck, lint, and production builds: passed.
+- `git diff --check` and scoped credential-pattern scan: passed.
+
+### Manual QA Status
+
+- The user-provided production screenshots are evidence of the original failure only. Post-fix deployed QA is not run and is not reported as passed.
+
+### Recommendation
+
+- Pass for immediate API/Web redeployment. No migration or tracking-client reinstall is required. Confirm one authenticated employee Reports request after deployment and inspect Render logs for the sanitized current-domain warning if enrichment remains unavailable.

@@ -3185,3 +3185,38 @@ Correct the password visibility eye button so it aligns inside the right edge of
 ### Remaining Risk
 
 - The current extension protocol does not emit an explicit uninstall, browser-close, or user-disable lifecycle event. Those cases cannot be truthfully distinguished from heartbeat loss; the report therefore shows an unconfirmed interruption unless an explicit status event exists.
+
+---
+
+## 2026-07-15 Reports 500 Regression Fix
+
+### Original Task Brief
+
+- Fix the production `GET /reports/usage-summary` 500 responses that appeared after adding the employee Reports live Browser Domain presentation.
+
+### Changed Files
+
+- Optional current-domain query isolation and minimal Prisma projection: `workmap/apps/api/src/modules/reports/reports.service.ts`.
+- Production failure-mode API regression: `workmap/apps/api/test/tracking-reports-verification.test.ts`.
+- Failed-revision request suppression: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`.
+- Web polling regression: `workmap/apps/web/test/reports-information-order.test.ts`.
+
+### Implementation Summary
+
+- The newly added current Browser Domain lookup is now an optional enrichment. If Prisma/database execution rejects that query, Reports logs only a sanitized error code, returns the full usage summary and connection coverage, and sets the two current-domain fields to null.
+- Both extension queries now select only the fields used by the report rather than materializing complete activity rows.
+- The Web live poll remembers a failed activity revision. It does not retry the same failing usage summary every ten seconds; a new revision or an explicit Apply Filters action allows a new attempt.
+- No report aggregation, duration calculation, auth/RBAC, schema, migration, Desktop Agent, or Browser Extension runtime behavior changed.
+
+### Verification
+
+- API tests passed, 14/14, including a simulated Prisma `P2022` failure of the optional current-domain query while `getUsageSummary` still succeeds.
+- API typecheck, lint, and build passed.
+- Web tests passed, 53/53, including failed-revision polling suppression.
+- Web typecheck, lint, and production build passed.
+- `git diff --check` and credential-pattern source scan passed.
+
+### Manual QA And Deployment
+
+- The supplied production screenshots confirmed the pre-fix 500 and retry storm. Post-fix production verification was not run because these source changes have not yet been deployed.
+- Deploy API and Web. No database migration and no Desktop Agent or Browser Extension package update are required.

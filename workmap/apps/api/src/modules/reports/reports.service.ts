@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   ActivityEventSource,
   ActivityEventType,
@@ -71,6 +71,8 @@ const BROWSER_CURRENT_DOMAIN_FRESH_MS = 45_000;
 
 @Injectable()
 export class ReportsService {
+  private readonly logger = new Logger(ReportsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -431,19 +433,9 @@ export class ReportsService {
           deviceId: { in: deviceIds },
         },
         orderBy: { endedAt: "desc" },
+        select: { deviceId: true, startedAt: true, endedAt: true },
       }),
-      this.prisma.activityEvent.findMany({
-        where: {
-          companyId: filter.companyId,
-          source: ActivityEventSource.BROWSER_EXTENSION,
-          eventType: ActivityEventType.BROWSER,
-          deviceId: { in: deviceIds },
-          isIdle: false,
-          isActiveWindow: true,
-          endedAt: { gte: new Date(now - BROWSER_CURRENT_DOMAIN_FRESH_MS) },
-        },
-        orderBy: { endedAt: "desc" },
-      }),
+      this.getRecentFocusedDomains(filter.companyId, deviceIds, new Date(now - BROWSER_CURRENT_DOMAIN_FRESH_MS)),
     ]);
     const latestOutageByDevice = new Map<string, typeof outages[number]>();
     for (const outage of outages) if (!latestOutageByDevice.has(outage.deviceId)) latestOutageByDevice.set(outage.deviceId, outage);
@@ -476,6 +468,28 @@ export class ReportsService {
         coverageRestoredAt: outage?.endedAt?.toISOString() ?? null,
       };
     });
+  }
+
+  private async getRecentFocusedDomains(companyId: string, deviceIds: string[], observedSince: Date) {
+    try {
+      return await this.prisma.activityEvent.findMany({
+        where: {
+          companyId,
+          source: ActivityEventSource.BROWSER_EXTENSION,
+          eventType: ActivityEventType.BROWSER,
+          deviceId: { in: deviceIds },
+          domain: { not: null },
+          isIdle: false,
+          isActiveWindow: true,
+          endedAt: { gte: observedSince },
+        },
+        orderBy: { endedAt: "desc" },
+        select: { deviceId: true, domain: true, endedAt: true },
+      });
+    } catch (error) {
+      this.logger.warn(`Current Browser Domain lookup failed; returning coverage without live domain (${reportQueryErrorCode(error)}).`);
+      return [];
+    }
   }
 
   private async getAgentStatus(filter: Pick<UsageFilter, "companyId" | "userId">) {
@@ -1067,4 +1081,9 @@ function addUtcDays(date: Date, days: number) {
 
 function toDateOnly(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function reportQueryErrorCode(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") return error.code;
+  return error instanceof Error ? error.name : "UnknownError";
 }

@@ -60,6 +60,7 @@ async function main() {
   testControllerGuards();
   await testDeviceRegistrationHeartbeatAndOwnership();
   await testBrowserExtensionCoverageLossAndRestore();
+  await testBrowserCurrentDomainFailureDoesNotBreakSummary();
   await testActivityIngestionAndReportsLoop();
   await testBrowserUsageUpdatesReportRevision();
   await testOwnerSeesLiveForegroundUsageBeforeAppSwitch();
@@ -356,6 +357,25 @@ async function testBrowserExtensionCoverageLossAndRestore() {
   assert.equal(summary.browserExtensionCoverage[0]?.coverageRestoredAt, outage.endedAt.toISOString());
 }
 
+async function testBrowserCurrentDomainFailureDoesNotBreakSummary() {
+  const prisma = new MockPrisma();
+  prisma.seedDevice({ id: DEVICE_ID, companyId: COMPANY_ID, userId: EMPLOYEE_ID });
+  Object.assign(prisma.devices[0]!, {
+    hostname: "CHROME",
+    agentVersion: "browser-extension-mv3/0.4.0",
+    lastSeenAt: new Date(),
+  });
+  prisma.failRecentFocusedDomainLookup = true;
+  const reports = new ReportsService(prisma as any, new MockAuditService() as any);
+
+  const summary = await reports.getUsageSummary(employeeContext, {});
+
+  assert.equal(summary.scope, "user");
+  assert.equal(summary.browserExtensionCoverage[0]?.state, "connected");
+  assert.equal(summary.browserExtensionCoverage[0]?.currentDomain, null);
+  assert.equal(summary.browserExtensionCoverage[0]?.currentDomainObservedAt, null);
+}
+
 async function testOwnerSeesLiveForegroundUsageBeforeAppSwitch() {
   const prisma = new MockPrisma();
   const reports = new ReportsService(prisma as any, new MockAuditService() as any);
@@ -583,6 +603,7 @@ class MockPrisma {
   agentSessions: any[] = [];
   deviceStatusEvents: any[] = [];
   platformAuditLogs: unknown[] = [];
+  failRecentFocusedDomainLookup = false;
 
   device = {
     findUnique: async ({ where }: any) => this.devices.find((device) => device.id === where.id) ?? null,
@@ -634,7 +655,17 @@ class MockPrisma {
       const latest = rows.reduce<Date | null>((current, row) => maxDate(current, row.createdAt), null);
       return { _max: { createdAt: latest } };
     },
-    findMany: async ({ where }: any) => this.activityEvents.filter((event) => matchesWhere(event, where)),
+    findMany: async ({ where }: any) => {
+      if (
+        this.failRecentFocusedDomainLookup
+        && where?.eventType === ActivityEventType.BROWSER
+        && where?.isActiveWindow === true
+        && where?.endedAt?.gte instanceof Date
+      ) {
+        throw Object.assign(new Error("Simulated optional current-domain query failure."), { code: "P2022" });
+      }
+      return this.activityEvents.filter((event) => matchesWhere(event, where));
+    },
   };
 
   appUsageSummary = {
