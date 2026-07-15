@@ -3045,3 +3045,143 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - Windows can reliably provide global last-input and foreground/visible-window context, but it cannot prove keyboard or pointer attribution to every visible application. The bounded grace model is explicit about that limitation and must be manually exercised on real multi-monitor workflows.
 - A forced process termination or sudden power loss cannot always be classified locally at the instant it happens; the server records it as an interruption until a later reconnect/recovery provides more evidence.
 - A disposable local database plus API process is still required to run the existing end-to-end `smoke:stage4` script. This is an environment gap, not a passed smoke result.
+
+---
+
+## 2026-07-15 Avatar Studio Visual Refinement
+
+### Original Task Brief
+
+- Redesign only the visual presentation of `/onboarding/avatar` as a clear character-building page. Preserve avatar assets, profile persistence, authentication, navigation, and selection behavior.
+
+### Changed Files
+
+- `workmap/apps/web/app/onboarding/avatar/page.tsx`
+- `workmap/apps/web/app/workspace-redesign.css`
+
+### Implementation Summary
+
+- Reframed the page as an Avatar Studio with a live dark preview stage, selected-layer summary, visible selected state, optional-layer labels, and compact selection counts.
+- Replaced the narrow internal picker layout with readable asset cards, single-line ellipsised labels, tooltips, and page-level scrolling. This removes the prior vertical letter wrapping and nested category scroll areas.
+- Added responsive behavior: the preview moves before the builder below 900px, and option cards become a stable two-column grid below 640px. Buttons and labels retain bounded widths.
+- Added only existing Lucide icons and existing layered WorkMap avatar assets. No avatar data, save API call, setup-state update, or routing logic changed.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/web typecheck`: passed.
+- `pnpm.cmd --filter @workmap/web lint`: passed.
+- `pnpm.cmd --filter @workmap/web test`: passed, 50/50.
+- `pnpm.cmd --filter @workmap/web build`: passed.
+- `git diff --check`: passed.
+- Credential-pattern source scan: passed.
+
+### Manual QA
+
+- Not run locally: this protected page redirects without a real Cognito session, and no session was fabricated for visual testing. Production/manual visual verification remains Deferred by user, pending final consolidated manual QA.
+
+### Intentionally Not Changed
+
+- Avatar assets, avatar encoding/storage, profile update requests, Cognito behavior, onboarding completion logic, virtual-office routing, APIs, schema, and backend code.
+
+---
+
+## 2026-07-15 Device Setup Download Button Alignment
+
+- Fixed the stretched download-link text alignment on `/onboarding/device-setup` by making the existing primary download style an explicit centered inline-flex control with a stable minimum height and safe width.
+- The same presentation fix applies to the Windows installer and Browser Extension ZIP links. Download URLs, pairing behavior, setup requirements, authentication, APIs, and backend code were not changed.
+- Web typecheck, lint, production build, and `git diff --check` passed. Manual authenticated visual QA was not run.
+
+---
+
+## 2026-07-15 Agent Restart And Audit Reliability Fix
+
+### Original Task Brief
+
+- Investigate and fix the production-observed Desktop Agent restart error (`Current activity observation is too far in the future`), misleading connected/offline UI, repeated Network Offline audit entries, and overlapping or incomplete Agent session history in Owner Reports.
+
+### Changed Files
+
+- Device heartbeat, Agent session start, and status-event handling: `workmap/apps/api/src/modules/devices/devices.service.ts`.
+- Report history aggregation: `workmap/apps/api/src/modules/reports/reports.service.ts`.
+- Desktop runtime connectivity state and renderer status copy under `workmap/apps/desktop-agent/`.
+- Owner Reports audit rendering: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`.
+- Focused API and Desktop Agent regression tests covering clock skew, retry idempotency, status deduplication, and report coalescing.
+
+### Runtime Implementation Summary
+
+- Heartbeats now tolerate and normalize bounded client clock skew up to five minutes against server time while preserving the observed activity duration. Larger future timestamps still fail validation instead of accepting unbounded or corrupt time.
+- Agent session start is idempotent by the client session ID. A retried request whose first response was lost reuses the existing active session rather than creating a phantom overlapping session.
+- Device status writes now deduplicate equivalent consecutive transitions even when a retry has a new client event ID.
+- Successful activity uploads no longer overwrite a failed-heartbeat connection state. Network Offline is recorded once per transition, and the Agent returns to connected only after an actual heartbeat succeeds.
+- The desktop window now distinguishes `Agent connected` from `Recording locally`; queued activity may continue to accumulate during a network interruption and is uploaded after heartbeat recovery.
+- Reports coalesce historical duplicate server sessions by client session ID and collapse consecutive equivalent device-status transitions at read time. The UI displays the complete API result (bounded to 500 rows server-side), explicit session end reasons, event occurrence time, and delayed sync time where applicable.
+
+### Build Artifact
+
+- Windows installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.8.exe`.
+- Size: 91,942,548 bytes.
+- SHA-256: `8FECA0D42E22CF9A3CE5A836D8A5DB1D41C6E82248F85FF1B9FE207033220CDE`.
+- A 0.5.8 client install is required for the corrected runtime connection state and renderer messaging. Server deployment alone gives 0.5.7 the bounded clock-skew and session-idempotency protections, but not the client-side transition fix.
+
+### Verification
+
+- API: typecheck, lint, build, and 14 tests passed.
+- Desktop Agent: typecheck, lint, build, 34 tests, renderer syntax check, and Windows installer packaging passed.
+- Web: typecheck, lint, build, and 50 tests passed.
+- `git diff --check`: passed.
+- Credential-pattern source scan excluding environment, dependency, generated, build, coverage, reference, and artifact paths: passed with no matches.
+- `pnpm smoke:stage4`: not run successfully because this process has no `DATABASE_URL`; Prisma stopped before connecting. No database was contacted or modified, and production was not used as a smoke target.
+
+### Manual QA
+
+- The supplied production screenshots established the original symptoms. Post-fix Windows restart, corporate-network interruption, and deployed Reports verification were not run by Codex. Deferred by user, pending final consolidated manual QA.
+
+### Intentionally Not Changed
+
+- No Prisma schema, migration, activity duration semantics, foreground tracking rules, queue capacity, authentication, Cognito, tenant/RBAC, browser-extension runtime, or production infrastructure was changed.
+
+### Remaining Risks
+
+- Historical rows without a client session ID cannot be safely merged automatically because they lack a reliable identity; they remain visible rather than being guessed away.
+- Offline Focus Active continuing to increase is expected while local foreground activity remains valid. Network reachability controls synchronization, not local collection; the bounded durable queue preserves those events until recovery.
+
+---
+
+## 2026-07-15 Reports Employee Information Hierarchy
+
+### Original Task Brief
+
+- Consolidate the selected employee `/reports` view into four clear sections: current Desktop Agent and Browser Extension activity, connection audits for both clients, the existing Daily Trend, and the existing API Summary.
+
+### Changed Files
+
+- Employee report composition and responsive cards: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`.
+- Browser coverage response typing: `workmap/apps/web/lib/api/apiTypes.ts`.
+- Fresh current-domain lookup: `workmap/apps/api/src/modules/reports/reports.service.ts`.
+- API coverage verification: `workmap/apps/api/test/tracking-reports-verification.test.ts`.
+- Web information-order regression test: `workmap/apps/web/test/reports-information-order.test.ts`.
+
+### Implementation Summary
+
+- Selected employee reports now render in the requested order: a two-column live-status section, a two-column connection-audit section, the unchanged Daily Trend, then the unchanged API Summary.
+- The Desktop live card uses the existing Agent status payload for connection, current foreground app, active/idle time, host, and last heartbeat.
+- Browser coverage now exposes `currentDomain` and `currentDomainObservedAt` only from a real Browser Extension activity event that is active-window, non-idle, no more than 45 seconds old, and belongs to a currently connected extension device. Stale, idle, background, or disconnected observations are not labelled as current activity.
+- Desktop audit combines session start/end records with device lifecycle events and preserves exact occurrence times plus delayed-sync context.
+- Browser audit combines extension coverage and Browser Extension lifecycle events. If only heartbeat loss is known, the UI labels it as an unconfirmed interruption rather than claiming a manual stop.
+- Company aggregate reports retain their previous coverage, metric, Daily Trend, employee usage, and API Summary composition.
+- No schema, migration, activity duration calculation, ingestion contract, authentication, tenant/RBAC rule, Desktop Agent runtime, or Browser Extension runtime changed in this UI/API increment.
+
+### Verification
+
+- API typecheck, lint, build, and tests: passed, 14/14.
+- Web typecheck, lint, production build, and tests: passed, 52/52.
+- `git diff --check`: passed; only existing line-ending conversion warnings were emitted.
+- Credential-pattern source scan: passed with no matches.
+
+### Manual QA
+
+- Deferred by user, pending final consolidated manual QA. Authenticated desktop/mobile browser verification was not run because no real Cognito session was fabricated.
+
+### Remaining Risk
+
+- The current extension protocol does not emit an explicit uninstall, browser-close, or user-disable lifecycle event. Those cases cannot be truthfully distinguished from heartbeat loss; the report therefore shows an unconfirmed interruption unless an explicit status event exists.

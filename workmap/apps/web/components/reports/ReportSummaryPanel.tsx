@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, AlertTriangle, ChevronDown, Download, FileText, Globe2, Power, RefreshCw } from "lucide-react";
+import { Activity, AlertTriangle, ChevronDown, Download, FileText, Globe2, History, Monitor, Power, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import type { ApiClientOptions, WorkMapApiReportLiveStatus, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
@@ -235,32 +235,29 @@ export function ReportSummaryPanel() {
         </div>
       </section>
 
-      <section style={styles.statusPanel}>
-        <div>
-          <p style={styles.panelLabel}>Role-aware reporting</p>
-          <h2 style={styles.panelTitle}>{reportState.loading ? "Loading report" : reportState.statusText}</h2>
-          <p style={styles.panelText}>
-            Company view is aggregated by default. Authorized Owner and manager roles may select an individual employee; every individual report request is audit logged.
-            Employees and IT Admins see only their own summary.
-          </p>
-          {auth ? <p style={styles.sessionText}>Cognito session / {auth.role} / {scopeLabel}</p> : null}
-        </div>
-        {reportState.error ? <p role="alert" style={styles.errorText}>{reportState.error}</p> : null}
-      </section>
+      {reportState.loading || reportState.error || !summary ? (
+        <section style={styles.statusPanel}>
+          <div>
+            <p style={styles.panelLabel}>Role-aware reporting</p>
+            <h2 style={styles.panelTitle}>{reportState.loading ? "Loading report" : reportState.statusText}</h2>
+            <p style={styles.panelText}>Reports remain scoped to the signed-in role and selected employee.</p>
+            {auth ? <p style={styles.sessionText}>Cognito session / {auth.role} / {scopeLabel}</p> : null}
+          </div>
+          {reportState.error ? <p role="alert" style={styles.errorText}>{reportState.error}</p> : null}
+        </section>
+      ) : null}
 
-      {summary?.scope === "user" ? <AgentStatusPanel summary={summary} /> : null}
+      {summary?.scope === "user" ? <EmployeeLiveOverview summary={summary} /> : null}
 
-      {summary && summary.browserExtensionCoverage.length > 0 ? <BrowserExtensionCoveragePanel rows={summary.browserExtensionCoverage} /> : null}
+      {summary?.scope === "user" ? <EmployeeConnectionAudit summary={summary} /> : null}
 
-      {summary ? <MetricGrid summary={summary} /> : null}
+      {summary?.scope === "company" && summary.browserExtensionCoverage.length > 0 ? <BrowserExtensionCoveragePanel rows={summary.browserExtensionCoverage} /> : null}
+
+      {summary?.scope === "company" ? <MetricGrid summary={summary} /> : null}
 
       {summary && summary.daily.length > 0 ? <DailyTrend rows={summary.daily} /> : null}
 
       {summary?.scope === "company" && summary.employeeUsage.length > 0 ? <EmployeeUsageChart rows={summary.employeeUsage} /> : null}
-
-      {summary?.scope === "user" && summary.agentSessions.length > 0 ? <AgentSessionHistory rows={summary.agentSessions} /> : null}
-
-      {summary?.scope === "user" && summary.deviceStatusHistory.length > 0 ? <DeviceStatusHistory rows={summary.deviceStatusHistory} /> : null}
 
       {summary ? (
         <section style={styles.apiPanel}>
@@ -291,47 +288,113 @@ export function ReportSummaryPanel() {
   );
 }
 
-function AgentStatusPanel({ summary }: { summary: WorkMapApiUsageSummary }) {
+function EmployeeLiveOverview({ summary }: { summary: WorkMapApiUsageSummary }) {
+  return (
+    <section style={styles.reportSection} aria-labelledby="employee-live-heading">
+      <div style={styles.sectionHeader}>
+        <div>
+          <p style={styles.panelLabel}>Live signals</p>
+          <h2 id="employee-live-heading" style={styles.sectionTitle}>Tracking connections and current focus</h2>
+          <p style={styles.panelText}>Fresh client signals only. Stale activity is not presented as current.</p>
+        </div>
+        <Activity size={22} aria-hidden />
+      </div>
+      <div style={styles.twoColumnGrid}>
+        <AgentLiveCard summary={summary} />
+        <BrowserLiveCard rows={summary.browserExtensionCoverage} />
+      </div>
+    </section>
+  );
+}
+
+function AgentLiveCard({ summary }: { summary: WorkMapApiUsageSummary }) {
   const status = summary.agentStatus;
   if (!status || status.state === "not_paired") {
     return (
-      <section style={styles.agentPanel} aria-label="Desktop Agent status">
-        <Power size={20} aria-hidden />
-        <div><p style={styles.panelLabel}>Desktop Agent</p><h2 style={styles.panelTitle}>No paired Agent</h2><p style={styles.panelText}>This employee has no active Windows Agent session.</p></div>
-      </section>
+      <article style={styles.clientCard} aria-label="Desktop Agent status">
+        <div style={styles.clientHeader}>
+          <span style={styles.clientIcon}><Monitor size={20} aria-hidden /></span>
+          <div><p style={styles.clientLabel}>Desktop Agent</p><h3 style={styles.clientTitle}>Not paired</h3></div>
+        </div>
+        <p style={styles.emptyText}>This employee has no Windows Agent connection.</p>
+      </article>
     );
   }
   const running = status.state === "running";
   const attention = isAttentionAgentState(status.state);
   return (
-    <section style={{ ...styles.agentPanel, ...(attention ? styles.agentInterrupted : running ? styles.agentOnline : {}) }} aria-label="Desktop Agent status">
-      {attention ? <AlertTriangle size={20} aria-hidden /> : running ? <Activity size={20} aria-hidden /> : <Power size={20} aria-hidden />}
-      <div style={styles.agentBody}>
-        <div style={styles.agentHeader}>
-          <div>
-            <p style={styles.panelLabel}>Desktop Agent now</p>
-            <h2 style={styles.panelTitle}>{describeAgentState(status.state)}</h2>
-          </div>
-          <span style={styles.agentTimestamp}>{status.lastHeartbeatAt ? `Last heartbeat ${formatDateTime(status.lastHeartbeatAt)}${status.heartbeatAgeSeconds !== undefined ? ` (${formatDuration(status.heartbeatAgeSeconds)} ago)` : ""}` : "No heartbeat"}</span>
+    <article style={{ ...styles.clientCard, ...(attention ? styles.clientAttention : running ? styles.clientConnected : {}) }} aria-label="Desktop Agent status">
+      <div style={styles.clientHeader}>
+        <span style={styles.clientIcon}>{attention ? <AlertTriangle size={20} aria-hidden /> : running ? <Monitor size={20} aria-hidden /> : <Power size={20} aria-hidden />}</span>
+        <div style={styles.clientHeading}>
+          <p style={styles.clientLabel}>Desktop Agent</p>
+          <h3 style={styles.clientTitle}>{describeAgentState(status.state)}</h3>
         </div>
-        <div style={styles.currentAppRow}>
-          <span style={styles.currentAppLabel}>Current foreground app</span>
-          <strong style={styles.currentAppName}>{running ? status.currentAppName ?? "No active foreground app" : "Not available"}</strong>
-          <span style={styles.currentAppDuration}>
-            {running && status.currentAppName
-              ? status.currentAppFocusedIdleSeconds
-                ? "No recent input"
-                : `${formatDuration(status.currentAppActiveSeconds ?? 0)} focus active`
-              : ""}
-          </span>
-        </div>
-        <div style={styles.todayUsageRow}>
-          <span>Today across all foreground apps</span>
-          <strong>{formatDuration(status.todayActiveSeconds ?? 0)}</strong>
-        </div>
-        <p style={styles.agentMeta}>{status.hostname ?? "Windows device"} · Session started {status.startedAt ? formatDateTime(status.startedAt) : "unknown"}</p>
+        <span style={{ ...styles.connectionPill, ...(attention ? styles.connectionPillAttention : running ? styles.connectionPillConnected : {}) }}>
+          {running ? "Connected" : describeAgentState(status.state)}
+        </span>
       </div>
-    </section>
+      <div style={styles.focusBlock}>
+        <span style={styles.focusLabel}>Focus-active app</span>
+        <strong style={styles.focusValue}>{running ? status.currentAppName ?? "No active app" : "Unavailable"}</strong>
+        <span style={styles.focusMeta}>
+          {running && status.currentAppName
+            ? status.currentAppFocusedIdleSeconds
+              ? "No recent input"
+              : `${formatDuration(status.currentAppActiveSeconds ?? 0)} active`
+            : "No fresh foreground signal"}
+        </span>
+      </div>
+      <div style={styles.clientFooter}>
+        <span>{status.hostname ?? "Windows device"}</span>
+        <span>{status.lastHeartbeatAt ? `Heartbeat ${formatDateTime(status.lastHeartbeatAt)}` : "No heartbeat"}</span>
+      </div>
+    </article>
+  );
+}
+
+function BrowserLiveCard({ rows }: { rows: WorkMapApiUsageSummary["browserExtensionCoverage"] }) {
+  const connectedCount = rows.filter((row) => row.state === "connected").length;
+  return (
+    <article style={{ ...styles.clientCard, ...(connectedCount > 0 ? styles.clientConnected : rows.length > 0 ? styles.clientAttention : {}) }} aria-label="Browser Extension status">
+      <div style={styles.clientHeader}>
+        <span style={styles.clientIcon}>{connectedCount > 0 ? <Globe2 size={20} aria-hidden /> : <WifiOff size={20} aria-hidden />}</span>
+        <div style={styles.clientHeading}>
+          <p style={styles.clientLabel}>Browser Extension</p>
+          <h3 style={styles.clientTitle}>{rows.length === 0 ? "Not paired" : connectedCount > 0 ? "Connected" : "Signal interrupted"}</h3>
+        </div>
+        {rows.length > 0 ? (
+          <span style={{ ...styles.connectionPill, ...(connectedCount > 0 ? styles.connectionPillConnected : styles.connectionPillAttention) }}>
+            {connectedCount}/{rows.length} online
+          </span>
+        ) : null}
+      </div>
+      {rows.length === 0 ? <p style={styles.emptyText}>This employee has no paired Chrome or Edge extension.</p> : (
+        <div style={styles.browserSignalRows}>
+          {rows.map((row) => {
+            const connected = row.state === "connected";
+            return (
+              <div key={row.deviceId} style={styles.browserSignalRow}>
+                <div style={styles.browserIdentity}>
+                  {connected ? <Wifi size={15} aria-hidden /> : <WifiOff size={15} aria-hidden />}
+                  <strong>{formatBrowserName(row.browserName)}</strong>
+                  <span style={{ ...styles.signalDot, background: connected ? wm.colors.success : wm.colors.error }} />
+                </div>
+                <div style={styles.domainFocus}>
+                  <span style={styles.focusLabel}>Focus-active domain</span>
+                  <strong style={styles.focusValue}>{connected ? row.currentDomain ?? "No active domain" : "Unavailable"}</strong>
+                  <span style={styles.focusMeta}>
+                    {row.currentDomainObservedAt
+                      ? `Observed ${formatDateTime(row.currentDomainObservedAt)}`
+                      : row.lastSignalAt ? `Last signal ${formatDateTime(row.lastSignalAt)}` : "No signal received"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -387,45 +450,142 @@ function EmployeeUsageChart({ rows }: { rows: WorkMapApiUsageSummary["employeeUs
   );
 }
 
-function AgentSessionHistory({ rows }: { rows: WorkMapApiUsageSummary["agentSessions"] }) {
+type AuditEntry = {
+  id: string;
+  title: string;
+  detail: string;
+  timestamp: string;
+  tone: "positive" | "attention" | "neutral";
+};
+
+function EmployeeConnectionAudit({ summary }: { summary: WorkMapApiUsageSummary }) {
+  const desktopEntries = buildDesktopAuditEntries(summary);
+  const browserEntries = buildBrowserAuditEntries(summary);
   return (
-    <section style={styles.trendPanel} aria-label="Desktop Agent session history">
-      <div><p style={styles.panelLabel}>Agent audit</p><h2 style={styles.panelTitle}>Start, stop and interruption history</h2></div>
-      <div style={styles.sessionRows}>
-        {rows.slice(0, 30).map((row) => {
-          const interrupted = row.endReason === "UNEXPECTED_STOP" || row.endReason === "UNKNOWN_INTERRUPTED" || row.endReason === "AGENT_CRASHED" || row.endReason === "AGENT_TERMINATED";
-          return (
-            <div key={row.id} style={styles.sessionRow}>
-              <span style={{ ...styles.sessionState, ...(interrupted ? styles.sessionInterrupted : {}) }}>{row.endedAt ? describeSessionEnd(row.endReason) : "Running"}</span>
-              <span>Started {formatDateTime(row.startedAt)}</span>
-              <span>{row.endedAt ? `Ended ${formatDateTime(row.endedAt)}` : `Last signal ${formatDateTime(row.lastHeartbeatAt)}`}</span>
-            </div>
-          );
-        })}
+    <section style={styles.reportSection} aria-labelledby="connection-audit-heading">
+      <div style={styles.sectionHeader}>
+        <div>
+          <p style={styles.panelLabel}>Connection audit</p>
+          <h2 id="connection-audit-heading" style={styles.sectionTitle}>Start, stop and interruption history</h2>
+          <p style={styles.panelText}>Exact client-reported times are shown separately for the Agent and Extension.</p>
+        </div>
+        <History size={22} aria-hidden />
+      </div>
+      <div style={styles.twoColumnGrid}>
+        <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} />
+        <AuditTimeline title="Browser Extension" icon={<Globe2 size={18} aria-hidden />} entries={browserEntries} />
       </div>
     </section>
   );
 }
 
-function DeviceStatusHistory({ rows }: { rows: WorkMapApiUsageSummary["deviceStatusHistory"] }) {
+function AuditTimeline({ title, icon, entries }: { title: string; icon: React.ReactNode; entries: AuditEntry[] }) {
   return (
-    <section style={styles.trendPanel} aria-label="Device status history">
-      <div>
-        <p style={styles.panelLabel}>Device status audit</p>
-        <h2 style={styles.panelTitle}>Reported lifecycle and connectivity events</h2>
-        <p style={styles.panelText}>Client-confirmed states are separated from inferred interruption records.</p>
+    <article style={styles.auditCard} aria-label={`${title} connection history`}>
+      <div style={styles.auditCardHeader}>
+        <span style={styles.auditIcon}>{icon}</span>
+        <h3 style={styles.auditTitle}>{title}</h3>
+        <span style={styles.auditCount}>{entries.length} events</span>
       </div>
-      <div style={styles.sessionRows}>
-        {rows.slice(0, 50).map((row) => (
-          <div key={row.id} style={styles.sessionRow}>
-            <span style={{ ...styles.sessionState, ...(isAttentionDeviceStatus(row.status) ? styles.sessionInterrupted : {}) }}>{formatDeviceStatus(row.status)}</span>
-            <span>{formatDeviceStatusReason(row.reason)}{row.confidence === "INFERRED" ? " (inferred)" : ""}</span>
-            <span>Recorded {formatDateTime(row.recordedAt)}</span>
+      <div style={styles.auditRows}>
+        {entries.length === 0 ? <p style={styles.emptyText}>No connection events in this report range.</p> : entries.map((entry) => (
+          <div key={entry.id} style={styles.auditRow}>
+            <span style={{ ...styles.auditMarker, ...(entry.tone === "attention" ? styles.auditMarkerAttention : entry.tone === "positive" ? styles.auditMarkerPositive : {}) }} />
+            <div style={styles.auditContent}>
+              <div style={styles.auditLine}>
+                <strong style={styles.auditEventTitle}>{entry.title}</strong>
+                <time style={styles.auditTime}>{formatDateTime(entry.timestamp)}</time>
+              </div>
+              <span style={styles.auditDetail}>{entry.detail}</span>
+            </div>
           </div>
         ))}
       </div>
-    </section>
+    </article>
   );
+}
+
+function buildDesktopAuditEntries(summary: WorkMapApiUsageSummary): AuditEntry[] {
+  const entries: AuditEntry[] = [];
+  for (const session of summary.agentSessions) {
+    entries.push({
+      id: `${session.id}:started`,
+      title: "Agent started",
+      detail: session.endedAt ? "Desktop monitoring session opened" : `Running - last signal ${formatDateTime(session.lastHeartbeatAt)}`,
+      timestamp: session.startedAt,
+      tone: "positive",
+    });
+    if (session.endedAt) {
+      const interrupted = session.endReason === "UNEXPECTED_STOP" || session.endReason === "UNKNOWN_INTERRUPTED" || session.endReason === "AGENT_CRASHED" || session.endReason === "AGENT_TERMINATED";
+      entries.push({
+        id: `${session.id}:ended`,
+        title: describeSessionEnd(session.endReason),
+        detail: session.endReason === "USER_STOP" ? "Employee manually stopped the Agent" : "Desktop monitoring session ended",
+        timestamp: session.endedAt,
+        tone: interrupted ? "attention" : "neutral",
+      });
+    }
+  }
+
+  const supplementalStatuses = new Set(["NETWORK_OFFLINE", "SERVER_UNREACHABLE", "SLEEPING", "LOCKED", "RECONNECTED", "RESTARTED"]);
+  for (const event of summary.deviceStatusHistory) {
+    if (event.source !== "DESKTOP_AGENT" || !supplementalStatuses.has(event.status)) continue;
+    entries.push(statusToAuditEntry(event, "Desktop Agent"));
+  }
+  return sortAuditEntries(entries);
+}
+
+function buildBrowserAuditEntries(summary: WorkMapApiUsageSummary): AuditEntry[] {
+  const entries: AuditEntry[] = [];
+  const coverageByDevice = new Map(summary.browserExtensionCoverage.map((row) => [row.deviceId, row]));
+  for (const row of summary.browserExtensionCoverage) {
+    entries.push({
+      id: `${row.deviceId}:enabled`,
+      title: "Extension started",
+      detail: `${formatBrowserName(row.browserName)} tracking enabled`,
+      timestamp: row.enabledAt,
+      tone: "positive",
+    });
+  }
+  for (const event of summary.deviceStatusHistory) {
+    if (event.source !== "BROWSER_EXTENSION" || event.status === "RUNNING") continue;
+    const browser = coverageByDevice.get(event.deviceId);
+    entries.push(statusToAuditEntry(event, browser ? formatBrowserName(browser.browserName) : "Browser Extension"));
+  }
+  for (const row of summary.browserExtensionCoverage) {
+    if (row.state !== "signal_lost" || !row.coverageLostDetectedAt) continue;
+    const hasMatchingInterruption = entries.some((entry) =>
+      entry.id.startsWith(`${row.deviceId}:status:`)
+      && Math.abs(Date.parse(entry.timestamp) - Date.parse(row.coverageLostDetectedAt!)) <= 90_000,
+    );
+    if (!hasMatchingInterruption) {
+      entries.push({
+        id: `${row.deviceId}:coverage-lost`,
+        title: "Signal interrupted",
+        detail: `${formatBrowserName(row.browserName)} stopped sending heartbeats; the cause is not confirmed`,
+        timestamp: row.coverageLostDetectedAt,
+        tone: "attention",
+      });
+    }
+  }
+  return sortAuditEntries(entries);
+}
+
+function statusToAuditEntry(
+  event: WorkMapApiUsageSummary["deviceStatusHistory"][number],
+  clientName: string,
+): AuditEntry {
+  return {
+    id: `${event.deviceId}:status:${event.id}`,
+    title: formatDeviceStatus(event.status),
+    detail: `${clientName} - ${formatDeviceStatusReason(event.reason)}${event.confidence === "INFERRED" ? " (inferred)" : ""}${statusSyncWasDelayed(event) ? ` - synced ${formatDateTime(event.receivedAt)}` : ""}`,
+    timestamp: event.startedAt,
+    tone: isAttentionDeviceStatus(event.status) ? "attention" : event.status === "RECONNECTED" || event.status === "RUNNING" ? "positive" : "neutral",
+  };
+}
+
+function sortAuditEntries(entries: AuditEntry[]) {
+  return entries.sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
 }
 
 function MetricGrid({ summary }: { summary: WorkMapApiUsageSummary }) {
@@ -810,6 +970,10 @@ function formatDeviceStatusReason(reason: WorkMapApiUsageSummary["deviceStatusHi
   return reason.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function statusSyncWasDelayed(row: WorkMapApiUsageSummary["deviceStatusHistory"][number]) {
+  return new Date(row.receivedAt).getTime() - new Date(row.startedAt).getTime() > 30_000;
+}
+
 function describeSessionEnd(endReason: WorkMapApiUsageSummary["agentSessions"][number]["endReason"]) {
   switch (endReason) {
     case "USER_STOP": return "Stopped by user";
@@ -838,6 +1002,46 @@ const styles = {
   filterActions: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" as const },
   rangeText: { color: wm.colors.textMuted, fontSize: "12px", fontWeight: 700 },
   statusPanel: { ...wmStyles.infoNotice, display: "flex", justifyContent: "space-between", alignItems: "start", gap: "16px", flexWrap: "wrap" as const, padding: "16px" },
+  reportSection: { display: "grid", gap: "14px", padding: "6px 0" },
+  sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", color: wm.colors.infoText },
+  sectionTitle: { margin: "2px 0 6px", color: wm.colors.text, fontSize: "22px", lineHeight: 1.25 },
+  twoColumnGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: "14px", alignItems: "stretch" },
+  clientCard: { ...wmStyles.card, display: "grid", alignContent: "start", gap: "14px", padding: "18px", minWidth: 0, overflow: "hidden" },
+  clientConnected: { borderColor: wm.colors.successBorder },
+  clientAttention: { borderColor: wm.colors.error, background: wm.colors.errorBg },
+  clientHeader: { display: "grid", gridTemplateColumns: "auto minmax(0, 1fr) auto", alignItems: "center", gap: "10px", minWidth: 0 },
+  clientIcon: { display: "grid", placeItems: "center", width: "38px", height: "38px", borderRadius: wm.radius.full, background: wm.colors.infoBg, color: wm.colors.infoText },
+  clientHeading: { minWidth: 0 },
+  clientLabel: { margin: 0, color: wm.colors.textMuted, fontSize: "11px", fontWeight: 900, textTransform: "uppercase" as const },
+  clientTitle: { margin: "2px 0 0", color: wm.colors.text, fontSize: "18px", lineHeight: 1.25, overflowWrap: "anywhere" as const },
+  connectionPill: { justifySelf: "end", maxWidth: "100%", border: `1px solid ${wm.colors.borderStrong}`, borderRadius: wm.radius.full, padding: "5px 9px", color: wm.colors.textSecondary, background: wm.colors.surface, fontSize: "11px", fontWeight: 900, lineHeight: 1.2, textAlign: "center" as const },
+  connectionPillConnected: { borderColor: wm.colors.successBorder, background: wm.colors.successBg, color: wm.colors.success },
+  connectionPillAttention: { borderColor: wm.colors.error, background: wm.colors.errorBg, color: wm.colors.errorText },
+  focusBlock: { display: "grid", gap: "4px", borderTop: `1px solid ${wm.colors.borderSubtle}`, borderBottom: `1px solid ${wm.colors.borderSubtle}`, padding: "14px 0", minWidth: 0 },
+  focusLabel: { color: wm.colors.textMuted, fontSize: "11px", fontWeight: 900, textTransform: "uppercase" as const },
+  focusValue: { color: wm.colors.text, fontSize: "20px", lineHeight: 1.25, overflowWrap: "anywhere" as const },
+  focusMeta: { color: wm.colors.textSecondary, fontSize: "12px", lineHeight: 1.4, overflowWrap: "anywhere" as const },
+  clientFooter: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px 16px", flexWrap: "wrap" as const, color: wm.colors.textMuted, fontSize: "11px", fontWeight: 700 },
+  browserSignalRows: { display: "grid", gap: "12px" },
+  browserSignalRow: { display: "grid", gridTemplateColumns: "minmax(130px, 0.65fr) minmax(0, 1.35fr)", gap: "14px", alignItems: "center", borderTop: `1px solid ${wm.colors.borderSubtle}`, paddingTop: "12px", minWidth: 0 },
+  browserIdentity: { display: "flex", alignItems: "center", gap: "7px", minWidth: 0, color: wm.colors.textSecondary, fontSize: "12px" },
+  signalDot: { width: "7px", height: "7px", borderRadius: wm.radius.full, flex: "0 0 auto" },
+  domainFocus: { display: "grid", gap: "3px", minWidth: 0 },
+  auditCard: { ...wmStyles.card, display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minWidth: 0, overflow: "hidden" },
+  auditCardHeader: { display: "grid", gridTemplateColumns: "auto minmax(0, 1fr) auto", alignItems: "center", gap: "10px", borderBottom: `1px solid ${wm.colors.borderSubtle}`, padding: "14px 16px" },
+  auditIcon: { display: "grid", placeItems: "center", color: wm.colors.infoText },
+  auditTitle: { margin: 0, color: wm.colors.text, fontSize: "16px", lineHeight: 1.25 },
+  auditCount: { color: wm.colors.textMuted, fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" as const },
+  auditRows: { display: "grid", alignContent: "start", maxHeight: "420px", overflowY: "auto" as const, padding: "0 16px" },
+  auditRow: { display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: "10px", borderBottom: `1px solid ${wm.colors.borderSubtle}`, padding: "12px 0", minWidth: 0 },
+  auditMarker: { width: "8px", height: "8px", marginTop: "5px", borderRadius: wm.radius.full, background: wm.colors.offline },
+  auditMarkerPositive: { background: wm.colors.success },
+  auditMarkerAttention: { background: wm.colors.error },
+  auditContent: { display: "grid", gap: "4px", minWidth: 0 },
+  auditLine: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "6px 12px", flexWrap: "wrap" as const },
+  auditEventTitle: { color: wm.colors.text, fontSize: "13px", overflowWrap: "anywhere" as const },
+  auditTime: { color: wm.colors.textMuted, fontSize: "11px", fontWeight: 700 },
+  auditDetail: { color: wm.colors.textSecondary, fontSize: "12px", lineHeight: 1.45, overflowWrap: "anywhere" as const },
   agentPanel: { ...wmStyles.card, padding: "16px", display: "flex", alignItems: "flex-start", gap: "12px", color: wm.colors.textSecondary },
   agentOnline: { borderColor: wm.colors.successBorder, background: wm.colors.successBg, color: wm.colors.success },
   agentInterrupted: { borderColor: wm.colors.error, background: wm.colors.errorBg, color: wm.colors.errorText },

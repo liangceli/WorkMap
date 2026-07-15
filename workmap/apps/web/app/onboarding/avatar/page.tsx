@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Check, Sparkles } from "lucide-react";
 import { LayeredAvatarPreview } from "../../../components/avatar/LayeredAvatarPreview";
 import { WorkMapLoader } from "../../../components/ui/WorkMapLoader";
 import {
@@ -133,10 +134,10 @@ export default function AvatarOnboardingPage() {
   return (
     <main className="wm-onboarding-page wm-avatar-onboarding" style={styles.page}>
       <section className="wm-onboarding-shell" style={styles.shell}>
-        <div className="wm-onboarding-header" style={styles.header}>
-          <p style={styles.eyebrow}>Choose your avatar</p>
+        <div className="wm-onboarding-header wm-avatar-studio-header" style={styles.header}>
+          <p style={styles.eyebrow}>Virtual office profile</p>
           <h1 style={styles.title}>Create your WorkMap avatar</h1>
-          <p style={styles.subtitle}>Choose how you appear in the virtual office.</p>
+          <p style={styles.subtitle}>Build the character your teammates will see in the virtual office.</p>
         </div>
 
         {!assetsAvailable ? (
@@ -145,10 +146,16 @@ export default function AvatarOnboardingPage() {
             <p style={styles.bodyText}>Add body layer assets before users can create an avatar.</p>
           </section>
         ) : (
-          <div className="wm-avatar-layout" style={styles.layout}>
+          <div className="wm-avatar-layout wm-avatar-studio-layout" style={styles.layout}>
             <section className="wm-avatar-builder" style={styles.panel}>
-              <h2 style={styles.sectionTitle}>Build your avatar</h2>
-              <p style={styles.bodyText}>Pick a body, eyes, hairstyle, outfit, and optional accessory.</p>
+              <div className="wm-avatar-builder-intro">
+                <div className="wm-avatar-builder-mark" aria-hidden="true"><Sparkles size={18} strokeWidth={2.25} /></div>
+                <div>
+                  <p className="wm-avatar-panel-kicker">Avatar builder</p>
+                  <h2 style={styles.sectionTitle}>Make it yours</h2>
+                  <p style={styles.bodyText}>Choose each layer to assemble your character.</p>
+                </div>
+              </div>
 
               <label style={styles.label}>
                 <span>Your display name</span>
@@ -176,17 +183,18 @@ export default function AvatarOnboardingPage() {
               </div>
             </section>
 
-            <aside className="wm-avatar-preview-panel" style={styles.panel}>
-              <div style={styles.previewWrap}>
+            <aside className="wm-avatar-preview-panel wm-avatar-studio-preview" style={styles.panel}>
+              <div className="wm-avatar-preview-label"><span className="wm-avatar-live-dot" /> Live avatar preview</div>
+              <div className="wm-avatar-preview-stage" style={styles.previewWrap}>
                 <LayeredAvatarPreview config={config} size={176} />
               </div>
-              <h2 style={styles.sectionTitle}>Your avatar</h2>
-              <p style={styles.bodyText}>{selectedNames}</p>
+              <h2 style={styles.sectionTitle}>Your character</h2>
+              <p className="wm-avatar-selected-summary" style={styles.bodyText}>{selectedNames}</p>
               <p style={styles.trustNote}>
                 WorkMap uses avatars for presence and collaboration. Activity visibility remains transparent and role-based.
               </p>
               <button type="button" onClick={saveAndEnterOffice} disabled={!config.bodyId} style={styles.saveButton}>
-                Save and continue
+                <Check size={18} strokeWidth={2.5} aria-hidden="true" /> Save and continue
               </button>
             </aside>
           </div>
@@ -206,16 +214,23 @@ function LayerGroup({
   onChange: (config: LayeredAvatarConfig) => void;
 }) {
   const assets = avatarLayersByType[group.type];
+  const selectionCount = group.type === "accessory" ? (config.accessoryIds?.length ?? 0) : group.type === "body" ? 1 : isLayerChosen(config, group.type) ? 1 : 0;
 
   return (
     <section className="wm-avatar-layer-group" style={styles.layerGroup}>
       <div style={styles.groupHeader}>
-        <h3 style={styles.groupTitle}>{group.title}</h3>
-        {group.optional ? (
-          <button type="button" onClick={() => onChange(clearLayer(config, group.type))} style={styles.clearButton}>
-            None
-          </button>
-        ) : null}
+        <div className="wm-avatar-group-title-wrap">
+          <h3 style={styles.groupTitle}>{group.title}</h3>
+          {group.optional ? <span className="wm-avatar-optional-label">Optional</span> : null}
+        </div>
+        <div className="wm-avatar-group-actions">
+          <span className="wm-avatar-selection-count">{selectionCount > 0 ? `${selectionCount} selected` : "None"}</span>
+          {group.optional ? (
+            <button type="button" onClick={() => onChange(clearLayer(config, group.type))} style={styles.clearButton}>
+              Clear
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="wm-avatar-option-grid" style={styles.optionGrid}>
         {assets.map((asset) => {
@@ -225,6 +240,9 @@ function LayerGroup({
               key={asset.id}
               type="button"
               onClick={() => onChange(selectLayer(config, asset, Boolean(group.multi)))}
+              className={`wm-avatar-option${selected ? " is-selected" : ""}`}
+              aria-pressed={selected}
+              title={asset.name}
               style={{
                 ...styles.optionButton,
                 borderColor: selected ? wm.colors.secondary : wm.colors.border,
@@ -292,6 +310,13 @@ function isSelected(config: LayeredAvatarConfig, asset: AvatarLayerAsset) {
     return config.outfitId === asset.id;
   }
   return (config.accessoryIds ?? []).includes(asset.id);
+}
+
+function isLayerChosen(config: LayeredAvatarConfig, type: AvatarLayerType) {
+  if (type === "eyes") return Boolean(config.eyesId);
+  if (type === "hairstyle") return Boolean(config.hairstyleId);
+  if (type === "outfit") return Boolean(config.outfitId);
+  return Boolean(config.bodyId);
 }
 
 function previewConfigFor(asset: AvatarLayerAsset, config: LayeredAvatarConfig): LayeredAvatarConfig {

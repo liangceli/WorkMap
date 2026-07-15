@@ -259,6 +259,51 @@ test("runtime recreates an inactive agent session instead of requiring re-pair",
   });
 });
 
+test("successful activity uploads do not manufacture repeated offline transitions after heartbeat failure", async () => {
+  await withRuntimeEnvironment(async (directory) => {
+    const originalFetch = globalThis.fetch;
+    let heartbeatCalls = 0;
+    const reportedStatuses: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/device-client/session/start") {
+        return jsonResponse({ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", startedAt: new Date().toISOString() });
+      }
+      if (path === "/device-client/heartbeat") {
+        heartbeatCalls += 1;
+        return heartbeatCalls === 1
+          ? jsonResponse({ device: { id: config.deviceId }, sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" })
+          : jsonResponse({ message: "Current activity observation is too far in the future." }, 400);
+      }
+      if (path === "/device-client/status-event") {
+        const body = JSON.parse(String(init?.body)) as { status?: string };
+        if (body.status) reportedStatuses.push(body.status);
+        return jsonResponse({ statusEvent: body });
+      }
+      if (path === "/device-client/session/stop") {
+        return jsonResponse({ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", endedAt: new Date().toISOString() });
+      }
+      return jsonResponse({ accepted: 1 });
+    };
+
+    try {
+      const runtime = new DesktopAgentRuntime(config, {
+        adapter: fakeAdapter(async () => sample("Microsoft Edge")),
+        queue: new FileEventQueue(join(directory, "queue.json")),
+        statusQueue: new FileStatusEventQueue(join(directory, "status-queue.json")),
+      });
+      const run = runtime.run();
+      await waitUntil(() => heartbeatCalls >= 4);
+      await runtime.shutdown();
+      await run;
+
+      assert.equal(reportedStatuses.filter((status) => status === "NETWORK_OFFLINE").length, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 test("graceful shutdown writes an offline local status after flushing the session", async () => {
   await withRuntimeEnvironment(async (directory) => {
     const originalFetch = globalThis.fetch;
@@ -331,10 +376,12 @@ async function withRuntimeEnvironment(action: (directory: string) => Promise<voi
   const previousSampleInterval = process.env.WORKMAP_AGENT_SAMPLE_INTERVAL_MS;
   const previousHeartbeatInterval = process.env.WORKMAP_AGENT_HEARTBEAT_INTERVAL_MS;
   const previousCheckpointInterval = process.env.WORKMAP_AGENT_CHECKPOINT_INTERVAL_MS;
+  const previousRuntimeSegment = process.env.WORKMAP_AGENT_RUNTIME_SEGMENT_MS;
   process.env.LOCALAPPDATA = directory;
   process.env.WORKMAP_AGENT_SAMPLE_INTERVAL_MS = "5";
   process.env.WORKMAP_AGENT_HEARTBEAT_INTERVAL_MS = "20";
   process.env.WORKMAP_AGENT_CHECKPOINT_INTERVAL_MS = "20";
+  process.env.WORKMAP_AGENT_RUNTIME_SEGMENT_MS = "10";
   try {
     await action(directory);
   } finally {
@@ -342,6 +389,7 @@ async function withRuntimeEnvironment(action: (directory: string) => Promise<voi
     restoreEnv("WORKMAP_AGENT_SAMPLE_INTERVAL_MS", previousSampleInterval);
     restoreEnv("WORKMAP_AGENT_HEARTBEAT_INTERVAL_MS", previousHeartbeatInterval);
     restoreEnv("WORKMAP_AGENT_CHECKPOINT_INTERVAL_MS", previousCheckpointInterval);
+    restoreEnv("WORKMAP_AGENT_RUNTIME_SEGMENT_MS", previousRuntimeSegment);
     await rm(directory, { recursive: true, force: true });
   }
 }

@@ -36,6 +36,7 @@ export class DesktopAgentRuntime {
   private sequenceNumber = 0;
   private shutdownReason: ShutdownReason;
   private hasConnected = false;
+  private heartbeatHealthy = false;
 
   constructor(
     private readonly config: AgentConfig,
@@ -143,8 +144,9 @@ export class DesktopAgentRuntime {
 
   private async heartbeat() {
     try {
-      const shouldReportReconnection = this.hasConnected && (this.status.state === "offline" || this.status.state === "server_unreachable");
+      const shouldReportReconnection = this.hasConnected && !this.heartbeatHealthy;
       await this.sendHeartbeatWithSessionRecovery();
+      this.heartbeatHealthy = true;
       this.status.state = "connected";
       this.status.lastHeartbeatAt = new Date().toISOString();
       this.status.error = undefined;
@@ -183,9 +185,11 @@ export class DesktopAgentRuntime {
     try {
       await sendAppUsage(this.config, ready.map((item) => this.ensureActivityMetadata(item.event)));
       await this.queue.acknowledge(ids);
-      this.status.state = "connected";
       this.status.lastUploadAt = new Date().toISOString();
-      this.status.error = undefined;
+      if (this.heartbeatHealthy) {
+        this.status.state = "connected";
+        this.status.error = undefined;
+      }
     } catch (error) {
       if (error instanceof AgentApiError && (error.status === 401 || error.status === 403)) {
         this.status.state = "auth_required";
@@ -202,6 +206,7 @@ export class DesktopAgentRuntime {
   }
 
   private async applyApiFailure(error: unknown) {
+    this.heartbeatHealthy = false;
     if (error instanceof AgentApiError && (error.status === 401 || (error.status === 403 && !isInactiveAgentSessionError(error)))) {
       this.status.state = "auth_required";
     } else {

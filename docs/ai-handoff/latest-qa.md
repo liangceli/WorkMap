@@ -2013,3 +2013,106 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 
 - Pass for the implemented source-level runtime, package, and regression suite. The current source can proceed to a configured isolated local integration environment and the user's consolidated manual QA.
 - Do not mark final end-to-end smoke, production deployment, or human acceptance as complete until a disposable local database/API environment and the deferred manual checks are available.
+
+---
+
+## 2026-07-15 Avatar Studio Visual QA
+
+### Reviewed Implementation
+
+- Reviewed the protected `/onboarding/avatar` page markup and scoped stylesheet overrides for asset picker sizing, selected states, live preview hierarchy, and mobile layout.
+
+### Findings Ordered By Severity
+
+- Fixed - Medium: option cards were constrained to 76px columns, allowing long layer names to wrap one letter per line and making the picker effectively unusable.
+- Fixed - Medium: category grids had independent max-height scrolling, creating stacked scrollbars and hiding available avatar layers.
+- Verified - Low: the page reuses existing WorkMap sprite assets and Lucide icons only; no generated character or fake visual asset was added.
+
+### Test And Verification Status
+
+- Web typecheck and lint: passed.
+- Web regression suite: passed, 50/50.
+- Production web build: passed.
+- `git diff --check` and credential-pattern scan: passed.
+
+### Manual QA Status
+
+- Deferred by user, pending final consolidated manual QA. A local visual browser run was not performed because the protected route requires a real Cognito session and no session was fabricated.
+
+### Recommendation
+
+- Pass for merge/deployment. The next round can proceed; authenticated desktop and mobile visual inspection remains the only deferred validation for this scoped style change.
+
+---
+
+## 2026-07-15 Device Setup Download Button QA
+
+- Root cause confirmed: the download `<a>` was stretched to the neighboring button height by the flex row while retaining normal inline text layout, leaving apparent blank space under the label.
+- The link now centers its label vertically and horizontally and remains width-bounded on narrow screens.
+- Web typecheck, lint, production build, and `git diff --check` passed. Download and pairing logic were not modified.
+- Manual QA: Deferred by user, pending final consolidated manual QA.
+
+---
+
+## 2026-07-15 Agent Restart And Audit Reliability QA
+
+### Reviewed Implementation
+
+- Reviewed client and server heartbeat handling, activity-upload connection-state transitions, Agent session retry behavior, device-status persistence, historical report aggregation, and Owner Reports audit rendering.
+
+### Findings Ordered By Severity
+
+- Fixed - High: bounded workstation clock skew caused heartbeat 400 responses during restart. The server now normalizes up to five minutes of future skew while preserving the current activity interval; larger skew remains rejected.
+- Fixed - High: `/device-client/session/start` retries could create overlapping server sessions when a prior response was lost. Start is now idempotent by device-bound client session ID.
+- Fixed - High: a successful activity upload could mark the Agent connected while heartbeat remained unavailable, causing repeated Network Offline transitions and contradictory UI. Connection recovery now requires heartbeat success.
+- Fixed - Medium: equivalent status transitions with different retry event IDs created repeated audit rows. The API now performs semantic consecutive-transition deduplication.
+- Fixed - Medium: Reports exposed raw duplicate sessions/status rows and truncated the browser-visible history. The API now coalesces safely identifiable historical duplicates, and the UI shows the complete bounded result with occurrence/sync timing.
+- Verified - Informational: Focus Active is intentionally collected and queued while the network is unavailable. This is offline durability, not proof that the backend is currently connected.
+
+### Test And Verification Status
+
+- API typecheck, lint, build, and tests: passed, 14/14.
+- Desktop Agent typecheck, lint, build, tests, renderer syntax check, and Windows packaging: passed, 34/34.
+- Web typecheck, lint, build, and tests: passed, 50/50.
+- Installer `WorkMap-Desktop-Agent-Setup-0.5.8.exe` exists and is non-empty; SHA-256 recorded in the implementation handoff.
+- `git diff --check` and the scoped credential-pattern scan passed.
+- `smoke:stage4` is environment-blocked by missing `DATABASE_URL`. It failed before any database connection or mutation and is not reported as passed.
+
+### Manual QA Status
+
+- Deferred by user, pending final consolidated manual QA. The fixed 0.5.8 binary has not been restarted on the affected employee computer, and the server/web changes have not been deployed or production-verified by Codex.
+
+### Risks And Recommendation
+
+- Pass for source, package, regression, and installer verification.
+- Production acceptance still requires deploying API/Web and installing 0.5.8 on the affected workstation. Existing 0.5.7 receives only the server-side protections after deployment.
+
+---
+
+## 2026-07-15 Reports Employee Information Hierarchy QA
+
+### Reviewed Implementation
+
+- Reviewed the selected employee report order, Desktop and Browser live-state sources, both audit timelines, current-domain freshness rules, responsive behavior, and preservation of Daily Trend/API Summary.
+
+### Findings Ordered By Severity
+
+- Fixed - Medium: live status, session history, lifecycle history, metrics, and summaries were interleaved, making the employee report difficult to scan. Current state and historical audit are now separate two-column sections above the unchanged trend and API summary.
+- Fixed - Medium: the API did not expose a truthful current Browser Domain. It now returns one only from a connected extension device's fresh, active-window, non-idle activity event.
+- Fixed - Low: the employee view repeated a verbose role-aware loaded-state panel and a metric grid before the requested content. Loaded-state narration is now limited to loading/error/empty states, and company-scope composition remains unchanged.
+- Verified - Informational: Browser heartbeat loss alone cannot prove whether a user disabled the extension, closed the browser, lost network, or experienced a worker interruption. The UI does not invent a manual-stop reason.
+
+### Test And Verification Status
+
+- API typecheck, lint, build, and tests: passed, 14/14.
+- Web typecheck, lint, production build, and tests: passed, 52/52.
+- Source regression verifies live status -> connection audit -> Daily Trend -> API Summary order and the responsive two-column layout.
+- `git diff --check` and the scoped credential-pattern scan passed.
+
+### Manual QA Status
+
+- Deferred by user, pending final consolidated manual QA. No authenticated production or local visual acceptance test was performed.
+
+### Recommendation
+
+- Pass for source, API contract, responsive composition, regression coverage, and build verification. API and Web must both be deployed for the new current-domain field and reordered report UI to appear; no Agent or Extension package update is required for this increment.

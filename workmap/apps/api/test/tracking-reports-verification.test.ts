@@ -5,9 +5,13 @@ import { BadRequestException, ForbiddenException, NotFoundException } from "@nes
 import {
   ActivityEventSource,
   ActivityEventType,
+  AgentSessionEndReason,
   BrowserName,
   DeviceClientType,
   DeviceOS,
+  DeviceStatus,
+  DeviceStatusConfidence,
+  DeviceStatusReason,
   ProductivityLabel,
   UserRole,
 } from "@prisma/client";
@@ -59,6 +63,7 @@ async function main() {
   await testActivityIngestionAndReportsLoop();
   await testBrowserUsageUpdatesReportRevision();
   await testOwnerSeesLiveForegroundUsageBeforeAppSwitch();
+  await testReportAuditCoalescesRetriedSessionsAndRepeatedConnectivityStates();
   await testCrossMidnightUsageIsSplitPrecisely();
   await testLateActivitySequenceDoesNotRegressSessionCursor();
   await testReportAccessBoundaries();
@@ -322,9 +327,31 @@ async function testBrowserExtensionCoverageLossAndRestore() {
   assert.equal(outage.startedAt.getTime(), previousSignal.getTime() + 90_000);
   assert(outage.endedAt);
 
+  const focusedDomainObservedAt = new Date(Date.now() - 5_000);
+  prisma.activityEvents.push({
+    id: nextId("activity"),
+    companyId: COMPANY_ID,
+    userId: EMPLOYEE_ID,
+    deviceId: DEVICE_ID,
+    source: ActivityEventSource.BROWSER_EXTENSION,
+    eventType: ActivityEventType.BROWSER,
+    appName: null,
+    browserName: BrowserName.CHROME,
+    domain: "workmap.example",
+    isIdle: false,
+    isActiveWindow: true,
+    startedAt: new Date(focusedDomainObservedAt.getTime() - 20_000),
+    endedAt: focusedDomainObservedAt,
+    durationSeconds: 20,
+    createdAt: focusedDomainObservedAt,
+    updatedAt: focusedDomainObservedAt,
+  });
+
   const summary = await reports.getUsageSummary(employeeContext, {});
   assert.equal(summary.browserExtensionCoverage[0]?.state, "connected");
   assert.equal(summary.browserExtensionCoverage[0]?.browserName, "CHROME");
+  assert.equal(summary.browserExtensionCoverage[0]?.currentDomain, "workmap.example");
+  assert.equal(summary.browserExtensionCoverage[0]?.currentDomainObservedAt, focusedDomainObservedAt.toISOString());
   assert.equal(summary.browserExtensionCoverage[0]?.coverageLostDetectedAt, outage.startedAt.toISOString());
   assert.equal(summary.browserExtensionCoverage[0]?.coverageRestoredAt, outage.endedAt.toISOString());
 }
@@ -376,6 +403,87 @@ async function testOwnerSeesLiveForegroundUsageBeforeAppSwitch() {
     topApp: "Microsoft Store",
     topDomain: null,
   }]);
+}
+
+async function testReportAuditCoalescesRetriedSessionsAndRepeatedConnectivityStates() {
+  const prisma = new MockPrisma();
+  prisma.seedDevice({ id: DEVICE_ID, companyId: COMPANY_ID, userId: EMPLOYEE_ID });
+  const reports = new ReportsService(prisma as any, new MockAuditService() as any);
+  const clientSessionId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const firstStart = new Date("2026-07-15T00:00:00.000Z");
+  const secondStart = new Date("2026-07-15T00:00:05.000Z");
+  const stoppedAt = new Date("2026-07-15T00:10:00.000Z");
+  const baseSession = {
+    companyId: COMPANY_ID,
+    userId: EMPLOYEE_ID,
+    deviceId: DEVICE_ID,
+    clientSessionId,
+    agentVersion: "0.5.7",
+    currentAppName: null,
+    currentAppStartedAt: null,
+    currentAppLastObservedAt: null,
+    currentAppIsIdle: false,
+  };
+  prisma.agentSessions.push(
+    {
+      ...baseSession,
+      id: AGENT_SESSION_ID,
+      startedAt: firstStart,
+      lastHeartbeatAt: secondStart,
+      endedAt: secondStart,
+      endReason: AgentSessionEndReason.UNKNOWN_INTERRUPTED,
+    },
+    {
+      ...baseSession,
+      id: OTHER_DEVICE_ID,
+      startedAt: secondStart,
+      lastHeartbeatAt: stoppedAt,
+      endedAt: stoppedAt,
+      endReason: AgentSessionEndReason.USER_STOP,
+    },
+  );
+
+  const offlineAt = new Date("2026-07-15T00:05:00.000Z");
+  const makeStatus = (id: string, recordedAt: Date) => ({
+    id,
+    companyId: COMPANY_ID,
+    userId: EMPLOYEE_ID,
+    deviceId: DEVICE_ID,
+    agentSessionId: OTHER_DEVICE_ID,
+    clientEventId: id,
+    status: DeviceStatus.NETWORK_OFFLINE,
+    reason: DeviceStatusReason.NETWORK_UNAVAILABLE,
+    startedAt: recordedAt,
+    endedAt: null,
+    lastHeartbeatAt: firstStart,
+    recordedAt,
+    receivedAt: recordedAt,
+    source: DeviceClientType.DESKTOP_AGENT,
+    timeZone: "Australia/Adelaide",
+    confidence: DeviceStatusConfidence.CONFIRMED,
+  });
+  prisma.deviceStatusEvents.push(
+    makeStatus("10000000-0000-4000-8000-000000000001", offlineAt),
+    {
+      ...makeStatus("20000000-0000-4000-8000-000000000001", new Date(offlineAt.getTime() + 5_000)),
+      deviceId: OTHER_DEVICE_ID,
+      agentSessionId: null,
+      status: DeviceStatus.RUNNING,
+      reason: DeviceStatusReason.HEARTBEAT_CONFIRMED,
+    },
+    makeStatus("10000000-0000-4000-8000-000000000002", new Date(offlineAt.getTime() + 10_000)),
+    makeStatus("10000000-0000-4000-8000-000000000003", new Date(offlineAt.getTime() + 20_000)),
+  );
+
+  const summary = await reports.getUsageSummary(employeeContext, { from: "2026-07-15", to: "2026-07-15" });
+  assert.equal(summary.agentSessions.length, 1);
+  assert.equal(summary.agentSessions[0]?.startedAt, firstStart.toISOString());
+  assert.equal(summary.agentSessions[0]?.endedAt, stoppedAt.toISOString());
+  assert.equal(summary.agentSessions[0]?.endReason, AgentSessionEndReason.USER_STOP);
+  assert.equal(summary.deviceStatusHistory.length, 2);
+  const offlineRows = summary.deviceStatusHistory.filter((event: { status: DeviceStatus }) => event.status === DeviceStatus.NETWORK_OFFLINE);
+  assert.equal(offlineRows.length, 1);
+  assert.equal(offlineRows[0]?.startedAt, offlineAt.toISOString());
 }
 
 async function testCrossMidnightUsageIsSplitPrecisely() {
@@ -557,6 +665,13 @@ class MockPrisma {
         : by.includes("userId")
           ? groupUserAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
           : groupAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)), take),
+    aggregate: async ({ where }: any) => ({
+      _sum: {
+        activeSeconds: this.appSummaries
+          .filter((row) => matchesWhere(row, where))
+          .reduce((total, row) => total + row.activeSeconds, 0),
+      },
+    }),
   };
 
   websiteUsageSummary = {
@@ -614,9 +729,19 @@ class MockPrisma {
   };
 
   agentSession = {
-    findFirst: async ({ where }: any = {}) => this.agentSessions.find((session) => matchesWhere(session, where)) ?? null,
-    findMany: async ({ where, include }: any = {}) => this.agentSessions
+    findFirst: async ({ where, include, orderBy }: any = {}) => {
+      const rows = this.agentSessions.filter((session) => matchesWhere(session, where));
+      if (orderBy?.startedAt === "desc") rows.sort((left, right) => right.startedAt.getTime() - left.startedAt.getTime());
+      const session = rows[0];
+      if (!session) return null;
+      if (!include?.device) return session;
+      const device = this.devices.find((row) => row.id === session.deviceId);
+      return { ...session, device: { hostname: device?.hostname ?? null, agentVersion: device?.agentVersion ?? null } };
+    },
+    findMany: async ({ where, include, orderBy, take }: any = {}) => this.agentSessions
       .filter((session) => matchesWhere(session, where))
+      .sort((left, right) => orderBy?.startedAt === "desc" ? right.startedAt.getTime() - left.startedAt.getTime() : 0)
+      .slice(0, take ?? this.agentSessions.length)
       .map((session) => include?.user
         ? { ...session, user: { displayName: this.users.find((user) => user.id === session.userId)?.displayName ?? "Employee" } }
         : session),
@@ -633,7 +758,10 @@ class MockPrisma {
 
   deviceStatusEvent = {
     findFirst: async ({ where }: any = {}) => this.deviceStatusEvents.find((event) => matchesWhere(event, where)) ?? null,
-    findMany: async ({ where }: any = {}) => this.deviceStatusEvents.filter((event) => matchesWhere(event, where)),
+    findMany: async ({ where, orderBy, take }: any = {}) => this.deviceStatusEvents
+      .filter((event) => matchesWhere(event, where))
+      .sort((left, right) => orderBy?.recordedAt === "desc" ? right.recordedAt.getTime() - left.recordedAt.getTime() : 0)
+      .slice(0, take ?? this.deviceStatusEvents.length),
     aggregate: async ({ where }: any = {}) => {
       const rows = this.deviceStatusEvents.filter((event) => matchesWhere(event, where));
       const latest = rows.reduce<Date | null>((current, row) => maxDate(current, row.receivedAt), null);
@@ -796,6 +924,9 @@ function matchesWhere(row: Record<string, any>, where: Record<string, any> | und
   }
 
   return Object.entries(where).every(([key, expected]) => {
+    if (key === "OR") {
+      return Array.isArray(expected) && expected.some((clause) => matchesWhere(row, clause));
+    }
     const actual = row[key];
     if (expected instanceof Date) {
       return actual instanceof Date && actual.getTime() === expected.getTime();

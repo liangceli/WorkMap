@@ -279,6 +279,8 @@ export type WorkMapApiUsageSummary = {
     state: "connected" | "signal_lost";
     enabledAt: string;
     lastSignalAt: string | null;
+    currentDomain: string | null;
+    currentDomainObservedAt: string | null;
     coverageLostDetectedAt: string | null;
     coverageRestoredAt: string | null;
   }>;

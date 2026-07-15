@@ -73,9 +73,10 @@ async function refreshState() {
 
   const status = state.status;
   setStatusChip(status);
+  setAgentHealthCopy(status);
   document.querySelector("#current-app").textContent = status.currentActivity?.appName ?? "No active app";
   document.querySelector("#last-heartbeat").textContent = formatTime(status.lastHeartbeatAt);
-  document.querySelector("#queued-events").textContent = String(status.queuedEvents ?? 0);
+  document.querySelector("#queued-events").textContent = String((status.queuedEvents ?? 0) + (status.queuedStatusEvents ?? 0));
   document.querySelector("#auto-start").textContent = state.startsWithWindows ? "Enabled" : state.paired ? "Enabling..." : "Not enabled";
   const health = deriveStatusHealth(status);
   const errorCopy = status.error || health.detail;
@@ -89,6 +90,7 @@ function setStatusChip(status) {
     connected: ["Connected", "status-connected"],
     pairing: ["Pairing", "status-warning"],
     offline: ["Offline - retrying", "status-warning"],
+    server_unreachable: ["Server unavailable - retrying", "status-warning"],
     auth_required: ["Pair again", "status-error"],
     error: ["Needs attention", "status-error"],
     unpaired: ["Not connected", "status-neutral"],
@@ -96,6 +98,20 @@ function setStatusChip(status) {
   }[health.state] ?? ["Checking", "status-neutral"];
   statusChip.className = `status-chip ${copy[1]}`;
   statusChip.querySelector("b").textContent = copy[0];
+}
+
+function setAgentHealthCopy(status) {
+  const health = deriveStatusHealth(status);
+  const copy = {
+    connected: ["Agent connected", "Foreground app activity is being summarized securely."],
+    stale: ["Recording locally", "The server signal is delayed. Activity remains on this computer and will sync automatically."],
+    offline: ["Recording locally", "WorkMap cannot confirm the server connection. Activity is queued safely and will retry."],
+    server_unreachable: ["Recording locally", "The WorkMap service is unavailable. Activity is queued safely and will retry."],
+    auth_required: ["Pairing required", "The device credential is no longer accepted. Pair this computer again to resume sync."],
+    error: ["Sync needs attention", "Local tracking is still visible below. Review the sync message before continuing."],
+  }[health.state] ?? ["Agent starting", "Preparing privacy-minimized activity tracking."];
+  document.querySelector("#agent-health-title").textContent = copy[0];
+  document.querySelector("#agent-health-detail").textContent = copy[1];
 }
 
 function deriveStatusHealth(status) {

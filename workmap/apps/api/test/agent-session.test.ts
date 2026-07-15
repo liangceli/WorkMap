@@ -56,6 +56,44 @@ test("agent sessions record live app, explicit user stop and inferred restart in
   assert.equal(prisma.statusEvents.at(-1)?.status, DeviceStatus.RESTARTED);
 });
 
+test("agent session start is idempotent for the same client runtime", async () => {
+  const prisma = new AgentSessionPrisma();
+  const service = new DevicesService(prisma as any);
+  const clientSessionId = "55555555-5555-4555-8555-555555555555";
+
+  const first = await service.startAgentSession(context, { deviceId: DEVICE_ID, clientSessionId });
+  const retried = await service.startAgentSession(context, { deviceId: DEVICE_ID, clientSessionId });
+
+  assert.equal(retried.sessionId, first.sessionId);
+  assert.equal(prisma.sessions.length, 1);
+  assert.equal(prisma.statusEvents.length, 1);
+  assert.equal(prisma.sessions[0]?.endReason, null);
+});
+
+test("heartbeat normalizes a bounded future client clock without losing relative activity time", async () => {
+  const prisma = new AgentSessionPrisma();
+  const service = new DevicesService(prisma as any);
+  const started = await service.startAgentSession(context, { deviceId: DEVICE_ID });
+  const before = Date.now();
+  const clientObservedAt = before + 2 * 60_000;
+
+  await service.recordHeartbeat(context, {
+    deviceId: DEVICE_ID,
+    sessionId: started.sessionId,
+    currentActivity: {
+      appName: "Microsoft Edge",
+      startedAt: new Date(clientObservedAt - 15_000).toISOString(),
+      lastObservedAt: new Date(clientObservedAt).toISOString(),
+      isIdle: false,
+    },
+  });
+
+  const session = prisma.sessions[0]!;
+  assert(session.currentAppLastObservedAt.getTime() >= before);
+  assert(session.currentAppLastObservedAt.getTime() <= Date.now());
+  assert.equal(session.currentAppLastObservedAt.getTime() - session.currentAppStartedAt.getTime(), 15_000);
+});
+
 test("durable device status closes a session and stays idempotent after retry", async () => {
   const prisma = new AgentSessionPrisma();
   const service = new DevicesService(prisma as any);
@@ -75,10 +113,15 @@ test("durable device status closes a session and stays idempotent after retry", 
 
   await service.recordDeviceStatus(context, event, DeviceClientType.DESKTOP_AGENT);
   await service.recordDeviceStatus(context, event, DeviceClientType.DESKTOP_AGENT);
+  await service.recordDeviceStatus(context, {
+    ...event,
+    clientEventId: "66666666-6666-4666-8666-666666666666",
+  }, DeviceClientType.DESKTOP_AGENT);
 
   const session = prisma.sessions.find((row) => row.id === started.sessionId);
   assert.equal(session?.endReason, AgentSessionEndReason.USER_STOP);
   assert.equal(prisma.statusEvents.filter((row) => row.clientEventId === event.clientEventId).length, 1);
+  assert.equal(prisma.statusEvents.filter((row) => row.status === DeviceStatus.STOPPED_BY_USER).length, 1);
 });
 
 class AgentSessionPrisma {
@@ -131,7 +174,11 @@ class AgentSessionPrisma {
       this.statusEvents.push(row);
       return row;
     },
-    findFirst: async ({ where }: any) => this.statusEvents.find((event) => matches(event, where)) ?? null,
+    findFirst: async ({ where, orderBy }: any) => {
+      const rows = this.statusEvents.filter((event) => matches(event, where)).reverse();
+      if (orderBy?.recordedAt === "desc") rows.sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime());
+      return rows[0] ?? null;
+    },
   };
 
   async $transaction(callback: (tx: AgentSessionPrisma) => Promise<unknown>) {

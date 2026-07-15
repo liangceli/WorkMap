@@ -27,6 +27,29 @@ type UsageFilter = { companyId: string; userId?: string; userIds?: string[]; ran
 type LiveAppSegment = { userId: string; displayName: string; appName: string; activeSeconds: number; focusedIdleSeconds: number };
 type UsageInterval = { startedAt: Date; endedAt: Date };
 type DomainMetricTotals = { focusActiveSeconds: number; focusedIdleSeconds: number; openRuntimeSeconds: number };
+type AgentSessionReportRow = {
+  id: string;
+  clientSessionId: string | null;
+  startedAt: Date;
+  lastHeartbeatAt: Date;
+  endedAt: Date | null;
+  endReason: AgentSessionEndReason | null;
+};
+type DeviceStatusReportRow = {
+  id: string;
+  deviceId: string;
+  agentSessionId: string | null;
+  status: DeviceStatus;
+  reason: DeviceStatusReason;
+  startedAt: string;
+  endedAt: string | null;
+  lastHeartbeatAt: string | null;
+  recordedAt: string;
+  receivedAt: string;
+  source: DeviceClientType;
+  timeZone: string | null;
+  confidence: DeviceStatusConfidence;
+};
 type ReportedAgentState =
   | "not_paired"
   | "running"
@@ -44,6 +67,7 @@ const DEFAULT_REPORT_DAYS = 30;
 const MAX_REPORT_DAYS = 366;
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const AGENT_HEARTBEAT_FRESH_MS = 30_000;
+const BROWSER_CURRENT_DOMAIN_FRESH_MS = 45_000;
 
 @Injectable()
 export class ReportsService {
@@ -396,20 +420,43 @@ export class ReportsService {
     });
     const extensionDevices = devices.filter((device) => device.agentVersion?.startsWith("browser-extension-mv3/") === true);
     if (extensionDevices.length === 0) return [];
-    const outages = await this.prisma.activityEvent.findMany({
-      where: {
-        companyId: filter.companyId,
-        source: ActivityEventSource.BROWSER_EXTENSION,
-        eventType: ActivityEventType.HEARTBEAT,
-        deviceId: { in: extensionDevices.map((device) => device.id) },
-      },
-      orderBy: { endedAt: "desc" },
-    });
+    const now = Date.now();
+    const deviceIds = extensionDevices.map((device) => device.id);
+    const [outages, recentFocusedDomains] = await Promise.all([
+      this.prisma.activityEvent.findMany({
+        where: {
+          companyId: filter.companyId,
+          source: ActivityEventSource.BROWSER_EXTENSION,
+          eventType: ActivityEventType.HEARTBEAT,
+          deviceId: { in: deviceIds },
+        },
+        orderBy: { endedAt: "desc" },
+      }),
+      this.prisma.activityEvent.findMany({
+        where: {
+          companyId: filter.companyId,
+          source: ActivityEventSource.BROWSER_EXTENSION,
+          eventType: ActivityEventType.BROWSER,
+          deviceId: { in: deviceIds },
+          isIdle: false,
+          isActiveWindow: true,
+          endedAt: { gte: new Date(now - BROWSER_CURRENT_DOMAIN_FRESH_MS) },
+        },
+        orderBy: { endedAt: "desc" },
+      }),
+    ]);
     const latestOutageByDevice = new Map<string, typeof outages[number]>();
     for (const outage of outages) if (!latestOutageByDevice.has(outage.deviceId)) latestOutageByDevice.set(outage.deviceId, outage);
-    const now = Date.now();
+    const latestFocusedDomainByDevice = new Map<string, typeof recentFocusedDomains[number]>();
+    for (const event of recentFocusedDomains) {
+      const existing = latestFocusedDomainByDevice.get(event.deviceId);
+      if (!existing || (event.endedAt?.getTime() ?? 0) > (existing.endedAt?.getTime() ?? 0)) {
+        latestFocusedDomainByDevice.set(event.deviceId, event);
+      }
+    }
     return extensionDevices.map((device) => {
       const outage = latestOutageByDevice.get(device.id);
+      const focusedDomain = latestFocusedDomainByDevice.get(device.id);
       const lastSignalAt = device.lastSeenAt;
       const connected = Boolean(lastSignalAt && now - lastSignalAt.getTime() <= BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS);
       return {
@@ -421,6 +468,8 @@ export class ReportsService {
         state: connected ? "connected" as const : "signal_lost" as const,
         enabledAt: device.createdAt.toISOString(),
         lastSignalAt: lastSignalAt?.toISOString() ?? null,
+        currentDomain: connected ? focusedDomain?.domain ?? null : null,
+        currentDomainObservedAt: connected ? focusedDomain?.endedAt?.toISOString() ?? null : null,
         coverageLostDetectedAt: connected
           ? outage?.startedAt.toISOString() ?? null
           : lastSignalAt ? new Date(lastSignalAt.getTime() + BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS).toISOString() : device.createdAt.toISOString(),
@@ -555,10 +604,10 @@ export class ReportsService {
         OR: [{ endedAt: null }, { endedAt: { gte: filter.range.from } }],
       },
       orderBy: { startedAt: "desc" },
-      take: 100,
+      take: 500,
     });
     const now = Date.now();
-    return sessions.map((session) => {
+    return coalesceAgentSessions(sessions).map((session) => {
       const staleOpenSession = !session.endedAt && now - session.lastHeartbeatAt.getTime() > AGENT_HEARTBEAT_FRESH_MS;
       return {
         id: session.id,
@@ -580,7 +629,7 @@ export class ReportsService {
         recordedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
       },
       orderBy: { recordedAt: "desc" },
-      take: 100,
+      take: 500,
       select: {
         id: true,
         deviceId: true,
@@ -597,7 +646,7 @@ export class ReportsService {
         confidence: true,
       },
     });
-    return events.map((event) => ({
+    return coalesceDeviceStatusHistory(events.map((event) => ({
       id: event.id,
       deviceId: event.deviceId,
       agentSessionId: event.agentSessionId,
@@ -611,7 +660,7 @@ export class ReportsService {
       source: event.source,
       timeZone: event.timeZone,
       confidence: event.confidence,
-    }));
+    })));
   }
 
   private async getEmployeeUsage(filter: UsageFilter) {
@@ -775,6 +824,76 @@ function summaryWhere(filter: UsageFilter) {
     ...identityFilter(filter),
     date: { gte: filter.range.from, lte: filter.range.to },
   };
+}
+
+function coalesceAgentSessions(sessions: AgentSessionReportRow[]) {
+  const logicalSessions = new Map<string, AgentSessionReportRow>();
+  for (const session of sessions) {
+    const key = session.clientSessionId ? `client:${session.clientSessionId}` : `server:${session.id}`;
+    const existing = logicalSessions.get(key);
+    if (!existing) {
+      logicalSessions.set(key, { ...session });
+      continue;
+    }
+
+    existing.startedAt = earlierDate(existing.startedAt, session.startedAt);
+    existing.lastHeartbeatAt = laterDate(existing.lastHeartbeatAt, session.lastHeartbeatAt);
+    if (!existing.endedAt || !session.endedAt) {
+      existing.endedAt = null;
+      existing.endReason = null;
+      continue;
+    }
+    existing.endedAt = laterDate(existing.endedAt, session.endedAt);
+    if (sessionEndReasonPriority(session.endReason) > sessionEndReasonPriority(existing.endReason)) {
+      existing.endReason = session.endReason;
+    }
+  }
+  return Array.from(logicalSessions.values()).sort((left, right) => right.startedAt.getTime() - left.startedAt.getTime());
+}
+
+function coalesceDeviceStatusHistory(events: DeviceStatusReportRow[]) {
+  const ordered = [...events].sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+  const transitions: DeviceStatusReportRow[] = [];
+  const previousByStream = new Map<string, DeviceStatusReportRow>();
+  for (const event of ordered) {
+    const streamKey = `${event.deviceId}:${event.source}`;
+    const previous = previousByStream.get(streamKey);
+    if (
+      previous
+      && previous.deviceId === event.deviceId
+      && previous.agentSessionId === event.agentSessionId
+      && previous.source === event.source
+      && previous.status === event.status
+      && previous.reason === event.reason
+    ) {
+      continue;
+    }
+    transitions.push(event);
+    previousByStream.set(streamKey, event);
+  }
+  return transitions.reverse();
+}
+
+function sessionEndReasonPriority(reason: AgentSessionEndReason | null) {
+  switch (reason) {
+    case AgentSessionEndReason.USER_STOP: return 8;
+    case AgentSessionEndReason.DEVICE_SHUTDOWN: return 7;
+    case AgentSessionEndReason.SUSPENDED: return 6;
+    case AgentSessionEndReason.AGENT_CRASHED: return 5;
+    case AgentSessionEndReason.AGENT_TERMINATED: return 4;
+    case AgentSessionEndReason.GRACEFUL_SHUTDOWN: return 3;
+    case AgentSessionEndReason.UNEXPECTED_STOP: return 2;
+    case AgentSessionEndReason.UNKNOWN_INTERRUPTED: return 1;
+    default: return 0;
+  }
+}
+
+function earlierDate(left: Date, right: Date) {
+  return left.getTime() <= right.getTime() ? left : right;
+}
+
+function laterDate(left: Date, right: Date) {
+  return left.getTime() >= right.getTime() ? left : right;
 }
 
 function identityFilter(filter: Pick<UsageFilter, "userId" | "userIds">) {

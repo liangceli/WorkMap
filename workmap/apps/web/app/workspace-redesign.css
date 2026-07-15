@@ -925,6 +925,333 @@
   border-radius: 12px !important;
 }
 
+/* Avatar studio: the layered sprite picker needs readable labels and page-level scrolling. */
+.wm-avatar-onboarding {
+  position: relative;
+  overflow: clip;
+  background-color: #edf1ed !important;
+  background-image:
+    linear-gradient(rgba(8, 13, 34, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(8, 13, 34, 0.028) 1px, transparent 1px) !important;
+  background-size: 28px 28px !important;
+}
+
+.wm-avatar-onboarding .wm-onboarding-shell {
+  position: relative;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-header {
+  max-width: 700px;
+  margin-bottom: 30px !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-header::after {
+  display: block;
+  width: 74px;
+  height: 4px;
+  margin-top: 20px;
+  background: var(--wm-secondary);
+  content: "";
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-header > p:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px !important;
+  color: #087c5a !important;
+  font-size: 11px !important;
+  font-weight: 850 !important;
+  letter-spacing: 0.08em !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-header > p:first-child::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--wm-secondary);
+  content: "";
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 350px) !important;
+  gap: clamp(18px, 3vw, 36px) !important;
+  align-items: start !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-builder {
+  padding: clamp(22px, 3.4vw, 38px) !important;
+  border: 1px solid #d9dfda !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: 0 18px 36px rgba(8, 13, 34, 0.07) !important;
+}
+
+.wm-avatar-builder-intro {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding-bottom: 22px;
+  border-bottom: 1px solid #e7ebe7;
+}
+
+.wm-avatar-builder-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(39, 224, 162, 0.55);
+  border-radius: 12px;
+  background: #e8fbf3;
+  color: #087c5a;
+}
+
+.wm-avatar-panel-kicker {
+  margin: 1px 0 5px;
+  color: #087c5a;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wm-avatar-builder-intro h2 {
+  margin-bottom: 5px !important;
+  color: var(--wm-primary) !important;
+  font-size: clamp(22px, 2.2vw, 28px) !important;
+}
+
+.wm-avatar-builder-intro p:last-child {
+  margin-bottom: 0 !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-builder > label {
+  margin: 22px 0 26px !important;
+  padding: 16px !important;
+  border: 1px solid #e3e8e3;
+  border-radius: 8px;
+  background: #f7f9f6;
+}
+
+.wm-avatar-onboarding .wm-avatar-builder input {
+  min-width: 0;
+  border-radius: 10px !important;
+  background: #fff !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-builder > div:last-child {
+  gap: 28px !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-layer-group {
+  gap: 12px !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-layer-group + .wm-avatar-layer-group {
+  padding-top: 26px;
+  border-top: 1px solid #e7ebe7;
+}
+
+.wm-avatar-group-title-wrap,
+.wm-avatar-group-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.wm-avatar-group-title-wrap {
+  flex-wrap: wrap;
+}
+
+.wm-avatar-onboarding .wm-avatar-layer-group h3 {
+  color: var(--wm-primary) !important;
+  font-size: 17px !important;
+}
+
+.wm-avatar-optional-label,
+.wm-avatar-selection-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wm-avatar-optional-label {
+  border: 1px solid #dce2dc;
+  background: #f6f8f6;
+  color: #6a7380;
+}
+
+.wm-avatar-selection-count {
+  background: #e8fbf3;
+  color: #087c5a;
+}
+
+.wm-avatar-onboarding .wm-avatar-group-actions button {
+  min-height: 28px !important;
+  padding: 3px 9px !important;
+  border-color: #cdd6cf !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  font-size: 12px !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-option-grid {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)) !important;
+  gap: 10px !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-option {
+  display: grid !important;
+  grid-template-columns: 46px minmax(0, 1fr) !important;
+  min-height: 68px;
+  align-items: center;
+  gap: 9px !important;
+  padding: 8px !important;
+  border: 1px solid #dce2dc !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-option:hover:not(:disabled) {
+  border-color: #8fddbf !important;
+  background: #f6fffa !important;
+  transform: translateY(-1px);
+}
+
+.wm-avatar-onboarding .wm-avatar-option.is-selected {
+  border-color: #16b980 !important;
+  background: #eafbf4 !important;
+  box-shadow: inset 0 0 0 1px #16b980 !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-option canvas {
+  width: 46px !important;
+  height: 46px !important;
+  border: 1px solid #dce2dc !important;
+  border-radius: 9px !important;
+  background: #f2f5f1 !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-option span {
+  min-width: 0;
+  overflow: hidden;
+  color: #172039;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  line-height: 1.25 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-preview {
+  position: sticky;
+  top: 24px;
+  padding: 18px !important;
+  overflow: hidden;
+  border: 1px solid #25304e !important;
+  border-radius: 8px !important;
+  background: #080d22 !important;
+  box-shadow: 0 20px 44px rgba(8, 13, 34, 0.18) !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-preview::before {
+  position: absolute;
+  inset: 0;
+  opacity: 0.15;
+  background-image:
+    linear-gradient(rgba(85, 233, 184, 0.45) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(85, 233, 184, 0.45) 1px, transparent 1px);
+  background-size: 20px 20px;
+  content: "";
+  pointer-events: none;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-preview > * {
+  position: relative;
+}
+
+.wm-avatar-preview-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: #b9f8de;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wm-avatar-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--wm-secondary);
+  box-shadow: 0 0 0 4px rgba(39, 224, 162, 0.12);
+}
+
+.wm-avatar-onboarding .wm-avatar-preview-stage {
+  min-height: 270px !important;
+  margin-bottom: 20px !important;
+  border: 1px solid rgba(191, 211, 205, 0.34) !important;
+  border-radius: 6px !important;
+  background: #182039 !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-preview-stage canvas {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  image-rendering: pixelated;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-preview h2 {
+  margin-bottom: 8px !important;
+  color: #fff !important;
+  font-size: 23px !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-selected-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-bottom: 16px !important;
+  color: #bfc7da !important;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-preview > p:not(.wm-avatar-selected-summary) {
+  color: #d5dbea !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-preview button {
+  display: inline-flex !important;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: var(--wm-secondary) !important;
+  color: #080d22 !important;
+}
+
+.wm-avatar-onboarding .wm-avatar-studio-preview button:hover:not(:disabled) {
+  background: #55e9b8 !important;
+}
+
 .wm-device-boundary-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   gap: 12px !important;
@@ -1340,5 +1667,88 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .wm-avatar-onboarding .wm-avatar-studio-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-studio-preview {
+    position: relative;
+    top: auto;
+    order: -1;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-preview-stage {
+    min-height: 230px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .wm-avatar-onboarding {
+    background-size: 22px 22px !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-studio-header {
+    margin-bottom: 22px !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-studio-header > h1 {
+    font-size: clamp(32px, 10vw, 42px) !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-builder,
+  .wm-avatar-onboarding .wm-avatar-studio-preview {
+    padding: 18px !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-builder-intro {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 11px;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-builder-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-builder > label {
+    padding: 13px !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-option-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-option {
+    grid-template-columns: 42px minmax(0, 1fr) !important;
+    min-height: 62px;
+    gap: 7px !important;
+    padding: 7px !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-option canvas {
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-group-actions {
+    gap: 5px;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-selection-count {
+    display: none;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-preview-stage {
+    min-height: 208px !important;
+  }
+
+  .wm-avatar-onboarding .wm-avatar-preview-stage canvas {
+    width: 152px !important;
+    height: 152px !important;
   }
 }

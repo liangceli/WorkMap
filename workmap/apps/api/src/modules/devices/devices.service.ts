@@ -19,6 +19,7 @@ const MAX_AGENT_VERSION_LENGTH = 80;
 const MAX_TIME_ZONE_LENGTH = 80;
 const MAX_STATUS_METADATA_KEYS = new Set(["operation", "networkState", "agentVersion"]);
 const MAX_STATUS_METADATA_VALUE_LENGTH = 120;
+const MAX_CURRENT_ACTIVITY_FUTURE_SKEW_MS = 5 * 60_000;
 export const BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS = 90_000;
 
 const DEVICE_STATUS_VALUES = new Set<string>(Object.values(DeviceStatus));
@@ -92,6 +93,9 @@ export class DevicesService {
   async recordHeartbeat(context: RequestContext, input: unknown, clientType?: DeviceClientType) {
     const body = readObject(input, "Device heartbeat body must be an object.");
     const deviceId = readRequiredUuid(body.deviceId, "deviceId");
+    const sessionId = readOptionalUuid(body.sessionId, "sessionId");
+    const currentActivity = sessionId ? readCurrentActivity(body.currentActivity) : null;
+    const sequenceNumber = readOptionalSequenceNumber(body.sequenceNumber);
     const device = await this.prisma.device.findFirst({
       where: {
         id: deviceId,
@@ -137,7 +141,6 @@ export class DevicesService {
       });
     }
 
-    const sessionId = readOptionalUuid(body.sessionId, "sessionId");
     if (sessionId) {
       const session = await this.prisma.agentSession.findFirst({
         where: {
@@ -151,8 +154,6 @@ export class DevicesService {
       });
       if (!session) throw new ForbiddenException("Agent session is not active for this device.");
 
-      const currentActivity = readCurrentActivity(body.currentActivity);
-      const sequenceNumber = readOptionalSequenceNumber(body.sequenceNumber);
       await this.prisma.agentSession.update({
         where: { id: session.id },
         data: {
@@ -186,8 +187,23 @@ export class DevicesService {
     const deviceId = readRequiredUuid(body.deviceId, "deviceId");
     const device = await this.findActiveDevice(context, deviceId);
     const now = new Date();
+    const clientSessionId = readOptionalUuid(body.clientSessionId, "clientSessionId");
 
     const session = await this.prisma.$transaction(async (tx) => {
+      const existing = clientSessionId
+        ? await tx.agentSession.findFirst({
+          where: {
+            companyId: context.companyId,
+            userId: context.userId,
+            deviceId,
+            clientSessionId,
+            endedAt: null,
+          },
+          select: { id: true, startedAt: true },
+        })
+        : null;
+      if (existing) return existing;
+
       const previous = await tx.agentSession.findFirst({
         where: { companyId: context.companyId, userId: context.userId, deviceId, endedAt: null },
         orderBy: { startedAt: "desc" },
@@ -221,7 +237,7 @@ export class DevicesService {
           userId: context.userId,
           deviceId,
           agentVersion: sanitizeOptionalText(body.agentVersion, MAX_AGENT_VERSION_LENGTH) ?? device.agentVersion,
-          clientSessionId: readOptionalUuid(body.clientSessionId, "clientSessionId"),
+          clientSessionId,
           timeZone: readOptionalTimeZone(body.timeZone),
           startedAt: now,
           lastHeartbeatAt: now,
@@ -316,6 +332,19 @@ export class DevicesService {
       })
       : null;
     if (agentSessionId && !session) throw new ForbiddenException("Agent session is not visible for this device.");
+
+    const latestTransition = await this.prisma.deviceStatusEvent.findFirst({
+      where: { companyId: context.companyId, deviceId, source: clientType },
+      orderBy: { recordedAt: "desc" },
+    });
+    if (
+      latestTransition
+      && latestTransition.status === status
+      && latestTransition.reason === reason
+      && latestTransition.agentSessionId === agentSessionId
+    ) {
+      return toStatusEventResponse(latestTransition);
+    }
 
     let event;
     try {
@@ -608,15 +637,22 @@ function isPrismaUniqueError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }
 
-function readCurrentActivity(value: unknown) {
+function readCurrentActivity(value: unknown, now = new Date()) {
   if (value === undefined || value === null) return null;
   const body = readObject(value, "currentActivity must be an object or null.");
   const appName = sanitizeOptionalText(body.appName, 120);
   if (!appName) return null;
-  const startedAt = readRequiredDate(body.startedAt, "currentActivity.startedAt");
-  const lastObservedAt = readRequiredDate(body.lastObservedAt, "currentActivity.lastObservedAt");
+  let startedAt = readRequiredDate(body.startedAt, "currentActivity.startedAt");
+  let lastObservedAt = readRequiredDate(body.lastObservedAt, "currentActivity.lastObservedAt");
   if (lastObservedAt < startedAt) throw new BadRequestException("Current activity observation cannot precede its start.");
-  if (lastObservedAt.getTime() > Date.now() + 60_000) throw new BadRequestException("Current activity observation is too far in the future.");
+  const futureSkewMs = lastObservedAt.getTime() - now.getTime();
+  if (futureSkewMs > MAX_CURRENT_ACTIVITY_FUTURE_SKEW_MS) {
+    throw new BadRequestException("Current activity observation is too far in the future.");
+  }
+  if (futureSkewMs > 0) {
+    startedAt = new Date(startedAt.getTime() - futureSkewMs);
+    lastObservedAt = now;
+  }
   return { appName, startedAt, lastObservedAt, isIdle: body.isIdle === true };
 }
 

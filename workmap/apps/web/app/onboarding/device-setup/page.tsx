@@ -360,8 +360,15 @@ const styles = {
   },
   downloadButton: {
     ...wmStyles.primaryButton,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "44px",
+    minWidth: 0,
     padding: "10px 14px",
     fontWeight: 900,
+    lineHeight: "20px",
+    textAlign: "center" as const,
     textDecoration: "none",
   },
   downloadUnavailable: {
