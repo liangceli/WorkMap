@@ -8,6 +8,7 @@ import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { completeCognitoRedirect } from "../../../lib/auth/cognitoSession";
 import { getPendingInviteToken } from "../../../lib/auth/pendingInvite";
+import { isConfirmedWorkspaceMissing, workspaceAccessError } from "../../../lib/auth/workspaceAccess";
 import { getDefaultSetupState, getNextRouteForUser, saveUserSetupState, type WorkMapRole } from "../../../lib/workflow/workflowState";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 
@@ -57,8 +58,12 @@ export default function CognitoCallbackPage() {
       }
 
       if (!contextResult.ok) {
-        setStatus("Cognito sign-in complete. Opening workspace setup...");
-        router.replace("/onboarding/company");
+        if (isConfirmedWorkspaceMissing(contextResult)) {
+          setStatus("Cognito sign-in complete. Opening workspace setup...");
+          router.replace("/onboarding/company");
+          return;
+        }
+        setStatus(workspaceAccessError(contextResult));
         return;
       }
 
@@ -69,7 +74,12 @@ export default function CognitoCallbackPage() {
         return;
       }
 
-      const backendAvatar = currentUserResult.ok ? decodeLayeredAvatarId(currentUserResult.data.avatarId) : null;
+      if (!currentUserResult.ok) {
+        setStatus(workspaceAccessError(currentUserResult));
+        return;
+      }
+
+      const backendAvatar = decodeLayeredAvatarId(currentUserResult.data.avatarId);
 
       if (backendAvatar) {
         saveLayeredAvatarConfig(backendAvatar);

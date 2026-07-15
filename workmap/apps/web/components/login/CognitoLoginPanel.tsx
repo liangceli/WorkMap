@@ -15,6 +15,7 @@ import {
   type StoredCognitoSession,
 } from "../../lib/auth/cognitoSession";
 import { getPendingInviteToken } from "../../lib/auth/pendingInvite";
+import { isConfirmedWorkspaceMissing, workspaceAccessError } from "../../lib/auth/workspaceAccess";
 import {
   getDefaultSetupState,
   getNextRouteForUser,
@@ -65,7 +66,12 @@ export function CognitoLoginPanel() {
     if (contextResult.ok) {
       const defaultState = getDefaultSetupState(toWorkflowRole(contextResult.data.role));
       const currentUserResult = await getCurrentUser(options);
-      const backendAvatar = currentUserResult.ok ? decodeLayeredAvatarId(currentUserResult.data.avatarId) : null;
+      if (!currentUserResult.ok) {
+        setStatus(workspaceAccessError(currentUserResult));
+        setContinuing(false);
+        return;
+      }
+      const backendAvatar = decodeLayeredAvatarId(currentUserResult.data.avatarId);
 
       if (backendAvatar) {
         saveLayeredAvatarConfig(backendAvatar);
@@ -77,7 +83,18 @@ export function CognitoLoginPanel() {
       return;
     }
 
-    router.push(inviteToken ? `/invite/${encodeURIComponent(inviteToken)}` : "/onboarding/company");
+    if (inviteToken) {
+      router.push(`/invite/${encodeURIComponent(inviteToken)}`);
+      return;
+    }
+
+    if (isConfirmedWorkspaceMissing(contextResult)) {
+      router.push("/onboarding/company");
+      return;
+    }
+
+    setStatus(workspaceAccessError(contextResult));
+    setContinuing(false);
   };
 
   const handleAuthenticated = async (session: StoredCognitoSession) => {
