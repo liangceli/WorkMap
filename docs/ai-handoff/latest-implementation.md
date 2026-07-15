@@ -3220,3 +3220,13 @@ Correct the password visibility eye button so it aligns inside the right edge of
 
 - The supplied production screenshots confirmed the pre-fix 500 and retry storm. Post-fix production verification was not run because these source changes have not yet been deployed.
 - Deploy API and Web. No database migration and no Desktop Agent or Browser Extension package update are required.
+
+---
+
+## 2026-07-15 Render Database Connection Exhaustion
+
+- The Render build for commit `904a249` completed successfully, including dependency install, Prisma Client generation, and the API Nest build.
+- Deployment failed before the HTTP listener started because `PrismaService.onModuleInit()` received Supabase `EMAXCONNSESSION`: the Session Pooler had reached its configured 15-client pool size.
+- This is not a schema, migration, Reports query, or TypeScript build failure. Re-running the same deployment against the same exhausted Session Pooler is not a reliable fix.
+- Production runtime should use the Supabase Transaction Pooler endpoint on port 6543 with bounded Prisma connections and PgBouncer compatibility. Local/controlled Prisma migrations should continue using the already verified session/direct migration connection instead of the transaction endpoint.
+- No database URL, password, token, or other credential was written to source or handoff files.

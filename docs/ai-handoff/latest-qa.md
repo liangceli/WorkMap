@@ -2141,3 +2141,13 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 ### Recommendation
 
 - Pass for immediate API/Web redeployment. No migration or tracking-client reinstall is required. Confirm one authenticated employee Reports request after deployment and inspect Render logs for the sanitized current-domain warning if enrichment remains unavailable.
+
+---
+
+## 2026-07-15 Render Deployment Failure Diagnosis
+
+- Build phase: passed. Prisma Client generation and `@workmap/api` build both completed.
+- Startup phase: failed before readiness because Supabase Session Pooler returned `EMAXCONNSESSION` with `pool_size: 15`.
+- The API source contains no interactive transaction, advisory-lock, temporary-table, or session-state dependency that would block using transaction pooling for normal runtime CRUD traffic.
+- Recommendation: change only Render's runtime `DATABASE_URL` to the Supabase transaction endpoint, bound Prisma connections, redeploy, then verify `/health` and `/health/readiness`. Do not run Prisma migrations through that transaction-pooler URL.
+- Deployment recovery is pending the Render environment-variable update; production recovery is not reported as passed.
