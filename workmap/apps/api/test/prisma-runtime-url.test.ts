@@ -7,7 +7,7 @@ test("Supabase transaction pooler receives bounded Prisma-compatible runtime par
   const url = new URL(value);
   assert.equal(url.port, "6543");
   assert.equal(url.searchParams.get("pgbouncer"), "true");
-  assert.equal(url.searchParams.get("connection_limit"), "2");
+  assert.equal(url.searchParams.get("connection_limit"), "4");
   assert.equal(url.searchParams.get("pool_timeout"), "30");
   assert.equal(url.searchParams.get("sslmode"), "require");
 });

@@ -39,25 +39,23 @@ export default function CognitoCallbackPage() {
         return;
       }
 
-      const platformContextResult = await getPlatformContext({ token: result.session.idToken });
-
-      if (cancelled) {
-        return;
-      }
-
-      if (platformContextResult.ok) {
-        setStatus("Cognito sign-in complete. Opening platform admin...");
-        router.replace("/platform-admin");
-        return;
-      }
-
-      const contextResult = await getAuthContext({ token: result.session.idToken });
+      const authOptions = { token: result.session.idToken };
+      const contextResult = await getAuthContext(authOptions);
 
       if (cancelled) {
         return;
       }
 
       if (!contextResult.ok) {
+        const platformContextResult = await getPlatformContext(authOptions);
+        if (cancelled) {
+          return;
+        }
+        if (platformContextResult.ok) {
+          setStatus("Cognito sign-in complete. Opening platform admin...");
+          router.replace("/platform-admin");
+          return;
+        }
         if (isConfirmedWorkspaceMissing(contextResult)) {
           setStatus("Cognito sign-in complete. Opening workspace setup...");
           router.replace("/onboarding/company");
@@ -68,7 +66,7 @@ export default function CognitoCallbackPage() {
       }
 
       const defaultState = getDefaultSetupState(toWorkflowRole(contextResult.data.role));
-      const currentUserResult = await getCurrentUser({ token: result.session.idToken });
+      const currentUserResult = await getCurrentUser(authOptions);
 
       if (cancelled) {
         return;

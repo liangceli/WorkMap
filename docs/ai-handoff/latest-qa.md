@@ -1,5 +1,42 @@
 # Latest QA Handoff
 
+## 2026-07-15 Login And Reports Request Latency Stabilisation QA
+
+### Reviewed Implementation
+
+- Cognito workspace-mapping request de-duplication, onboarding failure protection, standard-route Platform Admin request removal, and bounded Supabase Transaction Pooler runtime configuration.
+
+### Findings
+
+- Confirmed workspace mappings are cached briefly; transient unavailable mappings are deliberately not cached.
+- Concurrent authenticated surfaces share one mapping request for the same Cognito user.
+- Normal tenant login and pages no longer request `/platform/me`, eliminating the expected `403` request from the normal login/app-shell path.
+- Workspace onboarding remains limited to an explicit confirmed missing mapping; failure paths preserve the current user and tenant data.
+- No Desktop Agent or Browser Extension package change is required for this repair.
+
+### Verification Status
+
+- Web tests: pass (`57/57`).
+- API tests: pass (`16/16`).
+- Web/API typecheck: pass.
+- Web/API lint: pass.
+- Web/API build: pass.
+- `git diff --check`: pass.
+- Production health: warm `200`; authenticated endpoint performance not tested without a user token.
+
+### Manual QA Status
+
+- Deferred: deployed owner login and Reports load must be checked after both Web and API services receive this commit.
+
+### Risks
+
+- Render Starter cold starts remain an infrastructure-level source of first-request latency.
+- Generated TypeScript build-info cache is present locally and should not be included in a source commit.
+
+### Recommendation
+
+- Pass for deployment. Deploy API and Web together; do not change tracking client versions for this scope.
+
 ## 2026-07-11 Product Pages Visual Direction V1 QA
 
 ### Reviewed Implementation

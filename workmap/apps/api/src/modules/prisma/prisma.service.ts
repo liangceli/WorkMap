@@ -9,7 +9,7 @@ export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL
     if (!url.hostname.endsWith(".pooler.supabase.com") || url.port !== "6543") return databaseUrl;
 
     if (!url.searchParams.has("pgbouncer")) url.searchParams.set("pgbouncer", "true");
-    if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "2");
+    if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "4");
     if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "30");
     return url.toString();
   } catch {

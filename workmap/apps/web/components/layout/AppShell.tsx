@@ -85,9 +85,12 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     let cancelled = false;
 
     async function loadApiSummary() {
-      const platformAuth = await getWorkMapPlatformApiAuthOptions();
+      const [platformAuth, auth] = await Promise.all([
+        pathname === "/platform-admin" ? getWorkMapPlatformApiAuthOptions() : Promise.resolve(null),
+        getWorkMapApiAuthOptions(),
+      ]);
 
-      if (!cancelled && platformAuth.available) {
+      if (!cancelled && platformAuth?.available) {
         const summary: PlatformSessionSummary = {
           userName: platformAuth.context.identity.displayName,
           email: platformAuth.context.identity.email,
@@ -97,8 +100,6 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
         setPlatformSummary(summary);
         updateAppShellCache(session?.claims.sub, { platformSummary: summary });
       }
-
-      const auth = await getWorkMapApiAuthOptions();
 
       if (!auth.available) {
         if (cancelled) return;
@@ -139,7 +140,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [pathname]);
 
   const visibleItems = useMemo(() => {
     const isPlatformAdmin = platformSummary?.platformRole === "PLATFORM_ADMIN";

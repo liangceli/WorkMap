@@ -54,13 +54,6 @@ export function CognitoLoginPanel() {
     setStatus("Checking your WorkMap access...");
     const options = { token: session.idToken || session.accessToken };
     const inviteToken = getPendingInviteToken();
-    const platformContextResult = await getPlatformContext(options);
-
-    if (!inviteToken && platformContextResult.ok) {
-      router.push("/platform-admin");
-      return;
-    }
-
     const contextResult = await getAuthContext(options);
 
     if (contextResult.ok) {
@@ -85,6 +78,12 @@ export function CognitoLoginPanel() {
 
     if (inviteToken) {
       router.push(`/invite/${encodeURIComponent(inviteToken)}`);
+      return;
+    }
+
+    const platformContextResult = await getPlatformContext(options);
+    if (platformContextResult.ok) {
+      router.push("/platform-admin");
       return;
     }
 
