@@ -43,6 +43,13 @@ test("filter refresh replaces previous report content with the WorkMap pixel loa
   assert.match(reportSource, /disabled=\{!summary \|\| reportState\.loading\}/);
 });
 
+test("report filter loader leaves the pixel avatar unframed", () => {
+  assert.match(
+    redesignStyles,
+    /\.wm-report-summary > section\[aria-label="Loading selected report"\] \.wm-loader-section \{\s*min-height: 0;\s*border: 0;\s*border-radius: 0;\s*background: transparent;/,
+  );
+});
+
 test("live signals and connection audit retain comfortable responsive section padding", () => {
   assert.equal((reportSource.match(/className="wm-report-detail-section"/g) ?? []).length, 2);
   assert.match(redesignStyles, /\.wm-report-summary > section\.wm-report-detail-section \{\s*padding: 24px !important;/);

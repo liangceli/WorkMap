@@ -3,6 +3,19 @@
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  Building2,
+  ChartNoAxesCombined,
+  LayoutDashboard,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plug,
+  Settings,
+  ShieldCheck,
+  UserPlus,
+  UsersRound,
+} from "lucide-react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
 import { getCurrentCompany } from "../../lib/api/companiesApi";
 import { getCurrentUser } from "../../lib/api/authApi";
@@ -55,6 +68,19 @@ const platformNavigationItem: PlatformNavigationItem = {
 };
 
 const APP_SHELL_CACHE_KEY = "workmap.appShellContext";
+const APP_SHELL_SIDEBAR_COLLAPSED_KEY = "workmap.appShellSidebarCollapsed";
+
+const navigationIcons = {
+  "/employees": UsersRound,
+  "/dashboard": LayoutDashboard,
+  "/reports": ChartNoAxesCombined,
+  "/compliance": ShieldCheck,
+  "/virtual-office": Building2,
+  "/onboarding/invite": UserPlus,
+  "/integrations": Plug,
+  "/settings": Settings,
+  "/platform-admin": ShieldCheck,
+};
 
 export function AppShell({ children, variant = "default" }: AppShellProps) {
   const pathname = usePathname();
@@ -63,6 +89,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
   const [platformSummary, setPlatformSummary] = useState<PlatformSessionSummary | null>(null);
   const [cachedRole, setCachedRole] = useState<WorkMapRole | null>(null);
   const [shellLoading, setShellLoading] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const activeRole = apiSummary?.role ? toWorkflowRole(apiSummary.role) : cachedRole;
 
   useLayoutEffect(() => {
@@ -74,6 +101,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     setApiSummary(cached?.apiSummary ?? null);
     setPlatformSummary(cached?.platformSummary ?? null);
     setCachedRole(cached?.apiSummary?.role ? toWorkflowRole(cached.apiSummary.role) : setup?.role ?? null);
+    setSidebarCollapsed(readSidebarCollapsedPreference());
     if (hasWarmAppShellCache(cached)) {
       setShellLoading(false);
     }
@@ -188,12 +216,23 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     redirectToRootForMissingCognitoSession();
   };
 
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      saveSidebarCollapsedPreference(next);
+      return next;
+    });
+  };
+
   if (shellLoading) {
     return <WorkMapLoader fullPage label="Opening your workspace" />;
   }
 
   return (
-    <main className={`wm-app-shell${variant === "editorial" ? " wm-app-shell-editorial" : ""}`} style={styles.page}>
+    <main
+      className={`wm-app-shell${variant === "editorial" ? " wm-app-shell-editorial" : ""}${sidebarCollapsed ? " wm-app-shell-collapsed" : ""}`}
+      style={styles.page}
+    >
       <header className="wm-app-top-nav" style={styles.topNav}>
         <Link href="/" className="wm-app-brand" style={styles.brand}>
           <span style={styles.logo}>WM</span>
@@ -203,37 +242,66 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
           </span>
         </Link>
 
+        <button
+          type="button"
+          className="wm-app-sidebar-toggle"
+          aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+          aria-expanded={!sidebarCollapsed}
+          title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+          onClick={toggleSidebar}
+        >
+          {sidebarCollapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
+        </button>
+
         <nav className="wm-app-nav-links" style={styles.navLinks} aria-label="WorkMap navigation">
-          {visibleItems.map((item) => (
-            <Link
-              key={item.href}
-              className="wm-app-nav-link"
-              href={item.href}
-              aria-current={isActiveNav(pathname, item.href) ? "page" : undefined}
-              style={{
-                ...styles.navLink,
-                ...(isActiveNav(pathname, item.href) ? styles.navLinkActive : {}),
-                ...("platformOnly" in item ? styles.platformNavLink : {}),
-              }}
-            >
-              <span style={styles.navGroupLabel}>{formatNavGroup(item.group)}</span>
-              {item.label}
-            </Link>
-          ))}
+          {visibleItems.map((item) => {
+            const Icon = getNavigationIcon(item.href);
+
+            return (
+              <Link
+                key={item.href}
+                className="wm-app-nav-link"
+                href={item.href}
+                aria-current={isActiveNav(pathname, item.href) ? "page" : undefined}
+                aria-label={item.label}
+                title={sidebarCollapsed ? item.label : undefined}
+                style={{
+                  ...styles.navLink,
+                  ...(isActiveNav(pathname, item.href) ? styles.navLinkActive : {}),
+                  ...("platformOnly" in item ? styles.platformNavLink : {}),
+                }}
+              >
+                <span className="wm-app-nav-icon" aria-hidden="true"><Icon size={18} strokeWidth={1.9} /></span>
+                <span className="wm-app-nav-copy">
+                  <span style={styles.navGroupLabel}>{formatNavGroup(item.group)}</span>
+                  <span className="wm-app-nav-label">{item.label}</span>
+                </span>
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="wm-app-session-wrap" style={styles.sessionWrap}>
-          <div style={{ ...styles.rolePill, ...(platformSummary ? styles.platformRolePill : {}) }}>
+          <div
+            className="wm-app-role-pill"
+            aria-label={roleLabel}
+            title={sidebarCollapsed ? roleLabel : undefined}
+            style={{ ...styles.rolePill, ...(platformSummary ? styles.platformRolePill : {}) }}
+          >
             <span style={styles.roleDot} />
-            {roleLabel}
+            <span className="wm-app-role-label">{roleLabel}</span>
           </div>
           {cognitoSession ? (
             <button
               type="button"
+              className="wm-app-logout-button"
+              aria-label="Log out"
+              title={sidebarCollapsed ? "Log out" : undefined}
               style={styles.logoutButton}
               onClick={() => void logout()}
             >
-              Log out
+              <LogOut className="wm-app-logout-icon" size={16} aria-hidden="true" />
+              <span className="wm-app-logout-label">Log out</span>
             </button>
           ) : null}
         </div>
@@ -278,6 +346,20 @@ function clearAppShellCache() {
   }
 }
 
+function readSidebarCollapsedPreference() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(APP_SHELL_SIDEBAR_COLLAPSED_KEY) === "true";
+}
+
+function saveSidebarCollapsedPreference(collapsed: boolean) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(APP_SHELL_SIDEBAR_COLLAPSED_KEY, String(collapsed));
+  }
+}
+
 function formatRole(role: string) {
   return role.replace(/_/g, " ");
 }
@@ -288,6 +370,10 @@ function isActiveNav(pathname: string | null, href: string) {
   }
 
   return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+}
+
+function getNavigationIcon(href: string) {
+  return navigationIcons[href as keyof typeof navigationIcons] ?? ShieldCheck;
 }
 
 function formatNavGroup(group: NavItem["group"]) {

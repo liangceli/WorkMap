@@ -78,6 +78,33 @@
   color: rgba(255, 255, 255, 0.62) !important;
 }
 
+.wm-app-sidebar-toggle {
+  position: absolute !important;
+  top: 22px;
+  right: -16px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: #111b37;
+  color: #d8fff0;
+  box-shadow: 0 5px 14px rgba(8, 13, 34, 0.2);
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.wm-app-sidebar-toggle:hover,
+.wm-app-sidebar-toggle:focus-visible {
+  border-color: var(--wm-secondary);
+  background: #172648;
+  color: #ffffff;
+  outline: none;
+}
+
 .wm-app-shell .wm-app-nav-links,
 .wm-app-shell-editorial .wm-app-nav-links {
   width: 100% !important;
@@ -110,8 +137,20 @@
   font-weight: 700 !important;
 }
 
-.wm-app-shell .wm-app-nav-link span,
-.wm-app-shell-editorial .wm-app-nav-link span {
+.wm-app-shell .wm-app-nav-icon,
+.wm-app-shell-editorial .wm-app-nav-icon {
+  display: none;
+}
+
+.wm-app-shell .wm-app-nav-copy,
+.wm-app-shell-editorial .wm-app-nav-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.wm-app-shell .wm-app-nav-copy > span:first-child,
+.wm-app-shell-editorial .wm-app-nav-copy > span:first-child {
   color: rgba(255, 255, 255, 0.42) !important;
   font-size: 9px !important;
   text-transform: uppercase !important;
@@ -169,6 +208,17 @@
   color: #fff !important;
 }
 
+.wm-app-logout-button {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.wm-app-logout-icon {
+  display: none;
+}
+
 .wm-app-shell .wm-app-content,
 .wm-app-shell-editorial .wm-app-content {
   grid-column: 2 !important;
@@ -178,6 +228,102 @@
   min-width: 0 !important;
   margin: 0 !important;
   padding: clamp(28px, 3vw, 48px) clamp(24px, 4vw, 58px) 56px !important;
+}
+
+/* Collapsed desktop navigation rail */
+.wm-app-shell.wm-app-shell-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr) !important;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-top-nav {
+  width: 76px !important;
+  padding: 20px 10px !important;
+  gap: 18px !important;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-brand {
+  min-width: 0 !important;
+  justify-content: center;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-brand > span:last-child,
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-copy,
+.wm-app-shell.wm-app-shell-collapsed .wm-app-role-label,
+.wm-app-shell.wm-app-shell-collapsed .wm-app-logout-label {
+  display: none !important;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-links {
+  align-items: center !important;
+  padding: 8px 0 !important;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link {
+  width: 46px !important;
+  min-height: 46px !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 12px !important;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-icon {
+  width: 20px;
+  height: 20px;
+  display: grid !important;
+  place-items: center;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link[aria-current="page"]::before {
+  top: 50%;
+  left: -11px;
+  width: 3px;
+  height: 18px;
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link::after {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 12px);
+  z-index: 4;
+  padding: 6px 8px;
+  border: 1px solid rgba(39, 224, 162, 0.34);
+  border-radius: 6px;
+  background: #111b37;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(-4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  content: attr(aria-label);
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link:hover::after,
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-session-wrap {
+  align-items: center !important;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-role-pill,
+.wm-app-shell.wm-app-shell-collapsed .wm-app-logout-button {
+  min-height: 42px;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-logout-icon {
+  display: block;
 }
 
 /* Shared product-page language */
@@ -506,6 +652,13 @@
   padding: 24px !important;
 }
 
+.wm-report-summary > section[aria-label="Loading selected report"] .wm-loader-section {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .wm-usage-table-toggle {
   min-width: 0;
 }
@@ -583,29 +736,45 @@
   position: relative;
   display: grid !important;
   align-content: start;
-  gap: 10px !important;
+  gap: 12px !important;
   min-height: 100%;
+  padding: clamp(20px, 2.2vw, 28px) !important;
   overflow: hidden;
   border-color: var(--wm-primary) !important;
   border-radius: 8px !important;
   background: var(--wm-primary) !important;
-  box-shadow: none !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }
 
 .wm-invite-list-panel::before {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 72px;
-  height: 5px;
+  top: clamp(20px, 2.2vw, 28px);
+  left: clamp(20px, 2.2vw, 28px);
+  width: 4px;
+  height: 42px;
   background: var(--wm-civic-amber);
   content: "";
+}
+
+.wm-invite-list-panel::after {
+  position: absolute;
+  top: calc(clamp(20px, 2.2vw, 28px) + 4px);
+  right: clamp(20px, 2.2vw, 28px);
+  width: 46px;
+  height: 1px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.38) 0 2px,
+    transparent 2px 8px
+  );
+  content: "";
+  opacity: 0.72;
 }
 
 .wm-invite-list-heading {
   display: grid;
   gap: 5px;
-  padding: 8px 4px 10px;
+  padding: 1px 54px 16px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
 }
 
@@ -634,6 +803,7 @@
   column-gap: 12px;
   row-gap: 8px;
   min-width: 0;
+  padding: 16px !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 6px !important;
   background: rgba(255, 255, 255, 0.055) !important;
@@ -1373,6 +1543,55 @@
     display: block !important;
   }
 
+  .wm-app-sidebar-toggle {
+    display: none !important;
+  }
+
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-top-nav {
+    width: 100% !important;
+    padding: 12px 16px !important;
+    gap: 10px 14px !important;
+  }
+
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-brand {
+    min-width: 0 !important;
+    justify-content: flex-start;
+  }
+
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-brand > span:last-child,
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-nav-copy,
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-role-label,
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-logout-label {
+    display: grid !important;
+  }
+
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-nav-icon,
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-logout-icon {
+    display: none !important;
+  }
+
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link {
+    width: auto !important;
+    min-height: 0 !important;
+    padding: 6px 8px !important;
+    display: grid !important;
+    place-items: initial !important;
+  }
+
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-role-pill,
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-logout-button {
+    width: auto !important;
+    min-height: 0 !important;
+    padding: 8px 10px !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link::after {
+    display: none;
+  }
+
   .wm-app-shell .wm-app-top-nav,
   .wm-app-shell-editorial .wm-app-top-nav {
     position: sticky !important;
@@ -1561,9 +1780,16 @@
     display: none !important;
   }
 
-  .wm-app-shell .wm-app-nav-link span,
-  .wm-app-shell-editorial .wm-app-nav-link span {
+  .wm-app-shell .wm-app-nav-link > .wm-app-nav-icon,
+  .wm-app-shell-editorial .wm-app-nav-link > .wm-app-nav-icon,
+  .wm-app-shell .wm-app-nav-link > .wm-app-nav-copy > span:first-child,
+  .wm-app-shell-editorial .wm-app-nav-link > .wm-app-nav-copy > span:first-child {
     display: none !important;
+  }
+
+  .wm-app-shell .wm-app-nav-link > .wm-app-nav-copy,
+  .wm-app-shell-editorial .wm-app-nav-link > .wm-app-nav-copy {
+    display: block !important;
   }
 
   .wm-app-shell .wm-app-content,
@@ -1625,6 +1851,17 @@
 
   .wm-invite-list-panel {
     min-height: 0;
+    padding: 18px !important;
+  }
+
+  .wm-invite-list-panel::before {
+    top: 18px;
+    left: 18px;
+  }
+
+  .wm-invite-list-panel::after {
+    top: 22px;
+    right: 18px;
   }
 
   .wm-invitation-row {

@@ -1,5 +1,89 @@
 # Latest QA Handoff
 
+## 2026-07-16 Invitation Activity Panel Spacing QA
+
+### Reviewed Implementation
+
+- The owner invitation-list panel visual treatment and responsive spacing.
+
+### Findings
+
+- The amber element was confirmed to be decorative, not data-backed quota or seat usage; the visual now reads as a local access marker rather than a meter.
+- The panel and invitation rows gain scoped internal spacing without changing the invitation-list rendering or status values.
+- Narrow-screen padding and row stacking remain covered by a regression assertion.
+
+### Verification Status
+
+- Web tests: pass (`65/65`), including recent-invitation panel layout coverage.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass; existing Next ESLint-plugin configuration warning remains.
+- Scoped invitation-panel credential scan: pass; no credential-like values found.
+
+### Manual QA Status
+
+- Not run in this coding environment.
+
+### Recommendation
+
+- Pass for Web deployment. No invitation quota/capacity, API, database, deployment, Desktop Agent, Browser Extension, or tracking change is involved.
+
+## 2026-07-15 Collapsible Workspace Sidebar QA
+
+### Reviewed Implementation
+
+- Desktop workspace-sidebar collapse treatment and responsive fallbacks.
+
+### Findings
+
+- The default desktop sidebar remains familiar and fully labelled; the collapsed form retains every available navigation action as an accessible icon rail.
+- The active navigation route remains visually identifiable. Hover, focus, native title, and keyboard focus expose the label in the compact state.
+- The collapse preference is local to the browser and cannot change account state, role access, routing, report data, or backend behavior.
+- At `1024px` and below the collapse control is removed and the established responsive header returns; at the small mobile breakpoint the horizontal labelled navigation remains available.
+
+### Verification Status
+
+- Web tests: pass (`64/64`), including sidebar collapse and responsive recovery regression coverage.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass.
+- `git diff --check`: pass.
+
+### Manual QA Status
+
+- Not run in this coding environment.
+
+### Recommendation
+
+- Pass for Web deployment. No API, database, deployment, Desktop Agent, Browser Extension, or tracking changes are involved.
+
+## 2026-07-15 Reports Loader Unframed Avatar QA
+
+### Reviewed Implementation
+
+- Reports-only selected-report loading presentation.
+
+### Findings
+
+- The nested section loader has no border, background, rounded frame, or fixed height in this report-loading state.
+- The outer Reports loading panel remains unchanged, so page space and centering are stable while data loads.
+- The override does not affect full-page or other section loaders.
+
+### Verification Status
+
+- Web tests: pass (`62/62`), including a Report loader frame regression check.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass.
+
+### Manual QA Status
+
+- Not run in this coding environment.
+
+### Recommendation
+
+- Pass for Web deployment. No backend, database, deployment, Desktop Agent, or Browser Extension update is involved.
+
 ## 2026-07-15 Mobile Workspace Navigation Refinement QA
 
 ### Reviewed Implementation

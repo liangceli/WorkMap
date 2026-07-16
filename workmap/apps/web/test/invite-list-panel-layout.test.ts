@@ -25,3 +25,14 @@ test("recent invitations protects long email and status content on narrow screen
     /@media \(max-width: 760px\)[\s\S]*?\.wm-invitation-row[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/,
   );
 });
+
+test("recent invitations uses a decorative access marker rather than a quota indicator and keeps breathing room", () => {
+  assert.match(redesignStyles, /\.wm-invite-list-panel[\s\S]*?padding:\s*clamp\(20px, 2\.2vw, 28px\)\s*!important/);
+  assert.match(redesignStyles, /\.wm-invite-list-panel::before[\s\S]*?width:\s*4px[\s\S]*?height:\s*42px/);
+  assert.match(redesignStyles, /\.wm-invite-list-panel::after[\s\S]*?repeating-linear-gradient/);
+  assert.match(redesignStyles, /\.wm-invitation-row[\s\S]*?padding:\s*16px\s*!important/);
+  assert.match(
+    redesignStyles,
+    /@media \(max-width: 760px\)[\s\S]*?\.wm-invite-list-panel[\s\S]*?padding:\s*18px\s*!important/,
+  );
+});

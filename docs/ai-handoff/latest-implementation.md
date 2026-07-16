@@ -1,5 +1,101 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Invitation Activity Panel Spacing
+
+### Original Task Brief
+
+- Rework the Recent invitations panel accent and missing padding. Confirm whether its amber line represents invitation capacity before changing it.
+
+### Repository Finding
+
+- It is not an invitation quota or seat-usage indicator. `InvitationsService.create()` creates tenant-scoped invitations without a capacity check, and `/onboarding/invite` receives only the invitation list. The existing amber line was decorative only.
+
+### Changed Files
+
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/invite-list-panel-layout.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- The top-edge amber bar is replaced by an inset vertical access marker beside the panel heading, plus a subtle decorative dot rule on the opposite side. It no longer resembles a progress bar.
+- The dark invitation panel now has responsive internal padding, and every invitation row has a larger, consistent `16px` inset.
+- At the mobile breakpoint, panel padding reduces to `18px` and the marker stays aligned with the smaller inset.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/web test`: pass (`65/65`).
+- `pnpm.cmd --filter @workmap/web typecheck`: pass.
+- `pnpm.cmd --filter @workmap/web lint`: pass.
+- `pnpm.cmd --filter @workmap/web build`: pass. Existing Next ESLint-plugin configuration warning only.
+- Scoped invitation-panel credential scan: pass; no credential-like values found.
+
+### Intentionally Not Changed
+
+- Invitation limits, seat/capacity logic, API responses, owner authorization, invitation creation/acceptance behavior, backend, database, deployment, Desktop Agent, Browser Extension, and tracking behavior.
+
+## 2026-07-15 Collapsible Workspace Sidebar
+
+### Original Task Brief
+
+- Add a visually coherent collapsible left navigation for the Reports workspace without changing product behavior.
+
+### Changed Files
+
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/app-shell-sidebar.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Desktop authenticated pages now provide a compact toggle on the right edge of the workspace sidebar.
+- The collapsed state is a 76px icon rail with clear active styling, native labels, and keyboard-visible tooltips; the selected state and all role-filtered navigation links remain intact.
+- The visual preference is stored only in browser local storage. At `1024px` and below, the existing complete responsive navigation is restored; the smaller horizontal mobile navigation remains label-based and scrollable.
+
+### Verification
+
+- `pnpm --filter @workmap/web test`: pass (`64/64`).
+- `pnpm --filter @workmap/web typecheck`: pass.
+- `pnpm --filter @workmap/web lint`: pass.
+- `pnpm --filter @workmap/web build`: pass.
+- `git diff --check`: pass.
+
+### Intentionally Not Changed
+
+- Routes, navigation permissions, authentication, API/data fetching, reports behavior, backend, database, deployment, Desktop Agent, Browser Extension, and tracking behavior.
+
+## 2026-07-15 Reports Loader Unframed Avatar
+
+### Original Task Brief
+
+- Adjust only the Reports loading visual so the pixel avatar has no inner white bordered frame.
+
+### Changed Files
+
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/reports-information-order.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- The Reports-only selected-report loader now removes the nested Loader border, rounded container, background, and fixed inner height.
+- The report loading panel still centers the existing animated pixel avatar and loading label, without changing request, loading, or report-rendering behavior.
+
+### Verification
+
+- `pnpm --filter @workmap/web test`: pass (`62/62`).
+- `pnpm --filter @workmap/web typecheck`: pass.
+- `pnpm --filter @workmap/web lint`: pass.
+- `pnpm --filter @workmap/web build`: pass.
+
+### Intentionally Not Changed
+
+- Loading logic, Reports data/API behavior, backend, database, deployment, authentication, Desktop Agent, Browser Extension, and every non-Reports Loader.
+
 ## 2026-07-15 Mobile Workspace Navigation Refinement
 
 ### Original Task Brief
