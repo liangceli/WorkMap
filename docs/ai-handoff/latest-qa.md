@@ -2469,3 +2469,30 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 - The API source contains no interactive transaction, advisory-lock, temporary-table, or session-state dependency that would block using transaction pooling for normal runtime CRUD traffic.
 - Recommendation: change only Render's runtime `DATABASE_URL` to the Supabase transaction endpoint, bound Prisma connections, redeploy, then verify `/health` and `/health/readiness`. Do not run Prisma migrations through that transaction-pooler URL.
 - Deployment recovery is pending the Render environment-variable update; production recovery is not reported as passed.
+
+---
+
+## 2026-07-16 Reports Responsive Live Refresh And Query Separation QA
+
+### Reviewed Implementation
+
+- Reviewed the request split between `/reports/usage-summary`, `/reports/agent-status`, and the new `/reports/tracking-audit` endpoint.
+- Reviewed the new bounded live-browser query, aggregate-summary revision source, user/company authorization handling, and additive Prisma indexes.
+
+### Findings Ordered By Severity
+
+- No current-change correctness issue found in source review. The primary summary continues to use the existing aggregation methods; only optional live/audit sections move to independent requests.
+- The production latency improvement from indexes requires migration `20260716103000_report_query_performance` to be applied. It was not applied by this task.
+- Local Prisma database validation was not rerun because this shell has no `DATABASE_URL`; no production credential was read or printed.
+
+### Test And Verification Status
+
+- API tests: passed, 17/17.
+- Web tests: passed, 72/72.
+- API/Web typecheck, lint, and production builds: passed.
+- `git diff --check` and scoped source credential scan: passed; Windows line-ending notices were informational only.
+- Manual authenticated performance QA: not run.
+
+### Recommendation
+
+- Pass for a coordinated API/Web deployment and the already-scoped additive index migration. Do not update Desktop Agent or Browser Extension for this API/Web-only increment. Confirm production request duration and visible-tab report freshness after deployment; do not interpret automated source tests as production performance acceptance.

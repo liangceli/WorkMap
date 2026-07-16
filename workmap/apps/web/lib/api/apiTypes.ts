@@ -355,6 +355,14 @@ export type WorkMapApiUsageSummary = {
   activityRevision: string | null;
 };
 
+export type WorkMapApiTrackingAudit = {
+  scope: "user" | "company";
+  userId: string | null;
+  agentSessions: WorkMapApiUsageSummary["agentSessions"];
+  deviceStatusHistory: WorkMapApiUsageSummary["deviceStatusHistory"];
+  appTimeline: WorkMapApiUsageSummary["appTimeline"];
+};
+
 export type WorkMapApiReportLiveStatus =
   | {
       scope: "user";

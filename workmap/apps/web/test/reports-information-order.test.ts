@@ -9,8 +9,8 @@ const apiTypesSource = readFileSync(join(webRoot, "lib", "api", "apiTypes.ts"), 
 const redesignStyles = readFileSync(join(webRoot, "app", "workspace-redesign.css"), "utf8");
 
 test("employee reports present live signals, audit, trend and API summary in that order", () => {
-  const live = reportSource.indexOf('<EmployeeLiveOverview summary={summary} />');
-  const audit = reportSource.indexOf('<EmployeeConnectionAudit summary={summary} />');
+  const live = reportSource.indexOf("<EmployeeLiveOverview");
+  const audit = reportSource.indexOf("<EmployeeConnectionAudit");
   const trend = reportSource.indexOf('<DailyTrend rows={summary.daily} />');
   const api = reportSource.indexOf('>API summary</p>');
 
@@ -37,17 +37,24 @@ test("a failed summary revision is not retried on every live poll", () => {
 
 test("filter refresh replaces previous report content with the WorkMap pixel loader", () => {
   assert.match(reportSource, /import \{ WorkMapLoader \} from "\.\.\/ui\/WorkMapLoader"/);
-  assert.match(reportSource, /\{reportState\.loading \? \(\s*<section style=\{styles\.loadingPanel\}/);
+  assert.match(reportSource, /\{reportState\.loading \? \(/);
+  assert.match(reportSource, /<section style=\{styles\.loadingPanel\} aria-label="Loading selected report">/);
   assert.match(reportSource, /<WorkMapLoader label="Loading selected report" \/>/);
   assert.match(reportSource, /!reportState\.loading && summary\?\.scope === "user"/);
   assert.match(reportSource, /disabled=\{!summary \|\| reportState\.loading\}/);
 });
 
-test("the initial Owner report completes before optional directory and live-status reads", () => {
+test("the initial report loads current status first, then summary and non-blocking audit", () => {
+  assert.match(reportSource, /const initialLiveResult = await requestLiveStatus\(context, initialFilters, false\);/);
   assert.match(reportSource, /const result = await requestSummary\(context, initialFilters\);/);
-  assert.match(reportSource, /applyResult\(result, setReportState\);\s*\n\s*\n\s*if \(!canViewCompany\)/);
+  assert.match(reportSource, /applyResult\(result, setReportState\);\s*\n\s*nextRevisionCheckAtRef\.current/);
+  assert.match(reportSource, /void loadAudit\(context, initialFilters/);
   assert.match(reportSource, /void loadDirectory\(context\.options/);
   assert.match(reportSource, /if \(!auth \|\| !livePollingReady\) return;/);
+  assert.match(reportSource, /includeAudit: false/);
+  assert.match(reportSource, /includeLive: false/);
+  assert.match(reportSource, /includeRevision,\s*\n/);
+  assert.match(reportSource, /const revisionDue = Date\.now\(\) >= nextRevisionCheckAtRef\.current/);
 });
 
 test("report filter loader leaves the pixel avatar unframed", () => {

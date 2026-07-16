@@ -395,6 +395,9 @@ model ActivityEvent {
   @@index([companyId, eventType, startedAt])
   @@index([companyId, userId, deviceId, agentSessionId, startedAt])
   @@index([companyId, deviceId, source, sequenceNumber])
+  @@index([companyId, userId, source, eventType, startedAt])
+  @@index([companyId, source, eventType, startedAt])
+  @@index([companyId, deviceId, source, eventType, endedAt])
 }
 
 model DeviceStatusEvent {
@@ -446,6 +449,8 @@ model AppUsageSummary {
   @@unique([companyId, userId, date, appName])
   @@index([companyId, userId, date])
   @@index([companyId, date])
+  @@index([companyId, userId, date, updatedAt])
+  @@index([companyId, date, updatedAt])
 }
 
 model WebsiteUsageSummary {
@@ -467,6 +472,8 @@ model WebsiteUsageSummary {
   @@unique([companyId, userId, date, domain, browserName])
   @@index([companyId, userId, date])
   @@index([companyId, date])
+  @@index([companyId, userId, date, updatedAt])
+  @@index([companyId, date, updatedAt])
 }
 
 model OfficeMap {

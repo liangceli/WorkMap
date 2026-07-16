@@ -19,6 +19,9 @@ type SummaryQuery = {
   scope?: string;
   from?: string;
   to?: string;
+  includeAudit?: string;
+  includeLive?: string;
+  includeRevision?: string;
 };
 
 type ReportScope = "user" | "company";
@@ -68,6 +71,8 @@ const MAX_REPORT_DAYS = 366;
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const AGENT_HEARTBEAT_FRESH_MS = 30_000;
 const BROWSER_CURRENT_DOMAIN_FRESH_MS = 45_000;
+const BROWSER_COVERAGE_HISTORY_MS = 24 * 60 * 60 * 1000;
+const MAX_BROWSER_COVERAGE_EVENTS = 500;
 
 @Injectable()
 export class ReportsService {
@@ -81,10 +86,12 @@ export class ReportsService {
   async getUsageSummary(context: RequestContext, query: SummaryQuery) {
     const scope = normalizeReportScope(query.scope);
     const range = parseReportRange(query.from, query.to);
+    const includeAudit = query.includeAudit !== "false";
+    const includeLive = query.includeLive !== "false";
 
     if (scope === "company") {
       if (query.userId) throw new BadRequestException("userId cannot be combined with company scope.");
-      return this.getCompanyUsageSummary(context, query.departmentId, range);
+      return this.getCompanyUsageSummary(context, query.departmentId, range, includeLive);
     }
 
     if (query.departmentId) throw new BadRequestException("departmentId is available only for company scope.");
@@ -112,15 +119,21 @@ export class ReportsService {
       () => this.getDeviceCoverage(filter),
       { registeredDevices: 0, activeDevices24h: 0, usersWithActivity: 0 },
     );
-    const browserExtensionCoverage = await this.optionalReportSection(
-      "browser extension coverage",
-      () => this.getBrowserExtensionCoverage(filter),
-      [],
-    );
-    const agentStatus = await this.optionalReportSection("desktop agent status", () => this.getAgentStatus(filter), null);
-    const agentSessions = await this.optionalReportSection("desktop agent sessions", () => this.getAgentSessions(filter), []);
-    const deviceStatusHistory = await this.optionalReportSection("desktop status history", () => this.getDeviceStatusHistory(filter), []);
-    const appTimeline = await this.optionalReportSection("desktop app timeline", () => this.getAppTimeline(filter), []);
+    const browserExtensionCoverage = includeLive
+      ? await this.optionalReportSection("browser extension coverage", () => this.getBrowserExtensionCoverage(filter), [])
+      : [];
+    const agentStatus = includeLive
+      ? await this.optionalReportSection("desktop agent status", () => this.getAgentStatus(filter), null)
+      : null;
+    const agentSessions = includeAudit
+      ? await this.optionalReportSection("desktop agent sessions", () => this.getAgentSessions(filter), [])
+      : [];
+    const deviceStatusHistory = includeAudit
+      ? await this.optionalReportSection("desktop status history", () => this.getDeviceStatusHistory(filter), [])
+      : [];
+    const appTimeline = includeAudit
+      ? await this.optionalReportSection("desktop app timeline", () => this.getAppTimeline(filter), [])
+      : [];
     const activityRevision = await this.optionalReportSection("activity revision", () => this.getActivityRevision(filter), null);
 
     return {
@@ -143,6 +156,7 @@ export class ReportsService {
   async getAgentLiveStatus(context: RequestContext, query: SummaryQuery) {
     const scope = normalizeReportScope(query.scope);
     const range = parseReportRange(query.from, query.to);
+    const includeRevision = query.includeRevision !== "false";
     if (scope === "company") {
       if (query.userId) throw new BadRequestException("userId cannot be combined with company scope.");
       if (!canViewTeamReports(context)) throw new ForbiddenException("Company reports are not visible to this role.");
@@ -150,11 +164,11 @@ export class ReportsService {
         ? await this.resolveDepartmentUserIds(context.companyId, query.departmentId)
         : undefined;
       const filter = { companyId: context.companyId, userIds, range };
-      const [segments, browserExtensionCoverage, activityRevision] = await Promise.all([
+      const [segments, browserExtensionCoverage] = await Promise.all([
         this.getLiveAppSegments(filter),
         this.getBrowserExtensionCoverage(filter),
-        this.getActivityRevision(filter),
       ]);
+      const activityRevision = includeRevision ? await this.getActivityRevision(filter) : null;
       return {
         scope: "company" as const,
         userId: null,
@@ -169,11 +183,11 @@ export class ReportsService {
     if (query.departmentId) throw new BadRequestException("departmentId is available only for company scope.");
     const userId = await this.resolveVisibleReportUserId(context, query.userId);
     const filter = { companyId: context.companyId, userId, range };
-    const [agentStatus, browserExtensionCoverage, activityRevision] = await Promise.all([
+    const [agentStatus, browserExtensionCoverage] = await Promise.all([
       this.getAgentStatus(filter),
       this.getBrowserExtensionCoverage(filter),
-      this.getActivityRevision(filter),
     ]);
+    const activityRevision = includeRevision ? await this.getActivityRevision(filter) : null;
     return {
       scope: "user" as const,
       userId,
@@ -184,7 +198,33 @@ export class ReportsService {
     };
   }
 
-  private async getCompanyUsageSummary(context: RequestContext, departmentId: string | undefined, range: ReportRange) {
+  async getTrackingAudit(context: RequestContext, query: SummaryQuery) {
+    const scope = normalizeReportScope(query.scope);
+    const range = parseReportRange(query.from, query.to);
+
+    if (scope === "company") {
+      if (!canViewTeamReports(context)) throw new ForbiddenException("Company reports are not visible to this role.");
+      return { scope: "company" as const, userId: null, agentSessions: [], deviceStatusHistory: [], appTimeline: [] };
+    }
+
+    if (query.departmentId) throw new BadRequestException("departmentId is available only for company scope.");
+    const userId = await this.resolveVisibleReportUserId(context, query.userId);
+    const filter = { companyId: context.companyId, userId, range };
+    const [agentSessions, deviceStatusHistory, appTimeline] = await Promise.all([
+      this.optionalReportSection("desktop agent sessions", () => this.getAgentSessions(filter), []),
+      this.optionalReportSection("desktop status history", () => this.getDeviceStatusHistory(filter), []),
+      this.optionalReportSection("desktop app timeline", () => this.getAppTimeline(filter), []),
+    ]);
+
+    return { scope: "user" as const, userId, agentSessions, deviceStatusHistory, appTimeline };
+  }
+
+  private async getCompanyUsageSummary(
+    context: RequestContext,
+    departmentId: string | undefined,
+    range: ReportRange,
+    includeLive: boolean,
+  ) {
     if (!canViewTeamReports(context)) {
       throw new ForbiddenException("Company reports are not visible to this role.");
     }
@@ -212,11 +252,9 @@ export class ReportsService {
       () => this.getDeviceCoverage(filter),
       { registeredDevices: 0, activeDevices24h: 0, usersWithActivity: 0 },
     );
-    const browserExtensionCoverage = await this.optionalReportSection(
-      "company browser extension coverage",
-      () => this.getBrowserExtensionCoverage(filter),
-      [],
-    );
+    const browserExtensionCoverage = includeLive
+      ? await this.optionalReportSection("company browser extension coverage", () => this.getBrowserExtensionCoverage(filter), [])
+      : [];
     const employeeUsage = await this.getEmployeeUsage(filter);
     const activityRevision = await this.optionalReportSection("company activity revision", () => this.getActivityRevision(filter), null);
 
@@ -441,11 +479,9 @@ export class ReportsService {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const identityWhere = identityFilter(filter);
     const eventEndExclusive = addUtcDays(filter.range.to, 1);
-    const registeredDevices = await this.prisma.device.count({
+    const devices = await this.prisma.device.findMany({
       where: { companyId: filter.companyId, ...identityWhere, revokedAt: null },
-    });
-    const activeDevices24h = await this.prisma.device.count({
-      where: { companyId: filter.companyId, ...identityWhere, revokedAt: null, lastSeenAt: { gte: oneDayAgo } },
+      select: { id: true, lastSeenAt: true },
     });
     const usersWithActivity = await this.prisma.activityEvent.groupBy({
       by: ["userId"],
@@ -456,7 +492,11 @@ export class ReportsService {
       },
     });
 
-    return { registeredDevices, activeDevices24h, usersWithActivity: usersWithActivity.length };
+    return {
+      registeredDevices: devices.length,
+      activeDevices24h: devices.filter((device) => device.lastSeenAt && device.lastSeenAt >= oneDayAgo).length,
+      usersWithActivity: usersWithActivity.length,
+    };
   }
 
   private async getBrowserExtensionCoverage(filter: UsageFilter) {
@@ -475,8 +515,10 @@ export class ReportsService {
         source: ActivityEventSource.BROWSER_EXTENSION,
         eventType: ActivityEventType.HEARTBEAT,
         deviceId: { in: deviceIds },
+        endedAt: { gte: new Date(now - BROWSER_COVERAGE_HISTORY_MS) },
       },
       orderBy: { endedAt: "desc" },
+      take: MAX_BROWSER_COVERAGE_EVENTS,
       select: { deviceId: true, startedAt: true, endedAt: true },
     });
     const recentFocusedDomains = await this.getRecentFocusedDomains(
@@ -528,10 +570,11 @@ export class ReportsService {
           domain: { not: null },
           isIdle: false,
           isActiveWindow: true,
-          endedAt: { gte: observedSince },
-        },
-        orderBy: { endedAt: "desc" },
-        select: { deviceId: true, domain: true, endedAt: true },
+        endedAt: { gte: observedSince },
+      },
+      orderBy: { endedAt: "desc" },
+      take: MAX_BROWSER_COVERAGE_EVENTS,
+      select: { deviceId: true, domain: true, endedAt: true },
       });
     } catch (error) {
       this.logger.warn(`Current Browser Domain lookup failed; returning coverage without live domain (${reportQueryErrorCode(error)}).`);
@@ -629,24 +672,14 @@ export class ReportsService {
   }
 
   private async getActivityRevision(filter: UsageFilter) {
-    const activity = await this.prisma.activityEvent.aggregate({
-      where: {
-        companyId: filter.companyId,
-        ...identityFilter(filter),
-        eventType: { in: [ActivityEventType.APP, ActivityEventType.BROWSER] },
-        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
-      },
-      _max: { createdAt: true },
-    });
-    const status = await this.prisma.deviceStatusEvent.aggregate({
-      where: {
-        companyId: filter.companyId,
-        ...identityFilter(filter),
-        recordedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
-      },
-      _max: { receivedAt: true },
-    });
-    const latest = [activity._max.createdAt, status._max.receivedAt]
+    // Usage summaries are updated in the same transaction as accepted activity
+    // events. They are much smaller than the raw event log, so this keeps the
+    // revision check cheap without delaying live device state (which is read
+    // directly by getAgentLiveStatus).
+    const where = summaryWhere(filter);
+    const app = await this.prisma.appUsageSummary.aggregate({ where, _max: { updatedAt: true } });
+    const domain = await this.prisma.websiteUsageSummary.aggregate({ where, _max: { updatedAt: true } });
+    const latest = [app._max.updatedAt, domain._max.updatedAt]
       .filter((value): value is Date => Boolean(value))
       .sort((left, right) => right.getTime() - left.getTime())[0];
     return latest?.toISOString() ?? null;

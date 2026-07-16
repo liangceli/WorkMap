@@ -3,8 +3,8 @@
 import { Activity, AlertTriangle, ChevronDown, Download, FileText, Globe2, History, Monitor, Power, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
-import type { ApiClientOptions, WorkMapApiReportLiveStatus, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
-import { getAgentLiveStatus, getUsageSummary } from "../../lib/api/reportsApi";
+import type { ApiClientOptions, WorkMapApiReportLiveStatus, WorkMapApiTrackingAudit, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
+import { getAgentLiveStatus, getTrackingAudit, getUsageSummary } from "../../lib/api/reportsApi";
 import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
@@ -27,6 +27,14 @@ type ReportState = {
   error: string | null;
 };
 
+type AuditState = {
+  loading: boolean;
+  audit: WorkMapApiTrackingAudit | null;
+};
+
+const LIVE_REFRESH_MS = 5_000;
+const SUMMARY_REVISION_CHECK_MS = 20_000;
+
 export function ReportSummaryPanel() {
   const [auth, setAuth] = useState<AuthContext | null>(null);
   const [users, setUsers] = useState<WorkMapApiUser[]>([]);
@@ -36,6 +44,8 @@ export function ReportSummaryPanel() {
   const [livePollingReady, setLivePollingReady] = useState(false);
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
+  const nextRevisionCheckAtRef = useRef(0);
+  const [auditState, setAuditState] = useState<AuditState>({ loading: false, audit: null });
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
     summary: null,
@@ -64,25 +74,30 @@ export function ReportSummaryPanel() {
       const initialFilters = restoreReportFilters(context.userId, fallbackFilters, {
         canViewCompany,
       });
-      const result = await requestSummary(context, initialFilters);
-      if (cancelled) return;
-
       setAuth(context);
       setFilters(initialFilters);
       setAppliedFilters(initialFilters);
-      applyResult(result, setReportState);
 
-      if (!canViewCompany) {
-        setLivePollingReady(true);
-        return;
+      // Request current connection state before the historical report. This
+      // avoids holding the entire report page behind range aggregation work.
+      const initialLiveResult = await requestLiveStatus(context, initialFilters, false);
+      if (cancelled) return;
+      if (initialLiveResult.ok) setLiveStatus(initialLiveResult.data);
+
+      const result = await requestSummary(context, initialFilters);
+      if (cancelled) return;
+      applyResult(result, setReportState);
+      nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
+      if (result.ok && result.data.scope === "user") {
+        void loadAudit(context, initialFilters, () => cancelled, setAuditState);
       }
 
       // The user directory only fills the Owner filter controls. It must not block
       // the current page's first report request or compete with it at startup.
-      void loadDirectory(context.options, () => cancelled, (directoryUsers) => {
-        setUsers(directoryUsers);
-        setLivePollingReady(true);
-      });
+      if (canViewCompany) {
+        void loadDirectory(context.options, () => cancelled, setUsers);
+      }
+      setLivePollingReady(true);
     }
     void initialize();
     return () => { cancelled = true; };
@@ -100,21 +115,18 @@ export function ReportSummaryPanel() {
     if (!auth || !livePollingReady) return;
     let cancelled = false;
     const refresh = async () => {
-      const userId = appliedFilters.view.startsWith("user:") ? appliedFilters.view.slice(5) : undefined;
-      const result = await getAgentLiveStatus({
-        ...auth.options,
-        scope: appliedFilters.view === "company" ? "company" : "user",
-        userId,
-        departmentId: appliedFilters.view === "company" ? appliedFilters.departmentId || undefined : undefined,
-        from: appliedFilters.from,
-        to: appliedFilters.to,
-      });
+      if (document.visibilityState !== "visible") return;
+      const revisionDue = Date.now() >= nextRevisionCheckAtRef.current;
+      const result = await requestLiveStatus(auth, appliedFilters, revisionDue);
       if (cancelled || !result.ok) return;
       setLiveStatus(result.data);
       if (
+        revisionDue
+        &&
         result.data.activityRevision !== activityRevisionRef.current
         && result.data.activityRevision !== failedSummaryRevisionRef.current
       ) {
+        nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
         const summaryResult = await requestSummary(auth, appliedFilters);
         if (!cancelled && summaryResult.ok) {
           failedSummaryRevisionRef.current = undefined;
@@ -123,13 +135,20 @@ export function ReportSummaryPanel() {
         } else if (!cancelled) {
           failedSummaryRevisionRef.current = result.data.activityRevision;
         }
+      } else if (revisionDue) {
+        nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
       }
     };
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 10_000);
+    const timer = window.setInterval(() => void refresh(), LIVE_REFRESH_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [auth, appliedFilters, livePollingReady]);
 
@@ -158,12 +177,17 @@ export function ReportSummaryPanel() {
       return;
     }
     setReportState((current) => ({ ...current, loading: true, error: null, statusText: "Refreshing report..." }));
+    setAuditState({ loading: filters.view !== "company", audit: null });
     failedSummaryRevisionRef.current = undefined;
     const result = await requestSummary(auth, filters);
     persistReportFilters(auth.userId, filters);
     setLiveStatus(null);
     setAppliedFilters(filters);
     applyResult(result, setReportState);
+    nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
+    if (result.ok && result.data.scope === "user") {
+      void loadAudit(auth, filters, () => false, setAuditState);
+    }
   }
 
   function applyPreset(days: number) {
@@ -172,6 +196,7 @@ export function ReportSummaryPanel() {
   }
 
   const summary = useMemo(() => mergeLiveUsage(reportState.summary, liveStatus), [reportState.summary, liveStatus]);
+  const liveUser = liveStatus?.scope === "user" ? liveStatus : null;
   const hasRows = Boolean(summary && (summary.apps.length > 0 || summary.websites.length > 0));
   const scopeLabel = getScopeLabel(summary, selectedUser, departments);
 
@@ -250,6 +275,13 @@ export function ReportSummaryPanel() {
         </div>
       </section>
 
+      {liveUser || (!reportState.loading && summary?.scope === "user") ? (
+        <EmployeeLiveOverview
+          agentStatus={liveUser?.agentStatus ?? summary?.agentStatus ?? null}
+          rows={liveUser?.browserExtensionCoverage ?? summary?.browserExtensionCoverage ?? []}
+        />
+      ) : null}
+
       {reportState.loading ? (
         <section style={styles.loadingPanel} aria-label="Loading selected report">
           <WorkMapLoader label="Loading selected report" />
@@ -266,9 +298,13 @@ export function ReportSummaryPanel() {
         </section>
       ) : null}
 
-      {!reportState.loading && summary?.scope === "user" ? <EmployeeLiveOverview summary={summary} /> : null}
-
-      {!reportState.loading && summary?.scope === "user" ? <EmployeeConnectionAudit summary={summary} /> : null}
+      {!reportState.loading && summary?.scope === "user" ? (
+        <EmployeeConnectionAudit
+          audit={auditState.audit}
+          loading={auditState.loading}
+          rows={liveUser?.browserExtensionCoverage ?? summary.browserExtensionCoverage}
+        />
+      ) : null}
 
       {!reportState.loading && summary?.scope === "company" && summary.browserExtensionCoverage.length > 0 ? <BrowserExtensionCoveragePanel rows={summary.browserExtensionCoverage} /> : null}
 
@@ -307,7 +343,13 @@ export function ReportSummaryPanel() {
   );
 }
 
-function EmployeeLiveOverview({ summary }: { summary: WorkMapApiUsageSummary }) {
+function EmployeeLiveOverview({
+  agentStatus,
+  rows,
+}: {
+  agentStatus: WorkMapApiUsageSummary["agentStatus"];
+  rows: WorkMapApiUsageSummary["browserExtensionCoverage"];
+}) {
   return (
     <section className="wm-report-detail-section" style={styles.reportSection} aria-labelledby="employee-live-heading">
       <div style={styles.sectionHeader}>
@@ -319,15 +361,14 @@ function EmployeeLiveOverview({ summary }: { summary: WorkMapApiUsageSummary }) 
         <Activity size={22} aria-hidden />
       </div>
       <div style={styles.twoColumnGrid}>
-        <AgentLiveCard summary={summary} />
-        <BrowserLiveCard rows={summary.browserExtensionCoverage} />
+        <AgentLiveCard status={agentStatus} />
+        <BrowserLiveCard rows={rows} />
       </div>
     </section>
   );
 }
 
-function AgentLiveCard({ summary }: { summary: WorkMapApiUsageSummary }) {
-  const status = summary.agentStatus;
+function AgentLiveCard({ status }: { status: WorkMapApiUsageSummary["agentStatus"] }) {
   if (!status || status.state === "not_paired") {
     return (
       <article style={styles.clientCard} aria-label="Desktop Agent status">
@@ -477,9 +518,17 @@ type AuditEntry = {
   tone: "positive" | "attention" | "neutral";
 };
 
-function EmployeeConnectionAudit({ summary }: { summary: WorkMapApiUsageSummary }) {
-  const desktopEntries = buildDesktopAuditEntries(summary);
-  const browserEntries = buildBrowserAuditEntries(summary);
+function EmployeeConnectionAudit({
+  audit,
+  loading,
+  rows,
+}: {
+  audit: WorkMapApiTrackingAudit | null;
+  loading: boolean;
+  rows: WorkMapApiUsageSummary["browserExtensionCoverage"];
+}) {
+  const desktopEntries = audit ? buildDesktopAuditEntries(audit) : [];
+  const browserEntries = audit ? buildBrowserAuditEntries({ ...audit, browserExtensionCoverage: rows }) : [];
   return (
     <section className="wm-report-detail-section" style={styles.reportSection} aria-labelledby="connection-audit-heading">
       <div style={styles.sectionHeader}>
@@ -491,14 +540,14 @@ function EmployeeConnectionAudit({ summary }: { summary: WorkMapApiUsageSummary 
         <History size={22} aria-hidden />
       </div>
       <div style={styles.twoColumnGrid}>
-        <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} />
-        <AuditTimeline title="Browser Extension" icon={<Globe2 size={18} aria-hidden />} entries={browserEntries} />
+        <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} loading={loading} />
+        <AuditTimeline title="Browser Extension" icon={<Globe2 size={18} aria-hidden />} entries={browserEntries} loading={loading} />
       </div>
     </section>
   );
 }
 
-function AuditTimeline({ title, icon, entries }: { title: string; icon: React.ReactNode; entries: AuditEntry[] }) {
+function AuditTimeline({ title, icon, entries, loading }: { title: string; icon: React.ReactNode; entries: AuditEntry[]; loading: boolean }) {
   return (
     <article style={styles.auditCard} aria-label={`${title} connection history`}>
       <div style={styles.auditCardHeader}>
@@ -507,7 +556,7 @@ function AuditTimeline({ title, icon, entries }: { title: string; icon: React.Re
         <span style={styles.auditCount}>{entries.length} events</span>
       </div>
       <div style={styles.auditRows}>
-        {entries.length === 0 ? <p style={styles.emptyText}>No connection events in this report range.</p> : entries.map((entry) => (
+        {loading ? <p style={styles.emptyText}>Loading connection history...</p> : entries.length === 0 ? <p style={styles.emptyText}>No connection events in this report range.</p> : entries.map((entry) => (
           <div key={entry.id} style={styles.auditRow}>
             <span style={{ ...styles.auditMarker, ...(entry.tone === "attention" ? styles.auditMarkerAttention : entry.tone === "positive" ? styles.auditMarkerPositive : {}) }} />
             <div style={styles.auditContent}>
@@ -524,7 +573,7 @@ function AuditTimeline({ title, icon, entries }: { title: string; icon: React.Re
   );
 }
 
-function buildDesktopAuditEntries(summary: WorkMapApiUsageSummary): AuditEntry[] {
+function buildDesktopAuditEntries(summary: Pick<WorkMapApiUsageSummary, "agentSessions" | "deviceStatusHistory">): AuditEntry[] {
   const entries: AuditEntry[] = [];
   for (const session of summary.agentSessions) {
     entries.push({
@@ -554,7 +603,7 @@ function buildDesktopAuditEntries(summary: WorkMapApiUsageSummary): AuditEntry[]
   return sortAuditEntries(entries);
 }
 
-function buildBrowserAuditEntries(summary: WorkMapApiUsageSummary): AuditEntry[] {
+function buildBrowserAuditEntries(summary: Pick<WorkMapApiUsageSummary, "browserExtensionCoverage" | "deviceStatusHistory">): AuditEntry[] {
   const entries: AuditEntry[] = [];
   const coverageByDevice = new Map(summary.browserExtensionCoverage.map((row) => [row.deviceId, row]));
   for (const row of summary.browserExtensionCoverage) {
@@ -764,7 +813,42 @@ async function requestSummary(auth: AuthContext, filters: ReportFilters) {
     departmentId: filters.view === "company" ? filters.departmentId || undefined : undefined,
     from: filters.from,
     to: filters.to,
+    includeAudit: false,
+    includeLive: false,
   });
+}
+
+async function requestLiveStatus(auth: AuthContext, filters: ReportFilters, includeRevision = true) {
+  const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
+  return getAgentLiveStatus({
+    ...auth.options,
+    scope: filters.view === "company" ? "company" : "user",
+    userId,
+    departmentId: filters.view === "company" ? filters.departmentId || undefined : undefined,
+    from: filters.from,
+    to: filters.to,
+    includeRevision,
+  });
+}
+
+async function loadAudit(
+  auth: AuthContext,
+  filters: ReportFilters,
+  isCancelled: () => boolean,
+  setState: (state: AuditState) => void,
+) {
+  setState({ loading: true, audit: null });
+  const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
+  const result = await getTrackingAudit({
+    ...auth.options,
+    scope: filters.view === "company" ? "company" : "user",
+    userId,
+    departmentId: filters.view === "company" ? filters.departmentId || undefined : undefined,
+    from: filters.from,
+    to: filters.to,
+  });
+  if (isCancelled()) return;
+  setState({ loading: false, audit: result.ok ? result.data : null });
 }
 
 async function loadDirectory(

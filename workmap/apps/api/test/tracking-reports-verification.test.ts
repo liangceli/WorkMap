@@ -717,13 +717,13 @@ class MockPrisma {
         : by.includes("userId")
           ? groupUserAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)))
           : groupAppSummaries(this.appSummaries.filter((row) => matchesWhere(row, where)), take),
-    aggregate: async ({ where }: any) => ({
-      _sum: {
-        activeSeconds: this.appSummaries
-          .filter((row) => matchesWhere(row, where))
-          .reduce((total, row) => total + row.activeSeconds, 0),
-      },
-    }),
+    aggregate: async ({ where }: any) => {
+      const rows = this.appSummaries.filter((row) => matchesWhere(row, where));
+      return {
+        _sum: { activeSeconds: rows.reduce((total, row) => total + row.activeSeconds, 0) },
+        _max: { updatedAt: rows.reduce<Date | null>((latest, row) => maxDate(latest, row.updatedAt ?? null), null) },
+      };
+    },
   };
 
   websiteUsageSummary = {
@@ -753,6 +753,10 @@ class MockPrisma {
       : by.includes("userId") && by.includes("domain")
         ? groupUserDomainSummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)))
         : groupWebsiteSummaries(this.websiteSummaries.filter((row) => matchesWhere(row, where)), take),
+    aggregate: async ({ where }: any) => {
+      const rows = this.websiteSummaries.filter((row) => matchesWhere(row, where));
+      return { _max: { updatedAt: rows.reduce<Date | null>((latest, row) => maxDate(latest, row.updatedAt ?? null), null) } };
+    },
   };
 
   user = {
@@ -1108,6 +1112,9 @@ async function testBrowserUsageUpdatesReportRevision() {
   const browserEvent = prisma.activityEvents.find((event) => event.eventType === ActivityEventType.BROWSER);
   assert(browserEvent);
   browserEvent.createdAt = new Date("2026-07-14T00:00:02.000Z");
+  const browserSummary = prisma.websiteSummaries.find((summary) => summary.domain === "example.com");
+  assert(browserSummary);
+  browserSummary.updatedAt = browserEvent.createdAt;
 
   const live = await reports.getAgentLiveStatus(employeeContext, { from: "2026-06-17", to: "2026-06-17" });
   assert.equal(live.activityRevision, browserEvent.createdAt.toISOString());

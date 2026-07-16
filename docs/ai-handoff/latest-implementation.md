@@ -3655,3 +3655,47 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - This is not a schema, migration, Reports query, or TypeScript build failure. Re-running the same deployment against the same exhausted Session Pooler is not a reliable fix.
 - Production runtime should use the Supabase Transaction Pooler endpoint on port 6543 with bounded Prisma connections and PgBouncer compatibility. Local/controlled Prisma migrations should continue using the already verified session/direct migration connection instead of the transaction endpoint.
 - No database URL, password, token, or other credential was written to source or handoff files.
+
+---
+
+## 2026-07-16 Reports Responsive Live Refresh And Query Separation
+
+### Original Task Brief
+
+- Keep `/reports` current device/app/domain visibility responsive while reducing unnecessary database work and preserving all existing tracking, reports, access-control, deployment, Desktop Agent, and Browser Extension behaviour.
+
+### Changed Files
+
+- Reports API/controller and query separation: `workmap/apps/api/src/modules/reports/reports.controller.ts`, `workmap/apps/api/src/modules/reports/reports.service.ts`.
+- Report query indexes: `workmap/prisma/schema.prisma`, `workmap/prisma/migrations/20260716103000_report_query_performance/migration.sql`.
+- Reports client/API/types: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`, `workmap/apps/web/lib/api/reportsApi.ts`, `workmap/apps/web/lib/api/apiTypes.ts`.
+- Regression coverage: `workmap/apps/api/test/tracking-reports-verification.test.ts`, `workmap/apps/web/test/reports-api.test.ts`, `workmap/apps/web/test/reports-information-order.test.ts`.
+
+### Implementation Summary
+
+- `usage-summary` remains backward compatible by default, but can now omit inline audit and live enrichments for the primary report query. The same data still loads through dedicated calls instead of blocking the main report.
+- Added authenticated `GET /reports/tracking-audit`, preserving the existing user-resolution and RBAC checks before returning desktop session, status-history, and app-timeline data. Company scope intentionally returns no per-employee audit history.
+- The report page retrieves current Agent/Extension status first, polls that live state every five seconds only while the page is visible, and checks aggregate-summary revision at most every twenty seconds. Historical audit loads independently after the first summary.
+- Browser live coverage queries are capped to the latest 24 hours / 500 records, and coverage counts read registered devices in one bounded query.
+- Aggregate revision checks now use the already-updated app/domain summary tables rather than raw ActivityEvent and status-event scans. Seven additive database indexes support the existing report filters and bounded browser lookups.
+
+### Behaviour And Boundaries
+
+- No App/Domain duration calculation, activity ingestion, tenant filter, RBAC rule, Cognito flow, Agent runtime, Extension runtime, status model, API removal, or production environment setting changed.
+- The data freshness contract is intentionally split: current focus/connection status normally refreshes within five seconds on a visible report tab; historical aggregate cards refresh within the next twenty-second revision check after the server accepts activity data, plus the existing client upload latency.
+
+### Verification
+
+- API tests passed, 17/17.
+- Web tests passed, 72/72.
+- API and Web typecheck, lint, and production builds passed.
+- `git diff --check` and scoped source credential scan passed; Windows line-ending notices were informational only.
+
+### Manual QA And Deployment
+
+- Manual authenticated performance measurement was not run. Production environment, database, migration execution, Render/Vercel deployment, Desktop Agent, and Browser Extension were not changed in this round.
+- The additive index migration must be applied through the established production migration process before expecting its database-level performance benefit. API and Web must then deploy together because the Web client uses the new tracking-audit endpoint.
+
+### Remaining Risks
+
+- Source verification cannot prove Supabase/Render network latency or a constrained production pool. If production remains slow after the index migration and matching API/Web deploy, capture endpoint duration and pool metrics before changing tracking behaviour.
