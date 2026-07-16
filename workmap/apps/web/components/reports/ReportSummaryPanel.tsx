@@ -33,6 +33,7 @@ export function ReportSummaryPanel() {
   const [filters, setFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [liveStatus, setLiveStatus] = useState<WorkMapApiReportLiveStatus | null>(null);
+  const [livePollingReady, setLivePollingReady] = useState(false);
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
   const [reportState, setReportState] = useState<ReportState>({
@@ -60,14 +61,8 @@ export function ReportSummaryPanel() {
       };
       const canViewCompany = canRequestCompanySummary(context.role);
       const fallbackFilters = defaultReportFilters(canViewCompany ? "company" : "me");
-      const directoryResult = canViewCompany ? await listUsers(context.options) : null;
-      const directoryUsers = directoryResult?.ok ? directoryResult.data : [];
       const initialFilters = restoreReportFilters(context.userId, fallbackFilters, {
         canViewCompany,
-        userIds: directoryUsers.map((user) => user.id),
-        departmentIds: directoryResult?.ok
-          ? directoryUsers.flatMap((user) => user.department && typeof user.department !== "string" ? [user.department.id] : [])
-          : undefined,
       });
       const result = await requestSummary(context, initialFilters);
       if (cancelled) return;
@@ -75,8 +70,19 @@ export function ReportSummaryPanel() {
       setAuth(context);
       setFilters(initialFilters);
       setAppliedFilters(initialFilters);
-      if (directoryResult?.ok) setUsers(directoryUsers);
       applyResult(result, setReportState);
+
+      if (!canViewCompany) {
+        setLivePollingReady(true);
+        return;
+      }
+
+      // The user directory only fills the Owner filter controls. It must not block
+      // the current page's first report request or compete with it at startup.
+      void loadDirectory(context.options, () => cancelled, (directoryUsers) => {
+        setUsers(directoryUsers);
+        setLivePollingReady(true);
+      });
     }
     void initialize();
     return () => { cancelled = true; };
@@ -91,7 +97,7 @@ export function ReportSummaryPanel() {
   }, [auth, filters]);
 
   useEffect(() => {
-    if (!auth) return;
+    if (!auth || !livePollingReady) return;
     let cancelled = false;
     const refresh = async () => {
       const userId = appliedFilters.view.startsWith("user:") ? appliedFilters.view.slice(5) : undefined;
@@ -125,7 +131,7 @@ export function ReportSummaryPanel() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [auth, appliedFilters]);
+  }, [auth, appliedFilters, livePollingReady]);
 
   const departments = useMemo(() => {
     const values = new Map<string, string>();
@@ -759,6 +765,16 @@ async function requestSummary(auth: AuthContext, filters: ReportFilters) {
     from: filters.from,
     to: filters.to,
   });
+}
+
+async function loadDirectory(
+  options: ApiClientOptions,
+  isCancelled: () => boolean,
+  onLoaded: (users: WorkMapApiUser[]) => void,
+) {
+  const result = await listUsers(options);
+  if (isCancelled()) return;
+  onLoaded(result.ok ? result.data : []);
 }
 
 function applyResult(

@@ -16,7 +16,10 @@ export type WorkMapApiAuthResult =
     }
   | { available: false; reason: string };
 
-const AUTH_CONTEXT_CACHE_MS = 8_000;
+// The mapped tenant context is stable for an authenticated browser session. Keeping
+// it briefly in memory prevents every route shell from re-requesting /auth/me.
+// Failed mappings remain intentionally uncached below.
+const AUTH_CONTEXT_CACHE_MS = 60_000;
 
 export function createSingleFlightTtlCache<T>(
   ttlMs: number,

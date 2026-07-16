@@ -43,6 +43,13 @@ test("filter refresh replaces previous report content with the WorkMap pixel loa
   assert.match(reportSource, /disabled=\{!summary \|\| reportState\.loading\}/);
 });
 
+test("the initial Owner report completes before optional directory and live-status reads", () => {
+  assert.match(reportSource, /const result = await requestSummary\(context, initialFilters\);/);
+  assert.match(reportSource, /applyResult\(result, setReportState\);\s*\n\s*\n\s*if \(!canViewCompany\)/);
+  assert.match(reportSource, /void loadDirectory\(context\.options/);
+  assert.match(reportSource, /if \(!auth \|\| !livePollingReady\) return;/);
+});
+
 test("report filter loader leaves the pixel avatar unframed", () => {
   assert.match(
     redesignStyles,

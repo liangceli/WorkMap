@@ -30,7 +30,7 @@ import { redirectToRootForMissingCognitoSession } from "../../lib/auth/cognitoRe
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { getUserSetupState, resetUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
-import { hasWarmAppShellCache } from "./appShellCache";
+import { hasFreshPlatformAppShellCache, hasFreshWorkspaceAppShellCache, hasWarmAppShellCache } from "./appShellCache";
 
 type AppShellProps = {
   children: ReactNode;
@@ -109,14 +109,22 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
 
   useEffect(() => {
     const session = getCognitoSession();
+    const cached = readAppShellCache(session?.claims.sub);
 
     let cancelled = false;
 
     async function loadApiSummary() {
-      const [platformAuth, auth] = await Promise.all([
-        pathname === "/platform-admin" ? getWorkMapPlatformApiAuthOptions() : Promise.resolve(null),
-        getWorkMapApiAuthOptions(),
-      ]);
+      const needsPlatformContext = pathname === "/platform-admin" && !hasFreshPlatformAppShellCache(cached);
+      const needsWorkspaceContext = pathname !== "/platform-admin" && !hasFreshWorkspaceAppShellCache(cached);
+
+      // A warm shell already has the role and company label needed for navigation.
+      // Do not make tenant reads again solely because the user changed pages.
+      if (!needsPlatformContext && !needsWorkspaceContext) {
+        setShellLoading(false);
+        return;
+      }
+
+      const platformAuth = needsPlatformContext ? await getWorkMapPlatformApiAuthOptions() : null;
 
       if (!cancelled && platformAuth?.available) {
         const summary: PlatformSessionSummary = {
@@ -128,6 +136,13 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
         setPlatformSummary(summary);
         updateAppShellCache(session?.claims.sub, { platformSummary: summary });
       }
+
+      if (!needsWorkspaceContext) {
+        if (!cancelled) setShellLoading(false);
+        return;
+      }
+
+      const auth = await getWorkMapApiAuthOptions();
 
       if (!auth.available) {
         if (cancelled) return;
@@ -316,6 +331,7 @@ type CachedAppShellContext = {
   cognitoSub: string;
   apiSummary?: ApiSessionSummary;
   platformSummary?: PlatformSessionSummary;
+  updatedAt?: number;
 };
 
 function readAppShellCache(cognitoSub?: string): CachedAppShellContext | null {
@@ -337,7 +353,7 @@ function updateAppShellCache(cognitoSub: string | undefined, update: Partial<Omi
   }
 
   const current = readAppShellCache(cognitoSub);
-  window.localStorage.setItem(APP_SHELL_CACHE_KEY, JSON.stringify({ cognitoSub, ...current, ...update }));
+  window.localStorage.setItem(APP_SHELL_CACHE_KEY, JSON.stringify({ cognitoSub, ...current, ...update, updatedAt: Date.now() }));
 }
 
 function clearAppShellCache() {

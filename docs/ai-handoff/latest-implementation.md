@@ -1,5 +1,60 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Web Request Scope and Reports Load Sequencing
+
+### Original Task Brief
+
+- Reduce avoidable frontend requests so each authenticated page prioritizes its own data without changing backend, database, deployment, Desktop Agent, Browser Extension, report calculations, or permission behavior.
+
+### Changed Files
+
+- `workmap/apps/web/lib/api/apiAuth.ts`
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/components/layout/appShellCache.ts`
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/components/reports/reportFilters.ts`
+- `workmap/apps/web/test/app-shell-cache.test.ts`
+- `workmap/apps/web/test/reports-filter-persistence.test.ts`
+- `workmap/apps/web/test/reports-information-order.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Successful Cognito-to-WorkMap API context mappings are now shared in memory for 60 seconds; failed mappings remain uncached.
+- `AppShell` now reuses a fresh, per-user cached workspace or platform shell context for up to five minutes. Intra-app navigation no longer re-requests `/auth/me`, `/companies/current`, and `/users/me` merely to redraw the shared navigation shell.
+- The workspace and platform cache entries are intentionally separated so a Platform Admin cache cannot satisfy a tenant workspace shell, or vice versa.
+- `/reports` now requests its required usage summary before the Owner-only directory. The directory remains loaded for employee-filter controls, but it no longer delays the first report response.
+- Live agent-status polling starts only after the initial report and any required Owner directory request have settled, avoiding the previous startup burst of summary, directory, and live-status reads against the same API/database pool.
+- Existing report endpoints, role checks, query parameters, polling interval, exports, calculations, and displayed data contracts remain unchanged.
+
+### Role and Access Behavior
+
+- The browser cache only controls whether the shared navigation labels are re-read. Server-side authentication, tenant isolation, and role enforcement remain authoritative for every report request.
+- A saved Owner employee filter remains valid during the short period before the directory finishes loading; the reports API remains the authority for rejecting inaccessible users.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/web test`: pass (`69/69`).
+- `pnpm.cmd --filter @workmap/web lint`: pass.
+- `pnpm.cmd --filter @workmap/web typecheck`: pass.
+- `pnpm.cmd --filter @workmap/web build`: pass. Next.js reported only its existing ESLint-plugin configuration warning.
+- `git diff --check`: pass.
+- Secret scan excluding environment files and generated directories: pass.
+
+### Manual QA
+
+- Not run in a browser or against production during this local frontend-only change.
+
+### Intentionally Not Changed
+
+- Backend code, Prisma schema/migrations, Render or Supabase configuration, API contracts, Cognito behavior, Desktop Agent, Browser Extension, report aggregation, and production deployment.
+
+### Remaining Risks
+
+- The first authenticated application load and any cache expiry still perform the minimum identity/company reads required to render the shared shell.
+- Shell labels can remain cached for up to five minutes; permission-sensitive requests are not cached by this change and still receive normal server-side enforcement.
+
 ## 2026-07-16 Render Zero-Downtime Session-Pool Recovery
 
 ### Original Task Brief

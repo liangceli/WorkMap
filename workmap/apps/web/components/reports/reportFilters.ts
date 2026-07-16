@@ -12,7 +12,7 @@ export function defaultReportFilters(view: ViewFilter, today = utcToday()): Repo
 export function restoreReportFilters(
   userId: string,
   fallback: ReportFilters,
-  options: { canViewCompany: boolean; userIds: string[]; departmentIds?: string[] },
+  options: { canViewCompany: boolean; userIds?: string[]; departmentIds?: string[] },
 ) {
   if (typeof window === "undefined") return fallback;
 
@@ -22,7 +22,9 @@ export function restoreReportFilters(
     const parsed = JSON.parse(raw) as unknown;
     if (!isReportFilters(parsed) || parsed.from > parsed.to) return fallback;
     if (parsed.view === "company" && !options.canViewCompany) return fallback;
-    if (parsed.view.startsWith("user:") && !options.userIds.includes(parsed.view.slice(5))) return fallback;
+    // The owner directory is loaded after the core report. Until it is available,
+    // retain a saved employee view and let the report API remain the authority.
+    if (parsed.view.startsWith("user:") && options.userIds && !options.userIds.includes(parsed.view.slice(5))) return fallback;
 
     return {
       ...parsed,

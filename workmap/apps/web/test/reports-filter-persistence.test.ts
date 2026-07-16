@@ -62,6 +62,20 @@ test("stored views outside the current role or directory fall back safely", () =
   });
 });
 
+test("a saved employee view is retained until the Owner directory has loaded", () => {
+  withLocalStorage(() => {
+    const saved = { view: "user:employee-1" as const, departmentId: "", from: "2026-07-01", to: "2026-07-07" };
+    persistReportFilters("owner-1", saved);
+
+    assert.deepEqual(
+      restoreReportFilters("owner-1", defaultReportFilters("company", "2026-07-14"), {
+        canViewCompany: true,
+      }),
+      { ...saved, from: "2026-07-14", to: "2026-07-14" },
+    );
+  });
+});
+
 test("a historical persisted date range never carries forward to a newly opened report", () => {
   withLocalStorage(() => {
     const fallback = defaultReportFilters("company", "2026-07-14");
