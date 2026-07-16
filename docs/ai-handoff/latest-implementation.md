@@ -1,5 +1,56 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Desktop Agent 0.5.10 Focus Slice Continuity
+
+### Original Task Brief
+
+- Fix the Reports Focus Active display regression where a continuous app could appear to fall from a value such as `6m 17s` to `6m 0s` at a ten-second Agent slice boundary, without dropping completed activity time.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/src/runtime.ts`
+- `workmap/apps/desktop-agent/src/pairing.ts`
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/test/queue-api.test.ts`
+- `workmap/apps/desktop-agent/test/gui-release.test.ts`
+- `workmap/apps/web/components/reports/liveUsage.ts`
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/test/reports-live-usage.test.ts`
+
+### Implementation Summary
+
+- Desktop Agent `0.5.10` now sends a completed durable Focus slice to the existing local queue and flushes it before its rollover heartbeat publishes the next live slice.
+- The queue remains the source of durability: an event is removed only after the existing idempotent API acknowledgement. A network failure retains the event for the existing retry path.
+- Reports now retains the last displayed maximum totals for the same scope, employee, department, and reporting range while the independently fetched persisted aggregate catches up to a just-acknowledged heartbeat transition.
+- A changed filter range or reporting scope resets that display guard. API summaries, exports, database values, RBAC, pairing, backend endpoints, and Browser Extension behavior are unchanged.
+- Version metadata and the Windows installer are now `0.5.10`.
+
+### Verification
+
+- Web focused report tests: pass, 4/4.
+- Desktop Agent focused runtime, tracking, and release tests: pass, 27/27.
+- `pnpm.cmd --filter @workmap/desktop-agent typecheck`: pass.
+- `pnpm.cmd --filter @workmap/web typecheck`: pass.
+- `pnpm.cmd --filter @workmap/web lint`: pass.
+- `pnpm.cmd --filter @workmap/desktop-agent release:windows`: pass.
+- `git diff --check`: pass.
+
+### Build Artifact
+
+- `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.10.exe` (non-empty NSIS installer).
+
+### Manual QA
+
+- Not run. A paired Windows-device verification is required after release; no deployment, database, or API configuration is required by this code change.
+
+### Intentionally Not Changed
+
+- Prisma schema/migrations, API/backend, tenant/RBAC logic, device credentials, Browser Extension, data collection categories, retry semantics, and existing persisted activity events.
+
+### Remaining Risk
+
+- An abrupt power loss before the next existing local checkpoint can still lose only the in-memory fraction since that checkpoint; completed slices and queued uploads remain durable. This change removes the normal-network display regression without weakening that durability model.
+
 ## 2026-07-16 Compliance Card-Grid Surface Fix
 
 ### Original Task Brief
@@ -4032,3 +4083,10 @@ Correct the password visibility eye button so it aligns inside the right edge of
 ### Remaining Risks
 
 - Source verification cannot prove Supabase/Render network latency or a constrained production pool. If production remains slow after the index migration and matching API/Web deploy, capture endpoint duration and pool metrics before changing tracking behaviour.
+## 2026-07-16 - Desktop Agent v0.5.9 timing-path audit (analysis only)
+
+- Task: trace the actual Desktop Agent v0.5.9 timing path from Windows sampling through the API and `/reports`, following observed Focus Active display regressions.
+- Runtime code was not changed in this round.
+- Confirmed cause: `AppTrackingState` rolls an active focus segment every 10 seconds. The runtime sends a heartbeat containing the newly reset current segment before it uploads the completed previous segment. `/reports` combines persisted summary seconds with the heartbeat's current segment, so the displayed Focus Active total can temporarily fall until the queued completed segment is ingested.
+- Confirmed affected paths: `apps/desktop-agent/src/trackingState.ts`, `apps/desktop-agent/src/runtime.ts`, `apps/desktop-agent/src/windowsForeground.ts`, `apps/api/src/modules/devices/devices.service.ts`, `apps/api/src/modules/activity/activity.service.ts`, `apps/api/src/modules/reports/reports.service.ts`, and `apps/web/components/reports/liveUsage.ts`.
+- Verification: source-level audit completed. No automated command was required because no runtime code changed.

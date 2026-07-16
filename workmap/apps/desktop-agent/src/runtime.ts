@@ -92,6 +92,10 @@ export class DesktopAgentRuntime {
           this.status.error = safeError(error);
           await this.updateStatus();
         }
+        // A completed Focus slice is durable only after the API acknowledges it.
+        // Upload it before the heartbeat exposes the newly-reset live slice so
+        // Reports never has to replace a visible duration with a temporary zero.
+        if (completedEventCount > 0) await this.flushQueue();
         const heartbeatNow = Date.now();
         if (shouldSendHeartbeat(completedEventCount, heartbeatNow, nextHeartbeatAt)) {
           await this.heartbeat();
@@ -103,7 +107,7 @@ export class DesktopAgentRuntime {
           break;
         }
         await this.flushStatusQueue();
-        await this.flushQueue();
+        if (completedEventCount === 0) await this.flushQueue();
         if (!this.stopped) await delay(sampleInterval);
       }
     } finally {

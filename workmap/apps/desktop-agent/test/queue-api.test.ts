@@ -106,6 +106,72 @@ test("an app transition triggers an immediate heartbeat before the next schedule
   assert.equal(shouldSendHeartbeat(0, 10_000, 10_000), true);
 });
 
+test("uploads a completed focus slice before the rollover heartbeat exposes a new live slice", async () => {
+  await withRuntimeEnvironment(async (directory) => {
+    const originalFetch = globalThis.fetch;
+    const requests: string[] = [];
+    let sampleCount = 0;
+    const baseTime = Date.now();
+
+    globalThis.fetch = async (input) => {
+      const path = new URL(String(input)).pathname;
+      requests.push(path);
+
+      if (path === "/device-client/session/start") {
+        return jsonResponse({ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", startedAt: new Date().toISOString() });
+      }
+      if (path === "/device-client/heartbeat") {
+        return jsonResponse({ device: { id: config.deviceId }, sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+      }
+      if (path === "/device-client/app-usage") {
+        return jsonResponse({ accepted: 1 });
+      }
+      if (path === "/device-client/session/stop") {
+        return jsonResponse({ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", endedAt: new Date().toISOString() });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    };
+
+    try {
+      const runtime = new DesktopAgentRuntime(config, {
+        adapter: fakeAdapter(async () => {
+          sampleCount += 1;
+          const observedAtMs = baseTime + sampleCount * 10;
+          return {
+            appName: "Microsoft Edge",
+            openAppNames: ["Microsoft Edge"],
+            isIdle: false,
+            isLocked: false,
+            observedAtMs,
+            lastInputAtMs: observedAtMs,
+          };
+        }),
+        queue: new FileEventQueue(join(directory, "queue.json")),
+      });
+      const running = runtime.run();
+
+      await waitUntil(
+        () =>
+          requests.includes("/device-client/app-usage") &&
+          requests.filter((path) => path === "/device-client/heartbeat").length >= 2,
+      );
+
+      await runtime.shutdown();
+      await running;
+
+      const appUsageIndex = requests.indexOf("/device-client/app-usage");
+      const heartbeatAfterUpload = requests.findIndex(
+        (path, index) => index > appUsageIndex && path === "/device-client/heartbeat",
+      );
+
+      assert.ok(appUsageIndex >= 0);
+      assert.ok(heartbeatAfterUpload > appUsageIndex);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 test("offline activity binds to the recovered Agent session without changing event identity", () => {
   const queued = {
     ...event(42),

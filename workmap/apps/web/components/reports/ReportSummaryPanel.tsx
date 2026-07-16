@@ -9,7 +9,7 @@ import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
-import { mergeLiveUsage } from "./liveUsage";
+import { mergeLiveUsage, retainMonotonicLiveUsage } from "./liveUsage";
 import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
 import {
   defaultReportFilters,
@@ -50,6 +50,7 @@ export function ReportSummaryPanel() {
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
   const nextRevisionCheckAtRef = useRef(0);
+  const lastVisibleSummaryRef = useRef<WorkMapApiUsageSummary | null>(null);
   const [auditState, setAuditState] = useState<AuditState>({ loading: false, audit: null });
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
@@ -244,7 +245,14 @@ export function ReportSummaryPanel() {
     setFilters((current) => ({ ...current, from: addUtcDays(to, -(days - 1)), to }));
   }
 
-  const summary = useMemo(() => mergeLiveUsage(reportState.summary, liveStatus), [reportState.summary, liveStatus]);
+  const summary = useMemo(
+    () => retainMonotonicLiveUsage(lastVisibleSummaryRef.current, mergeLiveUsage(reportState.summary, liveStatus)),
+    [reportState.summary, liveStatus],
+  );
+
+  useEffect(() => {
+    lastVisibleSummaryRef.current = summary;
+  }, [summary]);
   const liveUser = liveStatus?.scope === "user" ? liveStatus : null;
   const hasRows = Boolean(summary && (summary.apps.length > 0 || summary.websites.length > 0));
   const scopeLabel = getScopeLabel(summary, selectedUser, departments);

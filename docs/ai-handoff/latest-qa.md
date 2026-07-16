@@ -1,5 +1,33 @@
 # Latest QA Handoff
 
+## 2026-07-16 Desktop Agent 0.5.10 Focus Slice Continuity QA
+
+### Reviewed Implementation
+
+- Reviewed the Agent event-upload/heartbeat order and the Reports same-range monotonic display guard.
+
+### Findings Ordered By Severity
+
+- Critical/high/medium: none found in the scoped change.
+- Low: the live display can temporarily retain a slightly older maximum for the same reporting range until the persisted aggregate catches up. It never changes exports or server-side values, and prevents the user-visible time regression caused by independently timed requests.
+
+### Test And Verification Status
+
+- Reports focused tests: pass, 4/4, including the completed-slice display-regression case.
+- Desktop Agent focused tests: pass, 27/27, including proof that `/device-client/app-usage` precedes the rollover heartbeat.
+- Desktop Agent and Web typecheck: pass.
+- Web lint: pass.
+- Windows NSIS installer build: pass. `WorkMap-Desktop-Agent-Setup-0.5.10.exe` exists and is non-empty.
+- `git diff --check`: pass.
+
+### Manual QA Status
+
+- Not run. Manual verification is deferred until the `0.5.10` installer is used with a paired device.
+
+### Risks And Recommendation
+
+- Pass for release. Existing `0.5.9` installations keep their previous runtime behavior; the Agent-side ordering fix requires the `0.5.10` installer. No database migration, API deploy, or Browser Extension release is required.
+
 ## 2026-07-16 Compliance Card-Grid Surface Fix QA
 
 ### Reviewed Implementation
@@ -2714,3 +2742,9 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 ### Recommendation
 
 - Pass for a coordinated API/Web deployment and the already-scoped additive index migration. Do not update Desktop Agent or Browser Extension for this API/Web-only increment. Confirm production request duration and visible-tab report freshness after deployment; do not interpret automated source tests as production performance acceptance.
+## 2026-07-16 - Desktop Agent timing-path audit
+
+- Reviewed v0.5.9 source flow only; no files in the runtime were changed.
+- Finding: Focus Active display can visibly regress at each 10-second rollover because the new heartbeat reaches `/reports` before the completed activity slice is uploaded and aggregated.
+- Severity: high for Owner report correctness perception; the durable activity event is normally uploaded afterwards, but the live display is not monotonic and must not be treated as an exact continuous timer.
+- Manual QA: not run in this analysis-only round.

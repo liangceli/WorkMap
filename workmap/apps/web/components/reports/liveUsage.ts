@@ -25,6 +25,24 @@ export function mergeLiveUsage(
   return summary;
 }
 
+// The report summary and the live heartbeat are separate requests. A completed
+// Agent slice can be acknowledged between them, so retain the last displayed
+// value for one immutable report view until the persisted aggregate catches up.
+// This is presentation-only: exports and stored summaries still use API data.
+export function retainMonotonicLiveUsage(
+  previous: WorkMapApiUsageSummary | null,
+  current: WorkMapApiUsageSummary | null,
+): WorkMapApiUsageSummary | null {
+  if (!previous || !current || !sameReportView(previous, current)) return current;
+
+  return {
+    ...current,
+    apps: retainRows(previous.apps, current.apps, mergeAppRow),
+    daily: retainRows(previous.daily, current.daily, mergeDailyRow),
+    employeeUsage: retainRows(previous.employeeUsage, current.employeeUsage, mergeEmployeeRow),
+  };
+}
+
 function mergeSegments(
   summary: WorkMapApiUsageSummary,
   liveApps: Array<{ appName: string; activeSeconds: number; focusedIdleSeconds?: number }>,
@@ -90,4 +108,74 @@ function mergeSegments(
 function rangeIncludesUtcToday(summary: WorkMapApiUsageSummary) {
   const today = new Date().toISOString().slice(0, 10);
   return summary.range.from <= today && summary.range.to >= today;
+}
+
+function sameReportView(left: WorkMapApiUsageSummary, right: WorkMapApiUsageSummary) {
+  return left.scope === right.scope
+    && left.userId === right.userId
+    && left.departmentId === right.departmentId
+    && left.range.from === right.range.from
+    && left.range.to === right.range.to
+    && left.range.timeZone === right.range.timeZone;
+}
+
+function retainRows<Row>(
+  previous: Row[],
+  current: Row[],
+  merge: (previous: Row, current: Row) => Row,
+) {
+  const previousByKey = new Map(previous.map((row) => [rowKey(row), row]));
+  const merged = current.map((row) => {
+    const prior = previousByKey.get(rowKey(row));
+    return prior ? merge(prior, row) : row;
+  });
+  const currentKeys = new Set(current.map(rowKey));
+  return [...merged, ...previous.filter((row) => !currentKeys.has(rowKey(row)))];
+}
+
+function mergeAppRow(
+  previous: WorkMapApiUsageSummary["apps"][number],
+  current: WorkMapApiUsageSummary["apps"][number],
+) {
+  return {
+    ...current,
+    activeSeconds: Math.max(previous.activeSeconds, current.activeSeconds),
+    idleSeconds: Math.max(previous.idleSeconds, current.idleSeconds),
+    focusActiveSeconds: Math.max(previous.focusActiveSeconds ?? previous.activeSeconds, current.focusActiveSeconds ?? current.activeSeconds),
+    focusedIdleSeconds: Math.max(previous.focusedIdleSeconds ?? previous.idleSeconds, current.focusedIdleSeconds ?? current.idleSeconds),
+    openRuntimeSeconds: Math.max(previous.openRuntimeSeconds ?? 0, current.openRuntimeSeconds ?? 0),
+  };
+}
+
+function mergeDailyRow(
+  previous: WorkMapApiUsageSummary["daily"][number],
+  current: WorkMapApiUsageSummary["daily"][number],
+) {
+  return {
+    ...current,
+    appActiveSeconds: Math.max(previous.appActiveSeconds, current.appActiveSeconds),
+    appIdleSeconds: Math.max(previous.appIdleSeconds, current.appIdleSeconds),
+    domainActiveSeconds: Math.max(previous.domainActiveSeconds, current.domainActiveSeconds),
+    domainIdleSeconds: Math.max(previous.domainIdleSeconds, current.domainIdleSeconds),
+  };
+}
+
+function mergeEmployeeRow(
+  previous: WorkMapApiUsageSummary["employeeUsage"][number],
+  current: WorkMapApiUsageSummary["employeeUsage"][number],
+) {
+  return {
+    ...current,
+    activeSeconds: Math.max(previous.activeSeconds, current.activeSeconds),
+    idleSeconds: Math.max(previous.idleSeconds, current.idleSeconds),
+  };
+}
+
+function rowKey(row: unknown) {
+  if (typeof row !== "object" || row === null) return "";
+  const value = row as Record<string, unknown>;
+  if (typeof value.appName === "string") return `app:${value.appName}`;
+  if (typeof value.date === "string") return `date:${value.date}`;
+  if (typeof value.userId === "string") return `user:${value.userId}`;
+  return "";
 }

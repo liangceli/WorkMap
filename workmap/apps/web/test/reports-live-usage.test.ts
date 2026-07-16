@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { WorkMapApiReportLiveStatus, WorkMapApiUsageSummary } from "../lib/api/apiTypes.js";
-import { mergeLiveUsage } from "../components/reports/liveUsage.js";
+import { mergeLiveUsage, retainMonotonicLiveUsage } from "../components/reports/liveUsage.js";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -69,6 +69,43 @@ test("user report excludes idle, minimized or background state from active total
   const merged = mergeLiveUsage(summary, live)!;
   assert.deepEqual(merged.apps, summary.apps);
   assert.deepEqual(merged.daily, summary.daily);
+});
+
+test("retains the displayed Focus Active total while a completed Agent slice is awaiting summary refresh", () => {
+  const summary = baseSummary("user");
+  const activeLive: WorkMapApiReportLiveStatus = {
+    scope: "user",
+    userId: "employee-1",
+    departmentId: null,
+    agentStatus: {
+      state: "running",
+      currentAppName: "Visual Studio Code",
+      currentAppActiveSeconds: 17,
+      currentAppFocusedIdleSeconds: 0,
+      todayActiveSeconds: 77,
+    },
+    browserExtensionCoverage: [],
+    activityRevision: null,
+  };
+  const beforeRollover = mergeLiveUsage(summary, activeLive)!;
+
+  const resetLive: WorkMapApiReportLiveStatus = {
+    ...activeLive,
+    agentStatus: {
+      state: "running",
+      currentAppName: "Visual Studio Code",
+      currentAppActiveSeconds: 0,
+      currentAppFocusedIdleSeconds: 0,
+      todayActiveSeconds: 60,
+    },
+  };
+  const rawAfterRollover = mergeLiveUsage(summary, resetLive)!;
+  const held = retainMonotonicLiveUsage(beforeRollover, rawAfterRollover)!;
+
+  assert.equal(beforeRollover.apps[0]?.activeSeconds, 77);
+  assert.equal(rawAfterRollover.apps[0]?.activeSeconds, 60);
+  assert.equal(held.apps[0]?.activeSeconds, 77);
+  assert.equal(held.daily[0]?.appActiveSeconds, 77);
 });
 
 function baseSummary(scope: "user" | "company"): WorkMapApiUsageSummary {
