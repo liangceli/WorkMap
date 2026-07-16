@@ -61,6 +61,7 @@ async function main() {
   await testDeviceRegistrationHeartbeatAndOwnership();
   await testBrowserExtensionCoverageLossAndRestore();
   await testBrowserCurrentDomainFailureDoesNotBreakSummary();
+  await testOptionalReportSectionsDoNotBlockCoreSummary();
   await testActivityIngestionAndReportsLoop();
   await testBrowserUsageUpdatesReportRevision();
   await testOwnerSeesLiveForegroundUsageBeforeAppSwitch();
@@ -376,6 +377,22 @@ async function testBrowserCurrentDomainFailureDoesNotBreakSummary() {
   assert.equal(summary.browserExtensionCoverage[0]?.currentDomainObservedAt, null);
 }
 
+async function testOptionalReportSectionsDoNotBlockCoreSummary() {
+  const prisma = new MockPrisma();
+  prisma.seedDevice({ id: DEVICE_ID, companyId: COMPANY_ID, userId: EMPLOYEE_ID });
+  prisma.failOptionalReportQueries = true;
+  const reports = new ReportsService(prisma as any, new MockAuditService() as any);
+
+  const summary = await reports.getUsageSummary(employeeContext, {});
+
+  assert.equal(summary.scope, "user");
+  assert.deepEqual(summary.apps, []);
+  assert.deepEqual(summary.websites, []);
+  assert.deepEqual(summary.appTimeline, []);
+  assert.deepEqual(summary.deviceStatusHistory, []);
+  assert.equal(summary.activityRevision, null);
+}
+
 async function testOwnerSeesLiveForegroundUsageBeforeAppSwitch() {
   const prisma = new MockPrisma();
   const reports = new ReportsService(prisma as any, new MockAuditService() as any);
@@ -591,6 +608,7 @@ class MockAuditService {
 }
 
 class MockPrisma {
+  failOptionalReportQueries = false;
   users = [
     { id: EMPLOYEE_ID, companyId: COMPANY_ID, departmentId: DEPARTMENT_ID, role: UserRole.EMPLOYEE, displayName: "Employee" },
     { id: OWNER_ID, companyId: COMPANY_ID, departmentId: null, role: UserRole.OWNER, displayName: "Owner" },
@@ -656,6 +674,9 @@ class MockPrisma {
       return { _max: { createdAt: latest } };
     },
     findMany: async ({ where }: any) => {
+      if (this.failOptionalReportQueries) {
+        throw Object.assign(new Error("Simulated optional report query failure."), { code: "P2022" });
+      }
       if (
         this.failRecentFocusedDomainLookup
         && where?.eventType === ActivityEventType.BROWSER
@@ -794,6 +815,9 @@ class MockPrisma {
       .sort((left, right) => orderBy?.recordedAt === "desc" ? right.recordedAt.getTime() - left.recordedAt.getTime() : 0)
       .slice(0, take ?? this.deviceStatusEvents.length),
     aggregate: async ({ where }: any = {}) => {
+      if (this.failOptionalReportQueries) {
+        throw Object.assign(new Error("Simulated optional status query failure."), { code: "P2022" });
+      }
       const rows = this.deviceStatusEvents.filter((event) => matchesWhere(event, where));
       const latest = rows.reduce<Date | null>((current, row) => maxDate(current, row.receivedAt), null);
       return { _max: { receivedAt: latest } };

@@ -1,5 +1,50 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Reports 500 Resilience
+
+### Original Task Brief
+
+- Investigate recurring production `500 Internal server error` responses from `/reports/usage-summary` and prevent optional tracking/audit reads from taking down the complete Owner or employee report.
+
+### Changed Files
+
+- `workmap/apps/api/src/modules/reports/reports.service.ts`
+- `workmap/apps/api/test/tracking-reports-verification.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Replaced the wide, nested `Promise.all` fan-out in usage-summary assembly with bounded, ordered report reads. This avoids a single report request attempting many simultaneous Prisma operations while the Supabase transaction pooler has a small connection budget.
+- App and domain summary tables remain required report data. Live current-app/domain enrichment, device coverage, status history, session audit, timeline, and activity-revision reads are isolated as optional sections.
+- If an optional tracking query is unavailable during a partial rollout or transient database failure, the API returns the core historical report and an empty value for that affected enrichment instead of returning HTTP 500 for the entire report.
+- Required summary failures now log a safe section label and Prisma/Nest error code; optional fallbacks log the affected section and code. Raw database URLs, credentials, bearer tokens, and raw database errors are not logged by this handling.
+- Added a regression test that simulates optional activity/status query failures and proves the report summary still responds.
+
+### Role and Access Behavior
+
+- Owner/company aggregation, employee own-report scope, tenant isolation, audit logging of sensitive report access, and platform boundaries are unchanged.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/api typecheck`: pass.
+- `pnpm.cmd --filter @workmap/api test`: pass (`16/16`).
+- `pnpm.cmd --filter @workmap/api lint`: pass.
+- `pnpm.cmd --filter @workmap/api build`: pass.
+- `git diff --check`: pass (line-ending warnings only).
+
+### Manual QA
+
+- Not run against the production Render service in this coding environment.
+
+### Intentionally Not Changed
+
+- Prisma schema, migrations, Supabase configuration, Render configuration, API routes/contracts, Cognito, Desktop Agent, Browser Extension, report calculations, and Web UI.
+
+### Remaining Risk
+
+- A failure in the required `AppUsageSummary` or `WebsiteUsageSummary` aggregation will still correctly return an error because there is no truthful historical report to render. The API now logs the exact required section and code for that case.
+
 ## 2026-07-16 Invitation Activity Panel Spacing
 
 ### Original Task Brief

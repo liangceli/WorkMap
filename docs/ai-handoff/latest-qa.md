@@ -1,5 +1,34 @@
 # Latest QA Handoff
 
+## 2026-07-16 Reports 500 Resilience QA
+
+### Reviewed Implementation
+
+- Report query concurrency reduction, optional tracking-section fallbacks, and safe failure diagnostics for `/reports/usage-summary`.
+
+### Findings
+
+- The previous usage-summary assembly issued multiple nested parallel Prisma reads. With the runtime limited to a small Supabase transaction-pooler connection budget, one optional tracking/audit read could fail the entire report request.
+- Core app/domain summaries remain required and are not replaced with fabricated data.
+- Status, live coverage, audit timeline, and freshness enrichments now degrade to explicit empty API values when their backing query fails, preserving report access and preventing a misleading full-page 500.
+- Regression coverage simulates `P2022` failures in optional activity/status reads and confirms that the core report still returns.
+
+### Verification Status
+
+- API typecheck: pass.
+- API tests: pass (`16/16`).
+- API lint: pass.
+- API production build: pass.
+- `git diff --check`: pass; only LF-to-CRLF warnings were emitted.
+
+### Manual QA Status
+
+- Not run against the deployed Render service in this coding environment.
+
+### Recommendation
+
+- Pass for backend deployment. No database migration or Desktop Agent/Browser Extension release is required for this fix.
+
 ## 2026-07-16 Invitation Activity Panel Spacing QA
 
 ### Reviewed Implementation
