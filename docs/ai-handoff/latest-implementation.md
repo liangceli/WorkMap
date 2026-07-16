@@ -1,5 +1,42 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Render Session Pool Startup Recovery
+
+### Original Task Brief
+
+- Fix the Render API deployment failure while retaining the Supabase session-pool connection on port `5432`.
+
+### Changed Files
+
+- `workmap/apps/api/src/modules/prisma/prisma.service.ts`
+- `workmap/apps/api/test/prisma-runtime-url.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Supabase pooler URLs on port `5432` now keep session-pool semantics and receive a bounded Prisma `connection_limit=1` plus `pool_timeout=30` when those values are not explicitly configured.
+- The transaction-pooler branch for port `6543` remains supported, but it is no longer required for this deployment; its default Prisma limit is bounded to two connections.
+- Prisma startup retries only transient connection-capacity or reachability failures three times with short bounded delays. Invalid URLs, credentials, and schema problems still fail immediately.
+
+### Intentionally Not Changed
+
+- Database schema, migrations, Render environment variables, API contracts, Cognito, Reports UI, Desktop Agent, and Browser Extension.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/api test`: pass (`17/17`).
+- `pnpm.cmd --filter @workmap/api typecheck`: pass.
+- `pnpm.cmd --filter @workmap/api build`: pass.
+
+### Manual QA
+
+- Not run against Render from this coding environment. The next Render deploy must retain the existing Supabase pooler host and port `5432` in `DATABASE_URL`.
+
+### Remaining Risk
+
+- If 15 session-pool clients are already held by other external tools or services, the API cannot acquire even its single connection until one frees. The bounded retry avoids an immediate transient deployment failure but cannot bypass Supabase's global cap.
+
 ## 2026-07-16 Reports 500 Resilience
 
 ### Original Task Brief

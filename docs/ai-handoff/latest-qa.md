@@ -1,5 +1,31 @@
 # Latest QA Handoff
 
+## 2026-07-16 Render Session Pool Startup Recovery QA
+
+### Reviewed Implementation
+
+- Prisma runtime URL normalization and transient startup retry for Supabase session-pool deployments on port `5432`.
+
+### Findings
+
+- The attached Render log shows that build succeeded; the process failed only during Prisma initialization with `EMAXCONNSESSION` because the Supabase `:5432` session pool had reached its 15-client cap.
+- Port `5432` is retained. The API now caps its own Prisma use to one connection and does not inject transaction-pooler settings into a session-pool URL.
+- Regression tests cover transaction and session pooler URL behavior, explicit configuration preservation, and malformed URL preservation.
+
+### Verification Status
+
+- API tests: pass (`17/17`).
+- API typecheck: pass.
+- API build: pass.
+
+### Manual QA Status
+
+- Pending Render deployment and service health check.
+
+### Recommendation
+
+- Deploy this backend-only fix while keeping the Render `DATABASE_URL` pointed at the existing Supabase pooler host on port `5432`. No migration or client release is required.
+
 ## 2026-07-16 Reports 500 Resilience QA
 
 ### Reviewed Implementation
