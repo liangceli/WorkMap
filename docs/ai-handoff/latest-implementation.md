@@ -4210,3 +4210,7 @@ Correct the password visibility eye button so it aligns inside the right edge of
 
 - Deferred by user, pending final consolidated manual QA: load v0.4.3 in Chrome/Edge, grant website access, verify a same-window tab switch, two separate browser windows, permission removal/regrant, offline retry, and current Domain display in Reports.
 - MV3 cannot reliably emit an explicit user-stop event for browser close, disable, uninstall, or service-worker eviction. Those remain truthfully represented as inferred signal loss rather than a false "stopped by user" event.
+
+### Release Artifact Correction
+
+- The GitHub Release artifact is `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.4.3.zip`, alongside the existing `0.4.2` archives. It contains the same zip-root layout as v0.4.2 and a verified `manifest.json` version `0.4.3`.
