@@ -283,6 +283,8 @@ export type WorkMapApiUsageSummary = {
     currentDomainObservedAt: string | null;
     coverageLostDetectedAt: string | null;
     coverageRestoredAt: string | null;
+    trackingState: "ready" | "permission_required" | "registration_failed" | null;
+    trackingStatusObservedAt: string | null;
   }>;
   agentStatus: null | {
     state:

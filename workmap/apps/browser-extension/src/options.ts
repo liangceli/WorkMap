@@ -33,7 +33,9 @@ async function pair() {
     if (!await requestTrackingPermission(apiBaseUrl)) throw new Error("Website tracking permission was not granted.");
     setBusy(true, "Registering tracker...");
     showProgress("Registering WorkMap domain tracker in Edge...");
-    await ensureDomainContentScriptRegistered(true);
+    if (!await ensureDomainContentScriptRegistered(true)) {
+      throw new Error("Website tracking permission is required. Open edge://extensions, allow WorkMap website access, then try again.");
+    }
     await writeStoredState({ workmapStatus: { state: "pairing", queuedEvents: 0, queuedStatusEvents: 0 } });
     await refreshStatus();
     setBusy(true, "Pairing with WorkMap...");
@@ -42,7 +44,7 @@ async function pair() {
     await savePairedConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, browserName: browserSelect.value });
     await writeStoredState({
       workmapStatus: { state: "offline", queuedEvents: 0, queuedStatusEvents: 0 },
-      workmapTracker: { version: 3, activeByTab: {}, openTabs: {}, runtimeByDomain: {}, focusedWindowId: null },
+      workmapTracker: { version: 4, activeByTab: {}, openTabs: {}, runtimeByDomain: {}, focusedWindowId: null, systemIdle: false },
       workmapQueue: [],
       workmapStatusQueue: [],
     });
@@ -78,6 +80,12 @@ function deriveStatusHealth(current: Awaited<ReturnType<typeof readStoredState>>
   if (current.state === "error") return { label: "Needs attention" };
   if (current.state === "pairing") return { label: "Pairing" };
   if (current.state === "unpaired") return { label: "Not paired" };
+  if (current.trackingState === "permission_required") {
+    return { label: "Website access required", detail: "Open edge://extensions, allow WorkMap website access, then reload this page." };
+  }
+  if (current.trackingState === "registration_failed") {
+    return { label: "Tracker needs attention", detail: current.trackingError ?? "WorkMap could not register its hostname-only tracker. Reload the extension and try again." };
+  }
   if (current.state !== "connected") return { label: "Not connected" };
 
   const heartbeatAge = ageMs(current.lastHeartbeatAt);

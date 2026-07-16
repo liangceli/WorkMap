@@ -26,18 +26,26 @@ test("local extension status does not preserve stale connected state", async () 
   const options = await readFile(new URL("../src/options.ts", import.meta.url), "utf8");
   const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
 
-  assert.equal(manifest.version, "0.4.2");
-  assert.equal(packageJson.version, "0.4.2");
-  assert.match(api, /browser-extension-mv3\/0\.4\.2/);
+  assert.equal(manifest.version, "0.4.3");
+  assert.equal(packageJson.version, "0.4.3");
+  assert.match(api, /browser-extension-mv3\/0\.4\.3/);
   assert.match(background, /status\?\.state \?\? "offline"/);
   assert.doesNotMatch(background, /status\?\.state \?\? "connected"/);
   assert.match(background, /workmapStatusQueue/);
   assert.match(background, /sendExtensionStatus/);
   assert.match(background, /ensureDomainContentScriptRegistered\(true\)/);
+  assert.match(background, /permissions\.onRemoved/);
+  assert.match(background, /recordTrackingHealth/);
   assert.match(options, /deriveStatusHealth/);
   assert.match(options, /Signal stale/);
   assert.match(options, /Last server-confirmed heartbeat/);
   assert.doesNotMatch(options, /current\?\.state \?\? "connected"/);
+});
+
+test("activity checkpoints flush before the heartbeat that makes Reports treat the extension as current", async () => {
+  const source = await readFile(new URL("../src/background.ts", import.meta.url), "utf8");
+  const mutation = source.slice(source.indexOf("async function mutateTracker"), source.indexOf("function heartbeatDue"));
+  assert(mutation.indexOf("await flushActivityQueue(config)") < mutation.indexOf("await heartbeat(config)"));
 });
 
 test("options page shows pairing progress and times out stuck Edge permission prompts", async () => {
@@ -55,7 +63,7 @@ test("options page shows pairing progress and times out stuck Edge permission pr
 
 test("content script reports only trusted activity timestamps including wheel", async () => {
   const source = await readFile(new URL("../src/contentScript.ts", import.meta.url), "utf8");
-  for (const marker of ["event.isTrusted", '"wheel"', '"keydown"', '"pointermove"', '"touchstart"', "activityAt", "lastInputAt"]) {
+  for (const marker of ["event.isTrusted", '"wheel"', '"keydown"', '"pointermove"', '"touchstart"', "activityAt", "lastInputAt", "domain-media-activity", "MEDIA_START_FROM_INTERACTION_MS", '"play"', '"pause"']) {
     assert(source.includes(marker), `missing ${marker}`);
   }
   for (const forbidden of ["event.key", "clientX", "clientY", "event.target", "textContent", "innerText", "document.title", "location.href"]) {

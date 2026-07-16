@@ -17,7 +17,7 @@ const DEVICE_OS_VALUES = new Set<string>(Object.values(DeviceOS));
 const MAX_HOSTNAME_LENGTH = 120;
 const MAX_AGENT_VERSION_LENGTH = 80;
 const MAX_TIME_ZONE_LENGTH = 80;
-const MAX_STATUS_METADATA_KEYS = new Set(["operation", "networkState", "agentVersion"]);
+const MAX_STATUS_METADATA_KEYS = new Set(["operation", "networkState", "agentVersion", "trackingState"]);
 const MAX_STATUS_METADATA_VALUE_LENGTH = 120;
 const MAX_CURRENT_ACTIVITY_FUTURE_SKEW_MS = 5 * 60_000;
 export const BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS = 90_000;
@@ -324,6 +324,7 @@ export class DevicesService {
     assertStatusTiming({ now, startedAt, endedAt, recordedAt, lastHeartbeatAt });
     const agentSessionId = readOptionalUuid(body.sessionId, "sessionId");
     const clientEventId = readOptionalUuid(body.clientEventId, "clientEventId");
+    const metadata = readStatusMetadata(body.metadata);
 
     const session = agentSessionId
       ? await this.prisma.agentSession.findFirst({
@@ -342,6 +343,7 @@ export class DevicesService {
       && latestTransition.status === status
       && latestTransition.reason === reason
       && latestTransition.agentSessionId === agentSessionId
+      && hasSameTrackingState(latestTransition.metadata, metadata)
     ) {
       return toStatusEventResponse(latestTransition);
     }
@@ -364,7 +366,7 @@ export class DevicesService {
           source: clientType,
           timeZone: readOptionalTimeZone(body.timeZone),
           confidence: body.confidence === "INFERRED" ? DeviceStatusConfidence.INFERRED : DeviceStatusConfidence.CONFIRMED,
-          metadata: readStatusMetadata(body.metadata),
+          metadata,
         },
       });
     } catch (error) {
@@ -376,7 +378,13 @@ export class DevicesService {
       event = existing;
     }
 
-    if (status === DeviceStatus.RUNNING || status === DeviceStatus.RECONNECTED) {
+    // Tracking-access diagnostics describe Extension capability, not a fresh device
+    // heartbeat. They must not make Reports show a client as connected ahead of a
+    // queued activity checkpoint.
+    if (
+      (status === DeviceStatus.RUNNING || status === DeviceStatus.RECONNECTED)
+      && metadata?.operation !== "tracking-access"
+    ) {
       await this.prisma.device.update({ where: { id: deviceId }, data: { lastSeenAt: now } });
     }
 
@@ -523,6 +531,13 @@ function readStatusMetadata(value: unknown) {
     if (safe) metadata[key] = safe;
   }
   return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function hasSameTrackingState(previous: unknown, next: Record<string, string> | undefined) {
+  const previousState = typeof previous === "object" && previous !== null && !Array.isArray(previous)
+    ? (previous as Record<string, unknown>).trackingState
+    : undefined;
+  return previousState === next?.trackingState;
 }
 
 function assertStatusTiming(input: {

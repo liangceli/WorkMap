@@ -348,6 +348,26 @@ async function testBrowserExtensionCoverageLossAndRestore() {
     createdAt: focusedDomainObservedAt,
     updatedAt: focusedDomainObservedAt,
   });
+  const trackingRecordedAt = new Date().toISOString();
+  prisma.deviceStatusEvents.push({
+    id: "a4444444-4444-4444-8444-444444444444",
+    companyId: COMPANY_ID,
+    userId: EMPLOYEE_ID,
+    deviceId: DEVICE_ID,
+    agentSessionId: null,
+    clientEventId: "a4444444-4444-4444-8444-444444444444",
+    status: DeviceStatus.RUNNING,
+    reason: DeviceStatusReason.UNKNOWN,
+    startedAt: new Date(trackingRecordedAt),
+    endedAt: null,
+    lastHeartbeatAt: new Date(trackingRecordedAt),
+    recordedAt: new Date(trackingRecordedAt),
+    receivedAt: new Date(trackingRecordedAt),
+    source: DeviceClientType.BROWSER_EXTENSION,
+    timeZone: "Australia/Adelaide",
+    confidence: DeviceStatusConfidence.CONFIRMED,
+    metadata: { operation: "tracking-access", trackingState: "ready" },
+  });
 
   const summary = await reports.getUsageSummary(employeeContext, {});
   assert.equal(summary.browserExtensionCoverage[0]?.state, "connected");
@@ -356,6 +376,8 @@ async function testBrowserExtensionCoverageLossAndRestore() {
   assert.equal(summary.browserExtensionCoverage[0]?.currentDomainObservedAt, focusedDomainObservedAt.toISOString());
   assert.equal(summary.browserExtensionCoverage[0]?.coverageLostDetectedAt, outage.startedAt.toISOString());
   assert.equal(summary.browserExtensionCoverage[0]?.coverageRestoredAt, outage.endedAt.toISOString());
+  assert.equal(summary.browserExtensionCoverage[0]?.trackingState, "ready");
+  assert.equal(summary.browserExtensionCoverage[0]?.trackingStatusObservedAt, trackingRecordedAt);
 }
 
 async function testBrowserCurrentDomainFailureDoesNotBreakSummary() {

@@ -12,6 +12,10 @@ if (!workMapWindow.__workmapDomainActivityInstalled) {
   let latestActivityAt = 0;
   let trailingTimer: number | undefined;
   let idleTimer: number | undefined;
+  let mediaTimer: number | undefined;
+  const activeMedia = new Set<HTMLMediaElement>();
+  const MEDIA_START_FROM_INTERACTION_MS = 5_000;
+  const MEDIA_SIGNAL_INTERVAL_MS = 10_000;
 
   const send = (message: Record<string, unknown>) => {
     try {
@@ -58,9 +62,45 @@ if (!workMapWindow.__workmapDomainActivityInstalled) {
   }
 
   if (isTopFrame) {
+    const pageCanReportMedia = () => document.visibilityState === "visible" && document.hasFocus();
+    const stopMediaSignals = () => {
+      activeMedia.clear();
+      if (mediaTimer !== undefined) {
+        window.clearInterval(mediaTimer);
+        mediaTimer = undefined;
+      }
+    };
+    const sendMediaActivity = () => {
+      if (activeMedia.size === 0 || !pageCanReportMedia()) return;
+      // This only says that a user-initiated media surface remains active. It
+      // never includes media metadata, page content, title, or URL details.
+      send({ type: "workmap:domain-media-activity", activityAt: Date.now() });
+    };
+    const startMediaSignals = () => {
+      sendMediaActivity();
+      if (mediaTimer === undefined) mediaTimer = window.setInterval(sendMediaActivity, MEDIA_SIGNAL_INTERVAL_MS);
+    };
+    const onMediaPlay = (event: Event) => {
+      const media = event.composedPath().find((entry): entry is HTMLMediaElement => entry instanceof HTMLMediaElement);
+      if (!media) return;
+      // Ignore autoplay and background media. A user must have interacted with
+      // this visible, focused page immediately before playback began.
+      if (!pageCanReportMedia() || Date.now() - latestActivityAt > MEDIA_START_FROM_INTERACTION_MS) return;
+      activeMedia.add(media);
+      startMediaSignals();
+    };
+    const onMediaStop = (event: Event) => {
+      const media = event.composedPath().find((entry): entry is HTMLMediaElement => entry instanceof HTMLMediaElement);
+      if (media) activeMedia.delete(media);
+      if (activeMedia.size === 0) stopMediaSignals();
+    };
+    for (const eventName of ["play", "pause", "ended", "emptied"] as const) {
+      document.addEventListener(eventName, eventName === "play" ? onMediaPlay : onMediaStop, true);
+    }
     const stopPageFocus = () => {
       sendLatestActivity();
       if (idleTimer !== undefined) window.clearTimeout(idleTimer);
+      stopMediaSignals();
       send({ type: "workmap:domain-blur", observedAt: Date.now() });
     };
     window.addEventListener("blur", stopPageFocus, true);

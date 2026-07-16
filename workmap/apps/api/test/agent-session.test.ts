@@ -124,6 +124,42 @@ test("durable device status closes a session and stays idempotent after retry", 
   assert.equal(prisma.statusEvents.filter((row) => row.status === DeviceStatus.STOPPED_BY_USER).length, 1);
 });
 
+test("browser tracking-health transitions persist without turning repeated status retries into history noise", async () => {
+  const prisma = new AgentSessionPrisma();
+  const lastHeartbeatBeforeHealthEvent = prisma.deviceRow.lastSeenAt.toISOString();
+  const service = new DevicesService(prisma as any);
+  const recordedAt = new Date().toISOString();
+  const base = {
+    deviceId: DEVICE_ID,
+    status: "RUNNING",
+    reason: "UNKNOWN",
+    startedAt: recordedAt,
+    recordedAt,
+    timeZone: "Australia/Adelaide",
+  };
+
+  await service.recordDeviceStatus(context, {
+    ...base,
+    clientEventId: "77777777-7777-4777-8777-777777777777",
+    metadata: { operation: "tracking-access", trackingState: "ready" },
+  }, DeviceClientType.BROWSER_EXTENSION);
+  await service.recordDeviceStatus(context, {
+    ...base,
+    clientEventId: "88888888-8888-4888-8888-888888888888",
+    metadata: { operation: "tracking-access", trackingState: "permission_required" },
+  }, DeviceClientType.BROWSER_EXTENSION);
+  await service.recordDeviceStatus(context, {
+    ...base,
+    clientEventId: "99999999-9999-4999-8999-999999999999",
+    metadata: { operation: "tracking-access", trackingState: "permission_required" },
+  }, DeviceClientType.BROWSER_EXTENSION);
+
+  const browserEvents = prisma.statusEvents.filter((event) => event.source === DeviceClientType.BROWSER_EXTENSION);
+  assert.equal(browserEvents.length, 2);
+  assert.equal(browserEvents[1]?.metadata?.trackingState, "permission_required");
+  assert.equal(prisma.deviceRow.lastSeenAt.toISOString(), lastHeartbeatBeforeHealthEvent);
+});
+
 class AgentSessionPrisma {
   deviceRow = {
     id: DEVICE_ID,

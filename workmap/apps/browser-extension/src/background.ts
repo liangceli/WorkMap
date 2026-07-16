@@ -54,7 +54,7 @@ type ChromeApi = {
     create(name: string, info: { periodInMinutes: number }): void;
     onAlarm: Event<(alarm: { name: string }) => void>;
   };
-  permissions: { onAdded: Event<() => void> };
+  permissions: { onAdded: Event<() => void>; onRemoved: Event<() => void> };
 };
 type Event<T> = { addListener(listener: T): void };
 declare const chrome: ChromeApi;
@@ -67,6 +67,7 @@ let operation = Promise.resolve();
 chrome.runtime.onInstalled.addListener(() => { void schedule(initialize); });
 chrome.runtime.onStartup.addListener(() => { void schedule(initialize); });
 chrome.permissions.onAdded.addListener(() => { void schedule(registerContentScript); });
+chrome.permissions.onRemoved.addListener(() => { void schedule(registerContentScript); });
 chrome.tabs.onCreated.addListener(() => { void schedule(reconcileOpenTabs); });
 chrome.tabs.onUpdated.addListener((_tabId, change) => { if (change.url) void schedule(reconcileOpenTabs); });
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -89,13 +90,16 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 chrome.idle.onStateChanged.addListener((state) => {
   if (state === "locked") {
     void schedule(async () => {
-      await stopFocusedDomains();
+      await setBrowserIdle(true);
       await transitionDeviceStatus("LOCKED", "SYSTEM_LOCK", { operation: "chrome-idle-locked" });
     });
   } else if (state === "idle") {
-    void schedule(stopFocusedDomains);
+    void schedule(() => setBrowserIdle(true));
   } else {
-    void schedule(resumeAfterUnlock);
+    void schedule(async () => {
+      await setBrowserIdle(false);
+      await resumeAfterUnlock();
+    });
   }
 });
 chrome.alarms.onAlarm.addListener((alarm) => { if (alarm.name === ALARM_NAME) void schedule(onAlarm); });
@@ -109,6 +113,15 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   const domain = readDomainFromUrl(sender.tab.url);
   if (message.type === "workmap:domain-activity" && domain) {
     void schedule(() => mutateTracker((tracker, config) => tracker.recordInteraction(
+      tabId,
+      domain,
+      safeObservedAt(message.activityAt),
+      config.deviceId,
+      config.browserName,
+      sender.tab?.windowId,
+    )));
+  } else if (message.type === "workmap:domain-media-activity" && domain && sender.frameId === 0) {
+    void schedule(() => mutateTracker((tracker, config) => tracker.recordMediaActivity(
       tabId,
       domain,
       safeObservedAt(message.activityAt),
@@ -155,14 +168,18 @@ async function initialize() {
 }
 
 async function registerContentScript() {
+  const stored = await readStoredState(storageKeys);
+  const config = await resolveRuntimeConfig(stored.workmapConfig, stored.workmapQueue?.length ?? 0, stored.workmapStatusQueue?.length ?? 0);
+  if (!config) return;
   try {
     // Dynamic registrations apply to future navigations. Re-injecting the
     // guarded script into existing web tabs closes the otherwise silent gap
     // after a service-worker or browser restart; the page marker makes this
     // idempotent and no URL/content is read by the script.
-    await ensureDomainContentScriptRegistered(true);
-  } catch {
-    // Pairing/options reports permission errors; registration retries on startup and permission changes.
+    const registered = await ensureDomainContentScriptRegistered(true);
+    await recordTrackingHealth(config, registered ? "ready" : "permission_required");
+  } catch (error) {
+    await recordTrackingHealth(config, "registration_failed", safeError(error));
   }
 }
 
@@ -180,6 +197,10 @@ async function reconcileOpenTabs(forceHeartbeat = false) {
 
 async function stopFocusedDomains() {
   await mutateTracker((tracker, config, now) => tracker.stopFocus(now, config.deviceId, config.browserName));
+}
+
+async function setBrowserIdle(isIdle: boolean) {
+  await mutateTracker((tracker, config, now) => tracker.setSystemIdle(isIdle, now, config.deviceId, config.browserName));
 }
 
 async function onAlarm() {
@@ -219,8 +240,11 @@ async function mutateTracker(
     workmapStatus: statusWithQueues(initialStatus.status, queue.length, initialStatus.queue.length, config),
   });
 
-  if (forceHeartbeat || heartbeatDue(initialStatus.status, now)) await heartbeat(config);
   if (events.length > 0 || queue.some((item) => item.nextAttemptAtMs <= now)) await flushActivityQueue(config);
+  // Summary rows are sent before the heartbeat that makes this client look
+  // current in Reports. That prevents a fresh heartbeat from briefly exposing
+  // an empty current-domain state while its queued checkpoint is still local.
+  if (forceHeartbeat || heartbeatDue(initialStatus.status, now)) await heartbeat(config);
   await flushStatusQueue(config);
 }
 
@@ -437,6 +461,37 @@ async function transitionDeviceStatus(
   await flushStatusQueue(config);
 }
 
+async function recordTrackingHealth(
+  config: ExtensionConfig,
+  trackingState: NonNullable<ExtensionStatus["trackingState"]>,
+  trackingError?: string,
+) {
+  const stored = await readStoredState(storageKeys);
+  const activityQueue = normalizeQueue(stored.workmapQueue);
+  let statusQueue = normalizeStatusQueue(stored.workmapStatusQueue);
+  const current = statusWithQueues(stored.workmapStatus, activityQueue.length, statusQueue.length, config);
+  const changed = current.trackingState !== trackingState || current.trackingError !== trackingError;
+  const nextStatus: ExtensionStatus = {
+    ...current,
+    trackingState,
+    trackingError,
+  };
+  if (changed) {
+    statusQueue = enqueueStatusEvent(
+      statusQueue,
+      createStatusEvent(config, "RUNNING", "UNKNOWN", Date.now(), {
+        operation: "tracking-access",
+        trackingState,
+      }),
+    );
+  }
+  await writeStoredState({
+    workmapStatusQueue: statusQueue,
+    workmapStatus: statusWithQueues(nextStatus, activityQueue.length, statusQueue.length, config),
+  });
+  if (changed) await flushStatusQueue(config);
+}
+
 async function resumeAfterUnlock() {
   const stored = await readStoredState(storageKeys);
   if (stored.workmapStatus?.deviceStatus !== "LOCKED") return;
@@ -467,7 +522,7 @@ function createStatusEvent(
     lastHeartbeatAt: status === "RUNNING" || status === "RECONNECTED" ? timestamp : undefined,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     confidence: "CONFIRMED",
-    metadata: { ...metadata, agentVersion: "browser-extension-mv3/0.4.2" },
+    metadata: { ...metadata, agentVersion: "browser-extension-mv3/0.4.3" },
   };
 }
 

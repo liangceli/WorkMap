@@ -1,5 +1,30 @@
 # Latest QA Handoff
 
+## 2026-07-16 Desktop Agent 0.5.10 Linear Runtime Diagram QA
+
+### Reviewed Implementation
+
+- Reviewed the new `0.5.10` Draw.io source against the current Agent runtime, tracking-state, local queue, and Reports live-usage display paths.
+
+### Findings Ordered By Severity
+
+- Critical/high/medium: none found in this documentation-only change.
+- Low: visual opening in diagrams.net was not performed; XML validity confirms the source structure but not subjective canvas presentation.
+
+### Test And Verification Status
+
+- PowerShell XML parse: pass; exactly two Draw.io diagrams are present.
+- `git diff --check`: pass.
+- Focused changed-file secret-pattern scan: pass; no matches.
+
+### Manual QA Status
+
+- Not run. No runtime behavior changed.
+
+### Risks And Recommendation
+
+- Pass for documentation delivery after the final diff and secret checks. The diagram correctly distinguishes the durable completed slice from the following zero-second live heartbeat and explains the Reports display guard.
+
 ## 2026-07-16 Desktop Agent 0.5.10 Focus Slice Continuity QA
 
 ### Reviewed Implementation
@@ -2748,3 +2773,61 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 - Finding: Focus Active display can visibly regress at each 10-second rollover because the new heartbeat reaches `/reports` before the completed activity slice is uploaded and aggregated.
 - Severity: high for Owner report correctness perception; the durable activity event is normally uploaded afterwards, but the live display is not monotonic and must not be treated as an exact continuous timer.
 - Manual QA: not run in this analysis-only round.
+
+---
+
+## 2026-07-16 Browser Extension v0.4.2 Audit QA
+
+### Reviewed Implementation
+
+- Reviewed the actual MV3 background lifecycle, content-script activity signals, persisted Domain tracker, queue/retry logic, activity ingestion, and `/reports` current-domain presentation.
+
+### Findings Ordered By Severity
+
+- High: `background.ts` writes a completed Domain slice to durable storage, sends heartbeat, and only then flushes the Domain queue. This can make `/reports` show a connected Extension but temporarily no current Domain or an old Domain at a checkpoint boundary.
+- Medium: optional HTTP/HTTPS host permission and content-script registration failures can leave a paired Extension connected but unable to observe user interactions. The background currently swallows registration failures and does not expose this as a tracking-health state.
+- Medium: when tab blur/visibility events are unavailable, the previous Focus Active interval remains open for up to the explicit 30-second grace period. This is bounded but can overstate per-domain Focus Active time around a missed tab switch.
+- Informational: unlike Desktop Agent's earlier live-duration regression, Extension heartbeat has no current Domain duration. Its persisted Domain aggregate does not use the desktop live-duration merge path and should not numerically reset at each checkpoint after the server accepts slices.
+- Informational: Browser close, disable, uninstall, and worker termination have no reliable explicit stop callback in MV3; inferred signal loss is the truthful status model for those situations.
+
+### Test Status
+
+- `pnpm.cmd --filter @workmap/browser-extension test`: passed, 17/17.
+- Test gap confirmed: no automated test asserts completed-Domain upload precedes heartbeat, reports-current-domain continuity, or paired-without-host-permission health reporting.
+
+### Manual QA Status
+
+- Deferred by user, pending final consolidated manual QA. No production browser session or extension load was performed.
+
+### Recommendation
+
+- Do not ship a claim that Browser Extension v0.4.2 already has the Desktop Agent v0.5.10 timing-path correction. Make the small ordering and tracking-health changes above, add narrow regression coverage, build a new extension package, then validate one Chrome/Edge live-domain session.
+
+---
+
+## 2026-07-16 Browser Extension v0.4.3 Reliability QA
+
+### Findings And Resolutions
+
+- Fixed - High: checkpoint processing now uploads queued completed Domain slices before its heartbeat. Reports therefore cannot be made fresh by the heartbeat while the corresponding persisted Domain summary is still waiting locally.
+- Fixed - High: tracking-access diagnostic events no longer update `lastSeenAt`. A website-permission health change cannot claim a current Extension connection ahead of a real heartbeat/activity upload.
+- Fixed - Medium: an active tab immediately seals a previously active tab in the same browser window. Different windows preserve explicitly bounded parallel Focus Active intervals.
+- Fixed - Medium: missing website access and dynamic content-script registration failure now persist a safe health state and appear in Extension options/Reports instead of silently allowing a paired but non-collecting state.
+- Fixed - Medium: media is not treated as a standalone activity source. It is accepted only after recent trusted input while visible and focused, so background/autoplay does not create usage time.
+- Retained limitation - Informational: MV3 has no dependable shutdown callback for browser close, disable, uninstall, or worker eviction. The system continues to use inferred signal loss for those cases.
+
+### Automated Verification
+
+- `pnpm.cmd --filter @workmap/browser-extension test`: passed, 20/20.
+- `pnpm.cmd --filter @workmap/browser-extension typecheck`, `lint`, and `build`: passed.
+- `pnpm.cmd --filter @workmap/api test`: passed, 18/18.
+- API typecheck/lint/build and Web typecheck/lint/build: passed.
+- `git diff --check` and scoped current-diff credential scan: passed.
+
+### Manual QA Status
+
+- Deferred by user, pending final consolidated manual QA. Automated tests do not substitute for loading v0.4.3 in a real Chrome/Edge profile and testing the permission and multi-window scenarios.
+
+### Recommendation
+
+- Pass for packaging Browser Extension v0.4.3 and coordinated API/Web deployment. No database migration and no Desktop Agent update are required for this extension release.

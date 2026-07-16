@@ -1,5 +1,42 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Desktop Agent 0.5.10 Linear Runtime Diagram
+
+### Original Task Brief
+
+- Update the detailed linear Desktop Agent flow diagram for the current `0.5.10` runtime.
+
+### Changed Files
+
+- `docs/designs/workmap-desktop-agent-0.5.10-runtime.drawio`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added a new, editable two-page Draw.io source without replacing the `0.5.8` or `0.5.9` historical diagrams.
+- Page one traces the production path from Agent startup, local queue/checkpoint recovery, 100 ms Windows foreground sampling, tracking-state boundaries, durable event creation, the `0.5.10` pre-heartbeat upload order, API acknowledgement/idempotency, report aggregation, and the same-view display guard.
+- Page two gives a concrete continuous-Edge example. It shows why `6m 17s` remains visible when the ten-second slice rolls over: the completed slice is first queued and uploaded, then the heartbeat is allowed to expose the new zero-second live slice, while Reports keeps the same-view maximum until durable aggregation catches up.
+- The diagram also marks app switches, idle/lock/no-window boundaries, UTC-day boundaries, offline retry, checkpoint recovery, shutdown flush, and the bounded in-memory loss risk during abrupt power loss.
+
+### Verification
+
+- PowerShell XML parse: pass; Draw.io source contains two pages, `0.5.10 Linear Runtime Flow` and `0.5.10 Edge rollover example`.
+- `git diff --check`: pass.
+- Focused changed-file secret-pattern scan: pass; no matches.
+
+### Manual QA
+
+- Not run. The Draw.io source was XML-validated; opening it in diagrams.net for visual-layout confirmation is deferred.
+
+### Intentionally Not Changed
+
+- Agent runtime, frontend logic, backend/API, database, Prisma schema, deployment configuration, credential behavior, and Browser Extension behavior.
+
+### Remaining Risk
+
+- The diagram reflects the current `0.5.10` code and configured defaults. If interval environment values are intentionally changed later, the labels in this explanatory diagram should be updated with the runtime configuration.
+
 ## 2026-07-16 Desktop Agent 0.5.10 Focus Slice Continuity
 
 ### Original Task Brief
@@ -4083,6 +4120,48 @@ Correct the password visibility eye button so it aligns inside the right edge of
 ### Remaining Risks
 
 - Source verification cannot prove Supabase/Render network latency or a constrained production pool. If production remains slow after the index migration and matching API/Web deploy, capture endpoint duration and pool metrics before changing tracking behaviour.
+
+---
+
+## 2026-07-16 Browser Extension v0.4.2 Timing-Path Audit
+
+### Original Task Brief
+
+- Check the current Browser Extension against the Desktop Agent timing and reporting defects, using source code rather than prior design documents.
+
+### Reviewed Runtime Paths
+
+- MV3 lifecycle, tab/window/idle listeners, checkpoint processing, queue and retry order: `workmap/apps/browser-extension/src/background.ts`.
+- Domain focus/runtime session state and 30-second idle boundary: `workmap/apps/browser-extension/src/domainState.ts`, `workmap/apps/browser-extension/src/domainTracking.ts`, and `workmap/apps/browser-extension/src/contentScript.ts`.
+- Durable local queue and device credential handling: `workmap/apps/browser-extension/src/extensionStorage.ts` and `workmap/apps/browser-extension/src/credentialVault.ts`.
+- API ingestion and Owner Reports current-domain enrichment: `workmap/apps/api/src/modules/activity/activity.service.ts`, `workmap/apps/api/src/modules/reports/reports.service.ts`, and `workmap/apps/web/components/reports/liveUsage.ts`.
+
+### Findings
+
+- The Extension has the same ordering risk that Desktop Agent had before v0.5.10: a checkpoint persists and queues finished Domain slices, then sends a heartbeat, and only then uploads that queue. `/reports` treats the heartbeat as connection freshness while current Domain comes from an already-persisted active slice. The result can be a connected Extension with a temporarily blank or stale current Domain at a checkpoint boundary.
+- This is not the exact Desktop Agent numeric regression. Extension heartbeat does not carry a live Domain duration, so it cannot produce the Agent-specific `6m17s -> 6m0s` display path. Persisted Domain totals are stored through idempotent completed slices and normally remain monotonic after ingestion.
+- Local persistence is present: tracker snapshot, activity queue, and status queue are written to `chrome.storage.local` before network upload. Queue items retain stable client IDs, are capped at 1,000 items / 31 days, retry with bounded exponential backoff, and are removed only after a successful API response. This prevents normal temporary network loss from discarding completed slices.
+- A material collection gap remains: web-host permission is optional and dynamic content-script registration failures are swallowed in the background worker. Without granted HTTP/HTTPS host permission or with failed injection, the Extension can be paired and heartbeat-connected while recording no interaction activity. The current UI does not make this failure state explicit enough.
+- Focus tracking is interaction-based and privacy-minimized. It collects no URL path, title, page body, input, or pointer coordinates. A visible, trusted interaction starts/refreshes one tab's Focus Active window; no new interaction for 30 seconds seals it exactly at the last-interaction-plus-30-second boundary. A browser focus loss, page blur, hidden tab, Chrome idle, or lock seals focus earlier.
+- The implementation intentionally permits bounded parallel Focus Active windows across different tabs/domains. Same-domain open-runtime is deduplicated, but different domains can overlap for their 30-second grace periods. Therefore a sum of per-domain Focus Active seconds can exceed wall-clock online time; Reports must continue to present it as per-domain activity rather than an employee's unique total time.
+- Tab changes rely primarily on the content script's `blur`/`visibilitychange` message. If that message cannot arrive, the prior tab can stay active until the bounded 30-second idle grace expires. This is a bounded overcount risk, not the observed Agent undercount path.
+- The Extension only reports RUNNING, NETWORK_OFFLINE, LOCKED, SERVER_UNREACHABLE, and RECONNECTED. Browser close, disable, uninstall, or service-worker termination cannot reliably generate an explicit user-stop event, so Reports must continue to describe them as inferred signal loss rather than “stopped by user”.
+
+### Required Follow-Up
+
+- Do not treat Browser Extension v0.4.2 as having the Desktop Agent v0.5.10 upload-order fix. A runtime patch should upload newly completed Domain slices before the checkpoint heartbeat, with a regression test covering Reports' current-domain freshness at that boundary.
+- Add explicit host-permission/injection health to options/status and Reports coverage so a paired but non-collecting Extension is diagnosable.
+- No runtime code, API, schema, migration, Desktop Agent, or production environment setting changed in this audit-only round.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/browser-extension test`: passed, 17/17 in 0.94 seconds.
+- Existing tests cover host-only extraction, minimal permissions, trusted interaction events, parallel grace windows, focus loss, idle boundary, durable queue behavior, retries, stable IDs, and MV3 lifecycle markers.
+- Existing tests do not cover checkpoint upload ordering, a paired Extension without host permission, or the Owner Reports current-domain race.
+
+### Manual QA
+
+- Deferred by user, pending final consolidated manual QA. No browser was paired, loaded, or interacted with during this source audit.
 ## 2026-07-16 - Desktop Agent v0.5.9 timing-path audit (analysis only)
 
 - Task: trace the actual Desktop Agent v0.5.9 timing path from Windows sampling through the API and `/reports`, following observed Focus Active display regressions.
@@ -4090,3 +4169,44 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - Confirmed cause: `AppTrackingState` rolls an active focus segment every 10 seconds. The runtime sends a heartbeat containing the newly reset current segment before it uploads the completed previous segment. `/reports` combines persisted summary seconds with the heartbeat's current segment, so the displayed Focus Active total can temporarily fall until the queued completed segment is ingested.
 - Confirmed affected paths: `apps/desktop-agent/src/trackingState.ts`, `apps/desktop-agent/src/runtime.ts`, `apps/desktop-agent/src/windowsForeground.ts`, `apps/api/src/modules/devices/devices.service.ts`, `apps/api/src/modules/activity/activity.service.ts`, `apps/api/src/modules/reports/reports.service.ts`, and `apps/web/components/reports/liveUsage.ts`.
 - Verification: source-level audit completed. No automated command was required because no runtime code changed.
+
+---
+
+## 2026-07-16 Browser Extension v0.4.3 Tracking Reliability Fix
+
+### Original Task Brief
+
+- Implement the complete, detailed Browser Extension remediation for the v0.4.2 audit risks and publish a new v0.4.3 Load-unpacked build.
+
+### Runtime Changes
+
+- `apps/browser-extension/src/background.ts`: completed Domain slices are persisted and uploaded before the checkpoint heartbeat. This removes the connected-but-stale/current-domain race at checkpoint boundaries.
+- `apps/browser-extension/src/domainState.ts`: an active tab now seals the previous active tab in the same browser window immediately. Separate browser windows retain the existing bounded parallel Focus Active behaviour. Idle/locked state prevents media signals from reviving a focus interval until a new direct user interaction occurs.
+- `apps/browser-extension/src/contentScript.ts`: trusted interaction remains the primary signal. Media may renew a session only after a recent trusted interaction while the page is visible and focused; autoplay, background pages, page content, titles, URL paths, query strings, form data, and media metadata are neither collected nor uploaded.
+- `apps/browser-extension/src/extensionStorage.ts` and `src/options.ts`: tracking health is persisted and shown as `ready`, website permission required, or registration failed. Pairing now reports missing HTTP/HTTPS website access instead of silently presenting a paired but non-collecting extension as healthy.
+- Existing v0.4.2 tracker snapshots are read compatibly and migrate naturally to the v4 snapshot on the next write. Durable queue, stable event identity, bounded retry, and credential storage were retained.
+
+### Reports Health Presentation
+
+- `apps/api/src/modules/devices/devices.service.ts` records a tracking-health transition only when its state changes. Repeated retries remain deduplicated.
+- Tracking-health events do not refresh a device `lastSeenAt`; only a real heartbeat/activity path can make Reports show the Extension as currently connected. This preserves upload-order correctness.
+- `apps/api/src/modules/reports/reports.service.ts` and `apps/web/components/reports/ReportSummaryPanel.tsx` expose website-permission/registration failures as a tracking-access problem instead of falsely showing an empty current Domain as a healthy connection.
+
+### Version And Artifact
+
+- Manifest, package metadata, and client metadata: `0.4.3` / `browser-extension-mv3/0.4.3`.
+- Load-unpacked artifact: `workmap/apps/browser-extension/alpha-unpacked`.
+- No Desktop Agent runtime, Prisma schema, migration, credential, or deployment setting changed.
+
+### Verification
+
+- Browser Extension tests: passed, 20/20.
+- Browser Extension typecheck, lint, and build: passed.
+- API tests: passed, 18/18; typecheck, lint, and build: passed.
+- Web typecheck, lint, and build: passed.
+- `git diff --check` and scoped current-diff credential scan: passed.
+
+### Manual QA And Remaining Boundary
+
+- Deferred by user, pending final consolidated manual QA: load v0.4.3 in Chrome/Edge, grant website access, verify a same-window tab switch, two separate browser windows, permission removal/regrant, offline retry, and current Domain display in Reports.
+- MV3 cannot reliably emit an explicit user-stop event for browser close, disable, uninstall, or service-worker eviction. Those remain truthfully represented as inferred signal loss rather than a false "stopped by user" event.

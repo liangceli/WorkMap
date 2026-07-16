@@ -471,7 +471,7 @@ function AgentLiveCard({ status }: { status: WorkMapApiUsageSummary["agentStatus
 }
 
 function BrowserLiveCard({ rows }: { rows: WorkMapApiUsageSummary["browserExtensionCoverage"] }) {
-  const connectedCount = rows.filter((row) => row.state === "connected").length;
+  const connectedCount = rows.filter((row) => row.state === "connected" && !hasBrowserTrackingIssue(row)).length;
   return (
     <article style={{ ...styles.clientCard, ...(connectedCount > 0 ? styles.clientConnected : rows.length > 0 ? styles.clientAttention : {}) }} aria-label="Browser Extension status">
       <div style={styles.clientHeader}>
@@ -490,18 +490,21 @@ function BrowserLiveCard({ rows }: { rows: WorkMapApiUsageSummary["browserExtens
         <div style={styles.browserSignalRows}>
           {rows.map((row) => {
             const connected = row.state === "connected";
+            const trackingIssue = hasBrowserTrackingIssue(row);
             return (
               <div key={row.deviceId} style={styles.browserSignalRow}>
                 <div style={styles.browserIdentity}>
                   {connected ? <Wifi size={15} aria-hidden /> : <WifiOff size={15} aria-hidden />}
                   <strong>{formatBrowserName(row.browserName)}</strong>
-                  <span style={{ ...styles.signalDot, background: connected ? wm.colors.success : wm.colors.error }} />
+                  <span style={{ ...styles.signalDot, background: connected && !trackingIssue ? wm.colors.success : wm.colors.error }} />
                 </div>
                 <div style={styles.domainFocus}>
                   <span style={styles.focusLabel}>Focus-active domain</span>
-                  <strong style={styles.focusValue}>{connected ? row.currentDomain ?? "No active domain" : "Unavailable"}</strong>
+                  <strong style={styles.focusValue}>{!connected ? "Unavailable" : trackingIssue ? trackingStateLabel(row.trackingState) : row.currentDomain ?? "No active domain"}</strong>
                   <span style={styles.focusMeta}>
-                    {row.currentDomainObservedAt
+                    {trackingIssue && row.trackingStatusObservedAt
+                      ? `Tracking status ${formatDateTime(row.trackingStatusObservedAt)}`
+                      : row.currentDomainObservedAt
                       ? `Observed ${formatDateTime(row.currentDomainObservedAt)}`
                       : row.lastSignalAt ? `Last signal ${formatDateTime(row.lastSignalAt)}` : "No signal received"}
                   </span>
@@ -531,7 +534,9 @@ function BrowserExtensionCoveragePanel({ rows }: { rows: WorkMapApiUsageSummary[
           const connected = row.state === "connected";
           return (
             <div key={row.deviceId} style={styles.sessionRow}>
-              <span style={{ ...styles.sessionState, ...(!connected ? styles.sessionInterrupted : {}) }}>{connected ? "Connected" : "Signal lost"}</span>
+              <span style={{ ...styles.sessionState, ...(!connected || hasBrowserTrackingIssue(row) ? styles.sessionInterrupted : {}) }}>
+                {!connected ? "Signal lost" : hasBrowserTrackingIssue(row) ? trackingStateLabel(row.trackingState) : "Connected"}
+              </span>
               <span>{row.displayName} · {formatBrowserName(row.browserName)}</span>
               <span>{row.lastSignalAt ? `Last signal ${formatDateTime(row.lastSignalAt)}` : `Enabled observed ${formatDateTime(row.enabledAt)}`}</span>
               <span>
@@ -602,6 +607,16 @@ function EmployeeConnectionAudit({
       </div>
     </section>
   );
+}
+
+function hasBrowserTrackingIssue(row: WorkMapApiUsageSummary["browserExtensionCoverage"][number]) {
+  return row.trackingState === "permission_required" || row.trackingState === "registration_failed";
+}
+
+function trackingStateLabel(state: WorkMapApiUsageSummary["browserExtensionCoverage"][number]["trackingState"]) {
+  if (state === "permission_required") return "Website access required";
+  if (state === "registration_failed") return "Tracker needs attention";
+  return "Tracking unavailable";
 }
 
 function AuditTimeline({ title, icon, entries, loading }: { title: string; icon: React.ReactNode; entries: AuditEntry[]; loading: boolean }) {

@@ -6,11 +6,12 @@ type OpenDomainTabSnapshot = { domain: string; windowId?: number };
 type ActiveDomainTab = DomainSession & { tabId: number; windowId?: number; lastInputAt: number };
 
 export type DomainTrackerSnapshot = {
-  version: 3;
+  version: 4;
   activeByTab: Record<string, ActiveDomainTab>;
   openTabs: Record<string, OpenDomainTabSnapshot>;
   runtimeByDomain: Record<string, DomainSession>;
   focusedWindowId: number | null;
+  systemIdle: boolean;
 };
 
 type LegacyDomainTrackerSnapshot = Partial<DomainTrackerSnapshot> & {
@@ -29,6 +30,7 @@ export class DomainTrackingState {
   private openTabs: Record<string, OpenDomainTabSnapshot>;
   private runtimeByDomain: Record<string, DomainSession>;
   private focusedWindowId: number | null;
+  private systemIdle: boolean;
 
   constructor(
     snapshot: LegacyDomainTrackerSnapshot = {},
@@ -43,6 +45,7 @@ export class DomainTrackingState {
       Object.entries(snapshot.runtimeByDomain ?? {}).map(([domain, session]) => [domain, { ...session, isIdle: false, isActiveWindow: false }]),
     );
     this.focusedWindowId = Number.isInteger(snapshot.focusedWindowId) ? snapshot.focusedWindowId ?? null : null;
+    this.systemIdle = snapshot.systemIdle === true;
   }
 
   reconcileTabs(tabs: OpenDomainTab[], nowMs: number, deviceId: string, browserName: string) {
@@ -88,7 +91,10 @@ export class DomainTrackingState {
     if (Number.isInteger(windowId)) this.focusedWindowId = windowId ?? null;
     const active = this.activeByTab[String(tabId)];
     if (active && Number.isInteger(windowId)) active.windowId = windowId;
-    return this.advanceActiveSessions(nowMs, deviceId, browserName);
+    return [
+      ...this.stopOtherActiveTabsInWindow(tabId, windowId, nowMs, deviceId, browserName),
+      ...this.advanceActiveSessions(nowMs, deviceId, browserName),
+    ];
   }
 
   setFocusedWindow(windowId: number | null, nowMs: number, deviceId: string, browserName: string) {
@@ -103,7 +109,11 @@ export class DomainTrackingState {
 
   recordInteraction(tabId: number, domain: string, nowMs: number, deviceId: string, browserName: string, windowId?: number) {
     if (!Number.isFinite(nowMs) || !domain) return [];
+    // A trusted page interaction is direct proof that Chrome is no longer idle.
+    // Media-only activity uses recordMediaActivity so a stale timer cannot do this.
+    this.systemIdle = false;
     const events = this.observeTab(tabId, domain, nowMs, deviceId, browserName, windowId);
+    events.push(...this.stopOtherActiveTabsInWindow(tabId, windowId, nowMs, deviceId, browserName));
     events.push(...this.advanceActiveSessions(nowMs, deviceId, browserName));
 
     const key = String(tabId);
@@ -118,6 +128,19 @@ export class DomainTrackingState {
     if (active) events.push(...this.finishActiveTab(tabId, nowMs, deviceId, browserName));
     this.activeByTab[key] = this.startActive(tabId, domain, nowMs, windowId);
     return events;
+  }
+
+  recordMediaActivity(tabId: number, domain: string, nowMs: number, deviceId: string, browserName: string, windowId?: number) {
+    // A page-owned media timer must never revive tracking after the browser has
+    // declared the operating system idle or locked. A new trusted interaction
+    // is required to resume it.
+    if (this.systemIdle) return [];
+    return this.recordInteraction(tabId, domain, nowMs, deviceId, browserName, windowId);
+  }
+
+  setSystemIdle(isIdle: boolean, nowMs: number, deviceId: string, browserName: string) {
+    this.systemIdle = isIdle;
+    return isIdle ? this.stopAllFocus(nowMs, deviceId, browserName) : [];
   }
 
   markIdle(tabId: number, lastInputAt: number, nowMs: number, deviceId: string, browserName: string) {
@@ -161,11 +184,12 @@ export class DomainTrackingState {
 
   snapshot(): DomainTrackerSnapshot {
     return {
-      version: 3,
+      version: 4,
       activeByTab: Object.fromEntries(Object.entries(this.activeByTab).map(([tabId, session]) => [tabId, { ...session }])),
       openTabs: Object.fromEntries(Object.entries(this.openTabs).map(([tabId, tab]) => [tabId, { ...tab }])),
       runtimeByDomain: Object.fromEntries(Object.entries(this.runtimeByDomain).map(([domain, session]) => [domain, { ...session }])),
       focusedWindowId: this.focusedWindowId,
+      systemIdle: this.systemIdle,
     };
   }
 
@@ -173,6 +197,22 @@ export class DomainTrackingState {
     const events: DomainUsageEvent[] = [];
     for (const tabId of Object.keys(this.activeByTab).map(Number)) {
       events.push(...this.advanceActiveTab(tabId, nowMs, deviceId, browserName));
+    }
+    return events;
+  }
+
+  private stopOtherActiveTabsInWindow(
+    tabId: number,
+    windowId: number | undefined,
+    nowMs: number,
+    deviceId: string,
+    browserName: string,
+  ) {
+    if (!Number.isInteger(windowId)) return [];
+    const events: DomainUsageEvent[] = [];
+    for (const [storedTabId, active] of Object.entries(this.activeByTab)) {
+      if (Number(storedTabId) === tabId || active.windowId !== windowId) continue;
+      events.push(...this.finishActiveTab(Number(storedTabId), nowMs, deviceId, browserName));
     }
     return events;
   }

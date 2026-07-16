@@ -6,7 +6,7 @@ const DEVICE_ID = "22222222-2222-4222-8222-222222222222";
 
 test("trusted interactions keep a bounded parallel grace period across domains", () => {
   const tracker = createTracker();
-  assert.deepEqual(tracker.recordInteraction(1, "a.example", 1_000, DEVICE_ID, "CHROME"), []);
+  assert.deepEqual(tracker.recordInteraction(1, "a.example", 1_000, DEVICE_ID, "CHROME", 1), []);
   assert.deepEqual(tracker.recordInteraction(2, "b.example", 11_000, DEVICE_ID, "CHROME", 2), []);
   const switched = tracker.checkpoint(31_000, DEVICE_ID, "CHROME");
   const focusA = switched.find((event) => event.domain === "a.example" && event.isActiveWindow && !event.isIdle);
@@ -17,6 +17,31 @@ test("trusted interactions keep a bounded parallel grace period across domains",
 
   const focusB = switched.find((event) => event.domain === "b.example" && event.isActiveWindow && !event.isIdle);
   assert.equal(focusB?.durationSeconds, 20);
+});
+
+test("activating another tab in the same browser window seals the previous focus immediately", () => {
+  const tracker = createTracker();
+  tracker.recordInteraction(1, "docs.example", 1_000, DEVICE_ID, "EDGE", 7);
+
+  const switched = tracker.activateTab(2, 8_000, DEVICE_ID, "EDGE", 7);
+  const closed = switched.find((event) => event.domain === "docs.example" && event.isActiveWindow);
+  assert.equal(closed?.durationSeconds, 7);
+  assert.equal(closed?.endedAt, "1970-01-01T00:00:08.000Z");
+
+  tracker.recordInteraction(2, "mail.example", 8_000, DEVICE_ID, "EDGE", 7);
+  assert.deepEqual(tracker.checkpoint(9_000, DEVICE_ID, "EDGE").filter((event) => event.domain === "docs.example" && event.isActiveWindow), []);
+});
+
+test("media-only activity cannot restart focus after the browser becomes idle", () => {
+  const tracker = createTracker();
+  tracker.recordInteraction(4, "meeting.example", 1_000, DEVICE_ID, "CHROME", 4);
+  const idle = tracker.setSystemIdle(true, 9_000, DEVICE_ID, "CHROME");
+  assert.equal(idle[0]?.durationSeconds, 8);
+  assert.deepEqual(tracker.recordMediaActivity(4, "meeting.example", 15_000, DEVICE_ID, "CHROME", 4), []);
+
+  tracker.recordInteraction(4, "meeting.example", 16_000, DEVICE_ID, "CHROME", 4);
+  const resumed = tracker.checkpoint(20_000, DEVICE_ID, "CHROME");
+  assert.equal(resumed.find((event) => event.domain === "meeting.example" && event.isActiveWindow)?.durationSeconds, 4);
 });
 
 test("browser focus loss seals every focus-active tab without waiting for a checkpoint", () => {

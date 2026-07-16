@@ -19,6 +19,8 @@ export type ExtensionStatus = {
   queuedEvents: number;
   queuedStatusEvents?: number;
   deviceStatus?: ExtensionDeviceStatusName;
+  trackingState?: "ready" | "permission_required" | "registration_failed";
+  trackingError?: string;
   error?: string;
 };
 
@@ -49,7 +51,12 @@ export type ExtensionDeviceStatusEvent = {
   lastHeartbeatAt?: string;
   timeZone: string;
   confidence: "CONFIRMED" | "INFERRED";
-  metadata?: { operation?: string; networkState?: string; agentVersion?: string };
+  metadata?: {
+    operation?: string;
+    networkState?: string;
+    agentVersion?: string;
+    trackingState?: "ready" | "permission_required" | "registration_failed";
+  };
 };
 
 export type QueuedExtensionStatusEvent = {

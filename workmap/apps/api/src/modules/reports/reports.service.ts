@@ -515,7 +515,7 @@ export class ReportsService {
     if (extensionDevices.length === 0) return [];
     const now = Date.now();
     const deviceIds = extensionDevices.map((device) => device.id);
-    const [outages, recentFocusedDomains] = await Promise.all([
+    const [outages, recentFocusedDomains, trackingEvents] = await Promise.all([
       this.prisma.activityEvent.findMany({
         where: {
           companyId: filter.companyId,
@@ -533,6 +533,16 @@ export class ReportsService {
         deviceIds,
         new Date(now - BROWSER_CURRENT_DOMAIN_FRESH_MS),
       ),
+      this.prisma.deviceStatusEvent.findMany({
+        where: {
+          companyId: filter.companyId,
+          source: DeviceClientType.BROWSER_EXTENSION,
+          deviceId: { in: deviceIds },
+        },
+        orderBy: { recordedAt: "desc" },
+        take: MAX_BROWSER_COVERAGE_EVENTS,
+        select: { deviceId: true, recordedAt: true, metadata: true },
+      }),
     ]);
     const latestOutageByDevice = new Map<string, typeof outages[number]>();
     for (const outage of outages) if (!latestOutageByDevice.has(outage.deviceId)) latestOutageByDevice.set(outage.deviceId, outage);
@@ -543,9 +553,14 @@ export class ReportsService {
         latestFocusedDomainByDevice.set(event.deviceId, event);
       }
     }
+    const latestTrackingEventByDevice = new Map<string, typeof trackingEvents[number]>();
+    for (const event of trackingEvents) {
+      if (!latestTrackingEventByDevice.has(event.deviceId)) latestTrackingEventByDevice.set(event.deviceId, event);
+    }
     return extensionDevices.map((device) => {
       const outage = latestOutageByDevice.get(device.id);
       const focusedDomain = latestFocusedDomainByDevice.get(device.id);
+      const trackingEvent = latestTrackingEventByDevice.get(device.id);
       const lastSignalAt = device.lastSeenAt;
       const connected = Boolean(lastSignalAt && now - lastSignalAt.getTime() <= BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS);
       return {
@@ -563,6 +578,8 @@ export class ReportsService {
           ? outage?.startedAt.toISOString() ?? null
           : lastSignalAt ? new Date(lastSignalAt.getTime() + BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS).toISOString() : device.createdAt.toISOString(),
         coverageRestoredAt: outage?.endedAt?.toISOString() ?? null,
+        trackingState: readBrowserTrackingState(trackingEvent?.metadata),
+        trackingStatusObservedAt: trackingEvent?.recordedAt.toISOString() ?? null,
       };
     });
   }
@@ -858,6 +875,12 @@ export class ReportsService {
     if (!target) throw new NotFoundException("Report target not found.");
     return target.id;
   }
+}
+
+function readBrowserTrackingState(metadata: unknown): "ready" | "permission_required" | "registration_failed" | null {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) return null;
+  const state = (metadata as Record<string, unknown>).trackingState;
+  return state === "ready" || state === "permission_required" || state === "registration_failed" ? state : null;
 }
 
 function resolveReportedAgentState(
