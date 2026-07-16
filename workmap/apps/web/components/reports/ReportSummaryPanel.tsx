@@ -34,7 +34,10 @@ type AuditState = {
 };
 
 const LIVE_REFRESH_MS = 5_000;
-const SUMMARY_REVISION_CHECK_MS = 20_000;
+// The Agent emits durable focus slices every ten seconds. Check the compact
+// revision alongside the five-second live poll so the persisted list replaces
+// a transient heartbeat entry without a visible gap.
+const SUMMARY_REVISION_CHECK_MS = LIVE_REFRESH_MS;
 const AUDIT_REFRESH_MS = 60_000;
 
 export function ReportSummaryPanel() {

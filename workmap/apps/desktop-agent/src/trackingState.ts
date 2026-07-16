@@ -24,6 +24,7 @@ export type TrackingStateOptions = {
   minimumDurationMs?: number;
   maximumSampleGapMs?: number;
   runtimeSegmentMs?: number;
+  focusSegmentMs?: number;
   focusGraceMs?: number;
   createEventId?: () => string;
 };
@@ -40,6 +41,7 @@ export class AppTrackingState {
   private readonly minimumDurationMs: number;
   private readonly maximumSampleGapMs: number;
   private readonly runtimeSegmentMs: number;
+  private readonly focusSegmentMs: number;
   private readonly focusGraceMs: number;
   private readonly createEventId: () => string;
 
@@ -47,6 +49,7 @@ export class AppTrackingState {
     this.minimumDurationMs = options.minimumDurationMs ?? 1;
     this.maximumSampleGapMs = options.maximumSampleGapMs ?? 15_000;
     this.runtimeSegmentMs = options.runtimeSegmentMs ?? 10_000;
+    this.focusSegmentMs = options.focusSegmentMs ?? this.runtimeSegmentMs;
     this.focusGraceMs = options.focusGraceMs ?? DEFAULT_FOCUS_GRACE_MS;
     this.createEventId = options.createEventId ?? randomUUID;
   }
@@ -116,6 +119,7 @@ export class AppTrackingState {
     }
 
     this.currentForegroundApp = appName;
+    completed.push(...this.rollOverFocusSegments(deviceId, nowMs));
     completed.push(...this.observeRuntime(sample, deviceId));
     return completed;
   }
@@ -224,6 +228,30 @@ export class AppTrackingState {
       segment.lastObservedAtMs + this.maximumSampleGapMs,
     );
     return this.toUsageEvent(segment.appName, segment.startedAtMs, safeEndMs, false, true, deviceId);
+  }
+
+  // Persist long-running focus activity in bounded pieces. Waiting for a window
+  // switch or the idle grace expiry made an actively used application appear
+  // only as a transient heartbeat value in Reports.
+  private rollOverFocusSegments(deviceId: string, nowMs: number) {
+    const completed: AppUsageEvent[] = [];
+    for (const segment of this.focusSegments.values()) {
+      if (nowMs - segment.startedAtMs < this.focusSegmentMs) continue;
+      const safeEndMs = Math.min(
+        nowMs,
+        segment.lastInputAtMs + this.focusGraceMs,
+        segment.lastObservedAtMs + this.maximumSampleGapMs,
+      );
+      // Do not manufacture a new segment when the adapter cannot prove that
+      // the existing one remained observable up to this sample.
+      if (safeEndMs !== nowMs) continue;
+      const event = this.toUsageEvent(segment.appName, segment.startedAtMs, safeEndMs, false, true, deviceId);
+      if (!event) continue;
+      completed.push(event);
+      segment.startedAtMs = safeEndMs;
+      segment.lastObservedAtMs = nowMs;
+    }
+    return completed;
   }
 
   private finishIdle(deviceId: string, observedEndMs: number): AppUsageEvent | null {

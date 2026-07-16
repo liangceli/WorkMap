@@ -1,5 +1,178 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Desktop Agent 0.5.9 Runtime Diagram Sync
+
+### Original Task Brief
+
+- Synchronize the Desktop Agent architecture diagram with the 0.5.9 continuous Focus reporting implementation.
+
+### Changed Files
+
+- `docs/designs/workmap-desktop-agent-0.5.9-runtime.drawio`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added a new two-page Draw.io source instead of overwriting the historical 0.5.8 diagram.
+- Page one documents the 0.5.9 release/paired-device continuity, Windows sample inputs, ten-second durable Focus slices, local queues, idempotent Device API upload, and five-second Reports revision replacement path.
+- Page two documents the continuous Focus lifecycle, the distinction between Focus Active and visible-window Open/runtime, all completion boundaries, checkpoint recovery, and the privacy boundary.
+
+### Verification
+
+- Draw.io XML parses as one `mxfile` with two diagrams.
+- Scoped secret scan: pass; no credentials, pairing codes, or database URLs were added.
+- `git diff --check`: pass; only existing CRLF conversion warnings were emitted.
+
+### Manual QA
+
+- Not required for the source-diagram update. The new file has not been manually opened in diagrams.net.
+
+### Intentionally Not Changed
+
+- Desktop Agent runtime, Windows installer, Browser Extension, API/backend, database, Prisma schema/migrations, authentication, deployment, and frontend behavior.
+
+### Remaining Risk And Suggested Next Step
+
+- The historical `workmap-desktop-agent-0.5.8-runtime.drawio` remains accurate for 0.5.8. Use the new 0.5.9 diagram for the current release and for any future implementation review.
+
+## 2026-07-16 Desktop Agent 0.5.9 Continuous Focus Reporting
+
+### Original Task Brief
+
+- Fix the Reports Apps list so a continuously used Desktop Agent application does not appear briefly and then disappear, and so durable App usage accumulates for every application used during the selected report range.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/src/trackingState.ts`
+- `workmap/apps/desktop-agent/test/tracking-state.test.ts`
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/src/pairing.ts`
+- `workmap/apps/desktop-agent/test/gui-release.test.ts`
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- The root cause was a lifecycle mismatch: the Agent exposed the current foreground App immediately through heartbeat, but did not persist active time until an App switch, idle/lock boundary, shutdown, or day boundary. The report could therefore show a short transient row and then an empty Apps list while work continued.
+- `AppTrackingState` now closes and persists a bounded focus-active slice every ten seconds while Windows samples continue to prove activity. Each slice uses the existing durable queue, upload, and server idempotency path; it does not collect a window title, content, input, screenshot, or any new data field.
+- Existing visible-window runtime events remain separate from focus-active time. The existing Reports API combines persisted focus summaries with open/runtime-only App rows, so Apps used in the selected range remain available without treating merely open Apps as focused work.
+- Reports now checks the lightweight activity revision on the existing five-second live refresh cadence. A newly persisted focus slice replaces transient heartbeat-only data without the prior visible blank period.
+- The Windows Agent release version is now `0.5.9` (`desktop-agent-windows/0.5.9`). A new NSIS installer was generated at `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.5.9.exe`.
+
+### Role And Access Behavior
+
+- No report authorization, tenant filtering, API endpoint, database schema, activity aggregation formula, pairing code, device credential, or employee/owner visibility boundary changed.
+- Existing paired 0.5.8 installations retain their local device configuration when 0.5.9 is installed over them; the new build does not require pairing again unless the previous local application data was deliberately removed.
+
+### Verification
+
+- `node_modules/.bin/tsx.CMD --test apps/desktop-agent/test/tracking-state.test.ts`: pass, 11/11.
+- `node_modules/.bin/tsx.CMD --test apps/desktop-agent/test/gui-release.test.ts`: pass, 3/3.
+- `pnpm.cmd --filter @workmap/desktop-agent typecheck`: pass.
+- `pnpm.cmd --filter @workmap/web typecheck`: pass.
+- `pnpm.cmd --filter @workmap/api test -- tracking-reports-verification.test.ts`: pass, 17/17.
+- `pnpm.cmd --filter @workmap/desktop-agent release:windows`: pass in 60 seconds.
+- Artifact existence check: installer is non-empty (91,942,795 bytes) and its blockmap is non-empty.
+- `git diff --check`: pass; only existing CRLF conversion warnings were emitted.
+
+### Manual QA
+
+- Not run against a real employee machine in this round. Manual QA should install 0.5.9 over a paired 0.5.8 Agent, keep one App active for more than 30 seconds, switch to another App, and confirm the selected employee report retains both Apps with growing persisted focus time.
+
+### Intentionally Not Changed
+
+- Browser Extension runtime, API/backend source, Prisma schema/migrations, authentication, device pairing rules, database deployment, report scope semantics, and existing frontend styling outside the five-second revision cadence.
+
+### Remaining Risk And Suggested Next Step
+
+- Source changes do not alter an already installed 0.5.8 executable. Publish and install the 0.5.9 installer to receive this Agent runtime fix; no database migration is required.
+- The next round can proceed after consolidated paired-device manual QA.
+
+## 2026-07-16 Collapsed Sidebar Control And Icon Styling
+
+### Original Task Brief
+
+- Frontend styling only: improve the poorly positioned expand-navigation button in the collapsed authenticated sidebar, enlarge the rail icons, and make their strokes heavier. Do not change any other behavior.
+
+### Changed Files
+
+- `workmap/apps/web/app/workspace-redesign.css`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Moved the collapsed sidebar expand button fully inside the 76px rail and placed it below the WorkMap logo, instead of leaving it floating across the sidebar/content boundary.
+- Enlarged the expand button to `46x42px`, its icon to `23px`, and its stroke to `2.35`.
+- Added reserved top spacing before the collapsed navigation links so the relocated button cannot overlap the first navigation item.
+- Increased collapsed navigation targets from `46px` to `50px`, enlarged navigation icons to `24px`, and increased their stroke to `2.3`.
+- Enlarged and thickened the collapsed logout icon consistently.
+- All changes are limited to collapsed desktop sidebar CSS selectors.
+
+### Role And Access Behavior
+
+- No role filtering, navigation items, routing, authentication, session behavior, click handlers, ARIA labels, or permissions changed.
+
+### Verification
+
+- `pnpm.CMD --filter @workmap/web typecheck`: pass.
+- `pnpm.CMD --filter @workmap/web lint`: pass.
+- `pnpm.CMD --filter @workmap/web build`: pass; existing Next.js ESLint-plugin warning only.
+- `git diff --check`: pass (line-ending conversion warnings only; no whitespace errors).
+- Scoped secret scan of the changed stylesheet and handoff files: pass; no matches.
+
+### Manual QA
+
+- The local site was opened successfully, but `/dashboard` redirected to the public homepage because the local browser had no authenticated workspace session. The collapsed authenticated rail was therefore not visually inspected in-browser during this round.
+
+### Intentionally Not Changed
+
+- React/TSX components, sidebar state persistence, routes, data fetching, backend, API, database, RBAC, Desktop Agent, Browser Extension, and responsive mobile behavior.
+
+### Remaining Risk And Suggested Next Step
+
+- Refresh any authenticated desktop page, collapse the sidebar, and confirm the new under-logo button placement at the normal desktop viewport. The CSS selectors are scoped away from the mobile layout, where the toggle is already hidden.
+- The next round can proceed after that visual confirmation.
+
+## 2026-07-16 Desktop Agent 0.5.8 Runtime Diagram
+
+### Original Task Brief
+
+- Explain the real WorkMap Desktop Agent `0.5.8` runtime behavior and provide a Draw.io diagram.
+
+### Changed Files
+
+- `docs/designs/workmap-desktop-agent-0.5.8-runtime.drawio`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added a two-page Draw.io source file based on the current Electron entry point, Windows foreground adapter, tracking state machine, durable queues, API client, credential store, and status lifecycle code.
+- Page one covers startup, pairing, DPAPI-protected credential storage, Windows sampling, activity segmentation, durable queues, device API uploads, and Reports visibility.
+- Page two covers client-visible status transitions, power events, shutdown/crash recovery, retry classification, queue acknowledgement, and bounded retry behavior.
+- The diagram explicitly records the privacy boundary: normalized application name and duration are collected; window titles, document contents, screenshots, keystrokes, clipboard, and credentials are not collected.
+
+### Verification
+
+- Draw.io XML parsed successfully: two pages and 88 cells.
+- `git diff --check`: pass.
+- Credential-pattern scan of the diagram: pass.
+
+### Manual QA
+
+- Not required for a documentation-only diagram artifact. The diagram has not been manually opened in diagrams.net yet.
+
+### Intentionally Not Changed
+
+- Desktop Agent runtime code, Electron UI, backend APIs, Prisma schema/migrations, credentials, Desktop Agent package/release version, Browser Extension, and deployment.
+
+### Remaining Risk
+
+- The Draw.io diagram is a code-derived explanation, not an executable runtime trace. Production network timing and operating-system-specific edge cases remain subject to normal runtime verification.
+
 ## 2026-07-16 5432 Session-Pool Throughput and Page Request Scope
 
 ### Original Task Brief

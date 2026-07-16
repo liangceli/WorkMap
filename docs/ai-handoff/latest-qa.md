@@ -1,5 +1,119 @@
 # Latest QA Handoff
 
+## 2026-07-16 Desktop Agent 0.5.9 Runtime Diagram QA
+
+### Reviewed Implementation
+
+- Reviewed the new two-page Draw.io source against the 0.5.9 focus-slice runtime, local queues, Device API flow, Reports revision cadence, paired-device continuity, and privacy constraints.
+
+### Findings
+
+- No runtime code changed.
+- The diagram explicitly distinguishes durable ten-second Focus Active slices from visible-window Open/runtime records, which prevents the prior heartbeat-only reporting gap from being misrepresented.
+- The diagram contains no real credential, pairing code, database URL, token, user data, or unapproved collection category.
+
+### Verification Status
+
+- Draw.io XML structural parse: pass, two pages.
+- Scoped credential-pattern scan: pass.
+- `git diff --check`: pass; no whitespace errors.
+
+### Manual QA Status
+
+- Not manually opened in diagrams.net. No application behavior changed.
+
+### Recommendation
+
+- Pass. Use `workmap-desktop-agent-0.5.9-runtime.drawio` as the current architecture reference; retain the 0.5.8 diagram only as release history.
+
+## 2026-07-16 Desktop Agent 0.5.9 Continuous Focus Reporting QA
+
+### Reviewed Implementation
+
+- Reviewed the Desktop Agent focus segmentation change, the Reports revision refresh cadence, the release version propagation, and the generated Windows installer.
+
+### Findings Ordered By Severity
+
+- Critical/high: none found in the scoped diff.
+- Medium: the continuous-focus fix is delivered in a new executable. Any employee who stays on 0.5.8 will retain the old switch/idle/shutdown-only persistence behavior until the 0.5.9 installer is applied.
+- Low: all Apps with visible-window runtime are already recorded through the existing raw event stream, while the Apps summary distinguishes focus-active time from open/runtime time. This is deliberate and avoids representing an unattended open window as active work.
+
+### Test And Verification Status
+
+- Desktop tracking state tests: pass, 11/11, including continuous 10-second focus persistence, idle, resume, app changes, runtime tracking, day boundary, and recovery coverage.
+- Desktop GUI/release tests: pass, 3/3, including the 0.5.9 version assertion.
+- Desktop Agent typecheck: pass.
+- Web typecheck: pass.
+- API tracking/report contract tests: pass, 17/17.
+- Windows NSIS release build: pass in 60 seconds.
+- Installer and blockmap exist and are non-empty.
+- `git diff --check`: pass; no whitespace errors.
+
+### Manual QA Status
+
+- Deferred. No Agent was installed or paired by Codex during this round.
+
+### Risks And Recommendation
+
+- Pass for releasing `WorkMap-Desktop-Agent-Setup-0.5.9.exe`. Deploying the web-only portion improves refresh timing, but the durable focus-slice behavior requires the 0.5.9 Agent executable.
+- No Prisma migration, API deployment, or Browser Extension update is required for this fix.
+
+## 2026-07-16 Collapsed Sidebar Styling QA
+
+### Reviewed Implementation
+
+- Reviewed the collapsed desktop sidebar CSS changes for the expand button, navigation hit areas, icon dimensions, icon stroke width, logout icon consistency, and responsive-selector boundaries.
+
+### Diff Review Summary And Findings Ordered By Severity
+
+- Critical/high/medium: none found in the scoped stylesheet diff.
+- Low: authenticated visual QA was unavailable locally because the existing auth guard redirected the unauthenticated browser to the public homepage. Production build validation passed, but final visual spacing remains a manual check.
+- The implementation changes CSS only; no JSX, state, events, routes, navigation visibility, or access logic changed.
+
+### Test And Verification Status
+
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass.
+- Browser smoke: local site loads; authenticated sidebar state not reached without a valid session.
+- `git diff --check`: pass (line-ending conversion warnings only; no whitespace errors).
+- Scoped secret scan: pass; no matches.
+
+### Manual QA Status
+
+- Partial only. The public local page loaded, but the authenticated collapsed rail could not be rendered in the available browser session.
+
+### Risks And Recommendation
+
+- Low visual-only risk. Pass for deployment after a quick authenticated desktop refresh/collapse check.
+- No functional regression was identified, and the next round can proceed.
+
+## 2026-07-16 Desktop Agent 0.5.8 Runtime Diagram QA
+
+### Reviewed Implementation
+
+- Reviewed the Draw.io source against the current Desktop Agent version, pairing flow, runtime loop, Windows adapter, tracking state, file queues, API client, and Electron lifecycle code.
+
+### Findings
+
+- No runtime code changed. The diagram accurately distinguishes focus-active time, focused-idle time, and open-runtime window segments.
+- The diagram correctly shows that abnormal termination cannot always send a final client event; the next Agent start recovers the local tracking checkpoint while the backend can infer a stale heartbeat interruption.
+- The diagram contains no real device credential, database URL, pairing code, token, or user data.
+
+### Verification Status
+
+- Draw.io XML parse: pass (`2` pages, `88` cells).
+- `git diff --check`: pass.
+- Diagram credential scan: pass.
+
+### Manual QA Status
+
+- Not opened manually in diagrams.net. No browser, Agent, or production QA was run because no runtime behavior changed.
+
+### Recommendation
+
+- The next round can proceed. Open the `.drawio` file in diagrams.net only if a visual layout adjustment is desired; no software deployment or Agent upgrade is associated with this artifact.
+
 ## 2026-07-16 5432 Session-Pool Throughput and Page Request Scope QA
 
 ### Reviewed Implementation

@@ -241,6 +241,23 @@
   gap: 18px !important;
 }
 
+.wm-app-shell.wm-app-shell-collapsed .wm-app-sidebar-toggle {
+  top: 68px;
+  right: auto;
+  left: 15px;
+  width: 46px;
+  height: 42px;
+  border-radius: 12px;
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-sidebar-toggle svg {
+  width: 23px;
+  height: 23px;
+  stroke-width: 2.35;
+}
+
 .wm-app-shell.wm-app-shell-collapsed .wm-app-brand {
   min-width: 0 !important;
   justify-content: center;
@@ -255,12 +272,12 @@
 
 .wm-app-shell.wm-app-shell-collapsed .wm-app-nav-links {
   align-items: center !important;
-  padding: 8px 0 !important;
+  padding: 54px 0 8px !important;
 }
 
 .wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link {
-  width: 46px !important;
-  min-height: 46px !important;
+  width: 50px !important;
+  min-height: 50px !important;
   padding: 0 !important;
   display: grid !important;
   place-items: center !important;
@@ -268,10 +285,16 @@
 }
 
 .wm-app-shell.wm-app-shell-collapsed .wm-app-nav-icon {
-  width: 20px;
-  height: 20px;
+  width: 25px;
+  height: 25px;
   display: grid !important;
   place-items: center;
+}
+
+.wm-app-shell.wm-app-shell-collapsed .wm-app-nav-icon svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.3;
 }
 
 .wm-app-shell.wm-app-shell-collapsed .wm-app-nav-link[aria-current="page"]::before {
@@ -324,6 +347,9 @@
 
 .wm-app-shell.wm-app-shell-collapsed .wm-app-logout-icon {
   display: block;
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.3;
 }
 
 /* Shared product-page language */
