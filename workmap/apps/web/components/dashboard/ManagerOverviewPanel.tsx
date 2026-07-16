@@ -98,7 +98,12 @@ export function ManagerOverviewPanel() {
         const [mapResult, policyResult, usageResult, liveStatusResult, devicesResult] = await Promise.all([
           getVirtualOfficeMap(auth.options),
           getCompliancePolicy(auth.options),
-          getUsageSummary({ ...auth.options, scope: canLoadCompanyReports ? "company" : "user" }),
+          getUsageSummary({
+            ...auth.options,
+            scope: canLoadCompanyReports ? "company" : "user",
+            includeAudit: false,
+            includeLive: false,
+          }),
           canLoadCompanyReports ? getAgentLiveStatus({ ...auth.options, scope: "company" }) : Promise.resolve(null),
           listDevices(auth.options),
         ]);

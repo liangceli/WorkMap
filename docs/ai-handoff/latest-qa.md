@@ -1,5 +1,58 @@
 # Latest QA Handoff
 
+## 2026-07-16 5432 Session-Pool Throughput and Page Request Scope QA
+
+### Reviewed Implementation
+
+- Reviewed the bounded Prisma runtime connection change for Supabase `:5432`, parallelization of independent report reads, and removal of duplicate live/audit usage-summary data from Dashboard and Employees.
+
+### Findings
+
+- The API retains `:5432` session-pool semantics and preserves explicit URL-level `connection_limit` values. The new default is eight, deliberately below both the configured 48 pool slots and the 16-value runtime safety ceiling.
+- Parallelized calls are independent read operations over the same existing filters. No aggregation formula, data shape, authorization decision, or fallback behavior changed.
+- Dashboard and Employees still request their dedicated live status exactly as before; the removed usage-summary enrichments were duplicate data neither page rendered from that endpoint.
+
+### Verification Status
+
+- API tests: pass (`17/17`), including the runtime database URL regression tests.
+- API typecheck: pass.
+- Web typecheck: pass.
+- `git diff --check`: pass.
+
+### Manual QA Status
+
+- Not run against production. Manual validation should compare first load and return navigation for Dashboard, Employees, and Reports after API plus web deployment.
+
+### Risk Assessment
+
+- Low to moderate operational risk: eight connections is intentionally conservative relative to 48 shared Supabase slots, but actual latency also depends on Render cold starts and Supabase regional network performance. No migration or client update is required.
+
+## 2026-07-16 Reports In-Tab Snapshot Reuse QA
+
+### Reviewed Implementation
+
+- Reviewed report cache isolation, cache expiry, background live-status refresh, revision-gated aggregate refresh, audit reuse, and the existing filter-loading transition.
+
+### Findings
+
+- No backend, database, authentication, Agent, Extension, or deployment behavior changed.
+- Snapshots are scoped to the authenticated user and report inputs, remain only in browser memory, and cannot be reused across a different signed-in user or range.
+- A failed background refresh retains the latest successful snapshot instead of replacing it with an empty report page.
+
+### Verification Status
+
+- Web typecheck: pass.
+- `git diff --check`: pass.
+- Secret scan: pass; no secrets found in changed source or handoff files.
+
+### Manual QA Status
+
+- Not run. Confirm rapid Reports -> another application page -> Reports navigation in the browser after deployment.
+
+### Risk Assessment
+
+- Low: a cached historical aggregate can be visible for up to the existing 20-second revision-check window while current Agent/Extension status continues to refresh.
+
 ## 2026-07-16 Web Request Scope and Reports Load Sequencing QA
 
 ### Reviewed Implementation

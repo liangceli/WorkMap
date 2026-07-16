@@ -74,7 +74,14 @@ export default function EmployeesPage() {
         listUsers(auth.options),
         listDevices(auth.options),
         canLoadCompanyReports
-          ? getUsageSummary({ ...auth.options, scope: "company", from: today, to: today })
+          ? getUsageSummary({
+            ...auth.options,
+            scope: "company",
+            from: today,
+            to: today,
+            includeAudit: false,
+            includeLive: false,
+          })
           : Promise.resolve(null),
         canLoadCompanyReports
           ? getAgentLiveStatus({ ...auth.options, scope: "company", from: today, to: today })

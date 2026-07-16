@@ -16,7 +16,7 @@ test("Supabase session pooler is bounded without transaction-pool settings", () 
   const value = resolveRuntimeDatabaseUrl("postgresql://user:example-password@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require");
   const url = new URL(value);
   assert.equal(url.port, "5432");
-  assert.equal(url.searchParams.get("connection_limit"), "1");
+  assert.equal(url.searchParams.get("connection_limit"), "8");
   assert.equal(url.searchParams.get("pool_timeout"), "30");
   assert.equal(url.searchParams.has("pgbouncer"), false);
 });

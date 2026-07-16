@@ -10,6 +10,7 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
 import { mergeLiveUsage } from "./liveUsage";
+import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
 import {
   defaultReportFilters,
   utcToday,
@@ -34,6 +35,7 @@ type AuditState = {
 
 const LIVE_REFRESH_MS = 5_000;
 const SUMMARY_REVISION_CHECK_MS = 20_000;
+const AUDIT_REFRESH_MS = 60_000;
 
 export function ReportSummaryPanel() {
   const [auth, setAuth] = useState<AuthContext | null>(null);
@@ -78,18 +80,55 @@ export function ReportSummaryPanel() {
       setFilters(initialFilters);
       setAppliedFilters(initialFilters);
 
-      // Request current connection state before the historical report. This
-      // avoids holding the entire report page behind range aggregation work.
-      const initialLiveResult = await requestLiveStatus(context, initialFilters, false);
-      if (cancelled) return;
-      if (initialLiveResult.ok) setLiveStatus(initialLiveResult.data);
+      const snapshotKey = reportSnapshotKey(context, initialFilters);
+      const snapshot = readReportSnapshot(snapshotKey);
+      const now = Date.now();
+      if (snapshot?.liveStatus) setLiveStatus(snapshot.liveStatus);
+      if (snapshot?.audit) setAuditState({ loading: false, audit: snapshot.audit });
+      if (snapshot?.summary) {
+        activityRevisionRef.current = snapshot.summary.activityRevision;
+        setReportState({
+          loading: false,
+          summary: snapshot.summary,
+          statusText: snapshot.summary.scope === "company" ? "Company usage summary loaded." : "Personal usage summary loaded.",
+          error: null,
+        });
+      }
 
-      const result = await requestSummary(context, initialFilters);
+      // Live connection state remains current even when a recent report snapshot
+      // is available. Historical aggregation is only refreshed when the cached
+      // revision is stale or has changed.
+      const summaryRevisionDue = !snapshot?.summary || now - snapshot.summaryCachedAt >= SUMMARY_REVISION_CHECK_MS;
+      const initialLiveResult = await requestLiveStatus(context, initialFilters, summaryRevisionDue);
       if (cancelled) return;
-      applyResult(result, setReportState);
-      nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
-      if (result.ok && result.data.scope === "user") {
-        void loadAudit(context, initialFilters, () => cancelled, setAuditState);
+      if (initialLiveResult.ok) {
+        setLiveStatus(initialLiveResult.data);
+        updateReportSnapshot(snapshotKey, { liveStatus: initialLiveResult.data });
+      }
+
+      let loadedSummary = snapshot?.summary ?? null;
+      const refreshSummary = !snapshot?.summary
+        || (summaryRevisionDue && initialLiveResult.ok && initialLiveResult.data.activityRevision !== snapshot.summary.activityRevision);
+      if (refreshSummary) {
+        const result = await requestSummary(context, initialFilters);
+        if (cancelled) return;
+        if (result.ok) {
+          applyResult(result, setReportState);
+          loadedSummary = result.data;
+          updateReportSnapshot(snapshotKey, { summary: result.data });
+          activityRevisionRef.current = result.data.activityRevision;
+        } else if (!snapshot?.summary) {
+          applyResult(result, setReportState);
+        }
+      }
+      nextRevisionCheckAtRef.current = summaryRevisionDue
+        ? Date.now() + SUMMARY_REVISION_CHECK_MS
+        : (snapshot?.summaryCachedAt ?? Date.now()) + SUMMARY_REVISION_CHECK_MS;
+
+      if (loadedSummary?.scope === "user" && (!snapshot?.audit || now - snapshot.auditCachedAt >= AUDIT_REFRESH_MS)) {
+        void loadAudit(context, initialFilters, () => cancelled, setAuditState, (audit) => {
+          updateReportSnapshot(snapshotKey, { audit });
+        });
       }
 
       // The user directory only fills the Owner filter controls. It must not block
@@ -120,6 +159,8 @@ export function ReportSummaryPanel() {
       const result = await requestLiveStatus(auth, appliedFilters, revisionDue);
       if (cancelled || !result.ok) return;
       setLiveStatus(result.data);
+      const snapshotKey = reportSnapshotKey(auth, appliedFilters);
+      updateReportSnapshot(snapshotKey, { liveStatus: result.data });
       if (
         revisionDue
         &&
@@ -132,6 +173,7 @@ export function ReportSummaryPanel() {
           failedSummaryRevisionRef.current = undefined;
           activityRevisionRef.current = summaryResult.data.activityRevision;
           applyResult(summaryResult, setReportState);
+          updateReportSnapshot(snapshotKey, { summary: summaryResult.data });
         } else if (!cancelled) {
           failedSummaryRevisionRef.current = result.data.activityRevision;
         }
@@ -179,14 +221,18 @@ export function ReportSummaryPanel() {
     setReportState((current) => ({ ...current, loading: true, error: null, statusText: "Refreshing report..." }));
     setAuditState({ loading: filters.view !== "company", audit: null });
     failedSummaryRevisionRef.current = undefined;
-    const result = await requestSummary(auth, filters);
-    persistReportFilters(auth.userId, filters);
     setLiveStatus(null);
     setAppliedFilters(filters);
+    const result = await requestSummary(auth, filters);
+    persistReportFilters(auth.userId, filters);
     applyResult(result, setReportState);
+    const snapshotKey = reportSnapshotKey(auth, filters);
+    if (result.ok) updateReportSnapshot(snapshotKey, { summary: result.data });
     nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
     if (result.ok && result.data.scope === "user") {
-      void loadAudit(auth, filters, () => false, setAuditState);
+      void loadAudit(auth, filters, () => false, setAuditState, (audit) => {
+        updateReportSnapshot(snapshotKey, { audit });
+      });
     }
   }
 
@@ -818,6 +864,19 @@ async function requestSummary(auth: AuthContext, filters: ReportFilters) {
   });
 }
 
+function reportSnapshotKey(auth: AuthContext, filters: ReportFilters) {
+  return JSON.stringify([
+    "report-snapshot-v1",
+    auth.userId,
+    auth.role,
+    auth.source,
+    filters.view,
+    filters.departmentId,
+    filters.from,
+    filters.to,
+  ]);
+}
+
 async function requestLiveStatus(auth: AuthContext, filters: ReportFilters, includeRevision = true) {
   const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
   return getAgentLiveStatus({
@@ -835,9 +894,10 @@ async function loadAudit(
   auth: AuthContext,
   filters: ReportFilters,
   isCancelled: () => boolean,
-  setState: (state: AuditState) => void,
+  setState: React.Dispatch<React.SetStateAction<AuditState>>,
+  onLoaded?: (audit: WorkMapApiTrackingAudit) => void,
 ) {
-  setState({ loading: true, audit: null });
+  setState((current) => ({ loading: true, audit: current.audit }));
   const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
   const result = await getTrackingAudit({
     ...auth.options,
@@ -848,7 +908,8 @@ async function loadAudit(
     to: filters.to,
   });
   if (isCancelled()) return;
-  setState({ loading: false, audit: result.ok ? result.data : null });
+  if (result.ok) onLoaded?.(result.data);
+  setState((current) => ({ loading: false, audit: result.ok ? result.data : current.audit }));
 }
 
 async function loadDirectory(

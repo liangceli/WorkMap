@@ -1,5 +1,88 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 5432 Session-Pool Throughput and Page Request Scope
+
+### Original Task Brief
+
+- After Supabase session-pool capacity was raised to 48, keep `:5432`, safely loosen the API's database concurrency, and combine it with the existing frontend cache so authenticated pages load faster without changing product behavior.
+
+### Changed Files
+
+- `workmap/apps/api/src/modules/prisma/prisma.service.ts`
+- `workmap/apps/api/src/modules/reports/reports.service.ts`
+- `workmap/apps/api/test/prisma-runtime-url.test.ts`
+- `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx`
+- `workmap/apps/web/app/employees/page.tsx`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Supabase `:5432` session-pool URLs now default to eight Prisma connections per API instance rather than one. The cap leaves capacity for Render's overlapping deployment instance and other operational connections; it does not consume all 48 Supabase pool slots.
+- An explicit `connection_limit` already present in `DATABASE_URL` remains authoritative. `WORKMAP_PRISMA_CONNECTION_LIMIT` can deliberately override the runtime value only when set to an integer from 1 through 16; no new environment variable is required for the default of eight.
+- Independent Reports aggregates, coverage reads, activity-revision checks, Browser Extension coverage reads, and current-Agent status reads now run concurrently rather than serially. Response shapes, calculations, tenant filtering, role checks, and optional-section fallbacks are unchanged.
+- Dashboard and Employees now request only their displayed report aggregate. They continue to load the existing dedicated live-status endpoint, but no longer also request duplicate live coverage or audit history from the usage-summary endpoint.
+- This compounds the existing browser memory caches: returns to the shell and Reports can render cached data immediately, while the API can service unavoidable fresh reads without the previous one-connection serialization.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/api test`: pass (`17/17`).
+- `pnpm.cmd --filter @workmap/api typecheck`: pass.
+- `pnpm.cmd --filter @workmap/web typecheck`: pass.
+- `git diff --check`: pass before and after the scoped code change.
+
+### Manual QA
+
+- Not run against production. Confirm login, Dashboard, Employees, and Reports response times after deploying both API and web changes.
+
+### Intentionally Not Changed
+
+- Prisma schema/migrations, Supabase schema, API response contracts, Cognito, RBAC, tenant isolation, reports calculations, Desktop Agent, Browser Extension, deployment settings, and production credentials.
+
+### Remaining Risk
+
+- A first-time load, cache expiry, new filter, or actual activity revision still requires current server data. If production monitoring later shows a sustained need for more than eight Prisma connections per Render instance, the bounded runtime override can be adjusted without changing code; it should not be set to the Supabase pool total.
+
+## 2026-07-16 Reports In-Tab Snapshot Reuse
+
+### Original Task Brief
+
+- When navigating away from `/reports` and returning, show the most recent report immediately while live status and changed aggregates refresh in the background. Do not change backend, database, deployment, Desktop Agent, Browser Extension, or report calculations.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/components/reports/reportSnapshotCache.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added a memory-only report snapshot cache scoped by signed-in user, role, auth source, report scope, department, and UTC date range.
+- A fresh snapshot renders immediately on a return to `/reports`; it is never written to browser storage or disk.
+- Live Agent/Extension status still refreshes in the background. Historical aggregation refreshes only when the existing activity-revision check is due and detects a change.
+- User audit data is reused for up to one minute before it is refreshed in the background, preventing audit history from blanking during a refresh.
+- The cache keeps at most 20 snapshots and expires after five minutes without activity.
+- Clicking **Apply filters** still clears the preceding view and shows the existing WorkMap loader for the newly selected scope/range.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/web typecheck`: pass.
+- `git diff --check`: pass.
+- Secret scan: pass; no secrets found in changed source or handoff files.
+
+### Manual QA
+
+- Not run. Browser navigation behavior remains pending manual confirmation.
+
+### Intentionally Not Changed
+
+- API contracts, reports calculations, Cognito, backend, Prisma schema/migrations, production configuration, Desktop Agent, Browser Extension, and deployment.
+
+### Remaining Risk
+
+- The first visit, an expired snapshot, a changed report revision, or a new filter selection still needs the normal server report query. The browser does not manufacture or persist report data.
+
 ## 2026-07-16 Web Request Scope and Reports Load Sequencing
 
 ### Original Task Brief

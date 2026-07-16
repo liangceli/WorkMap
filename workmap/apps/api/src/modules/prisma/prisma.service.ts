@@ -1,6 +1,9 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 
+const DEFAULT_SESSION_POOL_CONNECTION_LIMIT = 8;
+const MAX_RUNTIME_CONNECTION_LIMIT = 16;
+
 export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL) {
   if (!databaseUrl) return undefined;
 
@@ -9,9 +12,9 @@ export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL
     if (!url.hostname.endsWith(".pooler.supabase.com")) return databaseUrl;
 
     if (url.port === "5432") {
-      // Supabase session poolers cap concurrent client sessions. One Prisma
-      // connection keeps a single Render instance from consuming that cap.
-      if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "1");
+      // Keep enough headroom for Render's overlapping deploy instances and
+      // operational connections while allowing report aggregates to run in parallel.
+      applyRuntimeConnectionLimit(url, DEFAULT_SESSION_POOL_CONNECTION_LIMIT);
       if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "30");
       return url.toString();
     }
@@ -19,12 +22,27 @@ export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL
     if (url.port !== "6543") return databaseUrl;
 
     if (!url.searchParams.has("pgbouncer")) url.searchParams.set("pgbouncer", "true");
-    if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "2");
+    applyRuntimeConnectionLimit(url, 2);
     if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "30");
     return url.toString();
   } catch {
     return databaseUrl;
   }
+}
+
+function applyRuntimeConnectionLimit(url: URL, fallback: number) {
+  const configured = parseRuntimeConnectionLimit(process.env.WORKMAP_PRISMA_CONNECTION_LIMIT);
+  if (configured !== null) {
+    url.searchParams.set("connection_limit", `${configured}`);
+  } else if (!url.searchParams.has("connection_limit")) {
+    url.searchParams.set("connection_limit", `${fallback}`);
+  }
+}
+
+function parseRuntimeConnectionLimit(value: string | undefined) {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_RUNTIME_CONNECTION_LIMIT ? parsed : null;
 }
 
 @Injectable()

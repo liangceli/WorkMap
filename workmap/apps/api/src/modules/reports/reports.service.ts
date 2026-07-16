@@ -113,12 +113,15 @@ export class ReportsService {
     // Keep the main app/domain summary independent from live and audit enrichments.
     // Those enrichments touch newer tracking tables and must not turn a readable
     // historical report into a 500 when a client is delayed or a rollout is partial.
-    const summary = await this.getUsageRows(filter);
-    const deviceCoverage = await this.optionalReportSection(
-      "device coverage",
-      () => this.getDeviceCoverage(filter),
-      { registeredDevices: 0, activeDevices24h: 0, usersWithActivity: 0 },
-    );
+    const [summary, deviceCoverage, activityRevision] = await Promise.all([
+      this.getUsageRows(filter),
+      this.optionalReportSection(
+        "device coverage",
+        () => this.getDeviceCoverage(filter),
+        { registeredDevices: 0, activeDevices24h: 0, usersWithActivity: 0 },
+      ),
+      this.optionalReportSection("activity revision", () => this.getActivityRevision(filter), null),
+    ]);
     const browserExtensionCoverage = includeLive
       ? await this.optionalReportSection("browser extension coverage", () => this.getBrowserExtensionCoverage(filter), [])
       : [];
@@ -134,8 +137,6 @@ export class ReportsService {
     const appTimeline = includeAudit
       ? await this.optionalReportSection("desktop app timeline", () => this.getAppTimeline(filter), [])
       : [];
-    const activityRevision = await this.optionalReportSection("activity revision", () => this.getActivityRevision(filter), null);
-
     return {
       scope: "user" satisfies ReportScope,
       userId,
@@ -246,18 +247,19 @@ export class ReportsService {
     });
 
     const filter = { companyId: context.companyId, userIds, range };
-    const summary = await this.getUsageRows(filter);
-    const deviceCoverage = await this.optionalReportSection(
-      "company device coverage",
-      () => this.getDeviceCoverage(filter),
-      { registeredDevices: 0, activeDevices24h: 0, usersWithActivity: 0 },
-    );
+    const [summary, deviceCoverage, employeeUsage, activityRevision] = await Promise.all([
+      this.getUsageRows(filter),
+      this.optionalReportSection(
+        "company device coverage",
+        () => this.getDeviceCoverage(filter),
+        { registeredDevices: 0, activeDevices24h: 0, usersWithActivity: 0 },
+      ),
+      this.getEmployeeUsage(filter),
+      this.optionalReportSection("company activity revision", () => this.getActivityRevision(filter), null),
+    ]);
     const browserExtensionCoverage = includeLive
       ? await this.optionalReportSection("company browser extension coverage", () => this.getBrowserExtensionCoverage(filter), [])
       : [];
-    const employeeUsage = await this.getEmployeeUsage(filter);
-    const activityRevision = await this.optionalReportSection("company activity revision", () => this.getActivityRevision(filter), null);
-
     return {
       scope: "company" satisfies ReportScope,
       userId: null,
@@ -297,36 +299,38 @@ export class ReportsService {
 
   private async getUsageRows(filter: UsageFilter) {
     const where = summaryWhere(filter);
-    const appRows = await this.requiredReportSection("app usage aggregate", () =>
-      this.prisma.appUsageSummary.groupBy({
-        by: ["appName", "category", "productivityLabel"],
-        where,
-        _sum: { activeSeconds: true, idleSeconds: true },
-        orderBy: { _sum: { activeSeconds: "desc" } },
-      }),
-    );
-    const websiteRows = await this.requiredReportSection("domain usage aggregate", () =>
-      this.prisma.websiteUsageSummary.groupBy({
-        by: ["domain", "category", "productivityLabel"],
-        where,
-        _sum: { activeSeconds: true, idleSeconds: true },
-        orderBy: { _sum: { activeSeconds: "desc" } },
-      }),
-    );
-    const appDailyRows = await this.requiredReportSection("daily app usage aggregate", () =>
-      this.prisma.appUsageSummary.groupBy({
-        by: ["date"],
-        where,
-        _sum: { activeSeconds: true, idleSeconds: true },
-        orderBy: { date: "asc" },
-      }),
-    );
-    const appRuntimeRows = await this.optionalReportSection("app open runtime", () => this.getOpenRuntimeRows(filter), []);
-    const domainMetrics = await this.optionalReportSection(
-      "domain activity intervals",
-      () => this.getDomainMetricRows(filter),
-      emptyDomainMetricRows(),
-    );
+    const [appRows, websiteRows, appDailyRows, appRuntimeRows, domainMetrics] = await Promise.all([
+      this.requiredReportSection("app usage aggregate", () =>
+        this.prisma.appUsageSummary.groupBy({
+          by: ["appName", "category", "productivityLabel"],
+          where,
+          _sum: { activeSeconds: true, idleSeconds: true },
+          orderBy: { _sum: { activeSeconds: "desc" } },
+        }),
+      ),
+      this.requiredReportSection("domain usage aggregate", () =>
+        this.prisma.websiteUsageSummary.groupBy({
+          by: ["domain", "category", "productivityLabel"],
+          where,
+          _sum: { activeSeconds: true, idleSeconds: true },
+          orderBy: { _sum: { activeSeconds: "desc" } },
+        }),
+      ),
+      this.requiredReportSection("daily app usage aggregate", () =>
+        this.prisma.appUsageSummary.groupBy({
+          by: ["date"],
+          where,
+          _sum: { activeSeconds: true, idleSeconds: true },
+          orderBy: { date: "asc" },
+        }),
+      ),
+      this.optionalReportSection("app open runtime", () => this.getOpenRuntimeRows(filter), []),
+      this.optionalReportSection(
+        "domain activity intervals",
+        () => this.getDomainMetricRows(filter),
+        emptyDomainMetricRows(),
+      ),
+    ]);
 
     const daily = new Map<string, {
       date: string;
@@ -479,18 +483,20 @@ export class ReportsService {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const identityWhere = identityFilter(filter);
     const eventEndExclusive = addUtcDays(filter.range.to, 1);
-    const devices = await this.prisma.device.findMany({
-      where: { companyId: filter.companyId, ...identityWhere, revokedAt: null },
-      select: { id: true, lastSeenAt: true },
-    });
-    const usersWithActivity = await this.prisma.activityEvent.groupBy({
-      by: ["userId"],
-      where: {
-        companyId: filter.companyId,
-        ...identityWhere,
-        startedAt: { gte: filter.range.from, lt: eventEndExclusive },
-      },
-    });
+    const [devices, usersWithActivity] = await Promise.all([
+      this.prisma.device.findMany({
+        where: { companyId: filter.companyId, ...identityWhere, revokedAt: null },
+        select: { id: true, lastSeenAt: true },
+      }),
+      this.prisma.activityEvent.groupBy({
+        by: ["userId"],
+        where: {
+          companyId: filter.companyId,
+          ...identityWhere,
+          startedAt: { gte: filter.range.from, lt: eventEndExclusive },
+        },
+      }),
+    ]);
 
     return {
       registeredDevices: devices.length,
@@ -509,23 +515,25 @@ export class ReportsService {
     if (extensionDevices.length === 0) return [];
     const now = Date.now();
     const deviceIds = extensionDevices.map((device) => device.id);
-    const outages = await this.prisma.activityEvent.findMany({
-      where: {
-        companyId: filter.companyId,
-        source: ActivityEventSource.BROWSER_EXTENSION,
-        eventType: ActivityEventType.HEARTBEAT,
-        deviceId: { in: deviceIds },
-        endedAt: { gte: new Date(now - BROWSER_COVERAGE_HISTORY_MS) },
-      },
-      orderBy: { endedAt: "desc" },
-      take: MAX_BROWSER_COVERAGE_EVENTS,
-      select: { deviceId: true, startedAt: true, endedAt: true },
-    });
-    const recentFocusedDomains = await this.getRecentFocusedDomains(
-      filter.companyId,
-      deviceIds,
-      new Date(now - BROWSER_CURRENT_DOMAIN_FRESH_MS),
-    );
+    const [outages, recentFocusedDomains] = await Promise.all([
+      this.prisma.activityEvent.findMany({
+        where: {
+          companyId: filter.companyId,
+          source: ActivityEventSource.BROWSER_EXTENSION,
+          eventType: ActivityEventType.HEARTBEAT,
+          deviceId: { in: deviceIds },
+          endedAt: { gte: new Date(now - BROWSER_COVERAGE_HISTORY_MS) },
+        },
+        orderBy: { endedAt: "desc" },
+        take: MAX_BROWSER_COVERAGE_EVENTS,
+        select: { deviceId: true, startedAt: true, endedAt: true },
+      }),
+      this.getRecentFocusedDomains(
+        filter.companyId,
+        deviceIds,
+        new Date(now - BROWSER_CURRENT_DOMAIN_FRESH_MS),
+      ),
+    ]);
     const latestOutageByDevice = new Map<string, typeof outages[number]>();
     for (const outage of outages) if (!latestOutageByDevice.has(outage.deviceId)) latestOutageByDevice.set(outage.deviceId, outage);
     const latestFocusedDomainByDevice = new Map<string, typeof recentFocusedDomains[number]>();
@@ -594,27 +602,28 @@ export class ReportsService {
     const now = Date.now();
     const heartbeatAgeMs = now - session.lastHeartbeatAt.getTime();
     const isFresh = !session.endedAt && heartbeatAgeMs <= AGENT_HEARTBEAT_FRESH_MS;
-    const latestStatusEvent = await this.prisma.deviceStatusEvent.findFirst({
-      where: {
-        companyId: filter.companyId,
-        userId: filter.userId,
-        deviceId: session.deviceId,
-        source: DeviceClientType.DESKTOP_AGENT,
-      },
-      orderBy: { recordedAt: "desc" },
-    });
+    const today = utcDateOnly(new Date());
+    const [latestStatusEvent, todaySummary] = await Promise.all([
+      this.prisma.deviceStatusEvent.findFirst({
+        where: {
+          companyId: filter.companyId,
+          userId: filter.userId,
+          deviceId: session.deviceId,
+          source: DeviceClientType.DESKTOP_AGENT,
+        },
+        orderBy: { recordedAt: "desc" },
+      }),
+      this.prisma.appUsageSummary.aggregate({
+        where: { companyId: filter.companyId, userId: filter.userId, date: today },
+        _sum: { activeSeconds: true },
+      }),
+    ]);
     const state = resolveReportedAgentState(session, latestStatusEvent, isFresh);
     const currentAppDurationSeconds = isFresh && session.currentAppName && session.currentAppStartedAt
       ? Math.max(0, Math.round((Math.min(now, session.lastHeartbeatAt.getTime() + 15_000) - session.currentAppStartedAt.getTime()) / 1000))
       : 0;
     const currentAppActiveSeconds = !session.currentAppIsIdle ? currentAppDurationSeconds : 0;
     const currentAppFocusedIdleSeconds = session.currentAppIsIdle ? currentAppDurationSeconds : 0;
-    const today = utcDateOnly(new Date());
-    const todaySummary = await this.prisma.appUsageSummary.aggregate({
-      where: { companyId: filter.companyId, userId: filter.userId, date: today },
-      _sum: { activeSeconds: true },
-    });
-
     return {
       state,
       sessionId: session.id,
@@ -677,8 +686,10 @@ export class ReportsService {
     // revision check cheap without delaying live device state (which is read
     // directly by getAgentLiveStatus).
     const where = summaryWhere(filter);
-    const app = await this.prisma.appUsageSummary.aggregate({ where, _max: { updatedAt: true } });
-    const domain = await this.prisma.websiteUsageSummary.aggregate({ where, _max: { updatedAt: true } });
+    const [app, domain] = await Promise.all([
+      this.prisma.appUsageSummary.aggregate({ where, _max: { updatedAt: true } }),
+      this.prisma.websiteUsageSummary.aggregate({ where, _max: { updatedAt: true } }),
+    ]);
     const latest = [app._max.updatedAt, domain._max.updatedAt]
       .filter((value): value is Date => Boolean(value))
       .sort((left, right) => right.getTime() - left.getTime())[0];
