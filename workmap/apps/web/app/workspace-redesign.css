@@ -711,11 +711,14 @@
   -webkit-overflow-scrolling: touch;
 }
 
-.wm-compliance-card-grid {
+.wm-compliance-page .wm-compliance-policy > section.wm-compliance-card-grid {
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
   box-shadow: none !important;
+  padding: 0 !important;
 }
 
 /* Settings, integrations, invitations and platform operations */
@@ -1478,6 +1481,17 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+/* Keep the Desktop Agent actions visually aligned with the extension actions. */
+.wm-device-pairing-panel:first-child a[download],
+.wm-device-pairing-panel:first-child button {
+  box-sizing: border-box;
+  align-self: flex-start;
+  min-height: 44px !important;
+  height: 44px;
+  padding: 10px 14px !important;
+  line-height: 20px !important;
 }
 
 /* Invitation, callback and debug utilities */

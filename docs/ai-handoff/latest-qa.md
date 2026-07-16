@@ -1,5 +1,56 @@
 # Latest QA Handoff
 
+## 2026-07-16 Compliance Card-Grid Surface Fix QA
+
+### Reviewed Implementation
+
+- Reviewed the scoped CSS selector for the two direct `.wm-compliance-card-grid` containers on `/compliance`.
+
+### Findings
+
+- No behavior, data, API, or component markup changes were made.
+- The stronger page-scoped selector overrides the generic white-section treatment only for the grid containers, while retaining the individual card surfaces.
+
+### Verification Status
+
+- Scoped CSS diff review: pass.
+- `git diff --check`: pass.
+
+### Manual QA Status
+
+- Not run. Browser confirmation is required after the frontend deployment.
+
+### Recommendation
+
+- Pass for frontend deployment; no functional regression expected from this CSS-only scope.
+
+## 2026-07-16 Device Setup Button Height Alignment QA
+
+### Reviewed Implementation
+
+- Reviewed the first-panel-only CSS rule for the Desktop Agent download and pairing-code actions.
+
+### Findings Ordered By Severity
+
+- Critical/high/medium: none.
+- Low: authenticated screenshot confirmation was not performed locally. The rule is narrowly scoped to the first pairing panel and does not alter either action's behavior.
+
+### Test And Verification Status
+
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass.
+- `git diff --check`: pass (line-ending conversion warnings only; no whitespace errors).
+- Scoped secret scan: pass; no matches.
+
+### Manual QA Status
+
+- Not run in an authenticated browser session.
+
+### Risks And Recommendation
+
+- Pass for deployment as a frontend style-only change. The next round can proceed.
+
 ## 2026-07-16 Desktop Agent 0.5.9 Runtime Diagram QA
 
 ### Reviewed Implementation

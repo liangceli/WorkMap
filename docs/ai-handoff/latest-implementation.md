@@ -1,5 +1,82 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Compliance Card-Grid Surface Fix
+
+### Original Task Brief
+
+- On `/compliance`, remove the white background visible through the gaps between parallel cards. Change styles only.
+
+### Changed Files
+
+- `workmap/apps/web/app/workspace-redesign.css`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Scoped the neutral container reset to direct Compliance card-grid sections.
+- The grid container now explicitly has no surface, background image, border, shadow, or padding. Card content, policy data, acknowledgement behavior, layout breakpoints, and all other pages are unchanged.
+
+### Verification
+
+- Scoped CSS diff reviewed.
+- `git diff --check`: pass.
+
+### Manual QA
+
+- Not run. Refresh `/compliance` after deployment and confirm the card gaps reveal the page background rather than a white container.
+
+### Intentionally Not Changed
+
+- Compliance API, policy acknowledgement, data collection behavior, authentication, backend, database, Desktop Agent, Browser Extension, and deployment.
+
+### Remaining Risk
+
+- Visual confirmation remains deferred until the frontend deployment is viewed in a browser.
+
+## 2026-07-16 Device Setup Button Height Alignment
+
+### Original Task Brief
+
+- Frontend styling only: make the left Desktop Agent action buttons in `/onboarding/device-setup` match the compact visual treatment of the Browser Extension action buttons on the right. Do not change functionality.
+
+### Changed Files
+
+- `workmap/apps/web/app/workspace-redesign.css`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Scoped a style rule to the first (Desktop Agent) pairing panel only.
+- Fixed its download link and pairing-code button to the same compact `44px` height, `10px 14px` padding, and `20px` line height used by the right-side actions.
+- Added border-box sizing and start alignment so the left action row cannot stretch either control into the oversized treatment shown in the screenshot.
+
+### Role And Access Behavior
+
+- No download URL, pairing-code creation, disabled state, status message, authentication, role, routing, API, or data behavior changed.
+
+### Verification
+
+- `pnpm.CMD --filter @workmap/web typecheck`: pass.
+- `pnpm.CMD --filter @workmap/web lint`: pass.
+- `pnpm.CMD --filter @workmap/web build`: pass; existing Next.js ESLint-plugin warning only.
+- `git diff --check`: pass (line-ending conversion warnings only; no whitespace errors).
+- Scoped secret scan of changed style and handoff files: pass; no matches.
+
+### Manual QA
+
+- Not run in an authenticated browser session. This is a stylesheet-only, first-panel-scoped layout correction.
+
+### Intentionally Not Changed
+
+- `device-setup/page.tsx`, component logic, download links, pairing interactions, AppShell/sidebar styling, APIs, database, RBAC, Desktop Agent, Browser Extension, and deployment.
+
+### Remaining Risk And Suggested Next Step
+
+- Low visual-only risk. Refresh `/onboarding/device-setup` and confirm both left buttons now have the same compact height as the right action row.
+- The next round can proceed.
+
 ## 2026-07-16 Desktop Agent 0.5.9 Runtime Diagram Sync
 
 ### Original Task Brief
