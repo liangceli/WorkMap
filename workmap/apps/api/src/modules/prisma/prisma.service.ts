@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 
 export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL) {
@@ -28,18 +28,25 @@ export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL
 }
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService extends PrismaClient implements OnModuleDestroy {
+  private readonly logger = new Logger(PrismaService.name);
+
   constructor() {
     const runtimeDatabaseUrl = resolveRuntimeDatabaseUrl();
     super(runtimeDatabaseUrl ? { datasources: { db: { url: runtimeDatabaseUrl } } } : undefined);
   }
 
-  async onModuleInit() {
-    await this.connectWithRetry();
-  }
-
   async onModuleDestroy() {
     await this.$disconnect();
+  }
+
+  async connectAfterStartup() {
+    try {
+      await this.connectWithRetry();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown database connection error";
+      this.logger.warn(`Database remains unavailable after startup retry: ${message}`);
+    }
   }
 
   private async connectWithRetry() {

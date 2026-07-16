@@ -1,5 +1,43 @@
 # Latest Implementation Handoff
 
+## 2026-07-16 Render Zero-Downtime Session-Pool Recovery
+
+### Original Task Brief
+
+- Resolve the repeated Render deployment failure after the API already limits its own Supabase `:5432` session-pool usage.
+
+### Changed Files
+
+- `workmap/apps/api/src/main.ts`
+- `workmap/apps/api/src/modules/prisma/prisma.service.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Removed the blocking Prisma connection attempt from Nest module initialization, so the API can bind its Render port before attempting database recovery.
+- After the HTTP server is listening, Prisma performs the same bounded transient connection retry in the background. This allows Render to retire the previous instance and release its Supabase session connection instead of creating a replacement deadlock.
+- `/health/readiness` still executes a real database query and returns `503 not_ready` until the database connection is available; `/health` remains the process liveness endpoint.
+
+### Intentionally Not Changed
+
+- Supabase connection host/port configuration, database schema, migrations, API contracts, reports behavior, Cognito, Desktop Agent, and Browser Extension.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/api test`: pass (`17/17`).
+- `pnpm.cmd --filter @workmap/api typecheck`: pass.
+- `pnpm.cmd --filter @workmap/api lint`: pass.
+- `pnpm.cmd --filter @workmap/api build`: pass.
+
+### Manual QA
+
+- Pending a Render deployment. Keep `DATABASE_URL` on the existing Supabase pooler port `5432`.
+
+### Remaining Risk
+
+- If a Render health-check path has been manually set to `/health/readiness`, it will correctly remain unhealthy until a session is freed. The Render service must use `/health` or no explicit health-check path for zero-downtime replacement.
+
 ## 2026-07-16 Render Session Pool Startup Recovery
 
 ### Original Task Brief

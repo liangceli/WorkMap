@@ -1,5 +1,31 @@
 # Latest QA Handoff
 
+## 2026-07-16 Render Zero-Downtime Session-Pool Recovery QA
+
+### Reviewed Implementation
+
+- Deferred Prisma startup connection after HTTP port binding, preserving database-aware readiness.
+
+### Findings
+
+- The second Render log proves the connection limit and retry code was deployed, but all session-pool slots were still unavailable before Nest could call `listen`.
+- Moving recovery after `app.listen` removes the deployment gate without hiding database health. This specifically addresses a replacement instance competing with the old instance for a full Supabase session pool.
+
+### Verification Status
+
+- API tests: pass (`17/17`).
+- API typecheck: pass.
+- API lint: pass.
+- API build: pass.
+
+### Manual QA Status
+
+- Pending Render deploy and `/health` plus `/health/readiness` verification.
+
+### Recommendation
+
+- Deploy this backend-only change with port `5432` unchanged. Verify Render does not use `/health/readiness` as its deployment health-check path; it is intentionally a database readiness endpoint.
+
 ## 2026-07-16 Render Session Pool Startup Recovery QA
 
 ### Reviewed Implementation

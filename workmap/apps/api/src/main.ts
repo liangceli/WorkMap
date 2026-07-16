@@ -2,6 +2,7 @@ import "./load-local-env.js";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
 import { getAllowedOrigins, isAllowedOrigin } from "./config/allowed-origins.js";
+import { PrismaService } from "./modules/prisma/prisma.service.js";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -20,6 +21,7 @@ async function bootstrap() {
   }
 
   await app.listen(port);
+  void app.get(PrismaService).connectAfterStartup();
 }
 
 void bootstrap();
