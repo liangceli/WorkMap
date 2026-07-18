@@ -163,6 +163,17 @@ export type TrackingSyncResponseV2 = {
   serverTime: string;
   activePolicyVersion: string;
   activePolicyLeaseId: string | null;
+  requestId: string;
+};
+
+export type TrackingSyncDiagnosticV2 = {
+  requestId: string;
+  attemptedAt: string;
+  completedAt: string;
+  intervalCount: number;
+  httpStatus: number | null;
+  errorCode: string | null;
+  outcome: "CONFIRMED" | "FAILED";
 };
 
 export type ProtocolV2PrepareResponse = {
@@ -230,6 +241,8 @@ export type DesktopTrackingRuntimeStateV2 = {
   lastSuccessfulSyncAt: string | null;
   lastSuccessfulHeartbeatAt: string | null;
   lastErrorCode: TrackingHealthErrorCodeV2;
+  lastSyncDiagnostic: TrackingSyncDiagnosticV2 | null;
+  recentSyncFailures: TrackingSyncDiagnosticV2[];
 };
 
 export type DesktopV2QueueStats = {

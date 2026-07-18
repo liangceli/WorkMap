@@ -151,6 +151,7 @@ export type TrackingSyncResponseV2 = {
   serverTime: string;
   activePolicyVersion: string;
   activePolicyLeaseId: string | null;
+  requestId: string;
 };
 
 export type TrackingValidationIssueV2 = {

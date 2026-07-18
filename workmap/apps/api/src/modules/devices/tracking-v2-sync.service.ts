@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
+  Logger,
 } from "@nestjs/common";
 import {
   BrowserName,
@@ -88,13 +89,26 @@ type StoredIntervalIdentity = {
 
 @Injectable()
 export class TrackingV2SyncService {
+  private readonly logger = new Logger(TrackingV2SyncService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly policyService: TrackingV2PolicyService,
   ) {}
 
-  async sync(context: DeviceRequestContext, input: unknown) {
+  async sync(
+    context: DeviceRequestContext,
+    input: unknown,
+    requestId: string = randomUUID(),
+  ) {
+    const startedAtMs = Date.now();
+    let stage: TrackingV2SyncStage = "parse";
+    let intervalCount = 0;
+
+    try {
     const request = parseSyncRequest(input);
+    intervalCount = request.intervals.length;
+    stage = "policy";
     const identity = await this.policyService.requireV2DeviceIdentity(context);
     if (!identity.protocolActivatedAt) {
       throw new HttpException(
@@ -177,6 +191,7 @@ export class TrackingV2SyncService {
       );
     }
 
+    stage = "transaction";
     const transactionResult = await this.prisma.$transaction(
       async (tx) => {
         const laneKeys = collectLaneKeys(
@@ -379,6 +394,7 @@ export class TrackingV2SyncService {
     );
     // Reconciliation is performed by the background worker. A slow or failed
     // aggregate refresh must not delay an accepted client upload or heartbeat.
+    stage = "response";
     return {
       results: transactionResult.results,
       cursors: transactionResult.cursors,
@@ -387,8 +403,62 @@ export class TrackingV2SyncService {
       serverTime: now.toISOString(),
       activePolicyVersion: activePolicy?.policyVersion ?? "",
       activePolicyLeaseId: activeLease?.id ?? null,
+      requestId,
     };
+    } catch (error) {
+      const status = error instanceof HttpException ? error.getStatus() : 500;
+      const code = trackingSyncErrorCode(error, status);
+      this.logger.warn(JSON.stringify({
+        event: "tracking_v2_sync",
+        outcome: "failed",
+        requestId,
+        stage,
+        intervalCount,
+        status,
+        code,
+        durationMs: Date.now() - startedAtMs,
+      }));
+      throw withTrackingSyncRequestId(error, requestId, status, code);
+    }
   }
+}
+
+type TrackingV2SyncStage = "parse" | "policy" | "transaction" | "response";
+
+function trackingSyncErrorCode(error: unknown, status: number) {
+  if (error instanceof HttpException) {
+    const response = error.getResponse();
+    if (typeof response === "object" && response !== null && !Array.isArray(response)) {
+      const code = (response as Record<string, unknown>).code;
+      if (typeof code === "string" && /^[A-Z0-9_-]{1,80}$/.test(code)) return code;
+    }
+  }
+  return status >= 500 ? "TRACKING_SYNC_INTERNAL" : `HTTP_${status}`;
+}
+
+function withTrackingSyncRequestId(
+  error: unknown,
+  requestId: string,
+  status: number,
+  code: string,
+) {
+  if (error instanceof HttpException) {
+    const response = error.getResponse();
+    const body =
+      typeof response === "object" && response !== null && !Array.isArray(response)
+        ? response
+        : { statusCode: status, message: response };
+    return new HttpException({ ...body, requestId }, status);
+  }
+  return new HttpException(
+    {
+      statusCode: status,
+      message: "Tracking sync could not be completed.",
+      code,
+      requestId,
+    },
+    status,
+  );
 }
 
 function parseSyncRequest(input: unknown): TrackingSyncRequestV2 {

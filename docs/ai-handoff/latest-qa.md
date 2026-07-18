@@ -3171,6 +3171,32 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 
 - Deferred by user, pending final consolidated manual QA. No production deployment, Windows installation, browser loading, pairing, or live authenticated report session was performed in this task.
 
+---
+
+## 2026-07-19 V2 Sync Correlation Diagnostics QA
+
+### Reviewed Implementation
+
+- Reviewed the new request-ID propagation from Desktop Agent to `POST /device-client/sync-v2`, API validation and safe response echoing, structured stage-level failure logging, and Agent durable diagnostic persistence.
+
+### Findings Ordered By Severity
+
+- Fixed - High diagnostic gap: a local queued batch and a Render failure could not previously be correlated without inspecting sensitive request details. Both sides now retain the same UUID and safe stage/status metadata.
+- Remaining - Expected boundary: credential rejection can occur in the guard before the sync service. The Agent still stores its generated ID and HTTP status, but there is no sync-service stage log for a request that never reaches the controller.
+- Existing unrelated test gap: `tracking-reports-verification.test.ts` uses a historical input that now violates the existing activity age guard; it is not caused by this change.
+
+### Test And Verification Status
+
+- Shared typecheck passed.
+- API typecheck and production build passed.
+- Desktop Agent typecheck, 49/49 package tests, and Windows build passed.
+- New API request-ID test passed 2/2.
+- `git diff --check` passed and the changed-diff credential-pattern scan was clean.
+
+### Recommendation
+
+- Pass for source-level diagnostics. Proceed with a coordinated API plus Desktop Agent deployment, then capture the safe request ID from local diagnostic state and the Render log if a sync fails.
+
 ### Recommendation
 
 - Pass for source, focused automated verification, and Alpha artifact generation. Proceed only with a coordinated non-production validation of the migration/API/Web/client rollout before any production claim.

@@ -14,6 +14,7 @@ export class AgentApiError extends Error {
     readonly responseMessage?: string,
     readonly responseCode?: string,
     readonly retryAfterMs?: number,
+    readonly requestId?: string,
   ) {
     super(message);
   }
@@ -143,6 +144,7 @@ export function confirmProtocolV2(
 export function syncTrackingV2(
   config: AgentConfig,
   request: TrackingSyncRequestV2,
+  requestId: string,
 ) {
   return requestJson<TrackingSyncResponseV2>(
     config.apiBaseUrl,
@@ -150,6 +152,7 @@ export function syncTrackingV2(
     config.credential,
     request,
     15_000,
+    { requestId },
   );
 }
 
@@ -174,7 +177,7 @@ async function requestJson<T>(
   credential: string | undefined,
   body: unknown,
   timeoutMs = 10_000,
-  options: { retries?: number; method?: "GET" | "POST" } = {},
+  options: { retries?: number; method?: "GET" | "POST"; requestId?: string } = {},
 ): Promise<T> {
   const retries = Math.max(0, Math.floor(options.retries ?? 0));
   let attempt = 0;
@@ -187,6 +190,7 @@ async function requestJson<T>(
           Accept: "application/json",
           ...(options.method === "GET" ? {} : { "Content-Type": "application/json" }),
           ...(credential ? { Authorization: `Device ${credential}` } : {}),
+          ...(options.requestId ? { "X-WorkMap-Request-Id": options.requestId } : {}),
         },
         ...(options.method === "GET" ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(timeoutMs),
@@ -212,6 +216,7 @@ async function requestJson<T>(
         detail.message,
         detail.code,
         readRetryAfterMs(response),
+        detail.requestId ?? options.requestId,
       );
       if ((response.status >= 500 || response.status === 429) && attempt < retries) {
         await retryDelay(attempt);
@@ -235,9 +240,11 @@ async function readErrorDetail(response: Response) {
       const parsed = JSON.parse(text) as unknown;
       const message = extractErrorMessage(parsed);
       const code = extractErrorCode(parsed);
+      const requestId = extractRequestId(parsed);
       return {
         ...(message ? { message: sanitizeErrorDetail(message) } : {}),
         ...(code ? { code: sanitizeErrorCode(code) } : {}),
+        ...(requestId ? { requestId } : {}),
       };
     } catch {
       // Fall back to the raw text below.
@@ -262,6 +269,14 @@ function extractErrorCode(value: unknown): string | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   const body = value as Record<string, unknown>;
   return typeof body.code === "string" ? body.code : undefined;
+}
+
+function extractRequestId(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const requestId = (value as Record<string, unknown>).requestId;
+  return typeof requestId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)
+    ? requestId.toLowerCase()
+    : undefined;
 }
 
 function sanitizeErrorDetail(value: string) {

@@ -1,4 +1,4 @@
-import type { TrackingMigrationStateV2 } from "./trackingV2Types.js";
+import type { TrackingMigrationStateV2, TrackingSyncDiagnosticV2 } from "./trackingV2Types.js";
 
 export type AgentConfig = {
   apiBaseUrl: string;
@@ -132,5 +132,7 @@ export type AgentStatus = {
   trackingMigrationState?: TrackingMigrationStateV2;
   lastStatusUploadAt?: string;
   deviceStatus?: DeviceStatusName;
+  lastSyncDiagnostic?: TrackingSyncDiagnosticV2 | null;
+  recentSyncFailureCount?: number;
   error?: string;
 };

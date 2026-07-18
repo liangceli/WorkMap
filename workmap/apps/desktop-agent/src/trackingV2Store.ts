@@ -268,6 +268,8 @@ export function createInitialDesktopTrackingV2State(): DesktopTrackingRuntimeSta
     lastSuccessfulSyncAt: null,
     lastSuccessfulHeartbeatAt: null,
     lastErrorCode: "NONE",
+    lastSyncDiagnostic: null,
+    recentSyncFailures: [],
   };
 }
 

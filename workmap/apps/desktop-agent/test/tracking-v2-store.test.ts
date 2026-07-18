@@ -88,6 +88,12 @@ test("v2 queue survives process restart until server acknowledgement", async () 
   }
 });
 
+test("v2 runtime state starts with empty safe sync diagnostics", () => {
+  const state = createInitialDesktopTrackingV2State();
+  assert.equal(state.lastSyncDiagnostic, null);
+  assert.deepEqual(state.recentSyncFailures, []);
+});
+
 function interval(clientEventId: string, sequenceNumber: number): ActivityIntervalV2 {
   const startedAtMs = (sequenceNumber - 1) * 15_000;
   return {

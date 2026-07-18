@@ -38,6 +38,7 @@ import {
   type TrackingConnectionStateV2,
   type TrackingHealthErrorCodeV2,
   type TrackingPolicyStateV2,
+  type TrackingSyncDiagnosticV2,
   type TrackingSyncRequestV2,
 } from "./trackingV2Types.js";
 import type {
@@ -107,7 +108,15 @@ export class DesktopAgentRuntimeV2 {
     this.legacyQueue = options.legacyQueue ?? new FileEventQueue();
     this.statusQueue = options.statusQueue ?? new FileStatusEventQueue();
     this.statusWriter = options.statusWriter ?? writeAgentStatus;
-    this.state = this.store.readRuntimeState() ?? createInitialDesktopTrackingV2State();
+    const persistedState = this.store.readRuntimeState();
+    this.state = {
+      ...createInitialDesktopTrackingV2State(),
+      ...persistedState,
+      lastSyncDiagnostic: persistedState?.lastSyncDiagnostic ?? null,
+      recentSyncFailures: Array.isArray(persistedState?.recentSyncFailures)
+        ? persistedState.recentSyncFailures.slice(0, 10)
+        : [],
+    };
   }
 
   async run() {
@@ -530,8 +539,10 @@ export class DesktopAgentRuntimeV2 {
         ? { focusSnapshot: this.state.latestSnapshot }
         : {}),
     };
+    const requestId = randomUUID();
+    const attemptedAt = new Date(serverNow(this.state)).toISOString();
     try {
-      const response = await syncTrackingV2(this.config, request);
+      const response = await syncTrackingV2(this.config, request, requestId);
       this.applyServerClock(response.serverTime);
       const acknowledged = response.results
         .filter((result) => result.status === "ACCEPTED" || result.status === "DUPLICATE")
@@ -567,9 +578,27 @@ export class DesktopAgentRuntimeV2 {
         lastSuccessfulSyncAt: syncedAt,
         lastSuccessfulHeartbeatAt: syncedAt,
         lastErrorCode: "NONE",
+        lastSyncDiagnostic: {
+          requestId: response.requestId ?? requestId,
+          attemptedAt,
+          completedAt: syncedAt,
+          intervalCount: intervals.length,
+          httpStatus: 200,
+          errorCode: null,
+          outcome: "CONFIRMED",
+        },
       };
       this.store.writeRuntimeState(this.state);
     } catch (error) {
+      this.recordSyncFailure({
+        requestId: error instanceof AgentApiError ? error.requestId ?? requestId : requestId,
+        attemptedAt,
+        completedAt: new Date(serverNow(this.state)).toISOString(),
+        intervalCount: intervals.length,
+        httpStatus: error instanceof AgentApiError ? error.status ?? null : null,
+        errorCode: syncFailureCode(error),
+        outcome: "FAILED",
+      });
       const ids = intervals.map((interval) => interval.clientEventId);
       if (error instanceof AgentApiError && (error.status === 401 || error.status === 403)) {
         this.connectionState = "AUTH_REQUIRED";
@@ -595,6 +624,20 @@ export class DesktopAgentRuntimeV2 {
       await this.applyFailure(error, false);
     }
     await this.updateUiStatus();
+  }
+
+  private recordSyncFailure(diagnostic: TrackingSyncDiagnosticV2) {
+    this.state = {
+      ...this.state,
+      lastSyncDiagnostic: diagnostic,
+      recentSyncFailures: [
+        diagnostic,
+        ...this.state.recentSyncFailures.filter(
+          (existing) => existing.requestId !== diagnostic.requestId,
+        ),
+      ].slice(0, 10),
+    };
+    this.store.writeRuntimeState(this.state);
   }
 
   private async flushLegacyQueue() {
@@ -808,6 +851,8 @@ export class DesktopAgentRuntimeV2 {
       queuedStatusEvents: this.statusQueue.size(),
       queuedLegacyEvents: this.legacyQueue.size(),
       trackingMigrationState: this.state.migrationState,
+      lastSyncDiagnostic: this.state.lastSyncDiagnostic,
+      recentSyncFailureCount: this.state.recentSyncFailures.length,
       error,
     });
   }
@@ -917,6 +962,13 @@ function policyLeaseValid(policy: DeviceTrackingPolicyV2, nowMs: number) {
 
 function serverNow(state: DesktopTrackingRuntimeStateV2) {
   return Date.now() + state.serverOffsetMs;
+}
+
+function syncFailureCode(error: unknown) {
+  if (error instanceof AgentApiError) {
+    return error.responseCode ?? (error.status ? `HTTP_${error.status}` : "NETWORK_ERROR");
+  }
+  return "UNKNOWN";
 }
 
 function shutdownLifecycle(reason: ShutdownReason): {

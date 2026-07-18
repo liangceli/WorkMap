@@ -4694,6 +4694,41 @@ Correct the password visibility eye button so it aligns inside the right edge of
 
 ---
 
+## 2026-07-19 V2 Sync Correlation Diagnostics
+
+### Original Task Brief
+
+- Add a safe correlation path for a failed Desktop Agent `sync-v2` upload so the Agent and Render logs identify the same request without exposing credentials or activity payloads.
+
+### Runtime Change
+
+- The Desktop Agent generates one UUID request ID per `sync-v2` batch and sends it only in the `X-WorkMap-Request-Id` header.
+- The API validates or replaces that header, returns the canonical ID on both success and handled failure, and emits one compact failure log with `requestId`, last reached stage (`parse`, `policy`, `transaction`, or `response`), interval count, safe code/status, and elapsed time.
+- The Agent persists the latest sync diagnostic and up to ten recent failures in its existing local v2 state. It records only request ID, timestamps, batch count, HTTP status, and safe error code; no credential, window title, URL, or activity payload is stored in diagnostics.
+
+### Changed Files
+
+- API correlation and structured failure logging: `workmap/apps/api/src/modules/devices/device-client.controller.ts`, `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`, and `workmap/apps/api/test/tracking-v2-sync-request-id.test.ts`.
+- Desktop request header, error parsing, and durable diagnostic state: `workmap/apps/desktop-agent/src/apiClient.ts`, `src/runtimeV2.ts`, `src/trackingV2Types.ts`, `src/trackingV2Store.ts`, `src/types.ts`, and `test/tracking-v2-store.test.ts`.
+- Shared sync response contract: `workmap/packages/shared-types/src/tracking-v2.ts`.
+
+### Verification
+
+- Shared types typecheck passed.
+- API typecheck and production build passed.
+- Desktop Agent typecheck, focused/full package tests (49/49), and Windows build passed.
+- The new API correlation-ID test passed (2/2).
+- The full API package suite was also run: 23 tests passed and one existing report-verification fixture failed because its fixed historical activity timestamp is now older than the service's allowed ingestion window. This diagnostic change does not touch ingestion age validation.
+- `git diff --check` and a high-confidence changed-diff credential scan passed. CRLF notices were informational only.
+
+### Manual QA, Scope, And Remaining Risk
+
+- No database migration, schema migration, deployment configuration, credential, queue/retry behavior, or tracking time-calculation rule was changed.
+- A deployed API and a rebuilt Desktop Agent are required before live failures can be correlated. Failures rejected by credential authentication before the controller may retain the Agent-generated ID but cannot produce a service-stage log, by design.
+- Manual live correlation is deferred until a controlled failed/successful sync can be observed after the coordinated API and Agent release.
+
+---
+
 ## 2026-07-18 Paired Client Activation Recovery
 
 ### Original Task Brief

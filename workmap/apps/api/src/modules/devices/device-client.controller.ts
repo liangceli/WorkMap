@@ -1,5 +1,6 @@
-import { Body, Controller, ForbiddenException, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Headers, Post, UseGuards } from "@nestjs/common";
 import { DeviceClientType } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@workmap/auth";
 import { ActivityService } from "../activity/activity.service.js";
 import { CurrentDeviceContext, type DeviceRequestContext } from "./device-context.js";
@@ -67,8 +68,13 @@ export class DeviceClientController {
   syncV2(
     @CurrentDeviceContext() context: DeviceRequestContext,
     @Body() body: unknown,
+    @Headers("x-workmap-request-id") requestIdHeader?: string,
   ) {
-    return this.trackingSync.sync(context, body);
+    return this.trackingSync.sync(
+      context,
+      body,
+      normalizeTrackingSyncRequestId(requestIdHeader),
+    );
   }
 
   @Post("heartbeat")
@@ -118,6 +124,13 @@ export class DeviceClientController {
 
 function toRequestContext(context: DeviceRequestContext): RequestContext {
   return { companyId: context.companyId, userId: context.userId, role: context.role };
+}
+
+export function normalizeTrackingSyncRequestId(value: string | undefined) {
+  const requestId = value?.trim();
+  return requestId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)
+    ? requestId.toLowerCase()
+    : randomUUID();
 }
 
 function assertClientType(context: DeviceRequestContext, expected: DeviceClientType) {
