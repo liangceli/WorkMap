@@ -27,6 +27,33 @@
 - Pass for API-only deployment to decouple acceptance from aggregation and restore retry responsiveness.
 - Do not call reconciliation complete until the post-deploy detailed Render error is inspected and corrected.
 
+## 2026-07-19 Tracking v2 Reconciliation Advisory-Lock Fix QA
+
+### Reviewed Implementation
+
+- Reviewed the detailed deployed worker error: `P2010`, `Failed to deserialize column of type 'void'`.
+- The only raw read in the reconciliation transaction was `SELECT pg_advisory_xact_lock(...)`; PostgreSQL documents this locking function as returning `void`.
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: `$queryRaw` attempted to deserialize the advisory lock's `void` return value, preventing every affected dirty target from reaching the daily-summary upserts.
+- Verified - High: `$executeRaw` preserves the SQL statement and transaction-scoped lock while discarding the non-data return value, which is the correct Prisma invocation for this lock.
+
+### Test And Verification Status
+
+- `node --check` for the reconciliation service, worker, and sync service: pass.
+- `git -C workmap diff --check`: pass; CRLF conversion notices only.
+- Scoped changed-diff credential scan: pass; no match.
+- Full API typecheck/lint/build: not re-run. The local dependency state previously requested a destructive pnpm modules purge and registry access was unavailable; neither action was taken.
+
+### Manual QA Status
+
+- Not run. Production needs one API deployment, then confirmation that worker warnings stop and a paired client can move from local queue to confirmed report totals.
+
+### Pass/Fail Recommendation
+
+- Pass for a narrowly scoped API deployment. No migration or client release is required.
+
 ## 2026-07-18 Tracking v2 Sync UUID Lock Recovery QA
 
 ### Reviewed Implementation

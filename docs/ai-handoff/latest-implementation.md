@@ -41,6 +41,45 @@
 - The separate reconciliation failure remains unresolved until the newly detailed Render warning identifies its exact database error. It will no longer block client upload acknowledgement.
 - Existing v1 legacy queue items remain in `DRAINING_V1`; their independent retries are preserved and must not be discarded without an explicit data-retention decision.
 
+## 2026-07-19 Tracking v2 Reconciliation Advisory-Lock Fix
+
+### Original Task Brief
+
+- Diagnose the detailed Render worker warning: Prisma `P2010`, `Failed to deserialize column of type 'void'`, which kept Tracking v2 reconciliation targets retryable.
+
+### Changed Files
+
+- `workmap/apps/api/src/modules/devices/tracking-v2-reconciliation.service.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- The company-summary transaction takes a PostgreSQL advisory transaction lock to serialize concurrent aggregate updates. The lock function correctly returns PostgreSQL `void`, but it was called through Prisma `$queryRaw`, which attempts to deserialize a result set and therefore raised `P2010`.
+- Changed only that lock invocation to `$executeRaw`. The advisory lock, transaction, aggregation algorithm, schemas, intervals, clients, pairing, credentials, and Reports contract are unchanged.
+- This allows the existing worker to progress dirty reconciliation targets and populate the confirmed daily summaries used by `/reports`.
+
+### Verification Commands And Results
+
+- `node --check workmap/apps/api/src/modules/devices/tracking-v2-reconciliation.service.ts`: passed.
+- `node --check workmap/apps/api/src/modules/devices/tracking-v2-reconciliation.worker.ts`: passed.
+- `node --check workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`: passed.
+- `git -C workmap diff --check`: passed; CRLF conversion notices only.
+- Scoped changed-diff credential scan: passed; no match.
+- Full API typecheck/lint/build remains blocked locally by the pre-existing inconsistent `node_modules` state and unavailable registry access. No dependency directory was changed.
+
+### Manual QA
+
+- Not run. A Render API deployment is required; afterward the already-paired Agent retries automatically and the reconciliation worker should stop logging the `void` deserialization warning.
+
+### Intentionally Not Changed
+
+- No migration, database data, Desktop Agent, Browser Extension, authentication, or report UI change.
+
+### Remaining Risks
+
+- The production worker has not yet run this corrected path. If another database error exists, the existing redacted worker logging will identify it without exposing credentials.
+
 ## 2026-07-18 Tracking v2 Sync UUID Lock Recovery
 
 ### Original Task Brief

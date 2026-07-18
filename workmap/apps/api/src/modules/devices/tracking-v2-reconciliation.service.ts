@@ -212,7 +212,9 @@ export class TrackingV2ReconciliationService {
             normalized.source,
             normalized.utcDate.toISOString(),
           ].join(":");
-          await tx.$queryRaw`
+          // PostgreSQL advisory locks return void. Execute the lock statement
+          // without asking Prisma to deserialize that void result.
+          await tx.$executeRaw`
             SELECT pg_advisory_xact_lock(hashtext(${companyLane}))
           `;
           const users = await tx.userDailyFocusSummary.findMany({
