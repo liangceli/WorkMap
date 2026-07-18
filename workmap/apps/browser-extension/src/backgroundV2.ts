@@ -142,6 +142,7 @@ export class BrowserExtensionRuntimeV2 {
   private connectionState: TrackingConnectionStateV2 = "OFFLINE";
   private collectorState: TrackingCollectorStateV2 = "PAUSED";
   private errorCode: TrackingHealthErrorCodeV2 = "NONE";
+  private policySetupMessage: string | null = null;
   private lastPolicyRefreshAtMs = 0;
   private lastSyncAttemptAtMs = 0;
   private syncTimer: number | null = null;
@@ -322,6 +323,18 @@ export class BrowserExtensionRuntimeV2 {
   async handleAlarm() {
     await this.ensureInitialized();
     if (!this.state) return;
+    if (!this.state.protocolActivatedAt) {
+      const stored = await readStoredState([
+        "workmapConfig",
+        "workmapStatus",
+        "workmapQueue",
+        "workmapTracker",
+      ]);
+      const activated = await this.ensureProtocolV2(stored);
+      if (!activated) return;
+      await this.startTrackingAfterActivation();
+      return;
+    }
     await this.refreshPolicyIfDue();
     if (this.engine) {
       await this.persistUpdate(this.engine.settle(performance.now()), true);
@@ -368,15 +381,8 @@ export class BrowserExtensionRuntimeV2 {
       return;
     }
 
-    await this.flushLegacyQueue();
-    await this.closeRecoveredV2Tail();
-    const idleState = await queryIdleState(this.chromeApi, 60);
-    this.state = { ...this.state!, systemIdle: idleState !== "active" };
-    if (this.state.systemIdle) this.collectorState = "PAUSED";
-    await this.store.writeRuntimeState(this.state);
     this.initialized = true;
-    await this.reconcileBrowserReality(true);
-    await this.requestSync(true);
+    await this.startTrackingAfterActivation();
   }
 
   private async ensureProtocolV2(
@@ -394,6 +400,21 @@ export class BrowserExtensionRuntimeV2 {
         throw new Error(
           "The paired Browser Extension identity is incomplete or does not match this browser.",
         );
+      }
+      const policy = await getTrackingPolicyV2(this.config);
+      this.applyServerClock(policy.serverTime);
+      this.state = { ...this.state, policy };
+      await this.store.writeRuntimeState(this.state);
+      const policyRequirement = describeBrowserPolicyRequirement(policy);
+      if (policyRequirement) {
+        this.connectionState = "ONLINE";
+        this.collectorState = "PAUSED";
+        this.errorCode = "POLICY_UNAVAILABLE";
+        this.policySetupMessage = policyRequirement;
+        this.state = { ...this.state, lastErrorCode: this.errorCode };
+        await this.store.writeRuntimeState(this.state);
+        await this.updateVisibleStatus(policyRequirement);
+        return false;
       }
       const prepared = await prepareProtocolV2(this.config);
       this.applyServerClock(prepared.serverTime);
@@ -451,6 +472,7 @@ export class BrowserExtensionRuntimeV2 {
       };
       await this.store.writeRuntimeState(this.state);
       this.connectionState = "ONLINE";
+      this.policySetupMessage = null;
       this.collectorState = collectorStateForPolicy(
         prepared.policy,
         serverNow(this.state),
@@ -475,6 +497,19 @@ export class BrowserExtensionRuntimeV2 {
       await this.applyFailure(error);
       return false;
     }
+  }
+
+  private async startTrackingAfterActivation() {
+    if (!this.state?.protocolActivatedAt) return;
+    await this.flushLegacyQueue();
+    await this.closeRecoveredV2Tail();
+    const idleState = await queryIdleState(this.chromeApi, 60);
+    if (!this.state) return;
+    this.state = { ...this.state, systemIdle: idleState !== "active" };
+    if (this.state.systemIdle) this.collectorState = "PAUSED";
+    await this.store.writeRuntimeState(this.state);
+    await this.reconcileBrowserReality(true);
+    await this.requestSync(true);
   }
 
   private async closeLegacyTrackerAt(
@@ -966,7 +1001,9 @@ export class BrowserExtensionRuntimeV2 {
     const stats = await this.store.stats();
     const legacy = await readStoredState(["workmapQueue"]);
     const statusState: ExtensionStatus["state"] =
-      this.connectionState === "AUTH_REQUIRED"
+      this.policySetupMessage
+        ? "policy_required"
+        : this.connectionState === "AUTH_REQUIRED"
         ? "auth_required"
         : this.connectionState === "UPGRADE_REQUIRED"
           ? "upgrade_required"
@@ -990,7 +1027,7 @@ export class BrowserExtensionRuntimeV2 {
           this.errorCode === "INTERACTION_PERMISSION_REQUIRED"
             ? "permission_required"
             : "ready",
-        error,
+        error: error ?? this.policySetupMessage ?? undefined,
       },
     });
   }
@@ -1028,6 +1065,7 @@ export class BrowserExtensionRuntimeV2 {
   }
 
   private async applyFailure(error: unknown) {
+    this.policySetupMessage = null;
     if (
       error instanceof ExtensionApiError &&
       (error.status === 401 || error.status === 403)
@@ -1088,6 +1126,22 @@ function appendLegacyEvents(
 
 function normalizeBrowserName(value: string): BrowserNameV2 {
   return value.toUpperCase().includes("EDGE") ? "EDGE" : "CHROME";
+}
+
+function describeBrowserPolicyRequirement(policy: DeviceTrackingPolicyV2) {
+  if (policy.scheduleTimeZoneState !== "CONFIRMED") {
+    return "Tracking is waiting for the workspace Owner or Manager to confirm the policy time zone in WorkMap Compliance.";
+  }
+  if (policy.acknowledgementState !== "ACKNOWLEDGED") {
+    return "Tracking is waiting for this employee to review and acknowledge the current WorkMap policy.";
+  }
+  if (!policy.collectDomainFocus) {
+    return "Browser domain tracking is disabled by the current WorkMap policy.";
+  }
+  if (!policy.policyLeaseId || policy.allowedUtcWindows.length === 0) {
+    return "Tracking is waiting for a valid policy collection window. It will retry automatically.";
+  }
+  return null;
 }
 
 function collectorStateForPolicy(

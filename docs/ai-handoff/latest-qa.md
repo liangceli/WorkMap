@@ -1,5 +1,46 @@
 # Latest QA Handoff
 
+## 2026-07-18 Tracking Client GitHub Release Automation QA
+
+### Reviewed Implementation
+
+- Reviewed the new GitHub Actions release workflow and the Browser Extension archive naming change.
+
+### Diff Review Summary
+
+- The workflow publishes independently named, version-derived releases: `desktop-agent-v<version>` with the NSIS `.exe`, and `browser-extension-v<version>` with the Load-unpacked `.zip`.
+- Push detection is limited to the corresponding client `package.json`, preventing ordinary source commits from making duplicate releases. Manual dispatch is available for a deliberate rebuild/re-upload.
+- Release assets are checked before GitHub CLI is invoked. Existing release assets are replaced with `--clobber`, making retry behavior deterministic.
+- The workflow runs on Windows, matching both the NSIS release path and the Extension's PowerShell `Compress-Archive` implementation. pnpm setup precedes Node cache setup.
+- No secret or hard-coded version was introduced. The extension archive name now follows the package version.
+
+### Findings Ordered By Severity
+
+- High: none found in the changed automation.
+- Medium: the repository must allow `GITHUB_TOKEN` write permissions in GitHub Actions settings; this is an external repository setting, not a code defect.
+- Low: hosted-runner release execution has not happened yet, so Electron signing/runner-specific behavior remains unproven until the first GitHub Actions run.
+
+### Test And Verification Status
+
+- Prettier check for workflow and modified packager: pass.
+- Browser Extension: typecheck pass; lint pass; 31 automated tests pass; `release:zip` pass and generated the expected versioned archive.
+- Desktop Agent: typecheck pass; lint pass; 48 automated tests pass.
+- GitHub Actions workflow execution and real GitHub Release upload: not run; no live tag/release was created during this round.
+
+### Manual QA Status
+
+- Not run. No desktop installation, extension loading, tracking, or live GitHub UI interaction was required for this configuration-only task.
+
+### Risks
+
+- GitHub's workflow-permission setting and the first hosted Windows build are external runtime gates.
+- Existing untracked `workmap/scripts/diagnose-tracking-v2-readonly.mjs` remains outside this task and was not reviewed or changed.
+
+### Pass/Fail Recommendation
+
+- Pass for local release-automation implementation and package-level verification.
+- The next round can proceed after this workflow is committed and pushed. The first real Actions run should be checked for GitHub permission and hosted Windows packaging evidence before relying on it operationally.
+
 ## 2026-07-17 Tracking Protocol v2 Concurrency And Bootstrap Plan QA
 
 ### Reviewed Implementation
@@ -3042,3 +3083,33 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 ### Manual QA Status
 
 - Render deployment retry is not run by this task. No migration, database record, or production configuration was modified.
+
+---
+
+## 2026-07-18 Paired Client Activation Recovery QA
+
+### Reviewed Implementation
+
+- Reviewed the Desktop and MV3 activation paths from scoped credential validation through policy retrieval, activation handshake, local queue draining, heartbeat, and Reports eligibility.
+- Verified that a policy prerequisite now produces a dedicated local status rather than a false offline state, and that both clients retry without re-pairing.
+
+### Findings Ordered By Severity
+
+- Fixed - High: a device could pair successfully but fail v2 activation because the policy schedule time zone, acknowledgement, or lease was unavailable. The previous client treated this as generic offline and stopped activation.
+- Fixed - High: Extension alarms refreshed policy but did not re-run initial activation after a prerequisite was resolved. The alarm now retries activation and starts tracking after success.
+- Fixed - Medium: the Compliance page had an existing protected API action to confirm the schedule time zone but no UI path to invoke it.
+- Remaining - Manual QA: live verification still must confirm that the deployed API accepts the paired device credential and that policy confirmation causes a server-confirmed heartbeat and subsequent Reports data. This is not represented as passed.
+
+### Verification
+
+- `tsc --noEmit -p apps/desktop-agent/tsconfig.json`: passed.
+- `tsc --noEmit -p apps/browser-extension/tsconfig.json`: passed.
+- `tsc --noEmit -p apps/web/tsconfig.json`: passed.
+- Desktop focused runtime/queue tests: 20/20 passed; GUI/release tests: 3/3 passed.
+- Browser focused runtime/queue/service-worker tests: 18/18 passed.
+- Windows native host, Desktop NSIS installer, Extension unpacked build, and Extension ZIP build completed successfully.
+- `git diff --check`: passed.
+
+### Recommendation
+
+- Source and artifacts are ready for coordinated Web plus client deployment. No Prisma migration is needed. Manual validation remains deferred by user and should specifically verify policy confirmation, automatic client activation, queue drainage, current heartbeat, and Report visibility.

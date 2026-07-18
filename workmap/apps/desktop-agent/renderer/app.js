@@ -88,6 +88,7 @@ function setStatusChip(status) {
   const health = deriveStatusHealth(status);
   const copy = {
     connected: ["Connected", "status-connected"],
+    policy_required: ["Waiting for policy", "status-warning"],
     pairing: ["Pairing", "status-warning"],
     offline: ["Offline - retrying", "status-warning"],
     server_unreachable: ["Server unavailable - retrying", "status-warning"],
@@ -104,6 +105,7 @@ function setAgentHealthCopy(status) {
   const health = deriveStatusHealth(status);
   const copy = {
     connected: ["Agent connected", "Foreground app activity is being summarized securely."],
+    policy_required: ["Waiting for policy setup", "This paired device will begin tracking automatically after the workspace policy is ready."],
     stale: ["Recording locally", "The server signal is delayed. Activity remains on this computer and will sync automatically."],
     offline: ["Recording locally", "WorkMap cannot confirm the server connection. Activity is queued safely and will retry."],
     server_unreachable: ["Recording locally", "The WorkMap service is unavailable. Activity is queued safely and will retry."],

@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { PolicyAcknowledgementModal } from "./PolicyAcknowledgementModal";
-import { acknowledgeCompliancePolicy, getCompliancePolicy } from "../../lib/api/complianceApi";
+import {
+  acknowledgeCompliancePolicy,
+  confirmCompliancePolicyScheduleTimeZone,
+  getCompliancePolicy,
+} from "../../lib/api/complianceApi";
 import { getWorkMapApiAuthOptions, type WorkMapApiAuthResult } from "../../lib/api/apiAuth";
 import type { WorkMapApiCompliancePolicy } from "../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
@@ -38,6 +42,7 @@ export function CompliancePolicyPanel() {
   const [statusText, setStatusText] = useState("Loading policy status...");
   const [loading, setLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState(false);
+  const [confirmingTimeZone, setConfirmingTimeZone] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +126,37 @@ export function CompliancePolicyPanel() {
     setModalOpen(false);
   };
 
+  const confirmTimeZone = async () => {
+    if (!policy) return;
+
+    const auth = await getWorkMapApiAuthOptions();
+    if (!auth.available) {
+      setStatusText("Sign in with an Owner or Manager account before confirming the workspace time zone.");
+      return;
+    }
+
+    const scheduleTimeZone = getBrowserTimeZone();
+    setConfirmingTimeZone(true);
+    const result = await confirmCompliancePolicyScheduleTimeZone(
+      policy.id,
+      scheduleTimeZone,
+      auth.options,
+    );
+    setConfirmingTimeZone(false);
+
+    if (!result.ok) {
+      setStatusText(result.error);
+      return;
+    }
+
+    setPolicy((current) => current
+      ? { ...current, scheduleTimeZone: result.data.scheduleTimeZone }
+      : current);
+    setStatusText(
+      `Workspace schedule time zone confirmed as ${result.data.scheduleTimeZone}. Paired tracking clients will retry activation automatically.`,
+    );
+  };
+
   return (
     <div className="wm-compliance-policy" style={styles.stack}>
       <section className="wm-compliance-card-grid" style={styles.policyGrid}>
@@ -151,6 +187,26 @@ export function CompliancePolicyPanel() {
           Platform Admin views are separate and should remain limited to privacy-safe tenant metadata and health/audit summaries.
         </p>
       </section>
+
+      {policy && !policy.scheduleTimeZone ? (
+        <section style={styles.ackPanel}>
+          <div>
+            <p style={styles.panelLabel}>Workspace schedule setup</p>
+            <h2 style={styles.panelTitle}>Confirm the tracking time zone</h2>
+            <p style={styles.panelText}>
+              Paired Desktop Agents and Browser Extensions wait for this Owner or Manager confirmation before tracking starts. The suggested time zone for this browser is {getBrowserTimeZone()}.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void confirmTimeZone()}
+            disabled={confirmingTimeZone}
+            style={styles.primaryButton}
+          >
+            {confirmingTimeZone ? "Confirming time zone..." : `Confirm ${getBrowserTimeZone()}`}
+          </button>
+        </section>
+      ) : null}
 
       <section style={styles.ackPanel}>
         <div>
@@ -225,6 +281,14 @@ function writeAcknowledgement(auth: Extract<WorkMapApiAuthResult, { available: t
   }
 
   window.localStorage.setItem(acknowledgementKey(auth, policyId), acknowledgedAt);
+}
+
+function getBrowserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
 }
 
 const styles = {

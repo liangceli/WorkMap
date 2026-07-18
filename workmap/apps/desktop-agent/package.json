@@ -1,6 +1,6 @@
 {
   "name": "@workmap/desktop-agent",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Privacy-minimized foreground application usage agent for WorkMap employees.",
   "author": "WorkMap",
   "private": true,

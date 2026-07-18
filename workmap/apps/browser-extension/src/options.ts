@@ -122,6 +122,7 @@ async function saveExclusions() {
 function deriveStatusHealth(current: Awaited<ReturnType<typeof readStoredState>>["workmapStatus"]) {
   if (!current) return { label: "Not connected", detail: "Waiting for the first server-confirmed heartbeat." };
   if (current.state === "auth_required") return { label: "Pair again" };
+  if (current.state === "policy_required") return { label: "Waiting for policy setup", detail: current.error };
   if (current.state === "error") return { label: "Needs attention" };
   if (current.state === "pairing") return { label: "Pairing" };
   if (current.state === "unpaired") return { label: "Not paired" };

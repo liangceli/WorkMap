@@ -20,6 +20,7 @@ export type ExtensionStatus = {
     | "connected"
     | "offline"
     | "paused"
+    | "policy_required"
     | "auth_required"
     | "upgrade_required"
     | "error";

@@ -115,7 +115,7 @@ export type QueuedStatusEvent = {
 };
 
 export type AgentStatus = {
-  state: "unpaired" | "pairing" | "connected" | "paused" | "offline" | "server_unreachable" | "auth_required" | "upgrade_required" | "error";
+  state: "unpaired" | "pairing" | "connected" | "paused" | "policy_required" | "offline" | "server_unreachable" | "auth_required" | "upgrade_required" | "error";
   deviceId?: string;
   lastHeartbeatAt?: string;
   lastUploadAt?: string;

@@ -1,0 +1,236 @@
+name: Publish Tracking Clients
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "workmap/apps/desktop-agent/package.json"
+      - "workmap/apps/browser-extension/package.json"
+      - ".github/workflows/publish-tracking-clients.yml"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Client release to publish from the version in package.json"
+        required: true
+        default: both
+        type: choice
+        options:
+          - desktop-agent
+          - browser-extension
+          - both
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-tracking-clients-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    name: Detect release targets
+    runs-on: ubuntu-latest
+    outputs:
+      desktop: ${{ steps.targets.outputs.desktop }}
+      extension: ${{ steps.targets.outputs.extension }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: targets
+        name: Select changed clients
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_TARGET: ${{ inputs.target }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          desktop=false
+          extension=false
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            case "$MANUAL_TARGET" in
+              desktop-agent) desktop=true ;;
+              browser-extension) extension=true ;;
+              both)
+                desktop=true
+                extension=true
+                ;;
+              *)
+                echo "Unsupported manual release target: $MANUAL_TARGET" >&2
+                exit 1
+                ;;
+            esac
+          else
+            if git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              changed_files="$(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA")"
+            else
+              changed_files="$(git show --format= --name-only "$CURRENT_SHA")"
+            fi
+
+            version_changed() {
+              local package_path="$1"
+              local previous_version
+              local current_version
+
+              if ! git cat-file -e "$BEFORE_SHA:$package_path" 2>/dev/null; then
+                return 0
+              fi
+
+              previous_version="$(git show "$BEFORE_SHA:$package_path" | node -e "let input = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => console.log(JSON.parse(input).version));")"
+              current_version="$(node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).version);" "$package_path")"
+
+              [ "$previous_version" != "$current_version" ]
+            }
+
+            if grep -Fxq "workmap/apps/desktop-agent/package.json" <<< "$changed_files" && version_changed "workmap/apps/desktop-agent/package.json"; then
+              desktop=true
+            fi
+            if grep -Fxq "workmap/apps/browser-extension/package.json" && version_changed "workmap/apps/browser-extension/package.json"; then
+              extension=true
+            fi
+          fi
+
+          echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
+          echo "extension=$extension" >> "$GITHUB_OUTPUT"
+
+  desktop-agent:
+    name: Publish Desktop Agent
+    needs: detect
+    if: needs.detect.outputs.desktop == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: workmap/pnpm-lock.yaml
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Install dependencies
+        working-directory: workmap
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Desktop Agent
+        working-directory: workmap
+        run: |
+          pnpm --filter @workmap/desktop-agent typecheck
+          pnpm --filter @workmap/desktop-agent lint
+          pnpm --filter @workmap/desktop-agent test
+
+      - name: Build Windows installer
+        working-directory: workmap
+        run: pnpm --filter @workmap/desktop-agent release:windows
+
+      - id: release
+        name: Read Desktop release metadata
+        shell: pwsh
+        run: |
+          $package = Get-Content "workmap/apps/desktop-agent/package.json" -Raw | ConvertFrom-Json
+          $version = $package.version
+          $asset = Join-Path $PWD "workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-$version.exe"
+          if (-not (Test-Path -LiteralPath $asset)) {
+            throw "Expected Desktop Agent installer was not created: $asset"
+          }
+
+          "tag=desktop-agent-v$version" >> $env:GITHUB_OUTPUT
+          "title=WorkMap Desktop Agent v$version" >> $env:GITHUB_OUTPUT
+          "asset=$asset" >> $env:GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.release.outputs.title }}
+          RELEASE_ASSET: ${{ steps.release.outputs.asset }}
+        run: |
+          gh release view "$env:RELEASE_TAG" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create "$env:RELEASE_TAG" "$env:RELEASE_ASSET" --target "$env:GITHUB_SHA" --title "$env:RELEASE_TITLE" --generate-notes
+          } else {
+            gh release upload "$env:RELEASE_TAG" "$env:RELEASE_ASSET" --clobber
+          }
+
+  browser-extension:
+    name: Publish Browser Extension
+    needs: detect
+    if: needs.detect.outputs.extension == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: workmap/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: workmap
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Browser Extension
+        working-directory: workmap
+        run: |
+          pnpm --filter @workmap/browser-extension typecheck
+          pnpm --filter @workmap/browser-extension lint
+          pnpm --filter @workmap/browser-extension test
+
+      - name: Build extension archive
+        working-directory: workmap
+        run: pnpm --filter @workmap/browser-extension release:zip
+
+      - id: release
+        name: Read Extension release metadata
+        shell: pwsh
+        run: |
+          $package = Get-Content "workmap/apps/browser-extension/package.json" -Raw | ConvertFrom-Json
+          $version = $package.version
+          $asset = Join-Path $PWD "workmap/artifacts/browser-extension/WorkMap-Browser-Extension-$version.zip"
+          if (-not (Test-Path -LiteralPath $asset)) {
+            throw "Expected Browser Extension archive was not created: $asset"
+          }
+
+          "tag=browser-extension-v$version" >> $env:GITHUB_OUTPUT
+          "title=WorkMap Browser Extension v$version" >> $env:GITHUB_OUTPUT
+          "asset=$asset" >> $env:GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.release.outputs.title }}
+          RELEASE_ASSET: ${{ steps.release.outputs.asset }}
+        run: |
+          gh release view "$env:RELEASE_TAG" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create "$env:RELEASE_TAG" "$env:RELEASE_ASSET" --target "$env:GITHUB_SHA" --title "$env:RELEASE_TITLE" --generate-notes
+          } else {
+            gh release upload "$env:RELEASE_TAG" "$env:RELEASE_ASSET" --clobber
+          }

@@ -93,6 +93,7 @@ export class DesktopAgentRuntimeV2 {
   private connectionState: TrackingConnectionStateV2 = "OFFLINE";
   private collectorState: TrackingCollectorStateV2 = "PAUSED";
   private lastErrorCode: TrackingHealthErrorCodeV2 = "NONE";
+  private policySetupMessage: string | null = null;
   private shutdownReason: ShutdownReason;
   private queuesInitialized = false;
   private legacyCheckpoint: TrackingCheckpoint | null = null;
@@ -138,11 +139,12 @@ export class DesktopAgentRuntimeV2 {
     await this.initializeQueues();
     await this.updateUiStatus();
     try {
-      const activated = await this.ensureProtocolV2();
-      if (!activated) {
-        await this.updateUiStatus();
-        return;
+      let activated = false;
+      while (!this.stopped && !activated) {
+        activated = await this.ensureProtocolV2();
+        if (!activated && !this.stopped) await this.waitForActivationRetry();
       }
+      if (!activated) return;
       await this.closeRecoveredV2Tail();
       this.startHost();
       await this.enqueueLifecycle("RUNNING", "AGENT_STARTED", {
@@ -188,6 +190,21 @@ export class DesktopAgentRuntimeV2 {
         identity.browserName !== null
       ) {
         throw new Error("The paired Desktop device identity is incomplete.");
+      }
+      const policy = await getTrackingPolicyV2(this.config);
+      this.applyServerClock(policy.serverTime);
+      this.state = { ...this.state, policy };
+      this.store.writeRuntimeState(this.state);
+      const policyRequirement = describeDesktopPolicyRequirement(policy);
+      if (policyRequirement) {
+        this.connectionState = "ONLINE";
+        this.collectorState = "PAUSED";
+        this.lastErrorCode = "POLICY_UNAVAILABLE";
+        this.policySetupMessage = policyRequirement;
+        this.state = { ...this.state, lastErrorCode: this.lastErrorCode };
+        this.store.writeRuntimeState(this.state);
+        await this.updateUiStatus(policyRequirement);
+        return false;
       }
       const prepared = await prepareProtocolV2(this.config);
       this.applyServerClock(prepared.serverTime);
@@ -243,6 +260,7 @@ export class DesktopAgentRuntimeV2 {
       };
       this.store.writeRuntimeState(this.state);
       this.connectionState = "ONLINE";
+      this.policySetupMessage = null;
       this.collectorState = policyCollectorState(
         prepared.policy,
         serverNow(this.state),
@@ -728,6 +746,7 @@ export class DesktopAgentRuntimeV2 {
   }
 
   private async applyFailure(error: unknown, updateStatus = true) {
+    this.policySetupMessage = null;
     if (error instanceof AgentApiError && (error.status === 401 || error.status === 403)) {
       this.connectionState = "AUTH_REQUIRED";
     } else if (isUpgradeRequiredError(error)) {
@@ -746,7 +765,9 @@ export class DesktopAgentRuntimeV2 {
     const snapshot = this.state.latestSnapshot;
     const stats = this.store.stats();
     const state: AgentStatus["state"] =
-      this.connectionState === "ONLINE"
+      this.policySetupMessage
+        ? "policy_required"
+        : this.connectionState === "ONLINE"
         ? this.collectorState === "PAUSED" ? "paused" : "connected"
         : this.connectionState === "AUTH_REQUIRED"
           ? "auth_required"
@@ -786,6 +807,12 @@ export class DesktopAgentRuntimeV2 {
     });
   }
 
+  private async waitForActivationRetry() {
+    for (let second = 0; second < 30 && !this.stopped; second += 1) {
+      await delay(1_000);
+    }
+  }
+
   private applyServerClock(serverTime: string) {
     const serverMs = Date.parse(serverTime);
     if (Number.isFinite(serverMs)) {
@@ -816,6 +843,22 @@ export class DesktopAgentRuntimeV2 {
     await this.updateUiStatus();
     this.store.close();
   }
+}
+
+function describeDesktopPolicyRequirement(policy: DeviceTrackingPolicyV2) {
+  if (policy.scheduleTimeZoneState !== "CONFIRMED") {
+    return "Tracking is waiting for the workspace Owner or Manager to confirm the policy time zone in WorkMap Compliance.";
+  }
+  if (policy.acknowledgementState !== "ACKNOWLEDGED") {
+    return "Tracking is waiting for this employee to review and acknowledge the current WorkMap policy.";
+  }
+  if (!policy.collectAppFocus) {
+    return "Desktop app tracking is disabled by the current WorkMap policy.";
+  }
+  if (!policy.policyLeaseId || policy.allowedUtcWindows.length === 0) {
+    return "Tracking is waiting for a valid policy collection window. It will retry automatically.";
+  }
+  return null;
 }
 
 function currentMonotonic(runtime: DesktopAgentRuntimeV2) {

@@ -217,6 +217,7 @@ export type WorkMapApiCompliancePolicy = {
   workHoursOnly: boolean;
   workdayStart: string;
   workdayEnd: string;
+  scheduleTimeZone: string | null;
   retentionDays: number;
   employeeCanViewOwnData: boolean;
   policyVersion: string;
@@ -368,6 +369,13 @@ export type WorkMapApiUsageSummary = {
     }>;
     latestIncludedReceivedAt: string | null;
   };
+};
+
+export type WorkMapApiPolicyScheduleTimeZone = {
+  id: string;
+  policyVersion: string;
+  scheduleTimeZone: string;
+  scheduleTimeZoneState: "CONFIRMED";
 };
 
 export type WorkMapApiTrackingAudit = {

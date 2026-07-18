@@ -1,5 +1,62 @@
 # Latest Implementation Handoff
 
+## 2026-07-18 Tracking Client GitHub Release Automation
+
+### Original Task Brief
+
+- Automate GitHub tag/release creation and binary upload for each new Desktop Agent and Browser Extension version, so releases no longer require manual tag and asset handling in GitHub.
+
+### Changed Files
+
+- `.github/workflows/publish-tracking-clients.yml`
+- `workmap/apps/browser-extension/scripts/package-alpha.mjs`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Added a Windows GitHub Actions workflow that detects committed `package.json` version changes on `main` separately for Desktop Agent and Browser Extension. It also supports a targeted manual `workflow_dispatch` retry for either client or both clients.
+- Desktop release jobs install pinned pnpm, Node 22, and .NET 9; run the package typecheck/lint/tests; create the existing NSIS installer; then create `desktop-agent-v<version>` or replace its `.exe` asset in the matching GitHub Release.
+- Extension release jobs install pinned pnpm and Node 22; run typecheck/lint/tests; create the unpacked MV3 ZIP; then create `browser-extension-v<version>` or replace its `.zip` asset in the matching GitHub Release.
+- Browser Extension packaging now reads its version from `apps/browser-extension/package.json`; the release asset cannot remain accidentally hard-coded to `0.5.0` after a version bump.
+- The workflow uses GitHub's ephemeral `github.token` with `contents: write`; no repository secret, Cognito credential, device credential, or local environment value is added.
+
+### Role And Access Behaviour
+
+- The workflow token is limited to GitHub repository contents/release writes. It has no WorkMap API, tenant, Cognito, device, or Reports access.
+- A release is created only from the committed source version on `main`, or when a maintainer explicitly chooses its target in the Actions manual-run control.
+
+### Verification Commands And Results
+
+- `pnpm --dir workmap exec prettier --check ../.github/workflows/publish-tracking-clients.yml apps/browser-extension/scripts/package-alpha.mjs`: pass.
+- `pnpm --dir workmap --filter @workmap/browser-extension typecheck`: pass.
+- `pnpm --dir workmap --filter @workmap/browser-extension lint`: pass.
+- `pnpm --dir workmap --filter @workmap/browser-extension test`: pass, 31 tests.
+- `pnpm --dir workmap --filter @workmap/browser-extension release:zip`: pass; generated `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.0.zip`.
+- `pnpm --dir workmap --filter @workmap/desktop-agent typecheck`: pass.
+- `pnpm --dir workmap --filter @workmap/desktop-agent lint`: pass.
+- `pnpm --dir workmap --filter @workmap/desktop-agent test`: pass, 48 tests.
+- GitHub-hosted Windows runner execution, real tag creation, and release upload: not run locally and not claimed.
+
+### Manual QA
+
+- Not run. This round changes release automation only; it does not install the Agent, load the Extension, create a live GitHub Release, or exercise tracking behavior.
+
+### Intentionally Not Changed
+
+- Desktop Agent and Browser Extension runtime, auto-start behavior, pairing, tracking, backend, Reports, package versions, and existing release artifacts.
+- No existing GitHub Release, tag, secret, or unrelated untracked user file was modified.
+
+### Remaining Risks
+
+- The repository's GitHub Actions settings must grant workflows `Read and write permissions`; otherwise GitHub will reject release/tag creation.
+- First execution still depends on the hosted Windows runner being able to build the current Electron/.NET installer and invoke GitHub CLI. The workflow fails rather than creating a partial release if a test or artifact check fails.
+- This configuration intentionally releases only after a package version change or a maintainer's manual dispatch; it does not retroactively publish existing artifacts.
+
+### Suggested Next Steps
+
+- Commit and push these workflow changes. In GitHub Actions, run `Publish Tracking Clients` once with `both` to publish the current `0.6.0`/`0.5.0` artifacts if desired. Later releases need only a committed package-version bump on `main`; Actions will create the tag, release, and asset automatically.
+
 ## 2026-07-17 Tracking Protocol v2 Concurrency And Bootstrap Plan Revision
 
 ### Original Task Brief
@@ -4461,6 +4518,47 @@ Correct the password visibility eye button so it aligns inside the right edge of
 
 - Deferred by user, pending final consolidated manual QA. This includes installing the Windows package, pairing it, loading the Extension unpacked, granting website access, multi-window/browser activity verification, and live Reports validation.
 - No Render/Vercel/Supabase configuration, production deployment, production database migration, or production data was modified in this task.
+
+---
+
+## 2026-07-18 Paired Client Activation Recovery
+
+### Original Task Brief
+
+- Investigate paired Desktop Agent and Browser Extension clients that remained locally queued and did not become current in Owner Reports after installing the v2 releases.
+
+### Root Cause And Runtime Change
+
+- Pairing and v2 tracking activation were incorrectly conflated by the clients. A valid paired credential can still be blocked before activation when the current monitoring policy has no confirmed time zone, the employee has not acknowledged the policy, a source is disabled, or no current collection window is leased.
+- Desktop Agent `0.6.1` now distinguishes this condition from a genuine network outage. It reports `Waiting for policy setup`, preserves its durable queue, and retries activation every 30 seconds until the policy becomes valid.
+- Browser Extension `0.5.1` applies the same preflight policy check. Its MV3 alarm retries activation every 30 seconds after the policy is corrected, including after a service-worker restart.
+- The Compliance page now exposes the existing Owner/Manager-only backend action for confirming the workspace IANA schedule time zone. No new backend endpoint, schema field, migration, or credential scope was introduced.
+
+### Changed Files
+
+- Policy setup UI/client: `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx`, `workmap/apps/web/lib/api/complianceApi.ts`, and `workmap/apps/web/lib/api/apiTypes.ts`.
+- Desktop recovery/UI/version: `workmap/apps/desktop-agent/src/runtimeV2.ts`, `src/types.ts`, `renderer/app.js`, `src/version.ts`, `src/windowsActivityHost.ts`, package/release metadata, and release test.
+- Browser recovery/UI/version: `workmap/apps/browser-extension/src/backgroundV2.ts`, `src/extensionStorage.ts`, `src/options.ts`, `src/trackingV2Types.ts`, manifest/package metadata, and service-worker test.
+
+### Artifacts
+
+- Windows installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.1.exe`.
+- Desktop Alpha directory: `workmap/apps/desktop-agent/alpha-windows`.
+- Load-unpacked Extension directory: `workmap/apps/browser-extension/alpha-unpacked`.
+- Extension ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.1.zip`.
+
+### Verification
+
+- Web, Desktop Agent, and Browser Extension TypeScript checks passed.
+- Desktop focused tests passed: 20/20; Desktop GUI/release tests passed: 3/3.
+- Browser focused tests passed: 18/18.
+- Windows native activity host and NSIS installer builds passed; extension unpacked and ZIP builds passed.
+- No production database or deployment action was performed. No migration is required for this patch.
+
+### Manual QA And Remaining Boundary
+
+- Deferred by user, pending final consolidated manual QA. Deploy the Web change, use an Owner or Manager account to confirm the schedule time zone only if Compliance shows the setup action, then install `0.6.1` / load `0.5.1` over the existing clients. A normal in-place update preserves pairing; do not choose an uninstall option that removes WorkMap local data.
+- If a client still reports a genuine API connection error after policy setup, it will accurately remain offline; the device’s `apiBaseUrl` and current Render health must then be investigated separately rather than masking that condition as policy readiness.
 
 ### Intentionally Not Changed And Risks
 
