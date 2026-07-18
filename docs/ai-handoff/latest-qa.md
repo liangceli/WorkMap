@@ -1,5 +1,32 @@
 # Latest QA Handoff
 
+## 2026-07-19 Desktop Agent Queue Status Separation QA
+
+### Reviewed Implementation
+
+- Reviewed the v2 Desktop Agent status handoff from `runtimeV2.ts` to the Electron renderer after the local `queue.json` inspection returned exactly 1,000 retained legacy records.
+
+### Findings Ordered By Severity
+
+- Fixed - High UI diagnosis: `queuedEvents` combined SQLite Tracking v2 intervals with the legacy file queue, so the Agent presented historical compatibility records as current pending v2 uploads.
+- Verified - High data retention: the change only separates reported counts. It does not delete, clear, mutate, or stop retrying `queue.json` records.
+- Verified - Medium backward compatibility: new status fields are optional, so a pre-v2 or partially upgraded status file continues to render without an error.
+
+### Test And Verification Status
+
+- `pnpm --filter @workmap/desktop-agent test`: pass, 48/48.
+- `pnpm --filter @workmap/desktop-agent typecheck`: pass.
+- `node --check apps/desktop-agent/renderer/app.js`: pass.
+- `git diff --check`: pass; CRLF notices only.
+
+### Manual QA Status
+
+- Not run. A newly built Agent installer is needed to inspect the separate compatibility notice on Windows. No manual queue cleanup has been performed.
+
+### Pass/Fail Recommendation
+
+- Pass for a scoped Desktop Agent release. The visible v2 pending count will no longer be inflated by the legacy migration backlog.
+
 ## 2026-07-18 Tracking v2 Upload Confirmation And Reconciliation Diagnostics QA
 
 ### Reviewed Implementation

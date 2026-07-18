@@ -23,10 +23,12 @@ test("Windows release is a visual NSIS installer", async () => {
   assert.equal(packageJson.build?.nsis?.perMachine, false);
   assert.match(html, /id="pair-code"/);
   assert.match(html, /id="agent-error"/);
+  assert.match(html, /id="legacy-backlog"/);
   assert.match(html, /Never collected/);
   assert.match(renderer, /deriveStatusHealth/);
   assert.match(renderer, /Signal stale/);
   assert.match(renderer, /Last server-confirmed heartbeat/);
+  assert.match(renderer, /Legacy compatibility backlog/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
   assert.match(version, /desktop-agent-windows\/0\.6\.1/);
   assert.match(electronMain, /DesktopAgentRuntimeV2/);
@@ -49,6 +51,8 @@ test("runtime startup does not silently preserve stale connected state", async (
   assert.match(electronMain, /Get-CimInstance Win32_Process/);
   assert.match(electronMain, /run-workmap-agent/);
   assert.match(electronMain, /\$shellPid = \$PID/);
+  assert.match(runtime, /queuedEvents: stats\.pending/);
+  assert.match(runtime, /queuedLegacyEvents: this\.legacyQueue\.size\(\)/);
 });
 
 test("pairing errors are safe and actionable", () => {

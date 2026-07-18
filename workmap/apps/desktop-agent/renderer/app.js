@@ -77,11 +77,28 @@ async function refreshState() {
   document.querySelector("#current-app").textContent = status.currentActivity?.appName ?? "No active app";
   document.querySelector("#last-heartbeat").textContent = formatTime(status.lastHeartbeatAt);
   document.querySelector("#queued-events").textContent = String((status.queuedEvents ?? 0) + (status.queuedStatusEvents ?? 0));
+  setLegacyBacklog(status);
   document.querySelector("#auto-start").textContent = state.startsWithWindows ? "Enabled" : state.paired ? "Enabling..." : "Not enabled";
   const health = deriveStatusHealth(status);
   const errorCopy = status.error || health.detail;
   agentError.textContent = errorCopy;
   agentError.hidden = !errorCopy;
+}
+
+function setLegacyBacklog(status) {
+  const element = document.querySelector("#legacy-backlog");
+  const count = Number(status.queuedLegacyEvents ?? 0);
+  if (!Number.isFinite(count) || count <= 0) {
+    element.hidden = true;
+    element.textContent = "";
+    return;
+  }
+
+  const migration = status.trackingMigrationState === "DRAINING_V1"
+    ? "WorkMap is preserving and retrying these historical records through the v1 compatibility path."
+    : "WorkMap is retaining these historical records until their compatibility migration is complete.";
+  element.textContent = `Legacy compatibility backlog: ${count.toLocaleString()} historical record${count === 1 ? "" : "s"}. ${migration}`;
+  element.hidden = false;
 }
 
 function setStatusChip(status) {

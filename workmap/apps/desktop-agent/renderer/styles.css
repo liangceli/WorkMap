@@ -72,6 +72,7 @@ button:disabled { cursor: wait; opacity: .62; }
 .metrics div { min-width: 0; border-right: 1px solid #e1e8e5; border-bottom: 1px solid #e1e8e5; padding: 13px; }
 .metrics dt { color: #788697; font-size: 11px; }
 .metrics dd { overflow: hidden; margin: 5px 0 0; color: #18344f; font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.legacy-backlog { margin: -8px 0 20px; border-left: 3px solid #d68a17; background: #fff7e8; color: #6c501f; padding: 9px 11px; font-size: 12px; line-height: 1.45; }
 .connected-actions { display: flex; gap: 10px; }
 
 footer { display: flex; justify-content: space-between; border-top: 1px solid #d7e2de; color: #7a8795; padding: 13px 32px; font-size: 11px; }

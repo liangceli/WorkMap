@@ -801,8 +801,13 @@ export class DesktopAgentRuntimeV2 {
               isIdle: snapshot.state === "IDLE",
             }
           : null,
-      queuedEvents: stats.pending + this.legacyQueue.size(),
+      // Keep the durable v2 queue separate from retained v1 compatibility
+      // records. Mixing the counts made an old queue.json look like a v2 sync
+      // failure in the desktop UI.
+      queuedEvents: stats.pending,
       queuedStatusEvents: this.statusQueue.size(),
+      queuedLegacyEvents: this.legacyQueue.size(),
+      trackingMigrationState: this.state.migrationState,
       error,
     });
   }

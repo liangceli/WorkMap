@@ -1,5 +1,48 @@
 # Latest Implementation Handoff
 
+## 2026-07-19 Desktop Agent Queue Status Separation
+
+### Original Task Brief
+
+- Correct the Desktop Agent status UI after local diagnostics proved that the displayed `1,000` pending uploads were retained legacy `queue.json` records, not Tracking v2 intervals awaiting upload.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/src/types.ts`
+- `workmap/apps/desktop-agent/src/runtimeV2.ts`
+- `workmap/apps/desktop-agent/renderer/index.html`
+- `workmap/apps/desktop-agent/renderer/app.js`
+- `workmap/apps/desktop-agent/renderer/styles.css`
+- `workmap/apps/desktop-agent/test/gui-release.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Tracking v2 now writes only its SQLite pending interval count to `AgentStatus.queuedEvents`; queued lifecycle events remain included by the renderer as before.
+- Retained v1 compatibility records are written separately as `queuedLegacyEvents` with the current `trackingMigrationState`.
+- The Desktop Agent UI labels the primary value as `Pending Tracking v2 uploads` and displays a separate amber compatibility notice only when legacy records exist. The notice makes clear that retained historical records are preserved and retried through the v1 compatibility path.
+- No legacy records are deleted, cleared, re-paired, or silently reclassified. The existing `DRAINING_V1` compatibility retry remains unchanged.
+
+### Verification Commands And Results
+
+- `pnpm --filter @workmap/desktop-agent test`: passed, 48/48.
+- `pnpm --filter @workmap/desktop-agent typecheck`: passed.
+- `git diff --check`: passed; line-ending notices only.
+- The first `node --check` invocation used a wrong relative renderer path and did not inspect source; corrected source syntax verification is recorded in the QA handoff.
+
+### Manual QA
+
+- Not run. The current installed Agent will not receive this UI/runtime status change until a new Windows installer is built and installed. Existing paired credentials and local queues remain intact.
+
+### Intentionally Not Changed
+
+- No API, database, Prisma schema, migration, pairing, credential, queue retention, upload logic, or Browser Extension change.
+
+### Remaining Risks
+
+- A retained v1 queue still depends on the pre-existing compatibility endpoint to drain. Its presence is now observable separately rather than being misreported as Tracking v2 backlog.
+
 ## 2026-07-18 Tracking v2 Upload Confirmation And Reconciliation Diagnostics
 
 ### Original Task Brief

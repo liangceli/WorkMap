@@ -1,3 +1,5 @@
+import type { TrackingMigrationStateV2 } from "./trackingV2Types.js";
+
 export type AgentConfig = {
   apiBaseUrl: string;
   credential: string;
@@ -122,8 +124,12 @@ export type AgentStatus = {
   sessionId?: string;
   clientSessionId?: string;
   currentActivity?: CurrentAppActivity | null;
+  /** Pending Tracking v2 activity intervals only. */
   queuedEvents: number;
   queuedStatusEvents?: number;
+  /** Retained v1 records that are being retried through the compatibility path. */
+  queuedLegacyEvents?: number;
+  trackingMigrationState?: TrackingMigrationStateV2;
   lastStatusUploadAt?: string;
   deviceStatus?: DeviceStatusName;
   error?: string;
