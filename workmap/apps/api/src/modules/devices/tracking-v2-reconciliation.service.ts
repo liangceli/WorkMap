@@ -212,10 +212,16 @@ export class TrackingV2ReconciliationService {
             normalized.source,
             normalized.utcDate.toISOString(),
           ].join(":");
-          // PostgreSQL advisory locks return void. Execute the lock statement
-          // without asking Prisma to deserialize that void result.
-          await tx.$executeRaw`
-            SELECT pg_advisory_xact_lock(hashtext(${companyLane}))
+          // PostgreSQL advisory locks return void. Keep that value inside a
+          // referenced CTE and return only a supported boolean to Prisma.
+          // Referencing the CTE guarantees the transaction-scoped lock is held
+          // before the company summary is read and written.
+          await tx.$queryRaw<Array<{ locked: boolean }>>`
+            WITH advisory_lock AS (
+              SELECT pg_advisory_xact_lock(hashtext(${companyLane}))
+            )
+            SELECT TRUE AS "locked"
+            FROM advisory_lock
           `;
           const users = await tx.userDailyFocusSummary.findMany({
             where: {

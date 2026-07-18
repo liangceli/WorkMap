@@ -56,7 +56,7 @@
 ### Implementation Summary
 
 - The company-summary transaction takes a PostgreSQL advisory transaction lock to serialize concurrent aggregate updates. The lock function correctly returns PostgreSQL `void`, but it was called through Prisma `$queryRaw`, which attempts to deserialize a result set and therefore raised `P2010`.
-- Changed only that lock invocation to `$executeRaw`. The advisory lock, transaction, aggregation algorithm, schemas, intervals, clients, pairing, credentials, and Reports contract are unchanged.
+- Changed the lock query so `pg_advisory_xact_lock` executes inside a referenced CTE while the final result returned to Prisma is only `TRUE AS "locked"`. This guarantees the lock is held while no PostgreSQL `void` column is deserialized. The transaction, aggregation algorithm, schemas, intervals, clients, pairing, credentials, and Reports contract are unchanged.
 - This allows the existing worker to progress dirty reconciliation targets and populate the confirmed daily summaries used by `/reports`.
 
 ### Verification Commands And Results
@@ -78,7 +78,7 @@
 
 ### Remaining Risks
 
-- The production worker has not yet run this corrected path. If another database error exists, the existing redacted worker logging will identify it without exposing credentials.
+- The production worker has not yet run this corrected CTE path. If another database error exists, the existing redacted worker logging will identify it without exposing credentials.
 
 ## 2026-07-18 Tracking v2 Sync UUID Lock Recovery
 

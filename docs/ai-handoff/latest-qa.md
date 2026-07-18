@@ -37,7 +37,7 @@
 ### Findings Ordered By Severity
 
 - Fixed - Critical: `$queryRaw` attempted to deserialize the advisory lock's `void` return value, preventing every affected dirty target from reaching the daily-summary upserts.
-- Verified - High: `$executeRaw` preserves the SQL statement and transaction-scoped lock while discarding the non-data return value, which is the correct Prisma invocation for this lock.
+- Fixed - High: the initial `$executeRaw` adjustment was insufficiently defensive because the SQL statement still directly selected a PostgreSQL `void` value. The lock now runs inside a referenced CTE and the final query returns only a supported boolean column to Prisma.
 
 ### Test And Verification Status
 
