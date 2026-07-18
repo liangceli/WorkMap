@@ -4791,3 +4791,28 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - API typecheck and production build passed.
 - A no-database Node check from `workmap/apps/api` loaded `dist/apps/api/src/load-local-env.js`, resolved `@workmap/shared-types`, and loaded the v2 runtime exports successfully.
 - No database, API contract, tracking calculation, credential, or deployment environment value was changed by this source fix.
+
+---
+
+## 2026-07-19 Desktop Agent 0.6.2 Sync-Diagnostics Release Artifact
+
+### Purpose
+
+- Clarify the release boundary after adding safe v2 sync correlation diagnostics: the previous `0.6.1` installer was built before the request-ID diagnostic code and does not contain it.
+
+### Changed Release Metadata
+
+- `workmap/apps/desktop-agent/package.json`, `alpha-windows/package.json`, `scripts/build-alpha.mjs`, `src/version.ts`, `src/windowsActivityHost.ts`, and `test/gui-release.test.ts` now identify the Desktop Agent as `0.6.2` / `desktop-agent-windows/0.6.2`.
+- The `0.6.2` installer contains the already-implemented safe diagnostic state: per-sync request ID, HTTP status, safe error code, timestamp, and batch count. It does not persist credentials or activity payloads in diagnostics.
+
+### Artifact And Upgrade Behavior
+
+- Windows NSIS installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.2.exe` (115,431,692 bytes).
+- A normal in-place `0.6.1` to `0.6.2` upgrade preserves `%LOCALAPPDATA%\\WorkMap\\DesktopAgent\\config.json` and the protected credential. Re-pairing is not required unless the device was revoked or uninstall was explicitly told to delete WorkMap local data.
+- This artifact alone is not sufficient for end-to-end request correlation: deploy the matching API diagnostics source as well. No database migration is required.
+
+### Verification
+
+- Focused Desktop GUI/release tests passed: 3/3.
+- NSIS Windows release build completed in 82.5 seconds and the installer/blockmap were confirmed present and non-empty.
+- No deployment, database, pairing, or runtime queue behavior was changed while producing this artifact.

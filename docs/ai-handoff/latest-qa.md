@@ -3248,3 +3248,23 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 ### Recommendation
 
 - Source and artifacts are ready for coordinated Web plus client deployment. No Prisma migration is needed. Manual validation remains deferred by user and should specifically verify policy confirmation, automatic client activation, queue drainage, current heartbeat, and Report visibility.
+
+---
+
+## 2026-07-19 Desktop Agent 0.6.2 Artifact QA
+
+### Reviewed Release Boundary
+
+- Verified that the existing `0.6.1` installer predates the request-ID sync diagnostics and must not be represented as including today's diagnostic code.
+- Verified the released package and runtime source report `0.6.2` consistently.
+
+### Verification
+
+- `pnpm --filter @workmap/desktop-agent exec tsx --test test/gui-release.test.ts`: passed, 3/3.
+- `pnpm --filter @workmap/desktop-agent release:windows`: passed in 82.5 seconds.
+- `WorkMap-Desktop-Agent-Setup-0.6.2.exe` and its blockmap exist and are non-empty.
+
+### Manual QA And Risk
+
+- No live upgrade or re-pairing test was run. A normal in-place upgrade is designed to retain local pairing, but uninstalling with local-data deletion or a server-side device revoke requires a new pairing code.
+- Matching API diagnostics must be deployed with the `0.6.2` installer to correlate the Agent's local `requestId` with Render logs.
