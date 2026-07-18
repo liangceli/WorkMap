@@ -4466,3 +4466,22 @@ Correct the password visibility eye button so it aligns inside the right edge of
 
 - Cognito, tenant/RBAC boundaries, 3CX, Teams/Email content access, and Platform Admin privacy boundaries were not changed. No Clerk dependency was introduced.
 - The production migration and coordinated API/Web/client rollout remain operational steps. Existing v1 clients remain subject to their prior runtime limitations until replaced with v0.6.0/v0.5.0.
+
+---
+
+## 2026-07-18 Render Shared-Types Startup Fix
+
+### Issue
+
+- Render built `@workmap/api` successfully but could not start it: the runtime fell back to `packages/shared-types/src/index.ts` and could not resolve the new `tracking-v2.js` source-relative export.
+
+### Fix
+
+- `workmap/apps/api/src/load-local-env.ts` now discovers the workspace root from `pnpm-workspace.yaml`, independently from whether an `.env` file exists.
+- The compiled workspace aliases now resolve from the actual workspace root when Render starts the filtered API package from `apps/api`, so `@workmap/shared-types` resolves to `apps/api/dist/packages/shared-types/src/index.js` rather than TypeScript source.
+
+### Verification
+
+- API typecheck and production build passed.
+- A no-database Node check from `workmap/apps/api` loaded `dist/apps/api/src/load-local-env.js`, resolved `@workmap/shared-types`, and loaded the v2 runtime exports successfully.
+- No database, API contract, tracking calculation, credential, or deployment environment value was changed by this source fix.

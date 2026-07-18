@@ -3024,3 +3024,21 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 ### Recommendation
 
 - Pass for source, focused automated verification, and Alpha artifact generation. Proceed only with a coordinated non-production validation of the migration/API/Web/client rollout before any production claim.
+
+---
+
+## 2026-07-18 Render Startup Alias QA
+
+### Finding
+
+- Fixed - Critical deployment blocker: `load-local-env.ts` derived its workspace root from an `.env` path. Render starts the filtered API package without a local `.env`, so the alias target was computed beneath `apps/api` and did not exist. Node then loaded shared TypeScript source and failed on the new `.js` export.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/api typecheck`: passed.
+- `pnpm.cmd --filter @workmap/api build`: passed.
+- From the same `workmap/apps/api` working directory used by Render, a Node process loaded the compiled alias hook and required `@workmap/shared-types`; `TRACKING_PROTOCOL_VERSION_V2` and `SingleFocusSessionEngineV2` were available.
+
+### Manual QA Status
+
+- Render deployment retry is not run by this task. No migration, database record, or production configuration was modified.

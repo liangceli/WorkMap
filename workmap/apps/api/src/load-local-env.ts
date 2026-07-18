@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import Module from "node:module";
 import { dirname, parse, resolve } from "node:path";
 
-const rootEnvPath = findNearestEnvFile(process.cwd());
-const workspaceRoot = dirname(rootEnvPath);
+const workspaceRoot = findWorkspaceRoot(process.cwd());
+const rootEnvPath = findNearestEnvFile(process.cwd(), workspaceRoot);
 
 registerCompiledWorkspaceAliases(workspaceRoot);
 
@@ -32,7 +32,7 @@ if (existsSync(rootEnvPath)) {
   }
 }
 
-function findNearestEnvFile(startDir: string) {
+function findNearestEnvFile(startDir: string, fallbackDir: string) {
   let currentDir = startDir;
   const root = parse(startDir).root;
 
@@ -43,7 +43,24 @@ function findNearestEnvFile(startDir: string) {
     }
 
     if (currentDir === root) {
-      return resolve(startDir, ".env");
+      return resolve(fallbackDir, ".env");
+    }
+
+    currentDir = dirname(currentDir);
+  }
+}
+
+function findWorkspaceRoot(startDir: string) {
+  let currentDir = startDir;
+  const root = parse(startDir).root;
+
+  while (true) {
+    if (existsSync(resolve(currentDir, "pnpm-workspace.yaml"))) {
+      return currentDir;
+    }
+
+    if (currentDir === root) {
+      throw new Error("Unable to locate the WorkMap workspace root.");
     }
 
     currentDir = dirname(currentDir);
