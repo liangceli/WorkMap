@@ -1,5 +1,55 @@
 # Latest Implementation Handoff
 
+## 2026-07-18 Tracking v2 Sync UUID Lock Recovery
+
+### Original Task Brief
+
+- Diagnose and repair the production `POST /device-client/sync-v2` failure that left newly paired Desktop Agents in `Offline - retrying` with pending local uploads and no new Reports data.
+
+### Changed Files
+
+- `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`
+- `workmap/apps/api/test/tracking-v2-sync-uuid-lock.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Render logs identified the exact production failure: PostgreSQL rejected the v2 write-lane lock query with `uuid = text` (`P2010` / SQLSTATE `42883`).
+- `lockWriteLanes()` now explicitly casts every `ClientWriteLane.id` raw SQL parameter as `uuid` before `FOR UPDATE`. The lane rows remain deterministically ordered and the existing transaction/concurrency behavior is preserved.
+- Added a focused regression test which verifies the generated raw lock SQL keeps UUID values parameterized and casts each parameter to `uuid`.
+- No database schema, Prisma migration, pairing, credential, collection, Reports aggregation, Desktop Agent, Browser Extension, auth, or RBAC behavior was changed.
+
+### Role And Access Behaviour
+
+- Device credentials retain their existing device/user/tenant scope. This repair changes only the internal database type handling after the existing device credential has been authenticated.
+- No report-read access is added to a device credential.
+
+### Verification Commands And Results
+
+- `pnpm.cmd --filter @workmap/api test`: passed, 22/22 including `v2 write-lane lock casts raw lane identifiers to UUID`.
+- `pnpm.cmd --filter @workmap/api typecheck`: passed.
+- `pnpm.cmd --filter @workmap/api lint`: passed.
+- `pnpm.cmd --filter @workmap/api build`: passed.
+- `git diff --check`: passed; only informational Windows CRLF conversion warnings were emitted.
+- Scoped diff credential-pattern scan: passed; no match.
+
+### Manual QA
+
+- Not run locally. Render deployment and a real paired-client retry against the deployed API remain required to confirm the original production path.
+
+### Intentionally Not Changed
+
+- No Prisma migration is required or included.
+- No Desktop Agent or Browser Extension package update is required for this server-side fix.
+- No local agent queue records were edited or deleted.
+
+### Remaining Risks
+
+- Existing v2 `PENDING` intervals should retry automatically once the repaired API is deployed.
+- Previously dead-lettered `HTTP_400` intervals remain deliberately non-retriable; this fix does not requeue historical client-side dead letters.
+- The deployed API must be verified from Render logs after deployment to ensure the `P2010` / `uuid = text` error no longer appears.
+
 ## 2026-07-18 Tracking Client GitHub Release Automation
 
 ### Original Task Brief

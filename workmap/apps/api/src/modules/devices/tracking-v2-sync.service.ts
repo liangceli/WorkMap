@@ -677,11 +677,17 @@ async function lockWriteLanes(
     Prisma.sql`
       SELECT "id"
       FROM "ClientWriteLane"
-      WHERE "id" IN (${Prisma.join(laneIds)})
+      WHERE "id" IN (${uuidListForRawQuery(laneIds)})
       ORDER BY "id"
       FOR UPDATE
     `,
   );
+}
+
+// PostgreSQL does not implicitly compare a UUID column with text-bound raw SQL parameters.
+// Keep the cast next to the locking query so concurrent v2 syncs work on all pooler modes.
+export function uuidListForRawQuery(ids: readonly string[]) {
+  return Prisma.join(ids.map((id) => Prisma.sql`CAST(${id} AS uuid)`));
 }
 
 async function loadPersistedIdentities(

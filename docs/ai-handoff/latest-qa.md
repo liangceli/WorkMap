@@ -1,5 +1,33 @@
 # Latest QA Handoff
 
+## 2026-07-18 Tracking v2 Sync UUID Lock Recovery QA
+
+### Reviewed Implementation
+
+- Reviewed the Render production exception and the `lockWriteLanes()` raw PostgreSQL query used by `POST /device-client/sync-v2`.
+- `ClientWriteLane.id` is a Prisma `@db.Uuid`; the old `Prisma.join(laneIds)` binding produced a PostgreSQL `uuid = text` comparison. The fix changes only those bindings to `CAST($n AS uuid)`.
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: every v2 sync transaction attempted to lock a UUID lane against text-bound raw parameters and failed with Prisma `P2010` / PostgreSQL SQLSTATE `42883`. Because lane locking occurs before snapshot, health, or interval persistence, valid paired clients could not sync any v2 data.
+- Verified - High: the regression test asserts each generated lane ID remains parameterized and is explicitly cast as UUID before the `FOR UPDATE` lock.
+- Remaining - Medium: local queues already marked `DEAD_LETTER` after earlier HTTP 400 responses remain intentionally non-retriable and are not altered by this server-side repair.
+
+### Test And Verification Status
+
+- API test suite: passed, 22/22.
+- API typecheck, lint, and production build: passed.
+- `git diff --check`: passed with only informational CRLF conversion warnings.
+- Scoped changed-diff credential scan: passed.
+
+### Manual QA Status
+
+- Not run. Production confirmation requires deploying the API, allowing one paired v2 client to retry, confirming a successful sync/heartbeat, and checking Render no longer logs `uuid = text` for `sync-v2`.
+
+### Pass/Fail Recommendation
+
+- Pass for immediate API-only deployment. No migration and no tracking-client installer/extension update are required for the UUID lock fix.
+
 ## 2026-07-18 Tracking Client GitHub Release Automation QA
 
 ### Reviewed Implementation
