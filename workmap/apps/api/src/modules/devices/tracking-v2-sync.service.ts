@@ -106,318 +106,318 @@ export class TrackingV2SyncService {
     let intervalCount = 0;
 
     try {
-    const request = parseSyncRequest(input);
-    intervalCount = request.intervals.length;
-    stage = "policy";
-    const identity = await this.policyService.requireV2DeviceIdentity(context);
-    if (!identity.protocolActivatedAt) {
-      throw new HttpException(
-        "Protocol v2 has not been activated for this device.",
-        426,
-      );
-    }
-    const protocolActivatedAt = identity.protocolActivatedAt;
-    if (
-      new Date(request.protocolActivatedAt).getTime() !==
-      protocolActivatedAt.getTime()
-    ) {
-      throw new HttpException(
-        "Protocol activation boundary does not match this device.",
-        426,
-      );
-    }
+      const request = parseSyncRequest(input);
+      intervalCount = request.intervals.length;
+      stage = "policy";
+      const identity =
+        await this.policyService.requireV2DeviceIdentity(context);
+      if (!identity.protocolActivatedAt) {
+        throw new HttpException(
+          "Protocol v2 has not been activated for this device.",
+          426,
+        );
+      }
+      const protocolActivatedAt = identity.protocolActivatedAt;
+      if (
+        new Date(request.protocolActivatedAt).getTime() !==
+        protocolActivatedAt.getTime()
+      ) {
+        throw new HttpException(
+          "Protocol activation boundary does not match this device.",
+          426,
+        );
+      }
 
-    const expectedSource =
-      context.clientType === DeviceClientType.DESKTOP_AGENT
-        ? TrackingActivitySource.DESKTOP_APP
-        : TrackingActivitySource.BROWSER_DOMAIN;
-    assertHealthBinding(request.health, context.clientType);
-    if (
-      request.focusSnapshot &&
-      request.focusSnapshot.source !== expectedSource
-    ) {
-      throw new ForbiddenException(
-        "Focus snapshot source does not match the device credential.",
-      );
-    }
+      const expectedSource =
+        context.clientType === DeviceClientType.DESKTOP_AGENT
+          ? TrackingActivitySource.DESKTOP_APP
+          : TrackingActivitySource.BROWSER_DOMAIN;
+      assertHealthBinding(request.health, context.clientType);
+      if (
+        request.focusSnapshot &&
+        request.focusSnapshot.source !== expectedSource
+      ) {
+        throw new ForbiddenException(
+          "Focus snapshot source does not match the device credential.",
+        );
+      }
 
-    const candidateIntervals = request.intervals.map(
-      (rawInterval, index) =>
+      const candidateIntervals = request.intervals.map((rawInterval, index) =>
         parseCandidateInterval(rawInterval, index, expectedSource),
-    );
-    const policyLeaseIds = new Set(
-      candidateIntervals.map((candidate) => candidate.interval.policyLeaseId),
-    );
-    if (request.focusSnapshot) {
-      policyLeaseIds.add(request.focusSnapshot.policyLeaseId);
-    }
-    const leases = await this.prisma.devicePolicyLease.findMany({
-      where: {
-        id: { in: [...policyLeaseIds] },
-        companyId: context.companyId,
-        userId: context.userId,
-        deviceId: context.deviceId,
-      },
-      include: {
-        monitoringPolicy: {
-          select: {
-            collectAppUsage: true,
-            collectWebsiteDomain: true,
+      );
+      const policyLeaseIds = new Set(
+        candidateIntervals.map((candidate) => candidate.interval.policyLeaseId),
+      );
+      if (request.focusSnapshot) {
+        policyLeaseIds.add(request.focusSnapshot.policyLeaseId);
+      }
+      const leases = await this.prisma.devicePolicyLease.findMany({
+        where: {
+          id: { in: [...policyLeaseIds] },
+          companyId: context.companyId,
+          userId: context.userId,
+          deviceId: context.deviceId,
+        },
+        include: {
+          monitoringPolicy: {
+            select: {
+              collectAppUsage: true,
+              collectWebsiteDomain: true,
+            },
           },
         },
-      },
-    });
-    const leaseById = new Map(leases.map((lease) => [lease.id, lease]));
-    const now = new Date();
-    for (const candidate of candidateIntervals) {
-      candidate.rejectionCode ??= validateCandidatePolicyAndIdentity({
-        candidate,
-        context,
-        expectedSource,
-        browserName: identity.browserName,
-        protocolActivatedAt,
-        lease: leaseById.get(candidate.interval.policyLeaseId),
-        now,
       });
-    }
-    if (request.focusSnapshot) {
-      validateSnapshot(
-        request.focusSnapshot,
-        expectedSource,
-        identity.browserName,
-        protocolActivatedAt,
-        leaseById.get(request.focusSnapshot.policyLeaseId),
-        now,
-      );
-    }
-
-    stage = "transaction";
-    const transactionResult = await this.prisma.$transaction(
-      async (tx) => {
-        const laneKeys = collectLaneKeys(
-          candidateIntervals,
+      const leaseById = new Map(leases.map((lease) => [lease.id, lease]));
+      const now = new Date();
+      for (const candidate of candidateIntervals) {
+        candidate.rejectionCode ??= validateCandidatePolicyAndIdentity({
+          candidate,
+          context,
+          expectedSource,
+          browserName: identity.browserName,
+          protocolActivatedAt,
+          lease: leaseById.get(candidate.interval.policyLeaseId),
+          now,
+        });
+      }
+      if (request.focusSnapshot) {
+        validateSnapshot(
           request.focusSnapshot,
           expectedSource,
+          identity.browserName,
+          protocolActivatedAt,
+          leaseById.get(request.focusSnapshot.policyLeaseId),
+          now,
         );
-        await lockWriteLanes(tx, context, identity.workstationId, laneKeys);
+      }
 
-        const persistedIdentity = await loadPersistedIdentities(
-          tx,
-          context.deviceId,
-          candidateIntervals,
-        );
-        const overlapRows = await loadPotentialOverlaps(
-          tx,
-          context.deviceId,
-          candidateIntervals.filter(
-            (candidate) => candidate.rejectionCode === null,
-          ),
-        );
-        const results: TrackingSyncItemResultV2[] = [];
-        const accepted: CandidateInterval[] = [];
-        const tombstones: Array<{
-          candidate: CandidateInterval;
-          code: string;
-        }> = [];
+      stage = "transaction";
+      const transactionResult = await this.prisma.$transaction(
+        async (tx) => {
+          const laneKeys = collectLaneKeys(
+            candidateIntervals,
+            request.focusSnapshot,
+            expectedSource,
+          );
+          await lockWriteLanes(tx, context, identity.workstationId, laneKeys);
 
-        for (const candidate of candidateIntervals) {
-          const eventExisting = persistedIdentity.byEvent.get(
-            candidate.interval.clientEventId,
+          const persistedIdentity = await loadPersistedIdentities(
+            tx,
+            context.deviceId,
+            candidateIntervals,
           );
-          const sequenceExisting = persistedIdentity.bySequence.get(
-            sequenceKey(candidate.interval),
+          const overlapRows = await loadPotentialOverlaps(
+            tx,
+            context.deviceId,
+            candidateIntervals.filter(
+              (candidate) => candidate.rejectionCode === null,
+            ),
           );
-          const tombstoneExisting = persistedIdentity.tombstones.get(
-            sequenceKey(candidate.interval),
-          );
-          const existing = eventExisting ?? sequenceExisting;
-          if (existing) {
-            const sameIdentity =
-              existing.clientEventId === candidate.interval.clientEventId &&
-              existing.sequenceNumber === candidate.interval.sequenceNumber &&
-              existing.source === candidate.interval.source &&
-              existing.stream === candidate.interval.stream &&
-              existing.clockEpochId === candidate.interval.clockEpochId;
-            if (sameIdentity && existing.payloadHash === candidate.payloadHash) {
-              results[candidate.index] = {
-                clientEventId: candidate.interval.clientEventId,
-                status: "DUPLICATE",
-              };
-            } else {
+          const results: TrackingSyncItemResultV2[] = [];
+          const accepted: CandidateInterval[] = [];
+          const tombstones: Array<{
+            candidate: CandidateInterval;
+            code: string;
+          }> = [];
+
+          for (const candidate of candidateIntervals) {
+            const eventExisting = persistedIdentity.byEvent.get(
+              candidate.interval.clientEventId,
+            );
+            const sequenceExisting = persistedIdentity.bySequence.get(
+              sequenceKey(candidate.interval),
+            );
+            const tombstoneExisting = persistedIdentity.tombstones.get(
+              sequenceKey(candidate.interval),
+            );
+            const existing = eventExisting ?? sequenceExisting;
+            if (existing) {
+              const sameIdentity =
+                existing.clientEventId === candidate.interval.clientEventId &&
+                existing.sequenceNumber === candidate.interval.sequenceNumber &&
+                existing.source === candidate.interval.source &&
+                existing.stream === candidate.interval.stream &&
+                existing.clockEpochId === candidate.interval.clockEpochId;
+              if (
+                sameIdentity &&
+                existing.payloadHash === candidate.payloadHash
+              ) {
+                results[candidate.index] = {
+                  clientEventId: candidate.interval.clientEventId,
+                  status: "DUPLICATE",
+                };
+              } else {
+                results[candidate.index] = {
+                  clientEventId: candidate.interval.clientEventId,
+                  status: "REJECTED",
+                  rejectionCode: eventExisting
+                    ? "IDEMPOTENCY_CONFLICT"
+                    : "SEQUENCE_CONFLICT",
+                  terminal: true,
+                };
+              }
+              continue;
+            }
+            if (tombstoneExisting) {
               results[candidate.index] = {
                 clientEventId: candidate.interval.clientEventId,
                 status: "REJECTED",
-                rejectionCode: eventExisting
-                  ? "IDEMPOTENCY_CONFLICT"
-                  : "SEQUENCE_CONFLICT",
+                rejectionCode: tombstoneExisting.rejectionCode,
                 terminal: true,
               };
+              continue;
             }
-            continue;
-          }
-          if (tombstoneExisting) {
+            if (candidate.rejectionCode) {
+              results[candidate.index] = {
+                clientEventId: candidate.interval.clientEventId,
+                status: "REJECTED",
+                rejectionCode: candidate.rejectionCode,
+                terminal: true,
+              };
+              tombstones.push({
+                candidate,
+                code: candidate.rejectionCode,
+              });
+              continue;
+            }
+            if (
+              overlapsAny(
+                candidate.interval,
+                overlapRows,
+                accepted.map((item) => ({
+                  deviceId: context.deviceId,
+                  source: item.interval.source as TrackingActivitySource,
+                  stream: item.interval.stream as TrackingActivityStream,
+                  startedAt: new Date(item.interval.startedAt),
+                  endedAt: new Date(item.interval.endedAt),
+                })),
+              )
+            ) {
+              const rejectionCode =
+                candidate.interval.stream === "FOCUS"
+                  ? "FOCUS_OVERLAP"
+                  : "RUNTIME_OVERLAP";
+              results[candidate.index] = {
+                clientEventId: candidate.interval.clientEventId,
+                status: "REJECTED",
+                rejectionCode,
+                terminal: true,
+              };
+              tombstones.push({ candidate, code: rejectionCode });
+              continue;
+            }
+            accepted.push(candidate);
             results[candidate.index] = {
               clientEventId: candidate.interval.clientEventId,
-              status: "REJECTED",
-              rejectionCode: tombstoneExisting.rejectionCode,
-              terminal: true,
+              status: "ACCEPTED",
             };
-            continue;
           }
-          if (candidate.rejectionCode) {
-            results[candidate.index] = {
-              clientEventId: candidate.interval.clientEventId,
-              status: "REJECTED",
-              rejectionCode: candidate.rejectionCode,
-              terminal: true,
-            };
-            tombstones.push({
-              candidate,
-              code: candidate.rejectionCode,
-            });
-            continue;
-          }
-          if (
-            overlapsAny(
-              candidate.interval,
-              overlapRows,
-              accepted.map((item) => ({
+
+          if (tombstones.length > 0) {
+            await tx.clientSequenceTombstone.createMany({
+              data: tombstones.map(({ candidate, code }) => ({
+                id: randomUUID(),
+                companyId: context.companyId,
+                userId: context.userId,
                 deviceId: context.deviceId,
-                source: item.interval.source as TrackingActivitySource,
-                stream: item.interval.stream as TrackingActivityStream,
-                startedAt: new Date(item.interval.startedAt),
-                endedAt: new Date(item.interval.endedAt),
+                clientEventId: candidate.interval.clientEventId,
+                source: candidate.interval.source as TrackingActivitySource,
+                stream: candidate.interval.stream as TrackingActivityStream,
+                clockEpochId: candidate.interval.clockEpochId,
+                sequenceNumber: candidate.interval.sequenceNumber,
+                rejectionCode: code,
+                payloadHash: candidate.payloadHash,
               })),
-            )
-          ) {
-            const rejectionCode =
-              candidate.interval.stream === "FOCUS"
-                ? "FOCUS_OVERLAP"
-                : "RUNTIME_OVERLAP";
-            results[candidate.index] = {
-              clientEventId: candidate.interval.clientEventId,
-              status: "REJECTED",
-              rejectionCode,
-              terminal: true,
-            };
-            tombstones.push({ candidate, code: rejectionCode });
-            continue;
+              skipDuplicates: true,
+            });
           }
-          accepted.push(candidate);
-          results[candidate.index] = {
-            clientEventId: candidate.interval.clientEventId,
-            status: "ACCEPTED",
-          };
-        }
 
-        if (tombstones.length > 0) {
-          await tx.clientSequenceTombstone.createMany({
-            data: tombstones.map(({ candidate, code }) => ({
-              id: randomUUID(),
-              companyId: context.companyId,
-              userId: context.userId,
-              deviceId: context.deviceId,
-              clientEventId: candidate.interval.clientEventId,
-              source: candidate.interval.source as TrackingActivitySource,
-              stream: candidate.interval.stream as TrackingActivityStream,
-              clockEpochId: candidate.interval.clockEpochId,
-              sequenceNumber: candidate.interval.sequenceNumber,
-              rejectionCode: code,
-              payloadHash: candidate.payloadHash,
-            })),
-            skipDuplicates: true,
+          const inserted = await insertAcceptedIntervals(
+            tx,
+            context,
+            identity.workstationId,
+            accepted,
+          );
+          const cursorKeys = uniqueCursorKeys(candidateIntervals);
+          const cursors = await refreshCursors(tx, context, cursorKeys);
+          const acceptedSnapshotSequence = request.focusSnapshot
+            ? await storeFocusSnapshot({
+                tx,
+                context,
+                snapshot: request.focusSnapshot,
+                browserName: identity.browserName,
+                workstationId: identity.workstationId,
+                protocolActivatedAt,
+                lease: leaseById.get(request.focusSnapshot.policyLeaseId)!,
+                cursors,
+              })
+            : null;
+          await storeClientHealth(
+            tx,
+            context,
+            expectedSource,
+            identity.workstationId,
+            request.health,
+            now,
+          );
+          await tx.device.update({
+            where: { id: context.deviceId },
+            data: { lastSeenAt: now },
           });
-        }
 
-        const inserted = await insertAcceptedIntervals(
-          tx,
-          context,
-          identity.workstationId,
-          accepted,
-        );
-        const cursorKeys = uniqueCursorKeys(candidateIntervals);
-        const cursors = await refreshCursors(
-          tx,
-          context,
-          cursorKeys,
-        );
-        const acceptedSnapshotSequence = request.focusSnapshot
-          ? await storeFocusSnapshot({
-              tx,
-              context,
-              snapshot: request.focusSnapshot,
-              browserName: identity.browserName,
-              workstationId: identity.workstationId,
-              protocolActivatedAt,
-              lease: leaseById.get(request.focusSnapshot.policyLeaseId)!,
-              cursors,
-            })
-          : null;
-        await storeClientHealth(
-          tx,
-          context,
-          expectedSource,
-          identity.workstationId,
-          request.health,
-          now,
-        );
-        await tx.device.update({
-          where: { id: context.deviceId },
-          data: { lastSeenAt: now },
-        });
+          return {
+            results,
+            cursors,
+            acceptedSnapshotSequence,
+            insertedIntervalIds: inserted.intervals.map((row) => row.id),
+            dirtyTargets: inserted.dirtyTargets,
+          };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+          maxWait: 5_000,
+          timeout: 15_000,
+        },
+      );
 
-        return {
-          results,
-          cursors,
-          acceptedSnapshotSequence,
-          insertedIntervalIds: inserted.intervals.map((row) => row.id),
-          dirtyTargets: inserted.dirtyTargets,
-        };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
-        maxWait: 5_000,
-        timeout: 15_000,
-      },
-    );
-
-    const activePolicy = await this.prisma.monitoringPolicy.findFirst({
-      where: {
-        companyId: context.companyId,
-        activeFrom: { lte: now },
-      },
-      orderBy: [{ activeFrom: "desc" }, { id: "desc" }],
-      select: { policyVersion: true },
-    });
-    const activeLease = leases.find(
-      (lease) => lease.policyVersion === activePolicy?.policyVersion,
-    );
-    // Reconciliation is performed by the background worker. A slow or failed
-    // aggregate refresh must not delay an accepted client upload or heartbeat.
-    stage = "response";
-    return {
-      results: transactionResult.results,
-      cursors: transactionResult.cursors,
-      acceptedSnapshotSequence:
-        transactionResult.acceptedSnapshotSequence,
-      serverTime: now.toISOString(),
-      activePolicyVersion: activePolicy?.policyVersion ?? "",
-      activePolicyLeaseId: activeLease?.id ?? null,
-      requestId,
-    };
+      const activePolicy = await this.prisma.monitoringPolicy.findFirst({
+        where: {
+          companyId: context.companyId,
+          activeFrom: { lte: now },
+        },
+        orderBy: [{ activeFrom: "desc" }, { id: "desc" }],
+        select: { policyVersion: true },
+      });
+      const activeLease = leases.find(
+        (lease) => lease.policyVersion === activePolicy?.policyVersion,
+      );
+      // Reconciliation is performed by the background worker. A slow or failed
+      // aggregate refresh must not delay an accepted client upload or heartbeat.
+      stage = "response";
+      return {
+        results: transactionResult.results,
+        cursors: transactionResult.cursors,
+        acceptedSnapshotSequence: transactionResult.acceptedSnapshotSequence,
+        serverTime: now.toISOString(),
+        activePolicyVersion: activePolicy?.policyVersion ?? "",
+        activePolicyLeaseId: activeLease?.id ?? null,
+        requestId,
+      };
     } catch (error) {
       const status = error instanceof HttpException ? error.getStatus() : 500;
       const code = trackingSyncErrorCode(error, status);
-      this.logger.warn(JSON.stringify({
-        event: "tracking_v2_sync",
-        outcome: "failed",
-        requestId,
-        stage,
-        intervalCount,
-        status,
-        code,
-        durationMs: Date.now() - startedAtMs,
-      }));
+      this.logger.warn(
+        JSON.stringify({
+          event: "tracking_v2_sync",
+          outcome: "failed",
+          requestId,
+          stage,
+          intervalCount,
+          status,
+          code,
+          durationMs: Date.now() - startedAtMs,
+        }),
+      );
       throw withTrackingSyncRequestId(error, requestId, status, code);
     }
   }
@@ -428,9 +428,14 @@ type TrackingV2SyncStage = "parse" | "policy" | "transaction" | "response";
 function trackingSyncErrorCode(error: unknown, status: number) {
   if (error instanceof HttpException) {
     const response = error.getResponse();
-    if (typeof response === "object" && response !== null && !Array.isArray(response)) {
+    if (
+      typeof response === "object" &&
+      response !== null &&
+      !Array.isArray(response)
+    ) {
       const code = (response as Record<string, unknown>).code;
-      if (typeof code === "string" && /^[A-Z0-9_-]{1,80}$/.test(code)) return code;
+      if (typeof code === "string" && /^[A-Z0-9_-]{1,80}$/.test(code))
+        return code;
     }
   }
   return status >= 500 ? "TRACKING_SYNC_INTERNAL" : `HTTP_${status}`;
@@ -445,7 +450,9 @@ function withTrackingSyncRequestId(
   if (error instanceof HttpException) {
     const response = error.getResponse();
     const body =
-      typeof response === "object" && response !== null && !Array.isArray(response)
+      typeof response === "object" &&
+      response !== null &&
+      !Array.isArray(response)
         ? response
         : { statusCode: status, message: response };
     return new HttpException({ ...body, requestId }, status);
@@ -463,15 +470,19 @@ function withTrackingSyncRequestId(
 
 function parseSyncRequest(input: unknown): TrackingSyncRequestV2 {
   const body = readObject(input, "Tracking sync payload must be an object.");
-  assertOnlyKeys(body, [
-    "protocolVersion",
-    "protocolActivatedAt",
-    "clientInstanceId",
-    "sentAt",
-    "intervals",
-    "focusSnapshot",
-    "health",
-  ], "sync");
+  assertOnlyKeys(
+    body,
+    [
+      "protocolVersion",
+      "protocolActivatedAt",
+      "clientInstanceId",
+      "sentAt",
+      "intervals",
+      "focusSnapshot",
+      "health",
+    ],
+    "sync",
+  );
   const size = Buffer.byteLength(JSON.stringify(body), "utf8");
   if (size > MAX_TRACKING_SYNC_BYTES) {
     throw new BadRequestException(
@@ -481,7 +492,10 @@ function parseSyncRequest(input: unknown): TrackingSyncRequestV2 {
   if (body.protocolVersion !== TRACKING_PROTOCOL_VERSION_V2) {
     throw new HttpException("Protocol v2 is required.", 426);
   }
-  const protocolActivatedAt = readIso(body.protocolActivatedAt, "protocolActivatedAt");
+  const protocolActivatedAt = readIso(
+    body.protocolActivatedAt,
+    "protocolActivatedAt",
+  );
   const sentAt = readIso(body.sentAt, "sentAt");
   if (sentAt.getTime() > Date.now() + MAX_FUTURE_SKEW_MS) {
     throw new BadRequestException("sentAt is too far in the future.");
@@ -575,8 +589,7 @@ function validateCandidatePolicyAndIdentity(input: {
   }
   if (
     interval.stream !== "FOCUS" ||
-    (interval.metric !== "FOCUS_ACTIVE" &&
-      interval.metric !== "FOCUS_IDLE")
+    (interval.metric !== "FOCUS_ACTIVE" && interval.metric !== "FOCUS_IDLE")
   ) {
     return "OPEN_RUNTIME_NOT_ENABLED";
   }
@@ -586,10 +599,7 @@ function validateCandidatePolicyAndIdentity(input: {
   ) {
     return "BROWSER_IDENTITY_MISMATCH";
   }
-  if (
-    interval.source === "DESKTOP_APP" &&
-    interval.browserName !== undefined
-  ) {
+  if (interval.source === "DESKTOP_APP" && interval.browserName !== undefined) {
     return "BROWSER_IDENTITY_MISMATCH";
   }
   const startedAt = new Date(interval.startedAt);
@@ -648,8 +658,7 @@ function validateSnapshot(
   if (
     (snapshot.source === "BROWSER_DOMAIN" &&
       snapshot.browserName !== browserName) ||
-    (snapshot.source === "DESKTOP_APP" &&
-      snapshot.browserName !== undefined)
+    (snapshot.source === "DESKTOP_APP" && snapshot.browserName !== undefined)
   ) {
     throw new ForbiddenException(
       "Focus snapshot browser identity does not match the paired device.",
@@ -660,9 +669,7 @@ function validateSnapshot(
     lease.policyVersion !== snapshot.policyVersion ||
     lease.id !== snapshot.policyLeaseId
   ) {
-    throw new BadRequestException(
-      "Focus snapshot policy lease is invalid.",
-    );
+    throw new BadRequestException("Focus snapshot policy lease is invalid.");
   }
   const observedAt = readIso(snapshot.lastObservedAt, "lastObservedAt");
   if (
@@ -761,10 +768,7 @@ async function loadPersistedIdentities(
   const intervals = await tx.activityInterval.findMany({
     where: {
       deviceId,
-      OR: [
-        { clientEventId: { in: eventIds } },
-        ...sequenceClauses,
-      ],
+      OR: [{ clientEventId: { in: eventIds } }, ...sequenceClauses],
     },
     select: {
       id: true,
@@ -806,9 +810,7 @@ async function loadPersistedIdentities(
         interval as StoredIntervalIdentity,
       ]),
     ),
-    tombstones: new Map(
-      tombstoneRows.map((row) => [sequenceKey(row), row]),
-    ),
+    tombstones: new Map(tombstoneRows.map((row) => [sequenceKey(row), row])),
   };
 }
 
@@ -827,24 +829,20 @@ async function loadPotentialOverlaps(
   );
   const latest = new Date(
     Math.max(
-      ...candidates.map((candidate) =>
-        Date.parse(candidate.interval.endedAt),
-      ),
+      ...candidates.map((candidate) => Date.parse(candidate.interval.endedAt)),
     ),
   );
   const streams = [
     ...new Set(
       candidates.map(
-        (candidate) =>
-          candidate.interval.stream as TrackingActivityStream,
+        (candidate) => candidate.interval.stream as TrackingActivityStream,
       ),
     ),
   ];
   const sources = [
     ...new Set(
       candidates.map(
-        (candidate) =>
-          candidate.interval.source as TrackingActivitySource,
+        (candidate) => candidate.interval.source as TrackingActivitySource,
       ),
     ),
   ];
@@ -913,8 +911,7 @@ async function insertAcceptedIntervals(
         {
           id: randomUUID(),
           companyId: context.companyId,
-          source:
-            candidate.interval.source as TrackingActivitySource,
+          source: candidate.interval.source as TrackingActivitySource,
           subjectKey: candidate.interval.subjectKey,
           displayName: candidate.interval.displayName,
         },
@@ -989,8 +986,7 @@ async function insertAcceptedIntervals(
       metric: candidate.interval.metric as TrackingActivityMetric,
       subjectKey: candidate.interval.subjectKey,
       displayName: candidate.interval.displayName,
-      browserName:
-        candidate.interval.browserName as BrowserName | undefined,
+      browserName: candidate.interval.browserName as BrowserName | undefined,
       startedAt: new Date(candidate.interval.startedAt),
       endedAt: new Date(candidate.interval.endedAt),
       clockEpochId: candidate.interval.clockEpochId,
@@ -1005,8 +1001,7 @@ async function insertAcceptedIntervals(
       durationMs: BigInt(candidate.interval.durationMs),
       policyVersion: candidate.interval.policyVersion,
       payloadHash: candidate.payloadHash,
-      canonicalizationVersion:
-        TRACKING_CANONICALIZATION_VERSION_V1,
+      canonicalizationVersion: TRACKING_CANONICALIZATION_VERSION_V1,
     };
   });
   await tx.activityInterval.createMany({ data: inserted });
@@ -1051,10 +1046,7 @@ async function insertAcceptedIntervals(
       create: target,
     });
   }
-  await incrementDeviceSubjectSummaries(
-    tx,
-    fragments,
-  );
+  await incrementDeviceSubjectSummaries(tx, fragments);
   return {
     intervals: inserted,
     dirtyTargets,
@@ -1075,18 +1067,21 @@ async function incrementDeviceSubjectSummaries(
   }>,
 ) {
   const receivedAt = new Date();
-  const grouped = new Map<string, {
-    companyId: string;
-    userId: string;
-    deviceId: string;
-    activitySubjectId: string;
-    source: TrackingActivitySource;
-    utcDate: Date;
-    focusActiveMs: bigint;
-    focusedIdleMs: bigint;
-    openRuntimeMs: bigint;
-    latestReceivedAt: Date;
-  }>();
+  const grouped = new Map<
+    string,
+    {
+      companyId: string;
+      userId: string;
+      deviceId: string;
+      activitySubjectId: string;
+      source: TrackingActivitySource;
+      utcDate: Date;
+      focusActiveMs: bigint;
+      focusedIdleMs: bigint;
+      openRuntimeMs: bigint;
+      latestReceivedAt: Date;
+    }
+  >();
   for (const fragment of fragments) {
     const key = [
       fragment.deviceId,
@@ -1203,8 +1198,7 @@ async function refreshCursors(
         },
       },
       update: {
-        contiguousThroughSequence:
-          coverage.contiguousThroughSequence,
+        contiguousThroughSequence: coverage.contiguousThroughSequence,
         latestAcceptedEndedAt: coverage.latestAcceptedEndedAt
           ? new Date(coverage.latestAcceptedEndedAt)
           : null,
@@ -1218,8 +1212,7 @@ async function refreshCursors(
         source: key.source,
         stream: key.stream,
         clockEpochId: key.clockEpochId,
-        contiguousThroughSequence:
-          coverage.contiguousThroughSequence,
+        contiguousThroughSequence: coverage.contiguousThroughSequence,
         latestAcceptedEndedAt: coverage.latestAcceptedEndedAt
           ? new Date(coverage.latestAcceptedEndedAt)
           : null,
@@ -1268,8 +1261,7 @@ async function storeFocusSnapshot(input: {
       where: {
         companyId_source_subjectKey: {
           companyId: input.context.companyId,
-          source:
-            input.snapshot.source as TrackingActivitySource,
+          source: input.snapshot.source as TrackingActivitySource,
           subjectKey: input.snapshot.subjectKey,
         },
       },
@@ -1309,8 +1301,7 @@ async function storeFocusSnapshot(input: {
     activitySubjectId: subjectId,
     policyLeaseId: input.snapshot.policyLeaseId,
     stream: TrackingActivityStream.FOCUS,
-    browserName:
-      input.snapshot.browserName as BrowserName | undefined,
+    browserName: input.snapshot.browserName as BrowserName | undefined,
     snapshotSequence: input.snapshot.snapshotSequence,
     activitySessionId: input.snapshot.activitySessionId,
     currentStateId: input.snapshot.currentStateId,
@@ -1321,21 +1312,14 @@ async function storeFocusSnapshot(input: {
     state: input.snapshot.state as TrackingFocusState,
     sessionStartedAt: optionalDate(input.snapshot.sessionStartedAt),
     stateStartedAt: optionalDate(input.snapshot.stateStartedAt),
-    lastActivityEvidenceAt: optionalDate(
-      input.snapshot.lastActivityEvidenceAt,
-    ),
-    activityEvidenceKind:
-      input.snapshot.activityEvidenceKind as
-        | TrackingEvidenceKind
-        | null,
-    latestEmittedIntervalSequence:
-      input.snapshot.latestEmittedIntervalSequence,
-    latestEmittedClientEventId:
-      input.snapshot.latestEmittedClientEventId,
+    lastActivityEvidenceAt: optionalDate(input.snapshot.lastActivityEvidenceAt),
+    activityEvidenceKind: input.snapshot
+      .activityEvidenceKind as TrackingEvidenceKind | null,
+    latestEmittedIntervalSequence: input.snapshot.latestEmittedIntervalSequence,
+    latestEmittedClientEventId: input.snapshot.latestEmittedClientEventId,
     nextIntervalSequence: input.snapshot.nextIntervalSequence,
     lastObservedAt: new Date(input.snapshot.lastObservedAt),
-    collectorState:
-      input.snapshot.collectorState as TrackingCollectorState,
+    collectorState: input.snapshot.collectorState as TrackingCollectorState,
     provisionalFromAt,
     receivedAt: new Date(),
   };
@@ -1385,8 +1369,7 @@ async function resolveProvisionalFromAt(input: {
         source: snapshot.source as TrackingActivitySource,
         stream: TrackingActivityStream.FOCUS,
         clockEpochId: snapshot.clockEpochId,
-        sequenceNumber:
-          snapshot.latestEmittedIntervalSequence,
+        sequenceNumber: snapshot.latestEmittedIntervalSequence,
         activitySessionId: snapshot.activitySessionId,
         policyLeaseId: snapshot.policyLeaseId,
       },
@@ -1441,16 +1424,13 @@ async function resolveProvisionalFromAt(input: {
   ]);
   const allowed = canBootstrapFirstStateProvisionalV2({
     snapshot,
-    contiguousThroughSequence:
-      input.cursor.contiguousThroughSequence,
+    contiguousThroughSequence: input.cursor.contiguousThroughSequence,
     hasAnyDisposition: acceptedCount + tombstoneCount > 0,
     hasMissingSequence: input.cursor.missingRanges.length > 0,
     hasOverlap: Boolean(overlap),
     protocolActivatedAt: input.protocolActivatedAt.toISOString(),
     clockEpochStartedAt: input.protocolActivatedAt.toISOString(),
-    allowedUtcWindows: readPolicyWindows(
-      input.lease.allowedUtcWindows,
-    ),
+    allowedUtcWindows: readPolicyWindows(input.lease.allowedUtcWindows),
     ...(input.browserName === BrowserName.CHROME ||
     input.browserName === BrowserName.EDGE
       ? { expectedBrowserName: input.browserName }
@@ -1474,24 +1454,17 @@ async function storeClientHealth(
     clientType: health.clientType as DeviceClientType,
     clientVersion: health.clientVersion,
     platform: health.platform,
-    connectionState:
-      health.connectionState as TrackingConnectionState,
-    collectorState:
-      health.collectorState as TrackingCollectorState,
+    connectionState: health.connectionState as TrackingConnectionState,
+    collectorState: health.collectorState as TrackingCollectorState,
     policyState: health.policyState as TrackingPolicyState,
-    migrationState:
-      health.migrationState as TrackingMigrationState,
+    migrationState: health.migrationState as TrackingMigrationState,
     queuePending: health.queue.pending,
     queueReady: health.queue.ready,
     queueDeadLetter: health.queue.deadLetter,
     oldestQueuedAt: optionalDate(health.queue.oldestQueuedAt),
     nextRetryAt: optionalDate(health.queue.nextRetryAt),
-    lastSuccessfulHeartbeatAt: optionalDate(
-      health.lastSuccessfulHeartbeatAt,
-    ),
-    lastSuccessfulSyncAt: optionalDate(
-      health.lastSuccessfulSyncAt,
-    ),
+    lastSuccessfulHeartbeatAt: optionalDate(health.lastSuccessfulHeartbeatAt),
+    lastSuccessfulSyncAt: optionalDate(health.lastSuccessfulSyncAt),
     errorCode: health.errorCode as TrackingHealthErrorCode,
     receivedAt,
   };
@@ -1512,33 +1485,34 @@ async function storeClientHealth(
 }
 
 function parseSnapshot(value: unknown): LiveFocusSnapshotV2 {
-  const snapshot = readObject(
-    value,
-    "focusSnapshot must be an object.",
+  const snapshot = readObject(value, "focusSnapshot must be an object.");
+  assertOnlyKeys(
+    snapshot,
+    [
+      "snapshotSequence",
+      "activitySessionId",
+      "currentStateId",
+      "source",
+      "stream",
+      "clockEpochId",
+      "policyVersion",
+      "policyLeaseId",
+      "subjectKey",
+      "displayName",
+      "browserName",
+      "state",
+      "sessionStartedAt",
+      "stateStartedAt",
+      "lastActivityEvidenceAt",
+      "activityEvidenceKind",
+      "latestEmittedIntervalSequence",
+      "latestEmittedClientEventId",
+      "nextIntervalSequence",
+      "lastObservedAt",
+      "collectorState",
+    ],
+    "focusSnapshot",
   );
-  assertOnlyKeys(snapshot, [
-    "snapshotSequence",
-    "activitySessionId",
-    "currentStateId",
-    "source",
-    "stream",
-    "clockEpochId",
-    "policyVersion",
-    "policyLeaseId",
-    "subjectKey",
-    "displayName",
-    "browserName",
-    "state",
-    "sessionStartedAt",
-    "stateStartedAt",
-    "lastActivityEvidenceAt",
-    "activityEvidenceKind",
-    "latestEmittedIntervalSequence",
-    "latestEmittedClientEventId",
-    "nextIntervalSequence",
-    "lastObservedAt",
-    "collectorState",
-  ], "focusSnapshot");
   const parsed = snapshot as LiveFocusSnapshotV2;
   assertEnumValue(
     parsed.source,
@@ -1670,32 +1644,31 @@ function parseSnapshot(value: unknown): LiveFocusSnapshotV2 {
 
 function parseHealth(value: unknown): ClientHealthV2 {
   const health = readObject(value, "health must be an object.");
-  assertOnlyKeys(health, [
-    "clientType",
-    "clientVersion",
-    "platform",
-    "connectionState",
-    "collectorState",
-    "policyState",
-    "migrationState",
-    "queue",
-    "lastSuccessfulHeartbeatAt",
-    "lastSuccessfulSyncAt",
-    "errorCode",
-  ], "health");
+  assertOnlyKeys(
+    health,
+    [
+      "clientType",
+      "clientVersion",
+      "platform",
+      "connectionState",
+      "collectorState",
+      "policyState",
+      "migrationState",
+      "queue",
+      "lastSuccessfulHeartbeatAt",
+      "lastSuccessfulSyncAt",
+      "errorCode",
+    ],
+    "health",
+  );
   const queue = readObject(health.queue, "health.queue must be an object.");
-  assertOnlyKeys(queue, [
-    "pending",
-    "ready",
-    "deadLetter",
-    "oldestQueuedAt",
-    "nextRetryAt",
-  ], "health.queue");
+  assertOnlyKeys(
+    queue,
+    ["pending", "ready", "deadLetter", "oldestQueuedAt", "nextRetryAt"],
+    "health.queue",
+  );
   for (const key of ["pending", "ready", "deadLetter"]) {
-    if (
-      !Number.isInteger(queue[key]) ||
-      Number(queue[key]) < 0
-    ) {
+    if (!Number.isInteger(queue[key]) || Number(queue[key]) < 0) {
       throw new BadRequestException(
         `health.queue.${key} must be a non-negative integer.`,
       );
@@ -1745,11 +1718,7 @@ function parseHealth(value: unknown): ClientHealthV2 {
     ],
     "health.errorCode",
   );
-  readBoundedString(
-    health.clientVersion,
-    "health.clientVersion",
-    80,
-  );
+  readBoundedString(health.clientVersion, "health.clientVersion", 80);
   for (const value of [
     health.lastSuccessfulHeartbeatAt,
     health.lastSuccessfulSyncAt,
@@ -1803,10 +1772,7 @@ function collectLaneKeys(
   }
   return [
     ...new Map(
-      values.map((value) => [
-        `${value.source}:${value.stream}`,
-        value,
-      ]),
+      values.map((value) => [`${value.source}:${value.stream}`, value]),
     ).values(),
   ].sort(
     (left, right) =>
@@ -1820,10 +1786,8 @@ function uniqueCursorKeys(candidates: CandidateInterval[]) {
     ...new Map(
       candidates.map((candidate) => {
         const value = {
-          source:
-            candidate.interval.source as TrackingActivitySource,
-          stream:
-            candidate.interval.stream as TrackingActivityStream,
+          source: candidate.interval.source as TrackingActivitySource,
+          stream: candidate.interval.stream as TrackingActivityStream,
           clockEpochId: candidate.interval.clockEpochId,
         };
         return [sequenceKey(value), value];
@@ -1888,8 +1852,7 @@ function splitIntervalByUtcDay(interval: {
         cursor.getUTCDate() + 1,
       ),
     );
-    const endedAt =
-      interval.endedAt < nextDay ? interval.endedAt : nextDay;
+    const endedAt = interval.endedAt < nextDay ? interval.endedAt : nextDay;
     fragments.push({
       id: randomUUID(),
       activityIntervalId: interval.id,
@@ -1928,10 +1891,12 @@ function readPolicyWindows(value: unknown) {
       typeof (item as Record<string, unknown>).startsAt === "string" &&
       typeof (item as Record<string, unknown>).endsAt === "string"
     ) {
-      return [{
-        startsAt: (item as Record<string, string>).startsAt,
-        endsAt: (item as Record<string, string>).endsAt,
-      }];
+      return [
+        {
+          startsAt: (item as Record<string, string>).startsAt,
+          endsAt: (item as Record<string, string>).endsAt,
+        },
+      ];
     }
     return [];
   });
@@ -1943,9 +1908,7 @@ function safePayloadHash(interval: ActivityIntervalV2) {
       .update(canonicalizeActivityIntervalV2(interval))
       .digest("hex");
   } catch {
-    return createHash("sha256")
-      .update(JSON.stringify(interval))
-      .digest("hex");
+    return createHash("sha256").update(JSON.stringify(interval)).digest("hex");
   }
 }
 
@@ -1974,13 +1937,9 @@ function assertOnlyKeys(
   label: string,
 ) {
   const allowedSet = new Set(allowed);
-  const unexpected = Object.keys(record).find(
-    (key) => !allowedSet.has(key),
-  );
+  const unexpected = Object.keys(record).find((key) => !allowedSet.has(key));
   if (unexpected) {
-    throw new BadRequestException(
-      `${label}.${unexpected} is not allowed.`,
-    );
+    throw new BadRequestException(`${label}.${unexpected} is not allowed.`);
   }
 }
 
