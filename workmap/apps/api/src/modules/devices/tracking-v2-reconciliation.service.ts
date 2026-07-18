@@ -470,3 +470,37 @@ function reconciliationErrorCode(error: unknown) {
   }
   return "RECONCILIATION_FAILED";
 }
+
+// Reconciliation logs must identify the failed database operation without
+// exposing connection strings or device credentials.
+export function describeTrackingV2Error(error: unknown) {
+  const record = asRecord(error);
+  const code = typeof record?.code === "string" ? record.code : undefined;
+  const meta = asRecord(record?.meta);
+  const detail = firstString(
+    meta?.message,
+    record?.message,
+    typeof error === "string" ? error : undefined,
+  );
+  const message = redactTrackingV2Log(detail ?? "Unknown reconciliation error.");
+  return `${code ? `code=${code} ` : ""}message=${message}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function firstString(...values: unknown[]) {
+  return values.find((value): value is string => typeof value === "string");
+}
+
+function redactTrackingV2Log(value: string) {
+  return value
+    .replace(/(?:postgres(?:ql)?:\/\/)[^\s]+/gi, "[database-url]")
+    .replace(/(?:device|bearer)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [redacted]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 320);
+}

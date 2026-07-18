@@ -1,5 +1,32 @@
 # Latest QA Handoff
 
+## 2026-07-18 Tracking v2 Upload Confirmation And Reconciliation Diagnostics QA
+
+### Reviewed Implementation
+
+- Reviewed the post-`f5ad70b` failure mode: an accepted Tracking v2 upload could wait on daily-summary reconciliation before returning to the Agent, while the reconciliation worker discarded the diagnostic error detail.
+
+### Findings Ordered By Severity
+
+- Fixed - High: daily aggregation was in the synchronous `sync-v2` request path even though dirty targets are already durably queued for the worker. A slow or failing aggregate refresh could delay client acknowledgement and cause a retry/offline presentation.
+- Fixed - Medium: worker warnings hid the database error code/message necessary to repair reconciliation. New logs are redacted and capped; no request payload or device credential is logged.
+- Remaining - Medium: the worker still has a real production database error, currently unknown because the deployed version emits only generic warnings. The next deployment must provide its precise sanitized error.
+
+### Test And Verification Status
+
+- `git diff --check`: pass, with CRLF conversion notices only.
+- Node syntax checks for modified API modules: pass.
+- API typecheck/lint/build: blocked locally by inconsistent `node_modules` and unavailable registry fetch. The command was stopped before pnpm could remove or reinstall dependencies.
+
+### Manual QA Status
+
+- Not run. Production verification requires one API deployment, confirmation that a paired Agent reaches `Connected`, and inspection of the first detailed reconciliation warning if aggregation still fails.
+
+### Pass/Fail Recommendation
+
+- Pass for API-only deployment to decouple acceptance from aggregation and restore retry responsiveness.
+- Do not call reconciliation complete until the post-deploy detailed Render error is inspected and corrected.
+
 ## 2026-07-18 Tracking v2 Sync UUID Lock Recovery QA
 
 ### Reviewed Implementation

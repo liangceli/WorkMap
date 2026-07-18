@@ -1,5 +1,46 @@
 # Latest Implementation Handoff
 
+## 2026-07-18 Tracking v2 Upload Confirmation And Reconciliation Diagnostics
+
+### Original Task Brief
+
+- Investigate why the deployed `f5ad70b` UUID-lock repair still left a paired Desktop Agent in `Offline - retrying` with a full local queue while Render repeatedly logged only a generic Tracking v2 reconciliation warning.
+
+### Changed Files
+
+- `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`
+- `workmap/apps/api/src/modules/devices/tracking-v2-reconciliation.service.ts`
+- `workmap/apps/api/src/modules/devices/tracking-v2-reconciliation.worker.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Removed synchronous reconciliation from `POST /device-client/sync-v2`. Once the intake transaction accepts a v2 interval, snapshot, and health payload, the API now returns the acknowledgement without waiting for daily-report aggregation.
+- The existing reconciliation worker remains responsible for dirty aggregate targets. A failed aggregate refresh can no longer make a successful client upload wait long enough to time out and appear offline.
+- Worker warnings now include a capped, redacted database error code/message. URLs and Device/Bearer credentials are removed before logging, so the next Render failure identifies the remaining reconciliation fault without disclosing secrets.
+- No Prisma schema, migration, pairing, device credential, legacy queue record, Reports contract, or client installer was changed.
+
+### Verification Commands And Results
+
+- `git -C workmap diff --check`: passed; CRLF notices only.
+- `node --check` on the two modified API modules: passed.
+- API package typecheck/lint/build: not run. The local `workmap/node_modules` state is inconsistent with the lockfile; pnpm requested a destructive modules-directory purge, then failed to reach the registry. No dependency directory was removed or reinstalled.
+
+### Manual QA
+
+- Not run. Deploying this API-only patch is required before the Agent can retry against the decoupled sync path and before Render can emit the actual reconciliation error.
+
+### Intentionally Not Changed
+
+- No Desktop Agent or Browser Extension update is required for this API-only change.
+- No local client queue or historical event was deleted, requeued, or mutated.
+
+### Remaining Risks
+
+- The separate reconciliation failure remains unresolved until the newly detailed Render warning identifies its exact database error. It will no longer block client upload acknowledgement.
+- Existing v1 legacy queue items remain in `DRAINING_V1`; their independent retries are preserved and must not be discarded without an explicit data-retention decision.
+
 ## 2026-07-18 Tracking v2 Sync UUID Lock Recovery
 
 ### Original Task Brief

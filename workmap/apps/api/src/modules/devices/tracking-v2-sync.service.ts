@@ -3,7 +3,6 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
-  Logger,
 } from "@nestjs/common";
 import {
   BrowserName,
@@ -43,10 +42,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { DeviceRequestContext } from "./device-context.js";
 import { TrackingV2PolicyService } from "./tracking-v2-policy.service.js";
-import {
-  TrackingV2ReconciliationService,
-  type TrackingReconciliationTargetKey,
-} from "./tracking-v2-reconciliation.service.js";
+import type { TrackingReconciliationTargetKey } from "./tracking-v2-reconciliation.service.js";
 
 const MAX_EVENT_AGE_MS = 31 * 24 * 60 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
@@ -92,12 +88,9 @@ type StoredIntervalIdentity = {
 
 @Injectable()
 export class TrackingV2SyncService {
-  private readonly logger = new Logger(TrackingV2SyncService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly policyService: TrackingV2PolicyService,
-    private readonly reconciliation: TrackingV2ReconciliationService,
   ) {}
 
   async sync(context: DeviceRequestContext, input: unknown) {
@@ -384,17 +377,8 @@ export class TrackingV2SyncService {
     const activeLease = leases.find(
       (lease) => lease.policyVersion === activePolicy?.policyVersion,
     );
-    if (transactionResult.dirtyTargets.length > 0) {
-      try {
-        await this.reconciliation.reconcileTargets(
-          transactionResult.dirtyTargets,
-        );
-      } catch {
-        this.logger.warn(
-          "Tracking v2 reconciliation was deferred; dirty targets remain retryable.",
-        );
-      }
-    }
+    // Reconciliation is performed by the background worker. A slow or failed
+    // aggregate refresh must not delay an accepted client upload or heartbeat.
     return {
       results: transactionResult.results,
       cursors: transactionResult.cursors,

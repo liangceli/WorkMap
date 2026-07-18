@@ -4,7 +4,10 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { TrackingV2ReconciliationService } from "./tracking-v2-reconciliation.service.js";
+import {
+  describeTrackingV2Error,
+  TrackingV2ReconciliationService,
+} from "./tracking-v2-reconciliation.service.js";
 
 const INITIAL_RECONCILIATION_DELAY_MS = 2_000;
 const RECONCILIATION_INTERVAL_MS = 15_000;
@@ -44,9 +47,9 @@ export class TrackingV2ReconciliationWorker
   private async run() {
     try {
       await this.reconciliation.reconcileDirtyTargets();
-    } catch {
+    } catch (error) {
       this.logger.warn(
-        "Tracking v2 reconciliation retry failed; database targets remain retryable.",
+        `Tracking v2 reconciliation retry failed; database targets remain retryable. ${describeTrackingV2Error(error)}`,
       );
     } finally {
       this.schedule(RECONCILIATION_INTERVAL_MS);
