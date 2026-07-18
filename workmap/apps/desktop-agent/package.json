@@ -1,6 +1,6 @@
 {
   "name": "@workmap/desktop-agent",
-  "version": "0.5.10",
+  "version": "0.6.0",
   "description": "Privacy-minimized foreground application usage agent for WorkMap employees.",
   "author": "WorkMap",
   "private": true,
@@ -8,9 +8,10 @@
   "main": "dist/electron/main.js",
   "scripts": {
     "dev": "tsc --watch --noEmit",
-    "build": "tsc && node scripts/build-alpha.mjs",
-    "dev:gui": "tsc && electron .",
-    "release:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/generate-app-icon.ps1 && tsc && electron-builder --win nsis --x64",
+    "build:native": "node scripts/build-native-host.mjs",
+    "build": "pnpm run build:native && tsc && node scripts/build-alpha.mjs",
+    "dev:gui": "pnpm run build:native && tsc && electron .",
+    "release:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/generate-app-icon.ps1 && pnpm run build:native && tsc && electron-builder --win nsis --x64",
     "lint": "eslint .",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
@@ -33,6 +34,10 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "native/windows-activity-host/publish/workmap-windows-activity-host.exe",
+        "to": "native/workmap-windows-activity-host.exe"
+      },
       {
         "from": "scripts/windows-foreground.ps1",
         "to": "agent-scripts/windows-foreground.ps1"

@@ -1,14 +1,18 @@
 import { loadAgentConfig } from "./credentialStore.js";
 import { readJson, getAgentDataDirectory } from "./fileStore.js";
 import { pairDesktopAgent } from "./pairing.js";
-import { DesktopAgentRuntime } from "./runtime.js";
+import { DesktopAgentRuntimeV2 } from "./runtimeV2.js";
 import type { AgentStatus } from "./types.js";
+import { DESKTOP_AGENT_VERSION } from "./version.js";
 import { join } from "node:path";
 
 export * from "./apiClient.js";
 export * from "./fileStore.js";
 export * from "./trackingState.js";
+export * from "./trackingV2Store.js";
+export * from "./trackingV2Types.js";
 export * from "./types.js";
+export * from "./windowsActivityHost.js";
 export * from "./windowsForeground.js";
 
 async function main() {
@@ -19,7 +23,10 @@ async function main() {
 
   const config = await loadAgentConfig();
   if (!config) throw new Error("Desktop Agent is not paired. Run: run-workmap-agent.cmd pair --code XXXX-XXXX --api https://api.example.com");
-  const runtime = new DesktopAgentRuntime(config);
+  const runtime = new DesktopAgentRuntimeV2({
+    ...config,
+    agentVersion: DESKTOP_AGENT_VERSION,
+  });
   let stopping = false;
   const stop = (reason: "USER_STOP" | undefined) => {
     if (stopping) return;

@@ -1,6 +1,6 @@
 import { createParamDecorator, type ExecutionContext } from "@nestjs/common";
 import type { WorkMapRole } from "@workmap/auth";
-import type { DeviceClientType } from "@prisma/client";
+import type { BrowserName, DeviceClientType } from "@prisma/client";
 
 export const DEVICE_CONTEXT_KEY = "workmapDeviceContext";
 
@@ -11,6 +11,9 @@ export type DeviceRequestContext = {
   deviceId: string;
   credentialId: string;
   clientType: DeviceClientType;
+  browserName: BrowserName | null;
+  workstationId: string | null;
+  protocolActivatedAt: Date | null;
 };
 
 export type RequestWithDeviceContext = {

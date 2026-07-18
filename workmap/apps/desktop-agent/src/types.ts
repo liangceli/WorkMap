@@ -36,6 +36,7 @@ export type DeviceStatusReason =
   | "UNKNOWN";
 
 export type DeviceStatusEvent = {
+  protocolVersion?: 1 | 2;
   clientEventId: string;
   deviceId: string;
   sessionId?: string;
@@ -114,7 +115,7 @@ export type QueuedStatusEvent = {
 };
 
 export type AgentStatus = {
-  state: "unpaired" | "pairing" | "connected" | "offline" | "server_unreachable" | "auth_required" | "error";
+  state: "unpaired" | "pairing" | "connected" | "paused" | "offline" | "server_unreachable" | "auth_required" | "upgrade_required" | "error";
   deviceId?: string;
   lastHeartbeatAt?: string;
   lastUploadAt?: string;

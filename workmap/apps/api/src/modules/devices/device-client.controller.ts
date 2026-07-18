@@ -6,6 +6,8 @@ import { CurrentDeviceContext, type DeviceRequestContext } from "./device-contex
 import { DeviceCredentialGuard } from "./device-credential.guard.js";
 import { DevicePairingService } from "./device-pairing.service.js";
 import { DevicesService } from "./devices.service.js";
+import { TrackingV2PolicyService } from "./tracking-v2-policy.service.js";
+import { TrackingV2SyncService } from "./tracking-v2-sync.service.js";
 
 @Controller("device-client")
 export class DeviceClientController {
@@ -13,6 +15,8 @@ export class DeviceClientController {
     private readonly pairing: DevicePairingService,
     private readonly devices: DevicesService,
     private readonly activity: ActivityService,
+    private readonly trackingPolicy: TrackingV2PolicyService,
+    private readonly trackingSync: TrackingV2SyncService,
   ) {}
 
   @Post("pair")
@@ -23,7 +27,48 @@ export class DeviceClientController {
   @Get("status")
   @UseGuards(DeviceCredentialGuard)
   status(@CurrentDeviceContext() context: DeviceRequestContext) {
-    return { paired: true, clientType: context.clientType, deviceId: context.deviceId };
+    return {
+      paired: true,
+      clientType: context.clientType,
+      deviceId: context.deviceId,
+      workstationId: context.workstationId,
+      browserName: context.browserName,
+      protocolActivatedAt: context.protocolActivatedAt?.toISOString() ?? null,
+    };
+  }
+
+  @Get("tracking-policy")
+  @UseGuards(DeviceCredentialGuard)
+  trackingPolicyForDevice(
+    @CurrentDeviceContext() context: DeviceRequestContext,
+  ) {
+    return this.trackingPolicy.getTrackingPolicy(context);
+  }
+
+  @Post("protocol-v2/prepare")
+  @UseGuards(DeviceCredentialGuard)
+  prepareProtocolV2(
+    @CurrentDeviceContext() context: DeviceRequestContext,
+  ) {
+    return this.trackingPolicy.prepareActivation(context);
+  }
+
+  @Post("protocol-v2/confirm")
+  @UseGuards(DeviceCredentialGuard)
+  confirmProtocolV2(
+    @CurrentDeviceContext() context: DeviceRequestContext,
+    @Body() body: unknown,
+  ) {
+    return this.trackingPolicy.confirmActivation(context, body);
+  }
+
+  @Post("sync-v2")
+  @UseGuards(DeviceCredentialGuard)
+  syncV2(
+    @CurrentDeviceContext() context: DeviceRequestContext,
+    @Body() body: unknown,
+  ) {
+    return this.trackingSync.sync(context, body);
   }
 
   @Post("heartbeat")

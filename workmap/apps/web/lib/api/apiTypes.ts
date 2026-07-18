@@ -355,6 +355,19 @@ export type WorkMapApiUsageSummary = {
     topDomain?: string | null;
   }>;
   activityRevision: string | null;
+  trackingV2Coverage?: {
+    activatedDeviceCount: number;
+    openRuntimeEnabled: boolean;
+    reconciliationState: "RECONCILED" | "LEDGER_FALLBACK";
+    dirtyDates: Array<{
+      userId: string;
+      source: "DESKTOP_APP" | "BROWSER_DOMAIN";
+      date: string;
+      state: string;
+      errorCode: string | null;
+    }>;
+    latestIncludedReceivedAt: string | null;
+  };
 };
 
 export type WorkMapApiTrackingAudit = {
@@ -390,6 +403,95 @@ export type WorkMapApiReportLiveStatus =
       browserExtensionCoverage: WorkMapApiUsageSummary["browserExtensionCoverage"];
       activityRevision: string | null;
     };
+
+export type WorkMapApiTrackingV2LiveActivity = {
+  serverTime: string;
+  devices: Array<{
+    deviceId: string;
+    userId: string;
+    displayName: string;
+    clientType: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+    source: "DESKTOP_APP" | "BROWSER_DOMAIN";
+    browserName: "CHROME" | "EDGE" | null;
+    workstationId: string | null;
+    workstationName: string | null;
+    hostname: string | null;
+    clientVersion: string | null;
+    protocolActivatedAt: string | null;
+    fresh: boolean;
+    freshnessAgeMs: number | null;
+    freshnessLimitMs: number;
+    current: null | {
+      state: "ACTIVE" | "IDLE";
+      subjectKey: string | null;
+      displayName: string | null;
+      browserName: "CHROME" | "EDGE" | null;
+      sessionStartedAt: string | null;
+      stateStartedAt: string | null;
+      lastActivityEvidenceAt: string | null;
+      activityEvidenceKind:
+        | "FOCUS_ACQUIRED"
+        | "WINDOWS_SESSION_INPUT_WHILE_FOREGROUND"
+        | "TRUSTED_PAGE_INTERACTION"
+        | null;
+      provisionalFromAt: string | null;
+      provisionalDurationMs: number | null;
+    };
+    snapshot: null | {
+      snapshotSequence: number;
+      activitySessionId: string | null;
+      currentStateId: string | null;
+      clockEpochId: string;
+      policyVersion: string;
+      state: "ACTIVE" | "IDLE" | "NONE";
+      nextIntervalSequence: number;
+      latestEmittedIntervalSequence: number | null;
+      latestEmittedClientEventId: string | null;
+      lastObservedAt: string | null;
+      collectorState: "HEALTHY" | "LIMITED" | "PAUSED" | "ERROR";
+      receivedAt: string | null;
+    };
+    health: null | {
+      connectionState: "ONLINE" | "OFFLINE" | "AUTH_REQUIRED" | "UPGRADE_REQUIRED" | "ERROR";
+      collectorState: "HEALTHY" | "LIMITED" | "PAUSED" | "ERROR";
+      policyState: "ACTIVE" | "ACKNOWLEDGEMENT_REQUIRED" | "TIMEZONE_REQUIRED" | "EXPIRED";
+      migrationState: "V1" | "PREPARING_V2" | "DRAINING_V1" | "V2" | "ERROR";
+      platform: "WINDOWS" | "CHROME" | "EDGE";
+      queue: {
+        pending: number;
+        ready: number;
+        deadLetter: number;
+        oldestQueuedAt: string | null;
+        nextRetryAt: string | null;
+      };
+      lastSuccessfulHeartbeatAt: string | null;
+      lastSuccessfulSyncAt: string | null;
+      errorCode: string | null;
+      receivedAt: string | null;
+    };
+    cursor: null | {
+      clockEpochId: string;
+      contiguousThroughSequence: number;
+      latestAcceptedEndedAt: string | null;
+      missingRanges: unknown[];
+      rejectedRanges: unknown[];
+      clockDriftMs: number | null;
+      updatedAt: string | null;
+    };
+    correlation: null | {
+      state: "RESOLVED" | "UNRESOLVED" | "NO_MATCH";
+      desktopDeviceId?: string;
+      extensionDeviceId?: string;
+    };
+  }>;
+  coverage: {
+    total: number;
+    fresh: number;
+    stale: number;
+    withSequenceGaps: number;
+    withDeadLetters: number;
+  };
+};
 
 export type WorkMapApiDevice = {
   id: string;

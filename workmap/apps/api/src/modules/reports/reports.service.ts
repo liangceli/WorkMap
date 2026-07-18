@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
 import {
   ActivityEventSource,
   ActivityEventType,
@@ -12,6 +12,7 @@ import { canViewEmployeeActivity, canViewOwnReports, canViewTeamReports, type Re
 import { AuditService } from "../audit/audit.service.js";
 import { BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS } from "../devices/devices.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { TrackingV2ReportsService } from "./tracking-v2-reports.service.js";
 
 type SummaryQuery = {
   userId?: string;
@@ -81,7 +82,64 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Optional()
+    private readonly trackingV2?: TrackingV2ReportsService,
   ) {}
+
+  async getTrackingV2LiveActivity(
+    context: RequestContext,
+    query: Pick<SummaryQuery, "userId" | "departmentId" | "scope">,
+  ) {
+    const scope = normalizeReportScope(query.scope);
+    if (!this.trackingV2) {
+      return {
+        serverTime: new Date().toISOString(),
+        devices: [],
+        coverage: {
+          total: 0,
+          fresh: 0,
+          stale: 0,
+          withSequenceGaps: 0,
+          withDeadLetters: 0,
+        },
+      };
+    }
+    if (scope === "company") {
+      if (query.userId) {
+        throw new BadRequestException(
+          "userId cannot be combined with company scope.",
+        );
+      }
+      if (!canViewTeamReports(context)) {
+        throw new ForbiddenException(
+          "Company reports are not visible to this role.",
+        );
+      }
+      const userIds = query.departmentId
+        ? await this.resolveDepartmentUserIds(
+            context.companyId,
+            query.departmentId,
+          )
+        : undefined;
+      return this.trackingV2.getLiveActivity({
+        companyId: context.companyId,
+        userIds,
+      });
+    }
+    if (query.departmentId) {
+      throw new BadRequestException(
+        "departmentId is available only for company scope.",
+      );
+    }
+    const userId = await this.resolveVisibleReportUserId(
+      context,
+      query.userId,
+    );
+    return this.trackingV2.getLiveActivity({
+      companyId: context.companyId,
+      userId,
+    });
+  }
 
   async getUsageSummary(context: RequestContext, query: SummaryQuery) {
     const scope = normalizeReportScope(query.scope);
@@ -378,7 +436,7 @@ export class ReportsService {
         idleSeconds: focusedIdleSeconds,
         focusActiveSeconds,
         focusedIdleSeconds,
-        openRuntimeSeconds: Math.max(runtimeByApp.get(row.appName) ?? 0, focusActiveSeconds + focusedIdleSeconds),
+        openRuntimeSeconds: runtimeByApp.get(row.appName) ?? 0,
       };
     });
     const seenApps = new Set(apps.map((row) => row.appName));
@@ -415,18 +473,28 @@ export class ReportsService {
         idleSeconds: focusedIdleSeconds,
         focusActiveSeconds,
         focusedIdleSeconds,
-        openRuntimeSeconds: Math.max(metrics?.openRuntimeSeconds ?? 0, focusActiveSeconds + focusedIdleSeconds),
+        openRuntimeSeconds: metrics?.openRuntimeSeconds ?? 0,
       };
     }).sort((left, right) =>
       right.focusActiveSeconds - left.focusActiveSeconds
       || right.openRuntimeSeconds - left.openRuntimeSeconds
       || left.domain.localeCompare(right.domain));
 
-    return {
+    const legacyUsage = {
       apps,
       websites,
       daily: Array.from(daily.values()).sort((left, right) => left.date.localeCompare(right.date)),
     };
+    const confirmedV2 = this.trackingV2
+      ? await this.optionalReportSection(
+          "tracking v2 confirmed usage",
+          () => this.trackingV2!.getConfirmedUsage(filter),
+          null,
+        )
+      : null;
+    return confirmedV2
+      ? mergeConfirmedTrackingUsage(legacyUsage, confirmedV2)
+      : legacyUsage;
   }
 
   private async getDomainMetricRows(filter: UsageFilter) {
@@ -1202,4 +1270,161 @@ function toDateOnly(date: Date) {
 function reportQueryErrorCode(error: unknown) {
   if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") return error.code;
   return error instanceof Error ? error.name : "UnknownError";
+}
+
+type ConfirmedTrackingUsage = NonNullable<
+  Awaited<
+    ReturnType<TrackingV2ReportsService["getConfirmedUsage"]>
+  >
+>;
+
+function mergeConfirmedTrackingUsage(
+  legacy: {
+    apps: Array<{
+      appName: string;
+      category: string | null;
+      productivityLabel: string | null;
+      activeSeconds: number;
+      idleSeconds: number;
+      focusActiveSeconds: number;
+      focusedIdleSeconds: number;
+      openRuntimeSeconds: number;
+    }>;
+    websites: Array<{
+      domain: string;
+      category: string | null;
+      productivityLabel: string | null;
+      activeSeconds: number;
+      idleSeconds: number;
+      focusActiveSeconds: number;
+      focusedIdleSeconds: number;
+      openRuntimeSeconds: number;
+    }>;
+    daily: Array<{
+      date: string;
+      appActiveSeconds: number;
+      appIdleSeconds: number;
+      domainActiveSeconds: number;
+      domainIdleSeconds: number;
+    }>;
+  },
+  confirmed: ConfirmedTrackingUsage,
+) {
+  const apps = mergeConfirmedSubjectRows(
+    legacy.apps,
+    confirmed.apps.flatMap((row) =>
+      typeof row.appName === "string" ? [row] : [],
+    ),
+    "appName",
+  );
+  const websites = mergeConfirmedSubjectRows(
+    legacy.websites,
+    confirmed.websites.flatMap((row) =>
+      typeof row.domain === "string" ? [row] : [],
+    ),
+    "domain",
+  );
+  const dailyByDate = new Map(
+    legacy.daily.map((row) => [row.date, { ...row }]),
+  );
+  for (const row of confirmed.daily) {
+    const current = dailyByDate.get(row.date) ?? {
+      date: row.date,
+      appActiveSeconds: 0,
+      appIdleSeconds: 0,
+      domainActiveSeconds: 0,
+      domainIdleSeconds: 0,
+    };
+    current.appActiveSeconds += row.appActiveSeconds;
+    current.appIdleSeconds += row.appIdleSeconds;
+    current.domainActiveSeconds += row.domainActiveSeconds;
+    current.domainIdleSeconds += row.domainIdleSeconds;
+    dailyByDate.set(row.date, current);
+  }
+  return {
+    apps,
+    websites,
+    daily: [...dailyByDate.values()].sort((left, right) =>
+      left.date.localeCompare(right.date),
+    ),
+    trackingV2Coverage: confirmed.coverage,
+  };
+}
+
+function mergeConfirmedSubjectRows<
+  Key extends "appName" | "domain",
+  LegacyRow extends {
+    activeSeconds: number;
+    idleSeconds: number;
+    focusActiveSeconds: number;
+    focusedIdleSeconds: number;
+    openRuntimeSeconds: number;
+  } & Record<Key, string>,
+  ConfirmedRow extends {
+    subjectKey: string;
+    activeSeconds: number;
+    idleSeconds: number;
+    focusActiveSeconds: number;
+    focusedIdleSeconds: number;
+    openRuntimeSeconds: number;
+    focusActiveMs: number;
+    focusedIdleMs: number;
+    openRuntimeMs: number;
+  } & Record<Key, string>,
+>(
+  legacy: LegacyRow[],
+  confirmed: ConfirmedRow[],
+  key: Key,
+) {
+  const rows = new Map<
+    string,
+    LegacyRow & {
+      focusActiveMs?: number;
+      focusedIdleMs?: number;
+      openRuntimeMs?: number;
+      subjectKey?: string;
+    }
+  >(legacy.map((row) => [row[key], { ...row }]));
+  for (const row of confirmed) {
+    const existing = rows.get(row[key]);
+    if (existing) {
+      existing.activeSeconds += row.activeSeconds;
+      existing.idleSeconds += row.idleSeconds;
+      existing.focusActiveSeconds += row.focusActiveSeconds;
+      existing.focusedIdleSeconds += row.focusedIdleSeconds;
+      existing.openRuntimeSeconds += row.openRuntimeSeconds;
+      existing.focusActiveMs =
+        Math.round(
+          (existing.focusActiveSeconds - row.focusActiveSeconds) *
+            1000,
+        ) + row.focusActiveMs;
+      existing.focusedIdleMs =
+        Math.round(
+          (existing.focusedIdleSeconds -
+            row.focusedIdleSeconds) *
+            1000,
+        ) + row.focusedIdleMs;
+      existing.openRuntimeMs =
+        Math.round(
+          (existing.openRuntimeSeconds - row.openRuntimeSeconds) *
+            1000,
+        ) + row.openRuntimeMs;
+      existing.subjectKey = row.subjectKey;
+    } else {
+      rows.set(row[key], {
+        ...row,
+      } as unknown as LegacyRow & {
+        focusActiveMs?: number;
+        focusedIdleMs?: number;
+        openRuntimeMs?: number;
+        subjectKey?: string;
+      });
+    }
+  }
+  return [...rows.values()].sort(
+    (left, right) =>
+      right.focusActiveSeconds - left.focusActiveSeconds ||
+      right.openRuntimeSeconds - left.openRuntimeSeconds ||
+      left[key].localeCompare(right[key]),
+  );
 }

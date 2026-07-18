@@ -4,7 +4,19 @@ import type { NextConfig } from "next";
 
 loadWorkspaceRootEnv();
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  webpack(config) {
+    // The API compiles this workspace package with NodeNext, so its source keeps
+    // explicit .js specifiers. During web builds, resolve those specifiers to the
+    // TypeScript source before falling back to a real JavaScript file.
+    config.resolve ??= {};
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      ".js": [".ts", ".tsx", ".js"],
+    };
+    return config;
+  },
+};
 
 export default nextConfig;
 

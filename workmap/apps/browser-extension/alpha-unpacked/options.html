@@ -4,13 +4,18 @@
   <body>
     <main>
       <h1>WorkMap Domain Tracking</h1>
-      <p class="privacy">Tracks website hostname, open duration, and the time of trusted keyboard, mouse, wheel, or touch activity. It never records key values, typed text, pointer coordinates, scroll direction, target elements, full URLs, titles, page content, form input, passwords, screenshots, clipboard, camera, microphone, email bodies, or private messages.</p>
+      <p class="privacy">Tracks the focused website hostname and whether trusted keyboard, mouse, wheel, or touch activity was recently observed. It never records key values, typed text, pointer coordinates, scroll direction, target elements, full URLs, titles, page content, form input, passwords, screenshots, clipboard, camera, microphone, email bodies, or private messages.</p>
       <div id="status" class="status">Loading status...</div>
       <form id="pair-form">
         <label>API URL<input id="api-url" type="url" required></label>
         <label>Browser<select id="browser-name"><option value="CHROME">Chrome</option><option value="EDGE">Edge</option></select></label>
         <label>Pairing code<input id="pairing-code" autocomplete="one-time-code" placeholder="ABCD-EFGH" required></label>
+        <label>Sensitive hostnames to exclude
+          <textarea id="excluded-hostnames" rows="4" placeholder="payroll.example.com&#10;health.example.com"></textarea>
+          <small>Optional. One hostname per line. Matching subdomains are discarded on this device before queueing.</small>
+        </label>
         <button type="submit">Pair extension</button>
+        <button id="save-exclusions" type="button">Save exclusions</button>
       </form>
       <p id="message" aria-live="polite"></p>
     </main>

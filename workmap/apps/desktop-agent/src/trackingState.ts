@@ -408,6 +408,61 @@ export function recoverTrackingCheckpoints(
   return Array.from(recovered.values());
 }
 
+export function recoverTrackingCheckpointAtProtocolActivation(
+  checkpoint: TrackingCheckpoint | null,
+  deviceId: string,
+  protocolActivatedAt: string,
+  options: Pick<TrackingStateOptions, "minimumDurationMs" | "createEventId"> = {},
+) {
+  const protocolActivatedAtMs = Date.parse(protocolActivatedAt);
+  if (!Number.isFinite(protocolActivatedAtMs)) {
+    throw new Error("protocolActivatedAt must be a valid timestamp.");
+  }
+  if (!checkpoint) return [];
+
+  const sourceSegments = checkpoint.focusSegments?.length
+    ? checkpoint.focusSegments
+    : checkpoint.isIdle
+      ? []
+      : [{
+          appName: checkpoint.appName,
+          startedAtMs: checkpoint.startedAtMs,
+          lastObservedAtMs: checkpoint.lastObservedAtMs,
+          lastInputAtMs: checkpoint.lastInputAtMs ?? checkpoint.lastObservedAtMs,
+        }];
+  const clippedSegments = sourceSegments.flatMap((segment) => {
+    const lastObservedAtMs = Math.min(segment.lastObservedAtMs, protocolActivatedAtMs);
+    if (
+      !Number.isFinite(segment.startedAtMs) ||
+      !Number.isFinite(lastObservedAtMs) ||
+      lastObservedAtMs <= segment.startedAtMs
+    ) {
+      return [];
+    }
+    return [{
+      ...segment,
+      lastObservedAtMs,
+      lastInputAtMs: Math.min(segment.lastInputAtMs, lastObservedAtMs),
+    }];
+  });
+  if (clippedSegments.length === 0) return [];
+
+  const primary = clippedSegments[0]!;
+  return recoverTrackingCheckpoints(
+    {
+      ...checkpoint,
+      appName: primary.appName,
+      isIdle: false,
+      startedAtMs: primary.startedAtMs,
+      lastObservedAtMs: primary.lastObservedAtMs,
+      lastInputAtMs: primary.lastInputAtMs,
+      focusSegments: clippedSegments,
+    },
+    deviceId,
+    options,
+  );
+}
+
 export function recoverTrackingCheckpoint(
   checkpoint: TrackingCheckpoint | null,
   deviceId: string,

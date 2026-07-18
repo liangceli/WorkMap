@@ -38,6 +38,93 @@ enum DeviceClientType {
   BROWSER_EXTENSION
 }
 
+enum WorkstationPairingMode {
+  CREATE_NEW
+  EXISTING
+  STANDALONE
+}
+
+enum TrackingActivitySource {
+  DESKTOP_APP
+  BROWSER_DOMAIN
+}
+
+enum TrackingActivityStream {
+  FOCUS
+  OPEN_RUNTIME
+}
+
+enum TrackingActivityMetric {
+  FOCUS_ACTIVE
+  FOCUS_IDLE
+  OPEN_RUNTIME
+}
+
+enum TrackingCollectorState {
+  HEALTHY
+  LIMITED
+  PAUSED
+  ERROR
+}
+
+enum TrackingConnectionState {
+  ONLINE
+  OFFLINE
+  AUTH_REQUIRED
+  UPGRADE_REQUIRED
+  ERROR
+}
+
+enum TrackingPolicyState {
+  ACTIVE
+  ACKNOWLEDGEMENT_REQUIRED
+  TIMEZONE_REQUIRED
+  EXPIRED
+}
+
+enum TrackingMigrationState {
+  V1
+  PREPARING_V2
+  DRAINING_V1
+  V2
+  ERROR
+}
+
+enum TrackingHealthErrorCode {
+  NONE
+  NATIVE_HELPER_UNAVAILABLE
+  INTERACTION_PERMISSION_REQUIRED
+  QUEUE_PRESSURE
+  POLICY_UNAVAILABLE
+  CLOCK_UNTRUSTED
+  UPGRADE_REQUIRED
+  UNKNOWN
+}
+
+enum TrackingFocusState {
+  ACTIVE
+  IDLE
+  NONE
+}
+
+enum TrackingEvidenceKind {
+  FOCUS_ACQUIRED
+  WINDOWS_SESSION_INPUT_WHILE_FOREGROUND
+  TRUSTED_PAGE_INTERACTION
+}
+
+enum TrackingReconciliationState {
+  DIRTY
+  PROCESSING
+  CLEAN
+  FAILED
+}
+
+enum TrackingProtocolActivationState {
+  PREPARED
+  CONFIRMED
+}
+
 enum AgentSessionEndReason {
   GRACEFUL_SHUTDOWN
   UNEXPECTED_STOP
@@ -153,30 +240,45 @@ enum NoticeType {
 }
 
 model Company {
-  id                 String                  @id @default(uuid()) @db.Uuid
-  name               String
-  slug               String                  @unique
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
-  departments        Department[]
-  users              User[]
-  devices            Device[]
-  activityEvents     ActivityEvent[]
-  appSummaries       AppUsageSummary[]
-  websiteSummaries   WebsiteUsageSummary[]
-  officeMaps         OfficeMap[]
-  officeRooms        OfficeRoom[]
-  positions          VirtualOfficePosition[]
-  policies           MonitoringPolicy[]
-  acknowledgements   PolicyAcknowledgement[]
-  integrations       IntegrationAccount[]
-  auditLogs          AuditLog[]
-  invitations        Invitation[]
-  devicePairingCodes DevicePairingCode[]
-  deviceCredentials  DeviceCredential[]
-  agentSessions      AgentSession[]
-  deviceStatusEvents DeviceStatusEvent[]
-  notices            Notice[]
+  id                         String                      @id @default(uuid()) @db.Uuid
+  name                       String
+  slug                       String                      @unique
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  departments                Department[]
+  users                      User[]
+  devices                    Device[]
+  activityEvents             ActivityEvent[]
+  appSummaries               AppUsageSummary[]
+  websiteSummaries           WebsiteUsageSummary[]
+  officeMaps                 OfficeMap[]
+  officeRooms                OfficeRoom[]
+  positions                  VirtualOfficePosition[]
+  policies                   MonitoringPolicy[]
+  acknowledgements           PolicyAcknowledgement[]
+  integrations               IntegrationAccount[]
+  auditLogs                  AuditLog[]
+  invitations                Invitation[]
+  devicePairingCodes         DevicePairingCode[]
+  deviceCredentials          DeviceCredential[]
+  agentSessions              AgentSession[]
+  deviceStatusEvents         DeviceStatusEvent[]
+  notices                    Notice[]
+  workstations               Workstation[]
+  activitySubjects           ActivitySubject[]
+  activityIntervals          ActivityInterval[]
+  sequenceTombstones         ClientSequenceTombstone[]
+  clientWriteLanes           ClientWriteLane[]
+  liveFocusSnapshots         LiveFocusSnapshot[]
+  clientHealth               ClientHealthSnapshot[]
+  syncCursors                ClientSyncCursor[]
+  policyLeases               DevicePolicyLease[]
+  protocolActivations        DeviceProtocolActivation[]
+  deviceDailySummaries       DeviceSubjectDailySummary[]
+  userSubjectDailySummaries  UserSubjectDailySummary[]
+  userDailyFocusSummaries    UserDailyFocusSummary[]
+  companyDailyFocusSummaries CompanyDailyFocusSummary[]
+  reconciliationTargets      UsageReconciliationTarget[]
 }
 
 model Department {
@@ -193,20 +295,20 @@ model Department {
 }
 
 model User {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  companyId              String                  @db.Uuid
-  departmentId           String?                 @db.Uuid
+  id                     String                      @id @default(uuid()) @db.Uuid
+  companyId              String                      @db.Uuid
+  departmentId           String?                     @db.Uuid
   email                  String
-  cognitoSub             String?                 @unique
+  cognitoSub             String?                     @unique
   displayName            String
-  role                   UserRole                @default(EMPLOYEE)
-  status                 UserStatus              @default(OFFLINE)
+  role                   UserRole                    @default(EMPLOYEE)
+  status                 UserStatus                  @default(OFFLINE)
   avatarId               String?
   jobTitle               String?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  department             Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  company                Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department             Department?                 @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   devices                Device[]
   activityEvents         ActivityEvent[]
   appSummaries           AppUsageSummary[]
@@ -214,15 +316,28 @@ model User {
   position               VirtualOfficePosition?
   policyAcknowledgements PolicyAcknowledgement[]
   integrationAccounts    IntegrationAccount[]
-  auditLogsAuthored      AuditLog[]              @relation("AuditActor")
-  auditLogsTargeting     AuditLog[]              @relation("AuditTarget")
-  invitationsSent        Invitation[]            @relation("InvitationInvitedBy")
+  auditLogsAuthored      AuditLog[]                  @relation("AuditActor")
+  auditLogsTargeting     AuditLog[]                  @relation("AuditTarget")
+  invitationsSent        Invitation[]                @relation("InvitationInvitedBy")
   devicePairingCodes     DevicePairingCode[]
   deviceCredentials      DeviceCredential[]
   agentSessions          AgentSession[]
   deviceStatusEvents     DeviceStatusEvent[]
-  noticesSent            Notice[]                @relation("NoticeActor")
-  noticesReceived        Notice[]                @relation("NoticeRecipient")
+  noticesSent            Notice[]                    @relation("NoticeActor")
+  noticesReceived        Notice[]                    @relation("NoticeRecipient")
+  workstations           Workstation[]
+  activityIntervals      ActivityInterval[]
+  sequenceTombstones     ClientSequenceTombstone[]
+  clientWriteLanes       ClientWriteLane[]
+  liveFocusSnapshots     LiveFocusSnapshot[]
+  clientHealth           ClientHealthSnapshot[]
+  syncCursors            ClientSyncCursor[]
+  policyLeases           DevicePolicyLease[]
+  protocolActivations    DeviceProtocolActivation[]
+  deviceDailySummaries   DeviceSubjectDailySummary[]
+  subjectDailySummaries  UserSubjectDailySummary[]
+  dailyFocusSummaries    UserDailyFocusSummary[]
+  reconciliationTargets  UsageReconciliationTarget[]
 
   @@unique([companyId, email])
   @@index([companyId, departmentId])
@@ -268,44 +383,67 @@ model Invitation {
 }
 
 model Device {
-  id             String              @id @default(uuid()) @db.Uuid
-  companyId      String              @db.Uuid
-  userId         String              @db.Uuid
-  os             DeviceOS            @default(UNKNOWN)
-  hostname       String?
-  agentVersion   String?
-  lastSeenAt     DateTime?
-  revokedAt      DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  activityEvents ActivityEvent[]
-  pairingCodes   DevicePairingCode[]
-  credentials    DeviceCredential[]
-  agentSessions  AgentSession[]
-  statusEvents   DeviceStatusEvent[]
+  id                      String                      @id @default(uuid()) @db.Uuid
+  companyId               String                      @db.Uuid
+  userId                  String                      @db.Uuid
+  os                      DeviceOS                    @default(UNKNOWN)
+  hostname                String?
+  agentVersion            String?
+  clientType              DeviceClientType?
+  browserName             BrowserName?
+  workstationId           String?                     @db.Uuid
+  protocolActivatedAt     DateTime?                   @db.Timestamptz(3)
+  lastSeenAt              DateTime?
+  revokedAt               DateTime?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+  company                 Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                    User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityEvents          ActivityEvent[]
+  pairingCodes            DevicePairingCode[]
+  credentials             DeviceCredential[]
+  agentSessions           AgentSession[]
+  statusEvents            DeviceStatusEvent[]
+  workstation             Workstation?                @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  replacementPairingCodes DevicePairingCode[]         @relation("ExpectedDesktopReplacement")
+  activityIntervals       ActivityInterval[]
+  sequenceTombstones      ClientSequenceTombstone[]
+  clientWriteLanes        ClientWriteLane[]
+  liveFocusSnapshots      LiveFocusSnapshot[]
+  clientHealth            ClientHealthSnapshot[]
+  syncCursors             ClientSyncCursor[]
+  policyLeases            DevicePolicyLease[]
+  protocolActivation      DeviceProtocolActivation?
+  deviceDailySummaries    DeviceSubjectDailySummary[]
 
   @@index([companyId, userId])
   @@index([companyId, lastSeenAt])
+  @@index([workstationId, clientType, revokedAt])
 }
 
 model DevicePairingCode {
-  id         String           @id @default(uuid()) @db.Uuid
-  companyId  String           @db.Uuid
-  userId     String           @db.Uuid
-  deviceId   String?          @db.Uuid
-  clientType DeviceClientType
-  codeHash   String           @unique
-  expiresAt  DateTime
-  usedAt     DateTime?
-  createdAt  DateTime         @default(now())
-  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  device     Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  id                      String                  @id @default(uuid()) @db.Uuid
+  companyId               String                  @db.Uuid
+  userId                  String                  @db.Uuid
+  deviceId                String?                 @db.Uuid
+  clientType              DeviceClientType
+  workstationId           String?                 @db.Uuid
+  workstationMode         WorkstationPairingMode?
+  expectedDesktopDeviceId String?                 @db.Uuid
+  codeHash                String                  @unique
+  expiresAt               DateTime
+  usedAt                  DateTime?
+  createdAt               DateTime                @default(now())
+  company                 Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                    User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device                  Device?                 @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  workstation             Workstation?            @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  expectedDesktopDevice   Device?                 @relation("ExpectedDesktopReplacement", fields: [expectedDesktopDeviceId], references: [id], onDelete: SetNull)
 
   @@index([companyId, userId, expiresAt])
   @@index([deviceId])
+  @@index([workstationId])
+  @@index([expectedDesktopDeviceId])
 }
 
 model DeviceCredential {
@@ -326,6 +464,401 @@ model DeviceCredential {
 
   @@index([companyId, userId])
   @@index([deviceId, revokedAt])
+}
+
+model Workstation {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  companyId          String                 @db.Uuid
+  userId             String                 @db.Uuid
+  displayName        String
+  revokedAt          DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  devices            Device[]
+  pairingCodes       DevicePairingCode[]
+  activityIntervals  ActivityInterval[]
+  clientWriteLanes   ClientWriteLane[]
+  liveFocusSnapshots LiveFocusSnapshot[]
+  clientHealth       ClientHealthSnapshot[]
+
+  @@index([companyId, userId, revokedAt])
+}
+
+model ActivitySubject {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  companyId            String                      @db.Uuid
+  source               TrackingActivitySource
+  subjectKey           String
+  displayName          String
+  displayAliases       Json?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  company              Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  intervals            ActivityInterval[]
+  deviceDailySummaries DeviceSubjectDailySummary[]
+  userDailySummaries   UserSubjectDailySummary[]
+  liveFocusSnapshots   LiveFocusSnapshot[]
+
+  @@unique([companyId, source, subjectKey])
+  @@index([companyId, source, displayName])
+}
+
+model DevicePolicyLease {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  companyId           String                     @db.Uuid
+  userId              String                     @db.Uuid
+  deviceId            String                     @db.Uuid
+  monitoringPolicyId  String                     @db.Uuid
+  policyVersion       String
+  issuedAt            DateTime                   @db.Timestamptz(3)
+  expiresAt           DateTime                   @db.Timestamptz(3)
+  scheduleTimeZone    String
+  allowedUtcWindows   Json
+  windowSetHash       String
+  createdAt           DateTime                   @default(now())
+  company             Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device              Device                     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  monitoringPolicy    MonitoringPolicy           @relation(fields: [monitoringPolicyId], references: [id], onDelete: Restrict)
+  intervals           ActivityInterval[]
+  liveFocusSnapshots  LiveFocusSnapshot[]
+  protocolActivations DeviceProtocolActivation[]
+
+  @@index([companyId, userId, deviceId, expiresAt])
+  @@index([monitoringPolicyId, policyVersion])
+}
+
+model DeviceProtocolActivation {
+  id                   String                          @id @default(uuid()) @db.Uuid
+  companyId            String                          @db.Uuid
+  userId               String                          @db.Uuid
+  deviceId             String                          @unique @db.Uuid
+  policyLeaseId        String                          @db.Uuid
+  state                TrackingProtocolActivationState @default(PREPARED)
+  proposedActivatedAt  DateTime                        @db.Timestamptz(3)
+  confirmedActivatedAt DateTime?                       @db.Timestamptz(3)
+  preparedAt           DateTime                        @default(now())
+  confirmedAt          DateTime?
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
+  company              Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                 User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device               Device                          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  policyLease          DevicePolicyLease               @relation(fields: [policyLeaseId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, userId, state])
+}
+
+model ActivityInterval {
+  id                      String                        @id @default(uuid()) @db.Uuid
+  companyId               String                        @db.Uuid
+  userId                  String                        @db.Uuid
+  deviceId                String                        @db.Uuid
+  workstationId           String?                       @db.Uuid
+  activitySubjectId       String                        @db.Uuid
+  policyLeaseId           String                        @db.Uuid
+  clientEventId           String
+  activitySessionId       String
+  sequenceNumber          Int
+  source                  TrackingActivitySource
+  stream                  TrackingActivityStream
+  metric                  TrackingActivityMetric
+  subjectKey              String
+  displayName             String
+  browserName             BrowserName?
+  startedAt               DateTime                      @db.Timestamptz(3)
+  endedAt                 DateTime                      @db.Timestamptz(3)
+  clockEpochId            String
+  startedMonotonicMs      BigInt?
+  endedMonotonicMs        BigInt?
+  durationMs              BigInt
+  policyVersion           String
+  payloadHash             String
+  canonicalizationVersion Int                           @default(1)
+  receivedAt              DateTime                      @default(now()) @db.Timestamptz(3)
+  createdAt               DateTime                      @default(now())
+  company                 Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                    User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device                  Device                        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  workstation             Workstation?                  @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  subject                 ActivitySubject               @relation(fields: [activitySubjectId], references: [id], onDelete: Restrict)
+  policyLease             DevicePolicyLease             @relation(fields: [policyLeaseId], references: [id], onDelete: Restrict)
+  dayFragments            ActivityIntervalDayFragment[]
+
+  @@unique([deviceId, clientEventId])
+  @@unique([deviceId, source, stream, clockEpochId, sequenceNumber])
+  @@index([companyId, userId, source, startedAt])
+  @@index([companyId, deviceId, source, stream, startedAt])
+  @@index([companyId, activitySubjectId, startedAt])
+  @@index([policyLeaseId])
+}
+
+model ActivityIntervalDayFragment {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  activityIntervalId String                 @db.Uuid
+  companyId          String                 @db.Uuid
+  userId             String                 @db.Uuid
+  deviceId           String                 @db.Uuid
+  activitySubjectId  String                 @db.Uuid
+  source             TrackingActivitySource
+  stream             TrackingActivityStream
+  metric             TrackingActivityMetric
+  utcDate            DateTime               @db.Date
+  fragmentIndex      Int
+  startedAt          DateTime               @db.Timestamptz(3)
+  endedAt            DateTime               @db.Timestamptz(3)
+  durationMs         BigInt
+  createdAt          DateTime               @default(now())
+  activityInterval   ActivityInterval       @relation(fields: [activityIntervalId], references: [id], onDelete: Cascade)
+
+  @@unique([activityIntervalId, fragmentIndex])
+  @@index([companyId, userId, source, utcDate])
+  @@index([deviceId, activitySubjectId, utcDate])
+}
+
+model ClientSequenceTombstone {
+  id             String                 @id @default(uuid()) @db.Uuid
+  companyId      String                 @db.Uuid
+  userId         String                 @db.Uuid
+  deviceId       String                 @db.Uuid
+  clientEventId  String?
+  source         TrackingActivitySource
+  stream         TrackingActivityStream
+  clockEpochId   String
+  sequenceNumber Int
+  rejectionCode  String
+  payloadHash    String?
+  rejectedAt     DateTime               @default(now()) @db.Timestamptz(3)
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device         Device                 @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, source, stream, clockEpochId, sequenceNumber])
+  @@index([deviceId, clientEventId])
+  @@index([companyId, userId, rejectedAt])
+}
+
+model ClientWriteLane {
+  id            String                 @id @default(uuid()) @db.Uuid
+  companyId     String                 @db.Uuid
+  userId        String                 @db.Uuid
+  deviceId      String                 @db.Uuid
+  workstationId String?                @db.Uuid
+  source        TrackingActivitySource
+  stream        TrackingActivityStream
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  company       Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device        Device                 @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  workstation   Workstation?           @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+
+  @@unique([deviceId, source, stream])
+  @@index([companyId, userId])
+}
+
+model LiveFocusSnapshot {
+  id                            String                 @id @default(uuid()) @db.Uuid
+  companyId                     String                 @db.Uuid
+  userId                        String                 @db.Uuid
+  deviceId                      String                 @db.Uuid
+  workstationId                 String?                @db.Uuid
+  activitySubjectId             String?                @db.Uuid
+  policyLeaseId                 String                 @db.Uuid
+  source                        TrackingActivitySource
+  stream                        TrackingActivityStream @default(FOCUS)
+  browserName                   BrowserName?
+  snapshotSequence              Int
+  activitySessionId             String?
+  currentStateId                String?
+  clockEpochId                  String
+  policyVersion                 String
+  subjectKey                    String?
+  displayName                   String?
+  state                         TrackingFocusState
+  sessionStartedAt              DateTime?              @db.Timestamptz(3)
+  stateStartedAt                DateTime?              @db.Timestamptz(3)
+  lastActivityEvidenceAt        DateTime?              @db.Timestamptz(3)
+  activityEvidenceKind          TrackingEvidenceKind?
+  latestEmittedIntervalSequence Int?
+  latestEmittedClientEventId    String?
+  nextIntervalSequence          Int
+  lastObservedAt                DateTime               @db.Timestamptz(3)
+  collectorState                TrackingCollectorState
+  provisionalFromAt             DateTime?              @db.Timestamptz(3)
+  receivedAt                    DateTime               @default(now()) @db.Timestamptz(3)
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  company                       Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device                        Device                 @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  workstation                   Workstation?           @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  subject                       ActivitySubject?       @relation(fields: [activitySubjectId], references: [id], onDelete: SetNull)
+  policyLease                   DevicePolicyLease      @relation(fields: [policyLeaseId], references: [id], onDelete: Restrict)
+
+  @@unique([deviceId, source])
+  @@index([companyId, userId, source, receivedAt])
+}
+
+model ClientHealthSnapshot {
+  id                        String                  @id @default(uuid()) @db.Uuid
+  companyId                 String                  @db.Uuid
+  userId                    String                  @db.Uuid
+  deviceId                  String                  @db.Uuid
+  workstationId             String?                 @db.Uuid
+  source                    TrackingActivitySource
+  clientType                DeviceClientType
+  clientVersion             String
+  platform                  String
+  connectionState           TrackingConnectionState
+  collectorState            TrackingCollectorState
+  policyState               TrackingPolicyState
+  migrationState            TrackingMigrationState
+  queuePending              Int
+  queueReady                Int
+  queueDeadLetter           Int
+  oldestQueuedAt            DateTime?               @db.Timestamptz(3)
+  nextRetryAt               DateTime?               @db.Timestamptz(3)
+  lastSuccessfulHeartbeatAt DateTime?               @db.Timestamptz(3)
+  lastSuccessfulSyncAt      DateTime?               @db.Timestamptz(3)
+  errorCode                 TrackingHealthErrorCode
+  receivedAt                DateTime                @default(now()) @db.Timestamptz(3)
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  company                   Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device                    Device                  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  workstation               Workstation?            @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+
+  @@unique([deviceId, source])
+  @@index([companyId, userId, source, receivedAt])
+}
+
+model ClientSyncCursor {
+  id                        String                 @id @default(uuid()) @db.Uuid
+  companyId                 String                 @db.Uuid
+  userId                    String                 @db.Uuid
+  deviceId                  String                 @db.Uuid
+  source                    TrackingActivitySource
+  stream                    TrackingActivityStream
+  clockEpochId              String
+  contiguousThroughSequence Int                    @default(0)
+  latestAcceptedEndedAt     DateTime?              @db.Timestamptz(3)
+  missingRanges             Json
+  rejectedRanges            Json
+  clockDriftMs              Int?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  company                   Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device                    Device                 @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, source, stream, clockEpochId])
+  @@index([companyId, userId, source])
+}
+
+model DeviceSubjectDailySummary {
+  id                String                 @id @default(uuid()) @db.Uuid
+  companyId         String                 @db.Uuid
+  userId            String                 @db.Uuid
+  deviceId          String                 @db.Uuid
+  activitySubjectId String                 @db.Uuid
+  source            TrackingActivitySource
+  utcDate           DateTime               @db.Date
+  focusActiveMs     BigInt                 @default(0)
+  focusedIdleMs     BigInt                 @default(0)
+  openRuntimeMs     BigInt                 @default(0)
+  latestReceivedAt  DateTime?              @db.Timestamptz(3)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  company           Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device            Device                 @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  subject           ActivitySubject        @relation(fields: [activitySubjectId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, source, activitySubjectId, utcDate])
+  @@index([companyId, userId, source, utcDate])
+}
+
+model UserSubjectDailySummary {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  companyId                String                 @db.Uuid
+  userId                   String                 @db.Uuid
+  activitySubjectId        String                 @db.Uuid
+  source                   TrackingActivitySource
+  utcDate                  DateTime               @db.Date
+  focusActiveMs            BigInt                 @default(0)
+  focusedIdleMs            BigInt                 @default(0)
+  openRuntimeMs            BigInt                 @default(0)
+  reconciliationVersion    Int                    @default(0)
+  latestIncludedReceivedAt DateTime?              @db.Timestamptz(3)
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  company                  Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                     User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject                  ActivitySubject        @relation(fields: [activitySubjectId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId, source, activitySubjectId, utcDate])
+  @@index([companyId, userId, source, utcDate])
+}
+
+model UserDailyFocusSummary {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  companyId                String                 @db.Uuid
+  userId                   String                 @db.Uuid
+  source                   TrackingActivitySource
+  utcDate                  DateTime               @db.Date
+  focusActiveMs            BigInt                 @default(0)
+  focusedIdleMs            BigInt                 @default(0)
+  reconciliationVersion    Int                    @default(0)
+  latestIncludedReceivedAt DateTime?              @db.Timestamptz(3)
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  company                  Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                     User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId, source, utcDate])
+  @@index([companyId, source, utcDate])
+}
+
+model CompanyDailyFocusSummary {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  companyId                String                 @db.Uuid
+  source                   TrackingActivitySource
+  utcDate                  DateTime               @db.Date
+  focusActiveMs            BigInt                 @default(0)
+  focusedIdleMs            BigInt                 @default(0)
+  reconciliationVersion    Int                    @default(0)
+  latestIncludedReceivedAt DateTime?              @db.Timestamptz(3)
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  company                  Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, source, utcDate])
+}
+
+model UsageReconciliationTarget {
+  id            String                      @id @default(uuid()) @db.Uuid
+  companyId     String                      @db.Uuid
+  userId        String                      @db.Uuid
+  source        TrackingActivitySource
+  utcDate       DateTime                    @db.Date
+  state         TrackingReconciliationState @default(DIRTY)
+  version       Int                         @default(1)
+  attemptCount  Int                         @default(0)
+  dirtyAt       DateTime                    @default(now()) @db.Timestamptz(3)
+  lastAttemptAt DateTime?                   @db.Timestamptz(3)
+  reconciledAt  DateTime?                   @db.Timestamptz(3)
+  lastErrorCode String?
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+  company       Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user          User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId, source, utcDate])
+  @@index([state, dirtyAt])
 }
 
 model AgentSession {
@@ -360,33 +893,33 @@ model AgentSession {
 }
 
 model ActivityEvent {
-  id              String              @id @default(uuid()) @db.Uuid
-  companyId       String              @db.Uuid
-  userId          String              @db.Uuid
-  deviceId        String              @db.Uuid
-  agentSessionId  String?             @db.Uuid
-  clientEventId   String?
-  clientInstanceId String?
-  sequenceNumber  Int?
+  id                String              @id @default(uuid()) @db.Uuid
+  companyId         String              @db.Uuid
+  userId            String              @db.Uuid
+  deviceId          String              @db.Uuid
+  agentSessionId    String?             @db.Uuid
+  clientEventId     String?
+  clientInstanceId  String?
+  sequenceNumber    Int?
   clientMonotonicMs BigInt?
-  timeZone        String?
-  source          ActivityEventSource @default(DESKTOP_AGENT)
-  eventType       ActivityEventType
-  appName         String?
-  browserName     BrowserName?
-  domain          String?
-  isIdle          Boolean             @default(false)
-  isActiveWindow  Boolean             @default(false)
-  startedAt       DateTime
-  endedAt         DateTime?
-  durationSeconds Int?
-  receivedAt      DateTime            @default(now())
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  device          Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  agentSession    AgentSession?       @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
+  timeZone          String?
+  source            ActivityEventSource @default(DESKTOP_AGENT)
+  eventType         ActivityEventType
+  appName           String?
+  browserName       BrowserName?
+  domain            String?
+  isIdle            Boolean             @default(false)
+  isActiveWindow    Boolean             @default(false)
+  startedAt         DateTime
+  endedAt           DateTime?
+  durationSeconds   Int?
+  receivedAt        DateTime            @default(now())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device            Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  agentSession      AgentSession?       @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, source, clientEventId])
   @@index([companyId, userId, startedAt])
@@ -424,11 +957,11 @@ model DeviceStatusEvent {
   device          Device                 @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   agentSession    AgentSession?          @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
 
+  @@unique([companyId, source, clientEventId])
   @@index([companyId, userId, recordedAt])
   @@index([companyId, deviceId, recordedAt])
   @@index([companyId, agentSessionId, recordedAt])
   @@index([companyId, status, recordedAt])
-  @@unique([companyId, source, clientEventId])
 }
 
 model AppUsageSummary {
@@ -549,6 +1082,7 @@ model MonitoringPolicy {
   workHoursOnly          Boolean                 @default(true)
   workdayStart           String                  @default("09:00")
   workdayEnd             String                  @default("17:00")
+  scheduleTimeZone       String?
   retentionDays          Int                     @default(90)
   employeeCanViewOwnData Boolean                 @default(true)
   policyVersion          String
@@ -557,6 +1091,7 @@ model MonitoringPolicy {
   updatedAt              DateTime                @updatedAt
   company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   acknowledgements       PolicyAcknowledgement[]
+  policyLeases           DevicePolicyLease[]
 
   @@unique([companyId, policyVersion])
   @@index([companyId, activeFrom])

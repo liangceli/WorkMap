@@ -1,5 +1,10 @@
 # STAGE 4 Tracking + Reports Verification
 
+> Historical verification document. Its harness/scaffold descriptions no longer
+> represent the current client code. Use
+> [`docs/designs/workmap-tracking-clients-final-implementation-plan.md`](../designs/workmap-tracking-clients-final-implementation-plan.md)
+> as the implementation source of truth.
+
 This document adds the tracking/report verification gate to STAGE 4. STAGE 4 is not complete unless the activity summary loop is verified without overstating the desktop-agent or browser-extension scaffolds as production-ready tracking.
 
 ## Scope

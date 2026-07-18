@@ -5,6 +5,10 @@ dist
 coverage
 apps/desktop-agent/release
 apps/desktop-agent/alpha-windows/runtime
+apps/desktop-agent/native/windows-activity-host/.dotnet-cli/
+apps/desktop-agent/native/windows-activity-host/bin/
+apps/desktop-agent/native/windows-activity-host/obj/
+apps/desktop-agent/native/windows-activity-host/publish/
 /artifacts
 .env
 .env.*

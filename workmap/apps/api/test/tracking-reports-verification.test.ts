@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, HttpException, NotFoundException } from "@nestjs/common";
 import {
   ActivityEventSource,
   ActivityEventType,
@@ -63,6 +63,7 @@ async function main() {
   await testBrowserCurrentDomainFailureDoesNotBreakSummary();
   await testOptionalReportSectionsDoNotBlockCoreSummary();
   await testActivityIngestionAndReportsLoop();
+  await testLegacyActivityStopsAtProtocolActivation();
   await testBrowserUsageUpdatesReportRevision();
   await testOwnerSeesLiveForegroundUsageBeforeAppSwitch();
   await testReportAuditCoalescesRetriedSessionsAndRepeatedConnectivityStates();
@@ -208,7 +209,7 @@ async function testActivityIngestionAndReportsLoop() {
   assert.equal(ownSummary.scope, "user");
   assert.equal(ownSummary.userId, EMPLOYEE_ID);
   assert.deepEqual(ownSummary.apps.map((row: any) => [row.appName, row.activeSeconds, row.idleSeconds, row.openRuntimeSeconds]), [
-    ["Visual Studio Code", 300, 60, 360],
+    ["Visual Studio Code", 300, 60, 0],
     ["Outlook", 0, 0, 120],
   ]);
   assert.deepEqual(ownSummary.websites.map((row: any) => [row.domain, row.activeSeconds, row.focusedIdleSeconds, row.openRuntimeSeconds]), [
@@ -378,6 +379,41 @@ async function testBrowserExtensionCoverageLossAndRestore() {
   assert.equal(summary.browserExtensionCoverage[0]?.coverageRestoredAt, outage.endedAt.toISOString());
   assert.equal(summary.browserExtensionCoverage[0]?.trackingState, "ready");
   assert.equal(summary.browserExtensionCoverage[0]?.trackingStatusObservedAt, trackingRecordedAt);
+}
+
+async function testLegacyActivityStopsAtProtocolActivation() {
+  const prisma = new MockPrisma();
+  const protocolActivatedAt = new Date("2026-06-17T09:10:00.000Z");
+  prisma.seedDevice({
+    id: DEVICE_ID,
+    companyId: COMPANY_ID,
+    userId: EMPLOYEE_ID,
+    protocolActivatedAt,
+  });
+  const activity = new ActivityService(prisma as any);
+
+  const accepted = await activity.ingestAppUsage(employeeContext, {
+    deviceId: DEVICE_ID,
+    appName: "Visual Studio Code",
+    startedAt: "2026-06-17T09:08:00.000Z",
+    endedAt: protocolActivatedAt.toISOString(),
+    isIdle: false,
+  });
+  assert.equal(accepted.accepted, 1);
+
+  try {
+    await activity.ingestAppUsage(employeeContext, {
+      deviceId: DEVICE_ID,
+      appName: "Visual Studio Code",
+      startedAt: "2026-06-17T09:10:00.000Z",
+      endedAt: "2026-06-17T09:10:01.000Z",
+      isIdle: false,
+    });
+    assert.fail("Expected v1 activity after the v2 activation boundary to be rejected.");
+  } catch (error) {
+    assert(error instanceof HttpException);
+    assert.equal(error.getStatus(), 426);
+  }
 }
 
 async function testBrowserCurrentDomainFailureDoesNotBreakSummary() {
@@ -896,7 +932,7 @@ class MockPrisma {
     return Promise.all(operations);
   }
 
-  seedDevice(input: Pick<DeviceRow, "id" | "companyId" | "userId">) {
+  seedDevice(input: Pick<DeviceRow, "id" | "companyId" | "userId"> & { protocolActivatedAt?: Date | null }) {
     this.devices.push(toDeviceRow({
       ...input,
       os: DeviceOS.UNKNOWN,
@@ -916,6 +952,7 @@ type DeviceRow = {
   agentVersion: string | null;
   lastSeenAt: Date | null;
   revokedAt: Date | null;
+  protocolActivatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };

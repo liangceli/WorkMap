@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, HttpException, Injectable } from "@nestjs/common";
 import { ActivityEventSource, ActivityEventType, BrowserName, Prisma } from "@prisma/client";
 import type { RequestContext } from "@workmap/auth";
 import { createHash } from "node:crypto";
@@ -49,7 +49,7 @@ export class ActivityService {
     let accepted = 0;
 
     for (const event of events) {
-      await this.assertDeviceBoundToContext(context, event.deviceId);
+      await this.assertDeviceBoundToContext(context, event.deviceId, event.endedAt);
       await this.assertAgentSessionBoundToContext(context, event.deviceId, event.agentSessionId);
       for (const fragment of splitUsageEventByUtcDay(event)) {
         accepted += (await this.storeAppUsageEvent(context, fragment)) ? 1 : 0;
@@ -68,7 +68,7 @@ export class ActivityService {
     let accepted = 0;
 
     for (const event of events) {
-      await this.assertDeviceBoundToContext(context, event.deviceId);
+      await this.assertDeviceBoundToContext(context, event.deviceId, event.endedAt);
       await this.assertAgentSessionBoundToContext(context, event.deviceId, event.agentSessionId);
       for (const fragment of splitUsageEventByUtcDay(event)) {
         accepted += (await this.storeDomainUsageEvent(context, fragment)) ? 1 : 0;
@@ -82,7 +82,11 @@ export class ActivityService {
     };
   }
 
-  private async assertDeviceBoundToContext(context: RequestContext, deviceId: string) {
+  private async assertDeviceBoundToContext(
+    context: RequestContext,
+    deviceId: string,
+    eventEndedAt: Date,
+  ) {
     const device = await this.prisma.device.findFirst({
       where: {
         id: deviceId,
@@ -90,11 +94,21 @@ export class ActivityService {
         userId: context.userId,
         revokedAt: null,
       },
-      select: { id: true },
+      select: { id: true, protocolActivatedAt: true },
     });
 
     if (!device) {
       throw new ForbiddenException("Device is not registered for this WorkMap user and tenant.");
+    }
+
+    if (
+      device.protocolActivatedAt &&
+      eventEndedAt > device.protocolActivatedAt
+    ) {
+      throw new HttpException(
+        "UPGRADE_REQUIRED: protocol v1 activity cannot extend beyond this device's v2 activation boundary.",
+        426,
+      );
     }
   }
 

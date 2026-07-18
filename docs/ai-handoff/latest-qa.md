@@ -1,5 +1,151 @@
 # Latest QA Handoff
 
+## 2026-07-17 Tracking Protocol v2 Concurrency And Bootstrap Plan QA
+
+### Reviewed Implementation
+
+- Revised final plan against current Prisma Device/Credential/PairingCode models, pairing transaction, Desktop `0.5.10` Windows input adapter, Extension `0.4.3` identity baseline, v1 activity storage, and PostgreSQL/Prisma platform constraints.
+
+### Diff Review Summary
+
+- All three mandatory findings and both suggested refinements are valid against the repository and are resolved in the plan.
+- Focus concurrency now has a database serialization lane and a cross-epoch PostgreSQL exclusion constraint rather than only query-before-insert validation.
+- First App/Domain acquisition now has a strict `nextIntervalSequence = 1` bootstrap proof, so provisional UI timing need not wait for periodic settlement and cannot enter official history.
+- One active Desktop is enforced through immutable Device client identity, a workstation row lock, compare-and-swap replacement, and a partial unique index. Browser family is immutable server-owned Device identity.
+- Policy leases now contain concrete server-generated UTC windows, avoiding independent C#/JavaScript/Node DST interpretation.
+- `LASTINPUTINFO.dwTime` rollover has a deterministic unsigned mapping/test requirement, and the undefined sync-envelope `clientSequence` field was removed.
+
+### Findings Ordered By Severity
+
+- Critical/high plan blockers from this review: resolved.
+- Medium: the PostgreSQL extension, exclusion constraint, partial unique index, and legacy identity backfill still require real migration implementation and disposable-database validation.
+- Medium: the initial provisional proof depends on snapshot-only requests taking the same Focus lane lock; this is now explicit and must be preserved in implementation.
+- Medium: ambiguous legacy browser/client identities deliberately block v2 activation until repaired or re-paired.
+- Low: different Browser Profile devices may still provide conflicting live evidence; the plan correctly preserves and labels it for arbitration rather than fabricating one profile.
+
+### Test And Verification Status
+
+- Source/repository alignment review: pass.
+- PostgreSQL/Prisma/Microsoft platform constraint review: pass.
+- Required-plan-field and rejected-design scan: pass.
+- Code-fence/heading/trailing-whitespace structure check: pass; 24 balanced fences, 53 headings, zero trailing-whitespace matches.
+- `git diff --check`: pass for tracked changes; line-ending conversion warnings only.
+- Untracked plan whitespace check: pass; expected no-index difference exit with no whitespace finding.
+- Focused changed-file secret scan: pass.
+- Runtime tests/builds/migrations: not run because this round changed documentation only.
+
+### Manual QA Status
+
+- Not run. No runtime implementation or real-device behavior is claimed.
+
+### Risks
+
+- Current runtime remains on the existing v1 models and behavior until work packages 1-6 are implemented.
+- Database permissions, migration race tests, real Supabase pool behavior, Windows rollover/helper behavior, installed Chromium lifecycle, and Reports readback are not yet runtime evidence.
+
+### Pass/Fail Recommendation
+
+- Pass for final implementation-plan readiness.
+- Fail if evaluated as Desktop `0.6.0`, Extension `0.5.0`, Tracking Protocol v2, schema migration, API, or Reports runtime completion.
+- Work package 1 and work package 2 may now begin; v2 activation remains blocked until their automated contract, migration, concurrency, pairing, policy, and compatibility gates pass.
+
+## 2026-07-17 Tracking Protocol v2 Integrity Plan QA
+
+### Reviewed Implementation
+
+- Revised final plan against Desktop Agent `0.5.10`, Browser Extension `0.4.3`, current client error/queue behavior, client-type-only pairing, Prisma policy/device/event models, increment-only summaries, and Reports aggregation.
+
+### Diff Review Summary
+
+- All five mandatory review findings are valid against the repository and are resolved in the plan.
+- Event-ID idempotency and stream sequence identity are now independently unique and conflict checked with a canonical payload hash.
+- Canonical queue rows are immutable and one-to-one; transport compression cannot merge sequence-bearing events.
+- Multi-device user totals now use interval union and Active-over-Idle precedence; company totals sum reconciled users instead of raw device/app rows.
+- Collection schedule timezone is separated from UTC Reports dates and requires Owner confirmation before v2 activation.
+- Workstation selection is bound on the authenticated one-time code, and browser live-state arbitration no longer silently chooses among conflicting profiles.
+- Snapshot, health, subject identity, downgrade, 24-hour lease, and cross-midnight projection rules are now explicit.
+
+### Findings Ordered By Severity
+
+- Critical/high plan blockers from this review: resolved.
+- Medium: the plan requires an additive cross-stack implementation and migrations; none of these runtime/data-model changes exist yet.
+- Medium: old `0.5.10/0.4.3` binaries can only show generic error/offline behavior for a future HTTP `426`; the plan correctly limits the dedicated `UPGRADE_REQUIRED` UI claim to new clients.
+- Medium: exact union/reconciliation performance must be measured against the real Supabase pool, with dirty-date ledger fallback retained for correctness.
+- Low: stable app identity fallbacks and same-browser multi-profile arbitration can expose an honest unresolved state but cannot always identify the exact foreground profile.
+
+### Test And Verification Status
+
+- Repository/source-level alignment review: pass.
+- Official Windows/Chrome constraint review: pass.
+- Plan structure: pass; 22 balanced code fences, 53 headings, zero trailing whitespace.
+- Required-field scan for dual uniqueness, hashes/conflicts, snapshot/health, workstation binding, reconciliation, timezone, and non-compacting queues: pass.
+- Rejected-design scan: pass.
+- `git diff --check`: pass for tracked files; line-ending warnings only.
+- Focused secret scan: pass; no real secret matches.
+- Runtime tests/builds/migrations: not run because this round changed documentation only.
+
+### Manual QA Status
+
+- Not run. No runtime implementation or real-device behavior is claimed.
+
+### Risks
+
+- The current production code still has v1 second-level events, max-sequence behavior, increment-only summaries, client-type-only pairing, generic old-client `4xx` handling, and incomplete policy enforcement until the plan is implemented.
+- Real multi-monitor, Windows session/power behavior, installed Chrome/Edge suspension, multi-profile ambiguity, and Owner/Employee Reports readback remain later concentrated manual QA.
+
+### Pass/Fail Recommendation
+
+- Pass for implementation-plan readiness.
+- Fail if evaluated as Desktop `0.6.0`, Extension `0.5.0`, schema, API, or Reports runtime completion.
+- The next development round may start with work package 1 and then the additive backend foundation; v2 client activation must remain blocked until compatibility, pairing, policy, idempotency, and reconciliation tests pass.
+
+## 2026-07-17 Tracking Clients Revised Plan QA
+
+### Reviewed Implementation
+
+- Current Desktop Agent `0.5.10`, Browser Extension `0.4.3`, v1 local queues/checkpoints, activity/device ingestion, Prisma policies/summaries, Reports live/status aggregation, and the revised final implementation plan.
+
+### Diff Review Summary
+
+- The revised plan now uses the fixed 60-second rule, positive-millisecond history, event-driven MV3 behavior, contiguous sequence cursors, confirmed-only official history, lossless activation boundaries, device policy enforcement, UTC Reports aggregation with a separate IANA monitoring schedule, and source-specific freshness.
+- Open Runtime is removed from core Focus acceptance and remains a separately enabled policy package.
+- Automated and real-platform verification are separated so the plan does not claim ordinary CI can prove multi-monitor, UAC/RDP, power-loss, SmartScreen/AV, or every installed Chrome/Edge service-worker condition.
+- Older v1 proposal and scaffold-era verification files are retained but explicitly marked historical.
+
+### Findings Ordered By Severity
+
+- Critical/high design blockers from the review: resolved in the plan.
+- Medium: this remains a cross-stack Tracking Protocol v2 implementation touching clients, API, additive schema, policy, migration, and Reports; backend/policy compatibility must deploy before v2 activation.
+- Medium: old v1 data already removed by the existing 1,000-row queue cap is unrecoverable; the revised migration preserves all rows still present locally and prevents new silent eviction.
+- Medium: the current runtime still uses 30-second idle defaults, second-level v1 ingestion, max-sequence cursors, five-second live filtering, and incomplete client policy enforcement until implementation work is completed.
+- Low: exact attention cannot be inferred during passive reading, calls, meetings, or offline work; the revised wording preserves that limitation.
+
+### Test And Verification Status
+
+- Source-level architecture review: pass.
+- Official Windows/Chrome API constraint review: pass.
+- Plan structure, internal headings, and 18 balanced code fences: pass.
+- `git diff --check`: pass.
+- Focused changed-file secret scan: pass; no matches.
+- Runtime tests/builds were not run because no runtime code changed.
+
+### Manual QA Status
+
+- Not run. No Agent installation, Extension loading, live signal, or Reports browser interaction was changed or claimed.
+
+### Risks
+
+- This is a complete implementation blueprint, not completed client/report development.
+- The existing runtime remains on the current v1/slice behaviour until the plan is implemented and verified.
+- Real Windows and installed Chrome/Edge acceptance remains intentionally deferred until development and platform automation complete.
+
+### Pass/Fail Recommendation
+
+- Pass for architecture-plan delivery.
+- Fail if evaluated as Desktop `0.6.0` / Extension `0.5.0` runtime completion.
+- Core work packages 1-6 can proceed against this revised plan. Open Runtime must not block them.
+- Final concentrated manual acceptance cannot proceed until the runtime, migration, automated verification, and artifacts are complete.
+
 ## 2026-07-16 Desktop Agent 0.5.10 Linear Runtime Diagram QA
 
 ### Reviewed Implementation
@@ -2835,3 +2981,46 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 ### Release Artifact Verification
 
 - Verified `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.4.3.zip` contains the complete load-unpacked structure at zip root and reports `manifest.json` version `0.4.3`.
+
+---
+
+## 2026-07-18 Tracking Clients v2 QA
+
+### Reviewed Implementation
+
+- Reviewed the v2 Desktop Agent interval engine, protocol activation guard, durable queue/retry path, native Windows foreground adapter integration, and crash-window legacy checkpoint handling.
+- Reviewed the v2 MV3 Extension worker, persistent tab/window Domain engine, hostname minimization, queue/retry path, and Windows release/Load-unpacked packaging paths.
+- Reviewed v2 server ingestion/reconciliation, Reports v2-first merging, schema/migration shape, and Web source-module resolution needed for the production build.
+
+### Findings Ordered By Severity
+
+- Fixed - High: legacy checkpoint data could cross the v2 activation boundary after a client upgrade. The runtime now clips it at activation and fingerprints migrated legacy events so an interrupted migration cannot upload the same completed slice twice.
+- Fixed - High: Desktop focus display no longer depends on a reset current-segment timer at each checkpoint. The v2 engine preserves an active interval baseline and emits confirmed immutable intervals.
+- Fixed - High: Extension v2 persists its state independently of MV3 worker memory and uploads hostname-only completed intervals through a bounded queue.
+- Fixed - Medium: the Web build initially could not resolve NodeNext `.js` source specifiers exported by shared types. The Webpack extension alias now resolves the corresponding TypeScript source for Web builds without changing server module semantics.
+- Remaining - Manual QA: the true Windows foreground adapter and MV3 behaviour need a real Windows/Chrome or Edge validation; automated tests do not replace that test.
+
+### Test And Verification Status
+
+- Shared types: typecheck, lint, build passed.
+- API: tests 21/21, typecheck, lint, build passed.
+- Desktop Agent: tests 48/48, typecheck, lint, Windows release build passed.
+- Browser Extension: tests 31/31, typecheck, lint, build, and package zip passed.
+- Web: typecheck, lint, production build passed.
+- Prisma schema validation passed with a placeholder local connection string; no database was contacted.
+- `git diff --check` passed. The only output was informational CRLF conversion notices. High-confidence credential-pattern scan returned clean.
+- `smoke:stage4` not run because the current smoke script mutates test/demo database records and requires a dedicated local API/database; this is an explicit verification gap, not a pass.
+
+### Artifacts
+
+- Desktop installer exists and is non-empty: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.0.exe`.
+- Extension package exists and is non-empty: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.0.zip`.
+- Extension Load-unpacked root contains `manifest.json`, `options.html`, and `dist/backgroundV2.js`.
+
+### Manual QA Status
+
+- Deferred by user, pending final consolidated manual QA. No production deployment, Windows installation, browser loading, pairing, or live authenticated report session was performed in this task.
+
+### Recommendation
+
+- Pass for source, focused automated verification, and Alpha artifact generation. Proceed only with a coordinated non-production validation of the migration/API/Web/client rollout before any production claim.

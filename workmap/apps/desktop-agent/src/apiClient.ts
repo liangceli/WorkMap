@@ -1,7 +1,22 @@
 import type { AgentConfig, AppUsageEvent, CurrentAppActivity, DeviceStatusEvent } from "./types.js";
+import type {
+  DeviceTrackingPolicyV2,
+  ProtocolV2ConfirmResponse,
+  ProtocolV2PrepareResponse,
+  TrackingSyncRequestV2,
+  TrackingSyncResponseV2,
+} from "./trackingV2Types.js";
 
 export class AgentApiError extends Error {
-  constructor(message: string, readonly status?: number, readonly responseMessage?: string) { super(message); }
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly responseMessage?: string,
+    readonly responseCode?: string,
+    readonly retryAfterMs?: number,
+  ) {
+    super(message);
+  }
 }
 
 export async function waitForApiReady(apiBaseUrl: string) {
@@ -70,6 +85,83 @@ export function sendDeviceStatus(config: AgentConfig, event: DeviceStatusEvent) 
   return requestJson(config.apiBaseUrl, "/device-client/status-event", config.credential, event, 10_000, { retries: 1 });
 }
 
+export function getDeviceClientStatus(config: AgentConfig) {
+  return requestJson<{
+    paired: true;
+    clientType: "DESKTOP_AGENT";
+    deviceId: string;
+    workstationId: string | null;
+    browserName: null;
+    protocolActivatedAt: string | null;
+  }>(
+    config.apiBaseUrl,
+    "/device-client/status",
+    config.credential,
+    undefined,
+    10_000,
+    { retries: 2, method: "GET" },
+  );
+}
+
+export function getTrackingPolicyV2(config: AgentConfig) {
+  return requestJson<DeviceTrackingPolicyV2>(
+    config.apiBaseUrl,
+    "/device-client/tracking-policy",
+    config.credential,
+    undefined,
+    10_000,
+    { retries: 2, method: "GET" },
+  );
+}
+
+export function prepareProtocolV2(config: AgentConfig) {
+  return requestJson<ProtocolV2PrepareResponse>(
+    config.apiBaseUrl,
+    "/device-client/protocol-v2/prepare",
+    config.credential,
+    {},
+    10_000,
+    { retries: 2 },
+  );
+}
+
+export function confirmProtocolV2(
+  config: AgentConfig,
+  activationId: string,
+  protocolActivatedAt: string,
+) {
+  return requestJson<ProtocolV2ConfirmResponse>(
+    config.apiBaseUrl,
+    "/device-client/protocol-v2/confirm",
+    config.credential,
+    { activationId, protocolActivatedAt },
+    10_000,
+    { retries: 2 },
+  );
+}
+
+export function syncTrackingV2(
+  config: AgentConfig,
+  request: TrackingSyncRequestV2,
+) {
+  return requestJson<TrackingSyncResponseV2>(
+    config.apiBaseUrl,
+    "/device-client/sync-v2",
+    config.credential,
+    request,
+    15_000,
+  );
+}
+
+export function isUpgradeRequiredError(error: unknown) {
+  return (
+    error instanceof AgentApiError &&
+    (error.status === 426 ||
+      error.responseCode === "UPGRADE_REQUIRED" ||
+      /UPGRADE_REQUIRED/i.test(error.responseMessage ?? ""))
+  );
+}
+
 export function isInactiveAgentSessionError(error: unknown) {
   return error instanceof AgentApiError
     && error.status === 403
@@ -82,7 +174,7 @@ async function requestJson<T>(
   credential: string | undefined,
   body: unknown,
   timeoutMs = 10_000,
-  options: { retries?: number } = {},
+  options: { retries?: number; method?: "GET" | "POST" } = {},
 ): Promise<T> {
   const retries = Math.max(0, Math.floor(options.retries ?? 0));
   let attempt = 0;
@@ -90,13 +182,13 @@ async function requestJson<T>(
     let response: Response;
     try {
       response = await fetch(`${apiBaseUrl.replace(/\/+$/, "")}${path}`, {
-        method: "POST",
+        method: options.method ?? "POST",
         headers: {
           Accept: "application/json",
-          "Content-Type": "application/json",
+          ...(options.method === "GET" ? {} : { "Content-Type": "application/json" }),
           ...(credential ? { Authorization: `Device ${credential}` } : {}),
         },
-        body: JSON.stringify(body),
+        ...(options.method === "GET" ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
@@ -110,12 +202,18 @@ async function requestJson<T>(
     }
 
     if (!response.ok) {
-      const responseMessage = await readErrorDetail(response);
-      const message = responseMessage
-        ? `WorkMap API ${path} returned ${response.status}: ${responseMessage}`
+      const detail = await readErrorDetail(response);
+      const message = detail.message
+        ? `WorkMap API ${path} returned ${response.status}: ${detail.message}`
         : `WorkMap API ${path} returned ${response.status}.`;
-      const apiError = new AgentApiError(message, response.status, responseMessage);
-      if (response.status >= 500 && attempt < retries) {
+      const apiError = new AgentApiError(
+        message,
+        response.status,
+        detail.message,
+        detail.code,
+        readRetryAfterMs(response),
+      );
+      if ((response.status >= 500 || response.status === 429) && attempt < retries) {
         await retryDelay(attempt);
         attempt += 1;
         continue;
@@ -132,17 +230,21 @@ async function requestJson<T>(
 async function readErrorDetail(response: Response) {
   try {
     const text = await response.text();
-    if (!text.trim()) return undefined;
+    if (!text.trim()) return {};
     try {
       const parsed = JSON.parse(text) as unknown;
       const message = extractErrorMessage(parsed);
-      if (message) return sanitizeErrorDetail(message);
+      const code = extractErrorCode(parsed);
+      return {
+        ...(message ? { message: sanitizeErrorDetail(message) } : {}),
+        ...(code ? { code: sanitizeErrorCode(code) } : {}),
+      };
     } catch {
       // Fall back to the raw text below.
     }
-    return sanitizeErrorDetail(text);
+    return { message: sanitizeErrorDetail(text) };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -156,8 +258,27 @@ function extractErrorMessage(value: unknown): string | undefined {
   return undefined;
 }
 
+function extractErrorCode(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const body = value as Record<string, unknown>;
+  return typeof body.code === "string" ? body.code : undefined;
+}
+
 function sanitizeErrorDetail(value: string) {
   return value.replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]").replace(/\s+/g, " ").trim().slice(0, 240);
+}
+
+function sanitizeErrorCode(value: string) {
+  return value.replace(/[^A-Z0-9_-]/gi, "_").slice(0, 80);
+}
+
+function readRetryAfterMs(response: Response) {
+  const value = response.headers.get("retry-after");
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1_000);
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
 }
 
 function friendlyNetworkError(error: unknown, fallback: string) {

@@ -1,18 +1,28 @@
 import type { DomainUsageEvent } from "./domainTracking.js";
 import type { DomainTrackerSnapshot } from "./domainState.js";
 import { protectCredential, unprotectCredential, type ProtectedCredential } from "./credentialVault.js";
+import { normalizeExcludedHostnames } from "./hostnameExclusions.js";
 
 type ExtensionConfigMetadata = {
   apiBaseUrl: string;
   deviceId: string;
   browserName: string;
+  excludedHostnames?: string[];
 };
 
 export type ExtensionConfig = ExtensionConfigMetadata & { credential: string };
 export type PersistedExtensionConfig = ExtensionConfigMetadata & Partial<ProtectedCredential> & { credential?: string };
 
 export type ExtensionStatus = {
-  state: "unpaired" | "pairing" | "connected" | "offline" | "auth_required" | "error";
+  state:
+    | "unpaired"
+    | "pairing"
+    | "connected"
+    | "offline"
+    | "paused"
+    | "auth_required"
+    | "upgrade_required"
+    | "error";
   lastHeartbeatAt?: string;
   lastUploadAt?: string;
   lastStatusUploadAt?: string;
@@ -75,7 +85,13 @@ type StoredState = {
 };
 
 declare const chrome: {
-  storage: { local: { get(keys: string[] | string, callback: (items: StoredState) => void): void; set(items: StoredState, callback?: () => void): void } };
+  storage: {
+    local: {
+      get(keys: string[] | string, callback: (items: StoredState) => void): void;
+      set(items: StoredState, callback?: () => void): void;
+      remove(keys: string[] | string, callback?: () => void): void;
+    };
+  };
 };
 
 export function readStoredState(keys: readonly (keyof StoredState)[]) {
@@ -86,12 +102,21 @@ export function writeStoredState(value: StoredState) {
   return new Promise<void>((resolve) => chrome.storage.local.set(value, resolve));
 }
 
+export function removeStoredState(keys: readonly (keyof StoredState)[]) {
+  return new Promise<void>((resolve) =>
+    chrome.storage.local.remove(keys as string[], resolve),
+  );
+}
+
 export async function savePairedConfig(config: ExtensionConfig) {
   const protectedCredential = await protectCredential(config.credential);
   const metadata: ExtensionConfigMetadata = {
     apiBaseUrl: config.apiBaseUrl,
     deviceId: config.deviceId,
     browserName: config.browserName,
+    excludedHostnames: normalizeExcludedHostnames(
+      config.excludedHostnames ?? [],
+    ),
   };
   await writeStoredState({ workmapConfig: { ...metadata, ...protectedCredential } });
 }
@@ -99,14 +124,35 @@ export async function savePairedConfig(config: ExtensionConfig) {
 export async function resolveStoredConfig(config: PersistedExtensionConfig | undefined): Promise<ExtensionConfig | null> {
   if (!config) return null;
 
-  const { apiBaseUrl, deviceId, browserName } = config;
+  const {
+    apiBaseUrl,
+    deviceId,
+    browserName,
+    excludedHostnames,
+  } = config;
   if (config.credentialCiphertext && config.credentialIv && config.credentialVersion === 1) {
     const credential = await unprotectCredential(config as PersistedExtensionConfig & ProtectedCredential);
-    return { apiBaseUrl, deviceId, browserName, credential };
+    return {
+      apiBaseUrl,
+      deviceId,
+      browserName,
+      credential,
+      excludedHostnames: normalizeExcludedHostnames(
+        excludedHostnames ?? [],
+      ),
+    };
   }
 
   if (config.credential) {
-    const runtimeConfig = { apiBaseUrl, deviceId, browserName, credential: config.credential };
+    const runtimeConfig = {
+      apiBaseUrl,
+      deviceId,
+      browserName,
+      credential: config.credential,
+      excludedHostnames: normalizeExcludedHostnames(
+        excludedHostnames ?? [],
+      ),
+    };
     await savePairedConfig(runtimeConfig);
     return runtimeConfig;
   }

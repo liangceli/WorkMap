@@ -1,5 +1,205 @@
 # Latest Implementation Handoff
 
+## 2026-07-17 Tracking Protocol v2 Concurrency And Bootstrap Plan Revision
+
+### Original Task Brief
+
+- Re-evaluate the latest three mandatory and two suggested architecture findings against the real WorkMap repository.
+- Update the final Tracking clients execution plan without rewriting its settled architecture.
+- Make concurrent Focus writes, first-session live timing, one-Desktop workstation binding, DST-safe policy windows, and Windows input-tick rollover implementation-ready.
+
+### Changed Files
+
+- `docs/designs/workmap-tracking-clients-final-implementation-plan.md`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Accepted all five findings after confirming the current `Device` lacks client/browser/workstation identity, pairing creates devices without workstation locking, and the prior plan had no database serialization rule for overlap.
+- Added `ClientWriteLane(deviceId, source, stream)` row locking plus a PostgreSQL `btree_gist` half-open range exclusion for Focus. The constraint spans clock epochs, permits exact adjacency, and intentionally permits overlap between different Browser Profile device IDs for later arbitration/union.
+- Added `nextIntervalSequence` to `LiveFocusSnapshotV2`. A first state can start a UI-only provisional counter from `stateStartedAt` only when sequence `1`, cursor `0`, no dispositions, epoch, policy lease, and lane-locked database state all agree. Confirmed history remains ledger-only.
+- Chose immutable `Device.clientType` and server-owned `Device.browserName`, a raw PostgreSQL partial unique index for one active Desktop per workstation, workstation row locking, and compare-and-swap Desktop replacement so concurrent codes cannot revoke the wrong device.
+- Added server-issued, lease-scoped `allowedUtcWindows` and `DevicePolicyLease`; C#, Electron, Extension JavaScript, and ingestion compare UTC windows rather than independently resolving DST.
+- Added deterministic 32-bit `LASTINPUTINFO.dwTime` rollover behavior/tests and removed the undefined envelope-level `TrackingSyncRequestV2.clientSequence`.
+- Added migration, concurrency, pairing, initial-live, DST-window, and rollover verification requirements to work packages and release acceptance.
+- No runtime, Prisma schema, migration, API, client, Reports, auto-start, authentication, or deployment behavior changed.
+
+### Role And Access Behaviour
+
+- Workstation selection and replacement remain Cognito-authenticated, tenant/user scoped, and server bound to a one-time pairing code.
+- Device credentials remain write-only for their immutable device/client/workstation identity and cannot read Reports.
+- Employee own-data, authorised Owner/manager reads, report auditing, cross-tenant rejection, and Platform Admin employee-detail exclusion remain unchanged.
+
+### Verification Commands And Results
+
+- Current Prisma Device/Credential/PairingCode and pairing Web/API source review: pass.
+- Current Desktop `0.5.10`, Extension `0.4.3`, Windows adapter, activity storage, and migration pattern review: pass.
+- Official PostgreSQL exclusion/range, `btree_gist`, Prisma customized-migration, and Microsoft tick behavior review: pass.
+- Plan contract scan: pass; required database lane/exclusion, cross-epoch rule, initial sequence proof, immutable device/browser identity, partial unique index, UTC windows, and rollover coverage are present.
+- `TrackingSyncRequestV2.clientSequence` field scan: pass; zero field definitions remain.
+- Plan structure: pass; 24 balanced code fences, 53 headings, and zero trailing-whitespace matches.
+- `git diff --check`: pass for tracked changes; line-ending conversion warnings only.
+- Untracked plan whitespace check: pass; `git diff --no-index --check` returned only its expected file-difference exit status and no whitespace finding.
+- Focused secret scan: pass; no database URL, Redis URL, private key, cloud access key, device credential, or JWT-like token match.
+- Runtime typecheck, lint, build, tests, migrations, and packaging were not run because runtime code did not change.
+
+### Manual QA
+
+- Not run. No Agent installation, Extension loading, account flow, tracking signal, or Reports UI behavior changed or was claimed.
+
+### Intentionally Not Changed
+
+- Desktop Agent and Extension runtime or existing auto-start/tray behavior.
+- API/Web runtime, Prisma schema/migrations, Cognito, RBAC, deployment, generated artifacts, and optional Open Runtime scope.
+- Existing unrelated user documentation changes in the worktree.
+
+### Remaining Risks
+
+- This is an implementation-ready blueprint, not Tracking Protocol v2 runtime completion.
+- Supabase/Postgres must permit the migration's `btree_gist` extension and the exact exclusion/partial-index SQL must pass disposable-database migration validation.
+- Legacy Device identity conflicts require explicit quarantine/repair before v2 activation; the plan intentionally does not guess.
+- Real Windows, installed Chrome/Edge, Owner/Employee Reports, and migration performance remain implementation and later concentrated-QA work.
+
+### Suggested Next Steps
+
+- The reviewed architecture now meets the entry criteria for work package 1 contracts/fixtures and work package 2 additive backend/database foundation. Keep v2 activation disabled until their migration, concurrency, policy, pairing, and compatibility tests pass.
+
+## 2026-07-17 Tracking Protocol v2 Integrity Plan Revision
+
+### Original Task Brief
+
+- Re-evaluate the latest five mandatory architecture findings against the real Desktop Agent `0.5.10`, Browser Extension `0.4.3`, pairing, Prisma, ingestion, and Reports code.
+- Accept only findings supported by the repository and platform behavior, then update the final implementation plan.
+- Cover idempotency/sequence conflicts, queue compaction, multi-device totals, monitoring timezone, workstation pairing, downgrade behavior, stable subject identity, and accurate Desktop input wording.
+
+### Changed Files
+
+- `docs/designs/workmap-tracking-clients-final-implementation-plan.md`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Accepted all five mandatory findings and the three suggested refinements, with one explicit compatibility limit: already released binaries cannot gain a dedicated `UPGRADE_REQUIRED` UI from a server-only change.
+- Added dual uniqueness for event identity and stream sequence identity, server-computed canonical `payloadHash`, `IDEMPOTENCY_CONFLICT` / `SEQUENCE_CONFLICT`, and a frozen canonicalization version.
+- Completed `LiveFocusSnapshotV2` with clock epoch, policy, browser, stable subject, current-state identity, and exact latest-emitted event/sequence references; fully defined privacy-minimal `ClientHealthV2`.
+- Prohibited semantic merging or renumbering of queued canonical intervals. HTTP compression/batching remains allowed only as transport.
+- Replaced direct user/company summary addition with device/subject caches, durable dirty targets, user/day interval union, Active-over-Idle precedence, company sums of reconciled users, and a ledger fallback for dirty report dates.
+- Kept Reports date ownership in UTC but added an Owner-confirmed IANA monitoring timezone. Existing `09:00-17:00` values are not silently interpreted as UTC; collection stops after an explicit 24-hour offline policy lease.
+- Defined the Cognito-authenticated workstation selection flow, pairing-code workstation binding, exchange override rejection, one active Desktop per workstation, standalone Extension behavior, and Chrome/Edge/profile live arbitration.
+- Split immutable `subjectKey` from mutable `displayName` and corrected Desktop semantics: `GetLastInputInfo` proves Windows-session input observed while an app was foreground, not input targeted at that app.
+- Added post-activation downgrade behavior. The server returns structured HTTP `426 UPGRADE_REQUIRED` and never refreshes Healthy status; new clients handle it explicitly, while old clients may show only their existing generic error/offline state.
+- Resolved a derived cross-midnight conflict: one canonical interval owns the event/sequence, while server-generated day fragments carry no separate client sequence.
+- No runtime, schema, migration, API, client, Reports UI, auto-start, authentication provider, or deployment behavior changed in this documentation task.
+
+### Role And Access Behaviour
+
+- Workstation listing and code creation remain Cognito-authenticated and tenant/user scoped.
+- Pairing exchange cannot select a workstation; it consumes the server-bound one-time code.
+- Device credentials remain write-only for their bound tenant/user/client/device/workstation and cannot read Reports.
+- Employee own-data, authorised Owner/manager views, report auditing, cross-tenant rejection, and Platform Admin privacy boundaries remain mandatory.
+
+### Verification Commands And Results
+
+- Focused source review of current Prisma models, pairing Web/API flow, client `4xx` behavior, Extension startup/focus restoration, ingestion, and Reports aggregation: pass.
+- Official Microsoft `GetLastInputInfo` and Chrome windows/alarms/service-worker constraints reviewed: pass.
+- Plan structure: pass; 22 balanced code fences, 53 headings, zero trailing-whitespace matches.
+- Rejected-design scan: pass; no stale `lastInteractionAt`, UTC-only schedule, semantic queue-compaction, seven-day collection promise, Clerk, or 3CX direction remains in the plan.
+- `git diff --check`: pass for tracked changes; line-ending conversion warnings only.
+- Untracked plan whitespace check: pass; `git diff --no-index --check` reported only the expected file-difference exit status and no whitespace finding.
+- Focused secret scan: pass; no credential, private key, JWT, database URL, or cloud access-key match.
+- Runtime typecheck, lint, build, tests, migrations, and packaging were not run because runtime code did not change.
+
+### Manual QA
+
+- Not run. No Agent installation, Extension loading, account flow, live tracking, or Reports browser behavior changed or was claimed.
+
+### Intentionally Not Changed
+
+- Desktop Agent/Extension auto-start and tray behavior.
+- Client/API/Web runtime, Prisma schema and migrations, Cognito architecture, credentials, RBAC, deployment, and generated artifacts.
+- Open Runtime remains an optional later policy package and is not represented as implemented.
+
+### Remaining Risks
+
+- This is an implementation blueprint, not Tracking Protocol v2 runtime completion.
+- Existing `0.5.10/0.4.3` binaries cannot render a new dedicated downgrade message; server-side rejection and health status are the enforceable boundary until a new client is installed.
+- Exact app identity fallback quality, multi-profile browser arbitration, IANA/DST schedule behavior, interval-union load, and real Windows/Chrome lifecycle behavior still require implementation and the listed automated/manual verification.
+- Existing v1 rows already evicted by the old 1,000-row queue cap remain unrecoverable.
+
+### Suggested Next Steps
+
+- Begin work package 1 deterministic contracts/fixtures, then the additive backend/pairing/policy/reconciliation foundation. Do not activate either v2 client before those compatibility tests pass.
+
+## 2026-07-17 Tracking Clients Revised Final Implementation Plan
+
+### Original Task Brief
+
+- Review the latest Desktop Agent and Browser Extension plans against the real repository.
+- Determine whether the architecture and Desktop/Browser/mixed-use scenario tables are complete and internally consistent.
+- Apply the accepted technical review corrections to the final plan before runtime development begins.
+- Keep the design grounded in Desktop Agent `0.5.10`, Browser Extension `0.4.3`, current API/Prisma/Reports behavior, and real Windows/Chrome platform limits.
+
+### Changed Files
+
+- `docs/designs/workmap-tracking-clients-final-implementation-plan.md`
+- `docs/api/activity-ingestion-contract.md`
+- `docs/ai-handoff/stage4-tracking-reports-verification.md`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Implementation Summary
+
+- Revised the implementation source of truth for Desktop Agent `0.6.0`, Browser Extension `0.5.0`, Tracking Protocol `v2`, backend ledger/live snapshots, and Reports.
+- Fixed the product contract at 60 seconds and required every valid completed `durationMs > 0` interval to remain in the ledger and summaries; UI grouping cannot delete short history.
+- Replaced the impossible Extension five-second heartbeat with event-driven sync plus a production 30-second recovery/retry/reconciliation alarm and source-specific stale thresholds.
+- Replaced a single time watermark with device/source/stream/clock-epoch contiguous sequence cursors, missing ranges, terminal rejection tombstones, and `clientEventId` idempotency.
+- Restricted historical totals and exports to confirmed ledger data. Live animation is provisional, correctable, never persisted, and disabled when sequence continuity is unknown.
+- Added an online idempotent v2 activation handshake, `protocolActivatedAt`, preserved credentials, legacy v1 queue drain, and explicit `0.5.10 -> 0.6.0` / `0.4.3 -> 0.5.0` upgrade fixtures.
+- Added the missing device policy endpoint/cache/offline lease/server enforcement design; Reports daily summaries remain UTC while monitoring schedules require a separately confirmed IANA timezone.
+- Added the Windows hidden top-level message loop, WTS/power lifecycle, helper supervision/signing/SmartScreen/AV boundaries, and honest crash/power-loss inference limits.
+- Reduced the core release to accurate Focus/Current Focus. Open Runtime is a separate policy-gated optional package and does not block the core versions.
+- Reworked ingestion around batch 50, per-item results, set-based short transactions, and no per-interval duplicate/summary queries.
+- Split verification into deterministic tests, API/database integration, Windows/Chromium platform automation, and explicitly deferred concentrated real-device QA.
+- Marked two older proposal/verification documents as historical without deleting their contents.
+- No runtime implementation was changed in this architecture-only task.
+
+### Role And Access Behaviour
+
+- Employee own-data, authorised Owner/manager individual/company reports, cross-tenant rejection, report-access audit, and Platform Admin employee-detail exclusion remain mandatory.
+- Device credentials remain write-only for their bound tenant/user/client/device/workstation and cannot read Reports.
+
+### Verification
+
+- Inspected current Desktop, Extension, API, Prisma, Reports, pairing, queue, and test code.
+- Checked the design against Microsoft WinEvent/GetLastInputInfo/WTS/power/window-message constraints and Chrome MV3 lifecycle, tabs, windows, idle, content-script, and alarm constraints.
+- Plan structure/headings/code-fence check: pass; 18 balanced code fences.
+- `git diff --check`: pass.
+- Focused changed-file secret scan: pass; no matches.
+- Runtime tests/builds were not run because this task changed documentation only.
+
+### Manual QA
+
+- Not run. This task produced an implementation plan and did not change client/API/Reports runtime behaviour.
+
+### Intentionally Not Changed
+
+- Desktop Agent, Browser Extension, API, Web UI, Prisma schema/migrations, authentication, device credentials, deployment, and build artifacts.
+- Existing historical diagrams and handoff entries were retained.
+
+### Remaining Risks
+
+- The current clients and Reports do not yet satisfy the target architecture; the plan must not be reported as implemented.
+- Existing v1 queues may already have silently evicted old rows under their current 1,000-row cap; an upgrade cannot reconstruct data that no longer exists locally.
+- Open Runtime is broader than the current foreground-only compliance baseline and remains uncollected until its independent policy, employee notice, retention, implementation, and QA are complete.
+- Passive reading, meetings, calls, and offline work remain outside what interaction recency can prove.
+- Multi-monitor, UAC, RDP, sleep/hibernation, power loss, SmartScreen/AV, and real installed Chrome/Edge lifecycle behavior remain concentrated manual QA after development.
+
+### Suggested Next Steps
+
+- Execute core work packages 1-6 in order: deterministic contracts/upgrades, additive backend/policy foundation, Desktop Focus, Browser Focus, confirmed-history/provisional-current Reports, and compatibility rollout. Open Runtime remains optional work package 7.
+
 ## 2026-07-16 Desktop Agent 0.5.10 Linear Runtime Diagram
 
 ### Original Task Brief
@@ -4214,3 +4414,55 @@ Correct the password visibility eye button so it aligns inside the right edge of
 ### Release Artifact Correction
 
 - The GitHub Release artifact is `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.4.3.zip`, alongside the existing `0.4.2` archives. It contains the same zip-root layout as v0.4.2 and a verified `manifest.json` version `0.4.3`.
+
+---
+
+## 2026-07-18 Tracking Clients v2 Implementation
+
+### Original Task Brief
+
+- Implement the approved tracking-client plan against the existing WorkMap codebase: privacy-minimized, durable, monotonic Desktop Agent and MV3 Browser Extension tracking, unified server reconciliation, and Reports presentation that separates current focus from confirmed history.
+
+### Changed Files
+
+- Shared v2 contracts and deterministic single-focus engine: `workmap/packages/shared-types/src/tracking-v2.ts`, `workmap/packages/shared-types/src/single-focus-engine-v2.ts`, and `workmap/packages/shared-types/src/index.ts`.
+- Server policy, durable v2 ingestion, reconciliation and report merge: `workmap/apps/api/src/modules/devices/tracking-v2-*.ts`, `workmap/apps/api/src/modules/reports/tracking-v2-reports.service.ts`, `workmap/apps/api/src/modules/reports/reports.service.ts`, and `workmap/apps/api/src/modules/activity/activity.service.ts`.
+- Additive schema foundation: `workmap/prisma/schema.prisma` and `workmap/prisma/migrations/20260717090000_tracking_v2_foundation/migration.sql`.
+- Desktop Agent v0.6.0 runtime, Windows helper, durable queue, migration and tests: `workmap/apps/desktop-agent/src/runtimeV2.ts`, `desktopFocusEngineV2.ts`, `trackingV2Store.ts`, `windowsActivityHost.ts`, `trackingState.ts`, `fileStore.ts`, and related package/test files.
+- Browser Extension v0.5.0 MV3 runtime, durable state, host-permission tracking health, build packaging and tests: `workmap/apps/browser-extension/src/backgroundV2.ts`, `browserFocusEngineV2.ts`, `trackingV2Store.ts`, `hostnameExclusions.ts`, `scripts/package-alpha.mjs`, and related package/test files.
+- Reports v2-first presentation and Web source-module compatibility: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`, `reportSnapshotCache.ts`, `workmap/apps/web/lib/api/reportsApi.ts`, `apiTypes.ts`, and `next.config.ts`.
+
+### Runtime Behaviour
+
+- Desktop Agent v0.6.0 uses the Windows native foreground adapter in its normal runtime. It records normalized application identity only, never titles, document content, screenshots, keystrokes, clipboard, or window contents.
+- The Desktop v2 state engine keeps an interval's baseline stable while it remains active. Completed intervals enter a local durable queue before upload; the pre-v2 checkpoint migration clips old unpersisted state at protocol activation and fingerprints migrated legacy events to prevent a crash-window duplicate.
+- Browser Extension v0.5.0 tracks active HTTP(S) tab/window state in its MV3 worker, persists v2 checkpoint and queue state through worker restarts, and uploads hostname-only Domain intervals. It has no content-body or title collection path.
+- The API accepts immutable v2 intervals with idempotency/reconciliation rules. Reports prefer confirmed v2 aggregate data and use live state only as current-focus enrichment, avoiding the former reset-at-checkpoint display path.
+- The additive migration has been created and Prisma schema validation passed, but no production migration was run by this task.
+
+### Version And Build Artifacts
+
+- Desktop Agent version: `0.6.0`; verified Windows installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.0.exe`.
+- Browser Extension manifest/package version: `0.5.0`; verified Load-unpacked directory: `workmap/apps/browser-extension/alpha-unpacked`; verified release zip: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.0.zip`.
+- These artifacts contain no configured production credential. Windows installation and Chrome/Edge loading were not manually performed.
+
+### Verification
+
+- Shared types: typecheck, lint, build passed.
+- API: tests 21/21, typecheck, lint, and build passed.
+- Desktop Agent: tests 48/48, typecheck, lint, and Windows release build passed.
+- Browser Extension: tests 31/31, typecheck, lint, build, and `release:zip` passed.
+- Web: typecheck, lint, and production build passed.
+- Prisma schema validation passed using a placeholder non-production URL.
+- `git diff --check` passed; Windows line-ending notices were informational only. High-confidence source credential scan passed.
+- `pnpm smoke:stage4` was intentionally not run: its script creates test tenants/dev tokens/devices and deletes matching smoke records, so it is not a read-only check suitable for this workspace without a dedicated local test database and running local API.
+
+### Manual QA And Deployment
+
+- Deferred by user, pending final consolidated manual QA. This includes installing the Windows package, pairing it, loading the Extension unpacked, granting website access, multi-window/browser activity verification, and live Reports validation.
+- No Render/Vercel/Supabase configuration, production deployment, production database migration, or production data was modified in this task.
+
+### Intentionally Not Changed And Risks
+
+- Cognito, tenant/RBAC boundaries, 3CX, Teams/Email content access, and Platform Admin privacy boundaries were not changed. No Clerk dependency was introduced.
+- The production migration and coordinated API/Web/client rollout remain operational steps. Existing v1 clients remain subject to their prior runtime limitations until replaced with v0.6.0/v0.5.0.

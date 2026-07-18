@@ -48,4 +48,18 @@ export class ReportsController {
   ) {
     return this.reports.getAgentLiveStatus(context, { userId, departmentId, scope, from, to, includeRevision });
   }
+
+  @Get("live-activity")
+  getLiveActivity(
+    @CurrentContext() context: RequestContext,
+    @Query("userId", OptionalUuidPipe) userId?: string,
+    @Query("departmentId", OptionalUuidPipe) departmentId?: string,
+    @Query("scope") scope?: string,
+  ) {
+    return this.reports.getTrackingV2LiveActivity(context, {
+      userId,
+      departmentId,
+      scope,
+    });
+  }
 }

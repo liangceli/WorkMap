@@ -12,9 +12,10 @@ test("Windows release is a visual NSIS installer", async () => {
   const html = await readFile(new URL("../renderer/index.html", import.meta.url), "utf8");
   const renderer = await readFile(new URL("../renderer/app.js", import.meta.url), "utf8");
   const preload = await readFile(new URL("../renderer/preload.cjs", import.meta.url), "utf8");
-  const pairing = await readFile(new URL("../src/pairing.ts", import.meta.url), "utf8");
+  const version = await readFile(new URL("../src/version.ts", import.meta.url), "utf8");
+  const electronMain = await readFile(new URL("../src/electron/main.ts", import.meta.url), "utf8");
 
-  assert.equal(packageJson.version, "0.5.10");
+  assert.equal(packageJson.version, "0.6.0");
   assert.equal(packageJson.main, "dist/electron/main.js");
   assert.match(packageJson.scripts?.["release:windows"] ?? "", /electron-builder --win nsis --x64/);
   assert.equal(packageJson.build?.win?.target, "nsis");
@@ -27,16 +28,21 @@ test("Windows release is a visual NSIS installer", async () => {
   assert.match(renderer, /Signal stale/);
   assert.match(renderer, /Last server-confirmed heartbeat/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
-  assert.match(pairing, /desktop-agent-windows\/0\.5\.10/);
+  assert.match(version, /desktop-agent-windows\/0\.6\.0/);
+  assert.match(electronMain, /DesktopAgentRuntimeV2/);
+  assert.match(
+    JSON.stringify(packageJson),
+    /native\/windows-activity-host\/publish\/workmap-windows-activity-host\.exe/,
+  );
   assert.doesNotMatch(html, /nodeIntegration/);
 });
 
 test("runtime startup does not silently preserve stale connected state", async () => {
-  const runtime = await readFile(new URL("../src/runtime.ts", import.meta.url), "utf8");
+  const runtime = await readFile(new URL("../src/runtimeV2.ts", import.meta.url), "utf8");
   const electronMain = await readFile(new URL("../src/electron/main.ts", import.meta.url), "utf8");
 
-  assert.match(runtime, /state: "offline"/);
-  assert.doesNotMatch(runtime, /this\.status = \{ state: "connected"/);
+  assert.match(runtime, /connectionState: TrackingConnectionStateV2 = "OFFLINE"/);
+  assert.doesNotMatch(runtime, /connectionState: TrackingConnectionStateV2 = "ONLINE"/);
   assert.doesNotMatch(electronMain, /\.catch\(\(\) => undefined\)/);
   assert.match(electronMain, /safeRuntimeError/);
   assert.match(electronMain, /stopLegacyNodeAgents/);

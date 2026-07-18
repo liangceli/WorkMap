@@ -18,6 +18,11 @@ export class DevicesController {
     return this.devices.listVisibleDevices(context);
   }
 
+  @Get("workstations")
+  listWorkstations(@CurrentContext() context: RequestContext) {
+    return this.pairing.listWorkstations(context);
+  }
+
   @Post("register")
   registerDevice(@CurrentContext() context: RequestContext, @Body() body: unknown) {
     return this.devices.registerDevice(context, body);

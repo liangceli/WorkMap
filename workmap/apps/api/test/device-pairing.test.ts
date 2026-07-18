@@ -49,7 +49,11 @@ test("expired/invalid codes fail and revoked device credential immediately fails
   await assert.rejects(() => service.exchangePairingCode({ code: "AAAA-BBBB" }), UnauthorizedException);
 
   const valid = await service.createPairingCode(context, { clientType: "BROWSER_EXTENSION" });
-  const exchanged = await service.exchangePairingCode({ code: valid.code, clientType: "BROWSER_EXTENSION" });
+  const exchanged = await service.exchangePairingCode({
+    code: valid.code,
+    clientType: "BROWSER_EXTENSION",
+    browserName: "CHROME",
+  });
   await service.revokeDevice(context, exchanged.device.id);
   await assert.rejects(() => service.resolveDeviceAuthorization(`Device ${exchanged.credential}`), UnauthorizedException);
 });
@@ -102,6 +106,7 @@ class PairingPrisma {
   pairingCodes: any[] = [];
   devices: any[] = [];
   credentials: any[] = [];
+  workstations: any[] = [];
 
   devicePairingCode = {
     create: async ({ data }: any) => {
@@ -123,6 +128,28 @@ class PairingPrisma {
     create: async ({ data }: any) => { const row = { id: crypto.randomUUID(), revokedAt: null, createdAt: new Date(), updatedAt: new Date(), ...data }; this.devices.push(row); return row; },
     findFirst: async ({ where }: any) => this.devices.find((row) => row.id === where.id && row.companyId === where.companyId) ?? null,
     update: async ({ where, data }: any) => { const row = this.devices.find((item) => item.id === where.id); Object.assign(row, data); return row; },
+  };
+
+  workstation = {
+    create: async ({ data }: any) => {
+      const row = {
+        id: crypto.randomUUID(),
+        revokedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...data,
+      };
+      this.workstations.push(row);
+      return row;
+    },
+    findFirst: async ({ where }: any) =>
+      this.workstations.find(
+        (row) =>
+          row.id === where.id &&
+          row.companyId === where.companyId &&
+          row.userId === where.userId &&
+          row.revokedAt === null,
+      ) ?? null,
   };
 
   deviceCredential = {

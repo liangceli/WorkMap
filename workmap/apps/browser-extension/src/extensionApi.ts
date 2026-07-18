@@ -1,5 +1,13 @@
 import type { DomainUsageEvent } from "./domainTracking.js";
 import type { ExtensionConfig, ExtensionDeviceStatusEvent } from "./extensionStorage.js";
+import {
+  BROWSER_EXTENSION_VERSION,
+  type BrowserTrackingSyncRequestV2,
+  type BrowserTrackingSyncResponseV2,
+  type DeviceTrackingPolicyV2,
+  type ProtocolV2ConfirmResponse,
+  type ProtocolV2PrepareResponse,
+} from "./trackingV2Types.js";
 
 export class ExtensionApiError extends Error {
   constructor(message: string, readonly status?: number) { super(message); }
@@ -10,13 +18,14 @@ export function exchangePairingCode(apiBaseUrl: string, code: string, browserNam
     code,
     clientType: "BROWSER_EXTENSION",
     os: "UNKNOWN",
-    agentVersion: "browser-extension-mv3/0.4.3",
+    agentVersion: BROWSER_EXTENSION_VERSION,
     hostname: browserName,
+    browserName,
   });
 }
 
 export function sendExtensionHeartbeat(config: ExtensionConfig) {
-  return requestJson(config.apiBaseUrl, "/device-client/heartbeat", config.credential, { agentVersion: "browser-extension-mv3/0.4.3" });
+  return requestJson(config.apiBaseUrl, "/device-client/heartbeat", config.credential, { agentVersion: BROWSER_EXTENSION_VERSION });
 }
 
 export function sendDomainUsage(config: ExtensionConfig, events: DomainUsageEvent[]) {
@@ -27,13 +36,82 @@ export function sendExtensionStatus(config: ExtensionConfig, event: ExtensionDev
   return requestJson(config.apiBaseUrl, "/device-client/status-event", config.credential, event);
 }
 
-async function requestJson<T>(baseUrl: string, path: string, credential: string | undefined, body: unknown): Promise<T> {
+export function getDeviceClientStatus(config: ExtensionConfig) {
+  return requestJson<{
+    paired: true;
+    clientType: "BROWSER_EXTENSION";
+    deviceId: string;
+    workstationId: string | null;
+    browserName: "CHROME" | "EDGE" | null;
+    protocolActivatedAt: string | null;
+  }>(config.apiBaseUrl, "/device-client/status", config.credential);
+}
+
+export function getTrackingPolicyV2(config: ExtensionConfig) {
+  return requestJson<DeviceTrackingPolicyV2>(
+    config.apiBaseUrl,
+    "/device-client/tracking-policy",
+    config.credential,
+  );
+}
+
+export function prepareProtocolV2(config: ExtensionConfig) {
+  return requestJson<ProtocolV2PrepareResponse>(
+    config.apiBaseUrl,
+    "/device-client/protocol-v2/prepare",
+    config.credential,
+    {},
+  );
+}
+
+export function confirmProtocolV2(
+  config: ExtensionConfig,
+  activationId: string,
+  protocolActivatedAt: string,
+) {
+  return requestJson<ProtocolV2ConfirmResponse>(
+    config.apiBaseUrl,
+    "/device-client/protocol-v2/confirm",
+    config.credential,
+    { activationId, protocolActivatedAt },
+  );
+}
+
+export function syncTrackingV2(
+  config: ExtensionConfig,
+  body: BrowserTrackingSyncRequestV2,
+) {
+  return requestJson<BrowserTrackingSyncResponseV2>(
+    config.apiBaseUrl,
+    "/device-client/sync-v2",
+    config.credential,
+    body,
+  );
+}
+
+export function isUpgradeRequiredError(error: unknown) {
+  return (
+    error instanceof ExtensionApiError &&
+    (error.status === 426 || /UPGRADE_REQUIRED/i.test(error.message))
+  );
+}
+
+async function requestJson<T>(
+  baseUrl: string,
+  path: string,
+  credential: string | undefined,
+  body?: unknown,
+): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${baseUrl.replace(/\/+$/, "")}${path}`, {
-      method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json", ...(credential ? { Authorization: `Device ${credential}` } : {}) },
-      body: JSON.stringify(body),
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        Accept: "application/json",
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(credential ? { Authorization: `Device ${credential}` } : {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {

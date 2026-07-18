@@ -1,5 +1,9 @@
 # Activity Ingestion Contract
 
+> Historical proposal. Superseded for new implementation work by
+> [`docs/designs/workmap-tracking-clients-final-implementation-plan.md`](../designs/workmap-tracking-clients-final-implementation-plan.md).
+> Retained only to explain the earlier v1 contract.
+
 Status: proposed contract only, not implemented  
 Date: 2026-05-31  
 Future endpoint: `POST /activity/batch`

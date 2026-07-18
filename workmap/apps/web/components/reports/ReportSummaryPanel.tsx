@@ -3,13 +3,19 @@
 import { Activity, AlertTriangle, ChevronDown, Download, FileText, Globe2, History, Monitor, Power, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
-import type { ApiClientOptions, WorkMapApiReportLiveStatus, WorkMapApiTrackingAudit, WorkMapApiUsageSummary, WorkMapApiUser } from "../../lib/api/apiTypes";
-import { getAgentLiveStatus, getTrackingAudit, getUsageSummary } from "../../lib/api/reportsApi";
+import type {
+  ApiClientOptions,
+  WorkMapApiReportLiveStatus,
+  WorkMapApiTrackingAudit,
+  WorkMapApiTrackingV2LiveActivity,
+  WorkMapApiUsageSummary,
+  WorkMapApiUser,
+} from "../../lib/api/apiTypes";
+import { getAgentLiveStatus, getTrackingAudit, getTrackingV2LiveActivity, getUsageSummary } from "../../lib/api/reportsApi";
 import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
-import { mergeLiveUsage, retainMonotonicLiveUsage } from "./liveUsage";
 import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
 import {
   defaultReportFilters,
@@ -33,10 +39,13 @@ type AuditState = {
   audit: WorkMapApiTrackingAudit | null;
 };
 
+type CurrentLiveData = {
+  trackingV2: WorkMapApiTrackingV2LiveActivity | null;
+  legacy: WorkMapApiReportLiveStatus | null;
+  revision: string | null;
+};
+
 const LIVE_REFRESH_MS = 5_000;
-// The Agent emits durable focus slices every ten seconds. Check the compact
-// revision alongside the five-second live poll so the persisted list replaces
-// a transient heartbeat entry without a visible gap.
 const SUMMARY_REVISION_CHECK_MS = LIVE_REFRESH_MS;
 const AUDIT_REFRESH_MS = 60_000;
 
@@ -46,11 +55,11 @@ export function ReportSummaryPanel() {
   const [filters, setFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [liveStatus, setLiveStatus] = useState<WorkMapApiReportLiveStatus | null>(null);
+  const [trackingV2Live, setTrackingV2Live] = useState<WorkMapApiTrackingV2LiveActivity | null>(null);
   const [livePollingReady, setLivePollingReady] = useState(false);
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
   const nextRevisionCheckAtRef = useRef(0);
-  const lastVisibleSummaryRef = useRef<WorkMapApiUsageSummary | null>(null);
   const [auditState, setAuditState] = useState<AuditState>({ loading: false, audit: null });
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
@@ -88,9 +97,14 @@ export function ReportSummaryPanel() {
       const snapshot = readReportSnapshot(snapshotKey);
       const now = Date.now();
       if (snapshot?.liveStatus) setLiveStatus(snapshot.liveStatus);
+      if (snapshot?.trackingV2Live) setTrackingV2Live(snapshot.trackingV2Live);
       if (snapshot?.audit) setAuditState({ loading: false, audit: snapshot.audit });
       if (snapshot?.summary) {
-        activityRevisionRef.current = snapshot.summary.activityRevision;
+        activityRevisionRef.current = currentLiveRevision({
+          trackingV2: snapshot.trackingV2Live,
+          legacy: snapshot.liveStatus,
+          revision: null,
+        });
         setReportState({
           loading: false,
           summary: snapshot.summary,
@@ -103,16 +117,27 @@ export function ReportSummaryPanel() {
       // is available. Historical aggregation is only refreshed when the cached
       // revision is stale or has changed.
       const summaryRevisionDue = !snapshot?.summary || now - snapshot.summaryCachedAt >= SUMMARY_REVISION_CHECK_MS;
-      const initialLiveResult = await requestLiveStatus(context, initialFilters, summaryRevisionDue);
+      const initialLiveResult = await requestCurrentLive(context, initialFilters, summaryRevisionDue);
       if (cancelled) return;
       if (initialLiveResult.ok) {
-        setLiveStatus(initialLiveResult.data);
-        updateReportSnapshot(snapshotKey, { liveStatus: initialLiveResult.data });
+        setLiveStatus(initialLiveResult.data.legacy);
+        setTrackingV2Live(initialLiveResult.data.trackingV2);
+        activityRevisionRef.current = initialLiveResult.data.revision;
+        updateReportSnapshot(snapshotKey, {
+          liveStatus: initialLiveResult.data.legacy,
+          trackingV2Live: initialLiveResult.data.trackingV2,
+        });
       }
 
       let loadedSummary = snapshot?.summary ?? null;
       const refreshSummary = !snapshot?.summary
-        || (summaryRevisionDue && initialLiveResult.ok && initialLiveResult.data.activityRevision !== snapshot.summary.activityRevision);
+        || (summaryRevisionDue
+          && initialLiveResult.ok
+          && initialLiveResult.data.revision !== currentLiveRevision({
+            trackingV2: snapshot.trackingV2Live,
+            legacy: snapshot.liveStatus,
+            revision: null,
+          }));
       if (refreshSummary) {
         const result = await requestSummary(context, initialFilters);
         if (cancelled) return;
@@ -120,7 +145,6 @@ export function ReportSummaryPanel() {
           applyResult(result, setReportState);
           loadedSummary = result.data;
           updateReportSnapshot(snapshotKey, { summary: result.data });
-          activityRevisionRef.current = result.data.activityRevision;
         } else if (!snapshot?.summary) {
           applyResult(result, setReportState);
         }
@@ -147,10 +171,6 @@ export function ReportSummaryPanel() {
   }, []);
 
   useEffect(() => {
-    activityRevisionRef.current = reportState.summary?.activityRevision;
-  }, [reportState.summary?.activityRevision]);
-
-  useEffect(() => {
     if (auth) persistReportFilters(auth.userId, filters);
   }, [auth, filters]);
 
@@ -160,26 +180,30 @@ export function ReportSummaryPanel() {
     const refresh = async () => {
       if (document.visibilityState !== "visible") return;
       const revisionDue = Date.now() >= nextRevisionCheckAtRef.current;
-      const result = await requestLiveStatus(auth, appliedFilters, revisionDue);
+      const result = await requestCurrentLive(auth, appliedFilters, revisionDue);
       if (cancelled || !result.ok) return;
-      setLiveStatus(result.data);
+      setLiveStatus(result.data.legacy);
+      setTrackingV2Live(result.data.trackingV2);
       const snapshotKey = reportSnapshotKey(auth, appliedFilters);
-      updateReportSnapshot(snapshotKey, { liveStatus: result.data });
+      updateReportSnapshot(snapshotKey, {
+        liveStatus: result.data.legacy,
+        trackingV2Live: result.data.trackingV2,
+      });
       if (
         revisionDue
         &&
-        result.data.activityRevision !== activityRevisionRef.current
-        && result.data.activityRevision !== failedSummaryRevisionRef.current
+        result.data.revision !== activityRevisionRef.current
+        && result.data.revision !== failedSummaryRevisionRef.current
       ) {
         nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
         const summaryResult = await requestSummary(auth, appliedFilters);
         if (!cancelled && summaryResult.ok) {
           failedSummaryRevisionRef.current = undefined;
-          activityRevisionRef.current = summaryResult.data.activityRevision;
+          activityRevisionRef.current = result.data.revision;
           applyResult(summaryResult, setReportState);
           updateReportSnapshot(snapshotKey, { summary: summaryResult.data });
         } else if (!cancelled) {
-          failedSummaryRevisionRef.current = result.data.activityRevision;
+          failedSummaryRevisionRef.current = result.data.revision;
         }
       } else if (revisionDue) {
         nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
@@ -226,6 +250,7 @@ export function ReportSummaryPanel() {
     setAuditState({ loading: filters.view !== "company", audit: null });
     failedSummaryRevisionRef.current = undefined;
     setLiveStatus(null);
+    setTrackingV2Live(null);
     setAppliedFilters(filters);
     const result = await requestSummary(auth, filters);
     persistReportFilters(auth.userId, filters);
@@ -245,17 +270,11 @@ export function ReportSummaryPanel() {
     setFilters((current) => ({ ...current, from: addUtcDays(to, -(days - 1)), to }));
   }
 
-  const summary = useMemo(
-    () => retainMonotonicLiveUsage(lastVisibleSummaryRef.current, mergeLiveUsage(reportState.summary, liveStatus)),
-    [reportState.summary, liveStatus],
-  );
-
-  useEffect(() => {
-    lastVisibleSummaryRef.current = summary;
-  }, [summary]);
+  const summary = reportState.summary;
   const liveUser = liveStatus?.scope === "user" ? liveStatus : null;
   const hasRows = Boolean(summary && (summary.apps.length > 0 || summary.websites.length > 0));
   const scopeLabel = getScopeLabel(summary, selectedUser, departments);
+  const openRuntimeEnabled = summary?.trackingV2Coverage?.openRuntimeEnabled !== false;
 
   return (
     <div className="wm-report-summary" style={styles.stack}>
@@ -332,7 +351,9 @@ export function ReportSummaryPanel() {
         </div>
       </section>
 
-      {liveUser || (!reportState.loading && summary?.scope === "user") ? (
+      {trackingV2Live && trackingV2Live.devices.length > 0 && appliedFilters.view !== "company" ? (
+        <TrackingV2LiveOverview live={trackingV2Live} />
+      ) : liveUser || (!reportState.loading && summary?.scope === "user") ? (
         <EmployeeLiveOverview
           agentStatus={liveUser?.agentStatus ?? summary?.agentStatus ?? null}
           rows={liveUser?.browserExtensionCoverage ?? summary?.browserExtensionCoverage ?? []}
@@ -377,14 +398,18 @@ export function ReportSummaryPanel() {
             <div>
               <p style={styles.panelLabel}>API summary</p>
               <h2 style={styles.panelTitle}>{scopeLabel}</h2>
-              <p style={styles.panelText}>App and domain totals remain separate because browser time also appears under the desktop browser process. Every card highlights focus active; expand it only when you need focused idle and open/runtime context.</p>
+              <p style={styles.panelText}>
+                App and domain totals remain separate because domain time is a browser breakdown, not extra work time.
+                Every card highlights confirmed focus active; current provisional activity is shown only in Live signals.
+                {openRuntimeEnabled ? " Expand a card for measured focused idle and open/runtime context." : " Open/runtime collection is not enabled for v2 tracking."}
+              </p>
             </div>
             <span style={styles.scopePill}>{summary.scope === "company" ? "Company scope" : "User scope"}</span>
           </div>
           {hasRows ? (
             <div style={styles.summaryGrid}>
-              <SummaryUsageList title="Apps" kind="app" rows={summary.apps.map((row) => ({ name: row.appName, ...row }))} />
-              <SummaryUsageList title="Domains" kind="domain" rows={summary.websites.map((row) => ({ name: row.domain, ...row }))} />
+              <SummaryUsageList title="Apps" kind="app" rows={summary.apps.map((row) => ({ name: row.appName, ...row }))} openRuntimeEnabled={openRuntimeEnabled} />
+              <SummaryUsageList title="Domains" kind="domain" rows={summary.websites.map((row) => ({ name: row.domain, ...row }))} openRuntimeEnabled={openRuntimeEnabled} />
             </div>
           ) : (
             <p style={styles.emptyText}>No usage rows exist for this scope and date range.</p>
@@ -398,6 +423,172 @@ export function ReportSummaryPanel() {
       )}
     </div>
   );
+}
+
+function TrackingV2LiveOverview({ live }: { live: WorkMapApiTrackingV2LiveActivity }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <section className="wm-report-detail-section" style={styles.reportSection} aria-labelledby="tracking-v2-live-heading">
+      <div style={styles.sectionHeader}>
+        <div>
+          <p style={styles.panelLabel}>Live signals</p>
+          <h2 id="tracking-v2-live-heading" style={styles.sectionTitle}>Tracking connections and current focus</h2>
+          <p style={styles.panelText}>
+            Current activity is provisional until the client closes and confirms the interval. Confirmed report totals remain separate.
+          </p>
+        </div>
+        <div style={styles.liveCoverage}>
+          <Activity size={20} aria-hidden />
+          <strong>{live.coverage.fresh}/{live.coverage.total} fresh</strong>
+        </div>
+      </div>
+      <div style={styles.twoColumnGrid}>
+        {live.devices.map((device) => (
+          <TrackingV2DeviceCard
+            key={device.deviceId}
+            device={device}
+            serverTime={live.serverTime}
+            nowMs={nowMs}
+          />
+        ))}
+      </div>
+      {live.coverage.withSequenceGaps > 0 || live.coverage.withDeadLetters > 0 ? (
+        <div role="status" style={styles.liveWarning}>
+          <AlertTriangle size={17} aria-hidden />
+          <span>
+            {live.coverage.withSequenceGaps > 0 ? `${live.coverage.withSequenceGaps} client(s) have sequence gaps. ` : ""}
+            {live.coverage.withDeadLetters > 0 ? `${live.coverage.withDeadLetters} client(s) have rejected events requiring attention.` : ""}
+            Confirmed totals exclude unresolved data.
+          </span>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type TrackingV2LiveDevice = WorkMapApiTrackingV2LiveActivity["devices"][number];
+
+function TrackingV2DeviceCard({
+  device,
+  serverTime,
+  nowMs,
+}: {
+  device: TrackingV2LiveDevice;
+  serverTime: string;
+  nowMs: number;
+}) {
+  const healthy = device.fresh
+    && device.health?.connectionState === "ONLINE"
+    && device.health.collectorState === "HEALTHY"
+    && device.health.policyState === "ACTIVE";
+  const attention = !healthy;
+  const clientName = device.clientType === "DESKTOP_AGENT"
+    ? "Desktop Agent"
+    : `${formatTrackingBrowserName(device.browserName)} Extension`;
+  const connectionLabel = describeTrackingV2Connection(device);
+  const provisionalMs = liveProvisionalDurationMs(device, serverTime, nowMs);
+  const currentLabel = device.source === "DESKTOP_APP" ? "Current app" : "Current domain";
+  const currentValue = device.current?.displayName ?? "No current focus";
+
+  return (
+    <article
+      style={{ ...styles.clientCard, ...(attention ? styles.clientAttention : styles.clientConnected) }}
+      aria-label={`${clientName} status`}
+    >
+      <div style={styles.clientHeader}>
+        <span style={styles.clientIcon}>
+          {device.clientType === "DESKTOP_AGENT"
+            ? attention ? <AlertTriangle size={20} aria-hidden /> : <Monitor size={20} aria-hidden />
+            : attention ? <WifiOff size={20} aria-hidden /> : <Globe2 size={20} aria-hidden />}
+        </span>
+        <div style={styles.clientHeading}>
+          <p style={styles.clientLabel}>{clientName}</p>
+          <h3 style={styles.clientTitle}>{connectionLabel}</h3>
+        </div>
+        <span style={{ ...styles.connectionPill, ...(attention ? styles.connectionPillAttention : styles.connectionPillConnected) }}>
+          {device.fresh ? device.health?.migrationState ?? "V2" : "Stale"}
+        </span>
+      </div>
+
+      <div style={styles.focusBlock}>
+        <span style={styles.focusLabel}>{currentLabel}</span>
+        <strong style={styles.focusValue}>{currentValue}</strong>
+        <span style={styles.focusMeta}>
+          {device.current
+            ? `${device.current.state === "ACTIVE" ? "Focus active" : "Focused idle"} · ${formatDuration(provisionalMs / 1000)} provisional`
+            : device.fresh ? "Client is connected without a current focus subject" : "Fresh activity is unavailable"}
+        </span>
+        {device.current?.lastActivityEvidenceAt ? (
+          <span style={styles.focusMeta}>
+            Last trusted evidence {formatDateTime(device.current.lastActivityEvidenceAt)}
+          </span>
+        ) : null}
+      </div>
+
+      <div style={styles.healthGrid}>
+        <span>
+          <small>Queue</small>
+          <strong>{device.health?.queue.pending ?? 0} pending</strong>
+        </span>
+        <span>
+          <small>Confirmed through</small>
+          <strong>{device.cursor?.latestAcceptedEndedAt ? formatDateTime(device.cursor.latestAcceptedEndedAt) : "No confirmed interval"}</strong>
+        </span>
+        <span>
+          <small>Policy</small>
+          <strong>{formatTrackingState(device.health?.policyState ?? "UNKNOWN")}</strong>
+        </span>
+        <span>
+          <small>Last sync</small>
+          <strong>{device.health?.lastSuccessfulSyncAt ? formatDateTime(device.health.lastSuccessfulSyncAt) : "Not synced"}</strong>
+        </span>
+      </div>
+
+      {device.correlation && device.clientType === "BROWSER_EXTENSION" ? (
+        <p style={styles.correlationText}>
+          Browser/App correlation: {formatTrackingState(device.correlation.state)}
+        </p>
+      ) : null}
+      <div style={styles.clientFooter}>
+        <span>{device.workstationName ?? device.hostname ?? "Workstation"}</span>
+        <span>v{device.clientVersion ?? "unknown"}</span>
+      </div>
+    </article>
+  );
+}
+
+function liveProvisionalDurationMs(device: TrackingV2LiveDevice, serverTime: string, nowMs: number) {
+  if (!device.fresh || !device.current || device.current.provisionalDurationMs === null) return 0;
+  const serverMs = Date.parse(serverTime);
+  const elapsedSinceResponse = Number.isFinite(serverMs) ? Math.max(0, nowMs - serverMs) : 0;
+  return device.current.provisionalDurationMs + elapsedSinceResponse;
+}
+
+function describeTrackingV2Connection(device: TrackingV2LiveDevice) {
+  if (!device.fresh) return "Signal interrupted";
+  if (!device.health) return "Health pending";
+  if (device.health.connectionState === "AUTH_REQUIRED") return "Pairing required";
+  if (device.health.connectionState === "UPGRADE_REQUIRED") return "Upgrade required";
+  if (device.health.policyState !== "ACTIVE") return `Policy ${formatTrackingState(device.health.policyState)}`;
+  if (device.health.collectorState !== "HEALTHY") return `Collector ${formatTrackingState(device.health.collectorState)}`;
+  if (device.health.queue.deadLetter > 0) return "Rejected events need attention";
+  if ((device.cursor?.missingRanges.length ?? 0) > 0) return "Waiting for missing events";
+  return "Connected";
+}
+
+function formatTrackingBrowserName(value: TrackingV2LiveDevice["browserName"]) {
+  if (value === "EDGE") return "Microsoft Edge";
+  if (value === "CHROME") return "Google Chrome";
+  return "Browser";
+}
+
+function formatTrackingState(value: string) {
+  return value.toLowerCase().replace(/_/g, " ").replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
 function EmployeeLiveOverview({
@@ -733,7 +924,7 @@ function MetricGrid({ summary }: { summary: WorkMapApiUsageSummary }) {
   const domainActive = sum(summary.websites, "activeSeconds");
   const domainIdle = sum(summary.websites, "idleSeconds");
   const metrics = [
-    { label: "App focus active", value: formatDuration(appActive), detail: "Foreground app with keyboard or mouse input within 30 seconds" },
+    { label: "App focus active", value: formatDuration(appActive), detail: "Foreground app with trusted activity evidence within 60 seconds" },
     { label: "Domain focus active", value: formatDuration(domainActive), detail: `${formatDuration(domainIdle)} focused idle` },
     { label: "Tracked items", value: `${summary.apps.length} / ${summary.websites.length}`, detail: "App rows / domain rows" },
     {
@@ -793,28 +984,64 @@ export type UsageListRow = {
   openRuntimeSeconds?: number;
 };
 
-function SummaryUsageList({ title, kind, rows }: { title: string; kind: "app" | "domain"; rows: UsageListRow[] }) {
+function SummaryUsageList({
+  title,
+  kind,
+  rows,
+  openRuntimeEnabled,
+}: {
+  title: string;
+  kind: "app" | "domain";
+  rows: UsageListRow[];
+  openRuntimeEnabled: boolean;
+}) {
   return (
     <section style={styles.summaryCard}>
       <h3 style={styles.summaryTitle}>{title}</h3>
       <div style={styles.summaryRows}>
         {rows.map((row) => kind === "app"
-          ? <AppUsageMetricCard key={row.name} row={row} />
-          : <DomainUsageMetricCard key={row.name} row={row} />)}
+          ? <AppUsageMetricCard key={row.name} row={row} openRuntimeEnabled={openRuntimeEnabled} />
+          : <DomainUsageMetricCard key={row.name} row={row} openRuntimeEnabled={openRuntimeEnabled} />)}
       </div>
     </section>
   );
 }
 
-export function AppUsageMetricCard({ row, initiallyExpanded = false }: { row: UsageListRow; initiallyExpanded?: boolean }) {
-  return <UsageMetricCard row={row} kind="app" initiallyExpanded={initiallyExpanded} />;
+export function AppUsageMetricCard({
+  row,
+  initiallyExpanded = false,
+  openRuntimeEnabled = true,
+}: {
+  row: UsageListRow;
+  initiallyExpanded?: boolean;
+  openRuntimeEnabled?: boolean;
+}) {
+  return <UsageMetricCard row={row} kind="app" initiallyExpanded={initiallyExpanded} openRuntimeEnabled={openRuntimeEnabled} />;
 }
 
-export function DomainUsageMetricCard({ row, initiallyExpanded = false }: { row: UsageListRow; initiallyExpanded?: boolean }) {
-  return <UsageMetricCard row={row} kind="domain" initiallyExpanded={initiallyExpanded} />;
+export function DomainUsageMetricCard({
+  row,
+  initiallyExpanded = false,
+  openRuntimeEnabled = true,
+}: {
+  row: UsageListRow;
+  initiallyExpanded?: boolean;
+  openRuntimeEnabled?: boolean;
+}) {
+  return <UsageMetricCard row={row} kind="domain" initiallyExpanded={initiallyExpanded} openRuntimeEnabled={openRuntimeEnabled} />;
 }
 
-function UsageMetricCard({ row, kind, initiallyExpanded }: { row: UsageListRow; kind: "app" | "domain"; initiallyExpanded: boolean }) {
+function UsageMetricCard({
+  row,
+  kind,
+  initiallyExpanded,
+  openRuntimeEnabled,
+}: {
+  row: UsageListRow;
+  kind: "app" | "domain";
+  initiallyExpanded: boolean;
+  openRuntimeEnabled: boolean;
+}) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const focusActive = formatDuration(row.focusActiveSeconds ?? row.activeSeconds);
   const itemLabel = kind === "app" ? "app" : "domain";
@@ -852,13 +1079,15 @@ function UsageMetricCard({ row, kind, initiallyExpanded }: { row: UsageListRow; 
             label="Focused idle"
             value={formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)}
             tone="idle"
-            title={`Focused ${itemLabel} after 30 seconds without keyboard, mouse, wheel, or touch input`}
+            title={`Focused ${itemLabel} after 60 seconds without trusted activity evidence`}
           />
           <MetricChip
             label="Open/runtime"
-            value={formatDuration(openRuntime(row))}
+            value={openRuntimeEnabled ? formatDuration(openRuntime(row)) : "Not enabled"}
             tone="runtime"
-            title={kind === "app" ? "App was open or running; not proof of active use" : "At least one tab for this domain was open; duplicate tabs are counted once"}
+            title={openRuntimeEnabled
+              ? kind === "app" ? "Measured app open/runtime; not proof of active use" : "Measured domain open/runtime; not proof of active use"
+              : "Open/runtime collection is disabled in the v2 tracking release"}
           />
         </div>
       ) : null}
@@ -903,17 +1132,78 @@ function reportSnapshotKey(auth: AuthContext, filters: ReportFilters) {
   ]);
 }
 
-async function requestLiveStatus(auth: AuthContext, filters: ReportFilters, includeRevision = true) {
+async function requestCurrentLive(
+  auth: AuthContext,
+  filters: ReportFilters,
+  includeRevision = true,
+): Promise<
+  | { ok: true; data: CurrentLiveData }
+  | { ok: false; error: string }
+> {
   const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
-  return getAgentLiveStatus({
+  const common = {
     ...auth.options,
-    scope: filters.view === "company" ? "company" : "user",
+    scope: (filters.view === "company" ? "company" : "user") as "company" | "user",
     userId,
     departmentId: filters.view === "company" ? filters.departmentId || undefined : undefined,
+  };
+  const trackingV2 = await getTrackingV2LiveActivity(common);
+  if (trackingV2.ok && trackingV2.data.devices.length > 0) {
+    const data: CurrentLiveData = {
+      trackingV2: trackingV2.data,
+      legacy: null,
+      revision: trackingV2Revision(trackingV2.data),
+    };
+    return { ok: true, data };
+  }
+
+  const legacy = await getAgentLiveStatus({
+    ...common,
     from: filters.from,
     to: filters.to,
     includeRevision,
   });
+  if (legacy.ok) {
+    return {
+      ok: true,
+      data: {
+        trackingV2: trackingV2.ok ? trackingV2.data : null,
+        legacy: legacy.data,
+        revision: legacy.data.activityRevision,
+      },
+    };
+  }
+  if (trackingV2.ok) {
+    return {
+      ok: true,
+      data: {
+        trackingV2: trackingV2.data,
+        legacy: null,
+        revision: trackingV2Revision(trackingV2.data),
+      },
+    };
+  }
+  return { ok: false, error: trackingV2.error };
+}
+
+function currentLiveRevision(data: CurrentLiveData) {
+  return data.revision
+    ?? (data.trackingV2 ? trackingV2Revision(data.trackingV2) : null)
+    ?? data.legacy?.activityRevision
+    ?? null;
+}
+
+function trackingV2Revision(live: WorkMapApiTrackingV2LiveActivity) {
+  const settledCursors = live.devices
+    .map((device) => [
+      device.deviceId,
+      device.cursor?.clockEpochId ?? null,
+      device.cursor?.contiguousThroughSequence ?? null,
+      device.cursor?.latestAcceptedEndedAt ?? null,
+      device.cursor?.rejectedRanges.length ?? 0,
+    ])
+    .sort((left, right) => String(left[0]).localeCompare(String(right[0])));
+  return JSON.stringify(settledCursors);
 }
 
 async function loadAudit(
@@ -1098,7 +1388,7 @@ function csvCell(value: string | number) {
 }
 
 function openRuntime(row: { activeSeconds: number; idleSeconds: number; openRuntimeSeconds?: number }) {
-  return Math.max(row.openRuntimeSeconds ?? 0, row.activeSeconds + row.idleSeconds);
+  return row.openRuntimeSeconds ?? 0;
 }
 
 function sum(rows: Array<{ activeSeconds: number; idleSeconds: number }>, key: "activeSeconds" | "idleSeconds") {
@@ -1206,6 +1496,8 @@ const styles = {
   reportSection: { display: "grid", gap: "14px", padding: "6px 0" },
   sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", color: wm.colors.infoText },
   sectionTitle: { margin: "2px 0 6px", color: wm.colors.text, fontSize: "22px", lineHeight: 1.25 },
+  liveCoverage: { display: "flex", alignItems: "center", gap: "7px", border: `1px solid ${wm.colors.infoBorder}`, borderRadius: wm.radius.full, background: wm.colors.infoBg, color: wm.colors.infoText, padding: "7px 10px", fontSize: "12px", whiteSpace: "nowrap" as const },
+  liveWarning: { display: "flex", alignItems: "flex-start", gap: "9px", border: `1px solid ${wm.colors.warningBorder}`, borderRadius: wm.radius.md, background: wm.colors.warningBg, color: wm.colors.warning, padding: "11px 12px", fontSize: "12px", lineHeight: 1.45 },
   twoColumnGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: "14px", alignItems: "stretch" },
   clientCard: { ...wmStyles.card, display: "grid", alignContent: "start", gap: "14px", padding: "18px", minWidth: 0, overflow: "hidden" },
   clientConnected: { borderColor: wm.colors.successBorder },
@@ -1222,6 +1514,8 @@ const styles = {
   focusLabel: { color: wm.colors.textMuted, fontSize: "11px", fontWeight: 900, textTransform: "uppercase" as const },
   focusValue: { color: wm.colors.text, fontSize: "20px", lineHeight: 1.25, overflowWrap: "anywhere" as const },
   focusMeta: { color: wm.colors.textSecondary, fontSize: "12px", lineHeight: 1.4, overflowWrap: "anywhere" as const },
+  healthGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px 12px", color: wm.colors.textSecondary },
+  correlationText: { margin: 0, color: wm.colors.infoText, fontSize: "11px", fontWeight: 800 },
   clientFooter: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px 16px", flexWrap: "wrap" as const, color: wm.colors.textMuted, fontSize: "11px", fontWeight: 700 },
   browserSignalRows: { display: "grid", gap: "12px" },
   browserSignalRow: { display: "grid", gridTemplateColumns: "minmax(130px, 0.65fr) minmax(0, 1.35fr)", gap: "14px", alignItems: "center", borderTop: `1px solid ${wm.colors.borderSubtle}`, paddingTop: "12px", minWidth: 0 },

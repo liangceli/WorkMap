@@ -89,6 +89,8 @@ test("persistent queue retries, acknowledges and enforces capacity", async () =>
     const queue = new FileEventQueue(filePath);
     await queue.load(1_000);
     await queue.enqueue(event(1), 1_000);
+    await queue.enqueue({ ...event(1), clientEventId: event(2).clientEventId }, 1_000);
+    assert.equal(queue.size(), 1);
     await queue.retry([event(1).clientEventId], 1_000);
     assert.equal(queue.listReady(1_001).length, 0);
     await queue.load(100_000);
@@ -409,12 +411,14 @@ test("graceful shutdown writes an offline local status after flushing the sessio
 });
 
 function event(index: number): AppUsageEvent {
+  const startedAt = new Date(Date.UTC(2026, 5, 18, 0, 0, index * 5));
+  const endedAt = new Date(startedAt.getTime() + 5_000);
   return {
     clientEventId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     deviceId: config.deviceId,
     appName: "Code",
-    startedAt: "2026-06-18T00:00:00.000Z",
-    endedAt: "2026-06-18T00:00:05.000Z",
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
     durationSeconds: 5,
     isIdle: false,
     isActiveWindow: true,

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from "@nestjs/common";
 import type { RequestContext } from "@workmap/auth";
 import { CurrentContext } from "../auth/current-context.decorator.js";
 import { RequestContextGuard } from "../auth/request-context.guard.js";
@@ -24,6 +24,7 @@ export class ComplianceController {
       workHoursOnly: policy.workHoursOnly,
       workdayStart: policy.workdayStart,
       workdayEnd: policy.workdayEnd,
+      scheduleTimeZone: policy.scheduleTimeZone,
       retentionDays: policy.retentionDays,
       employeeCanViewOwnData: policy.employeeCanViewOwnData,
       policyVersion: policy.policyVersion,
@@ -39,6 +40,25 @@ export class ComplianceController {
       id: acknowledgement.id,
       monitoringPolicyId: acknowledgement.monitoringPolicyId,
       acknowledgedAt: acknowledgement.acknowledgedAt.toISOString(),
+    };
+  }
+
+  @Patch("policy/:policyId/schedule-time-zone")
+  async confirmScheduleTimeZone(
+    @CurrentContext() context: RequestContext,
+    @Param("policyId", ParseUUIDPipe) policyId: string,
+    @Body() body: unknown,
+  ) {
+    const policy = await this.compliance.confirmScheduleTimeZone(
+      context,
+      policyId,
+      body,
+    );
+    return {
+      id: policy.id,
+      policyVersion: policy.policyVersion,
+      scheduleTimeZone: policy.scheduleTimeZone,
+      scheduleTimeZoneState: "CONFIRMED" as const,
     };
   }
 }

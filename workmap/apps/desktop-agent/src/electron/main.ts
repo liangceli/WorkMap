@@ -5,8 +5,9 @@ import { dirname, join, resolve } from "node:path";
 import { loadAgentConfig } from "../credentialStore.js";
 import { getAgentDataDirectory, readJson, writeAgentStatus } from "../fileStore.js";
 import { pairDesktopAgent, safePairingError, type PairingProgress } from "../pairing.js";
-import { DesktopAgentRuntime } from "../runtime.js";
+import { DesktopAgentRuntimeV2 } from "../runtimeV2.js";
 import type { AgentStatus } from "../types.js";
+import { DESKTOP_AGENT_VERSION } from "../version.js";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const rendererDirectory = resolve(currentDirectory, "..", "..", "renderer");
@@ -15,7 +16,7 @@ const icon = nativeImage.createFromPath(join(rendererDirectory, "workmap-mark.sv
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-let runtime: DesktopAgentRuntime | null = null;
+let runtime: DesktopAgentRuntimeV2 | null = null;
 let runtimePromise: Promise<void> | null = null;
 let paired = false;
 let allowQuit = false;
@@ -121,7 +122,10 @@ async function startRuntime() {
   if (runtimePromise) return;
   const config = await loadAgentConfig();
   if (!config) return;
-  runtime = new DesktopAgentRuntime(config);
+  runtime = new DesktopAgentRuntimeV2({
+    ...config,
+    agentVersion: DESKTOP_AGENT_VERSION,
+  });
   runtimePromise = runtime.run()
     .catch(async (error) => {
       await writeAgentStatus({

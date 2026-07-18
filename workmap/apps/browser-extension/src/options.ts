@@ -1,6 +1,12 @@
 import { exchangePairingCode } from "./extensionApi.js";
 import { ensureDomainContentScriptRegistered } from "./contentRegistration.js";
-import { readStoredState, savePairedConfig, writeStoredState } from "./extensionStorage.js";
+import {
+  readStoredState,
+  resolveStoredConfig,
+  savePairedConfig,
+  writeStoredState,
+} from "./extensionStorage.js";
+import { normalizeExcludedHostnames } from "./hostnameExclusions.js";
 
 declare const chrome: {
   permissions: { request(permissions: { origins: string[] }, callback: (allowed: boolean) => void): void };
@@ -11,6 +17,10 @@ const form = document.querySelector<HTMLFormElement>("#pair-form")!;
 const apiInput = document.querySelector<HTMLInputElement>("#api-url")!;
 const codeInput = document.querySelector<HTMLInputElement>("#pairing-code")!;
 const browserSelect = document.querySelector<HTMLSelectElement>("#browser-name")!;
+const exclusionsInput =
+  document.querySelector<HTMLTextAreaElement>("#excluded-hostnames")!;
+const saveExclusionsButton =
+  document.querySelector<HTMLButtonElement>("#save-exclusions")!;
 const pairButton = form.querySelector<HTMLButtonElement>("button[type='submit']")!;
 const message = document.querySelector<HTMLElement>("#message")!;
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -21,6 +31,9 @@ const DEFAULT_BUTTON_TEXT = pairButton.textContent ?? "Pair extension";
 
 void refreshStatus();
 form.addEventListener("submit", (event) => { event.preventDefault(); void pair(); });
+saveExclusionsButton.addEventListener("click", () => {
+  void saveExclusions();
+});
 
 async function pair() {
   const apiBaseUrl = apiInput.value.trim().replace(/\/+$/, "");
@@ -41,7 +54,15 @@ async function pair() {
     setBusy(true, "Pairing with WorkMap...");
     showProgress("Pairing with WorkMap API...");
     const result = await exchangePairingCode(apiBaseUrl, code, browserSelect.value);
-    await savePairedConfig({ apiBaseUrl, credential: result.credential, deviceId: result.device.id, browserName: browserSelect.value });
+    await savePairedConfig({
+      apiBaseUrl,
+      credential: result.credential,
+      deviceId: result.device.id,
+      browserName: browserSelect.value,
+      excludedHostnames: normalizeExcludedHostnames(
+        exclusionsInput.value,
+      ),
+    });
     await writeStoredState({
       workmapStatus: { state: "offline", queuedEvents: 0, queuedStatusEvents: 0 },
       workmapTracker: { version: 4, activeByTab: {}, openTabs: {}, runtimeByDomain: {}, focusedWindowId: null, systemIdle: false },
@@ -65,6 +86,10 @@ async function refreshStatus() {
   const stored = await readStoredState(["workmapConfig", "workmapStatus"]);
   apiInput.value = stored.workmapConfig?.apiBaseUrl ?? "https://workmap-api.onrender.com";
   browserSelect.value = stored.workmapConfig?.browserName ?? inferBrowser();
+  exclusionsInput.value = (
+    stored.workmapConfig?.excludedHostnames ?? []
+  ).join("\n");
+  saveExclusionsButton.disabled = !stored.workmapConfig;
   const current = stored.workmapStatus;
   const health = deriveStatusHealth(current);
   status.textContent = stored.workmapConfig
@@ -72,6 +97,26 @@ async function refreshStatus() {
     : current
       ? `${health.label}${current.error ? ` | ${current.error}` : ""}`
       : "Not paired";
+}
+
+async function saveExclusions() {
+  const stored = await readStoredState(["workmapConfig"]);
+  const config = await resolveStoredConfig(stored.workmapConfig);
+  if (!config) {
+    show("Pair the extension before saving exclusions.", true);
+    return;
+  }
+  await savePairedConfig({
+    ...config,
+    excludedHostnames: normalizeExcludedHostnames(
+      exclusionsInput.value,
+    ),
+  });
+  chrome.runtime.sendMessage(
+    { type: "workmap:exclusions-updated" },
+    () => void chrome.runtime.lastError,
+  );
+  show("Sensitive hostname exclusions saved on this device.", false);
 }
 
 function deriveStatusHealth(current: Awaited<ReturnType<typeof readStoredState>>["workmapStatus"]) {

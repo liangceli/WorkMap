@@ -36,6 +36,10 @@ export class FileEventQueue {
     await this.save();
   }
 
+  async loadPreservingExisting() {
+    this.events = await readJson<QueuedEvent[]>(this.filePath, []);
+  }
+
   listReady(nowMs = Date.now(), limit = 50) {
     return this.events.filter((item) => item.nextAttemptAtMs <= nowMs).slice(0, limit);
   }
@@ -46,10 +50,13 @@ export class FileEventQueue {
 
   async enqueueMany(events: QueuedEvent["event"][], nowMs = Date.now()) {
     const ids = new Set(this.events.map((item) => item.event.clientEventId));
+    const fingerprints = new Set(this.events.map((item) => legacyEventFingerprint(item.event)));
     for (const event of events) {
-      if (ids.has(event.clientEventId)) continue;
+      const fingerprint = legacyEventFingerprint(event);
+      if (ids.has(event.clientEventId) || fingerprints.has(fingerprint)) continue;
       this.events.push({ event, attempts: 0, nextAttemptAtMs: nowMs, createdAtMs: nowMs });
       ids.add(event.clientEventId);
+      fingerprints.add(fingerprint);
     }
     if (this.events.length > MAX_QUEUE_SIZE) this.events.splice(0, this.events.length - MAX_QUEUE_SIZE);
     await this.save();
@@ -150,6 +157,21 @@ export class FileStatusEventQueue {
   }
 
   private async save() { await writeJsonAtomic(this.filePath, this.events); }
+}
+
+function legacyEventFingerprint(event: QueuedEvent["event"]) {
+  return [
+    event.deviceId,
+    event.appName,
+    event.startedAt,
+    event.endedAt,
+    event.durationSeconds,
+    event.isIdle,
+    event.isActiveWindow,
+    event.agentSessionId ?? "",
+    event.clientInstanceId ?? "",
+    event.sequenceNumber ?? "",
+  ].join("|");
 }
 
 export function readTrackingCheckpoint(filePath = join(getAgentDataDirectory(), "tracking-state.json")) {

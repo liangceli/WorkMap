@@ -1,8 +1,14 @@
-import type { WorkMapApiReportLiveStatus, WorkMapApiTrackingAudit, WorkMapApiUsageSummary } from "../../lib/api/apiTypes";
+import type {
+  WorkMapApiReportLiveStatus,
+  WorkMapApiTrackingAudit,
+  WorkMapApiTrackingV2LiveActivity,
+  WorkMapApiUsageSummary,
+} from "../../lib/api/apiTypes";
 
 export type ReportSnapshot = {
   summary: WorkMapApiUsageSummary | null;
   liveStatus: WorkMapApiReportLiveStatus | null;
+  trackingV2Live: WorkMapApiTrackingV2LiveActivity | null;
   audit: WorkMapApiTrackingAudit | null;
   cachedAt: number;
   summaryCachedAt: number;
@@ -32,14 +38,16 @@ export function updateReportSnapshot(
   const existing = readReportSnapshot(key, now);
   const hasSummary = updates.summary !== undefined;
   const hasLiveStatus = updates.liveStatus !== undefined;
+  const hasTrackingV2Live = updates.trackingV2Live !== undefined;
   const hasAudit = updates.audit !== undefined;
   const snapshot: ReportSnapshot = {
     summary: updates.summary ?? existing?.summary ?? null,
     liveStatus: updates.liveStatus ?? existing?.liveStatus ?? null,
+    trackingV2Live: updates.trackingV2Live ?? existing?.trackingV2Live ?? null,
     audit: updates.audit ?? existing?.audit ?? null,
     cachedAt: now,
     summaryCachedAt: hasSummary ? now : existing?.summaryCachedAt ?? 0,
-    liveCachedAt: hasLiveStatus ? now : existing?.liveCachedAt ?? 0,
+    liveCachedAt: hasLiveStatus || hasTrackingV2Live ? now : existing?.liveCachedAt ?? 0,
     auditCachedAt: hasAudit ? now : existing?.auditCachedAt ?? 0,
   };
   snapshots.delete(key);

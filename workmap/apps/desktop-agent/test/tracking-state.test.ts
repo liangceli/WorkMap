@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AppTrackingState, recoverTrackingCheckpoint, recoverTrackingCheckpoints } from "../src/trackingState.js";
+import {
+  AppTrackingState,
+  recoverTrackingCheckpoint,
+  recoverTrackingCheckpointAtProtocolActivation,
+  recoverTrackingCheckpoints,
+} from "../src/trackingState.js";
 
 const DEVICE_ID = "11111111-1111-4111-8111-111111111111";
 const base = Date.parse("2026-06-18T00:00:00.000Z");
@@ -174,6 +179,62 @@ test("crash recovery preserves every persisted focus-active segment without dupl
   assert.deepEqual(persisted, { Code: 21, Teams: 11 });
   assert.deepEqual(recovered, []);
   assert.equal(recoverTrackingCheckpoint(checkpoint, DEVICE_ID), null);
+});
+
+test("protocol activation recovery clips every legacy tail to the server boundary", () => {
+  let id = 70;
+  const protocolActivatedAt = new Date(base + 60_000).toISOString();
+  const recovered = recoverTrackingCheckpointAtProtocolActivation(
+    {
+      appName: "Code",
+      isIdle: false,
+      startedAtMs: base,
+      lastObservedAtMs: base + 90_000,
+      lastInputAtMs: base + 90_000,
+      focusSegments: [
+        {
+          appName: "Code",
+          startedAtMs: base,
+          lastObservedAtMs: base + 90_000,
+          lastInputAtMs: base + 90_000,
+        },
+        {
+          appName: "Teams",
+          startedAtMs: base + 45_000,
+          lastObservedAtMs: base + 120_000,
+          lastInputAtMs: base + 120_000,
+        },
+      ],
+    },
+    DEVICE_ID,
+    protocolActivatedAt,
+    {
+      createEventId: () => `00000000-0000-4000-8000-${String(++id).padStart(12, "0")}`,
+    },
+  );
+
+  assert.deepEqual(
+    recovered.map((event) => [event.appName, event.durationSeconds, event.endedAt]),
+    [
+      ["Code", 60, protocolActivatedAt],
+      ["Teams", 15, protocolActivatedAt],
+    ],
+  );
+});
+
+test("protocol activation recovery never creates legacy time after the boundary", () => {
+  const recovered = recoverTrackingCheckpointAtProtocolActivation(
+    {
+      appName: "Code",
+      isIdle: false,
+      startedAtMs: base + 61_000,
+      lastObservedAtMs: base + 90_000,
+      lastInputAtMs: base + 90_000,
+    },
+    DEVICE_ID,
+    new Date(base + 60_000).toISOString(),
+  );
+  assert.deepEqual(recovered, []);
 });
 
 test("records detected foreground and open runtime without the old five-second delay", () => {

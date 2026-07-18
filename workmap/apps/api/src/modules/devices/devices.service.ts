@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, HttpException, Injectable } from "@nestjs/common";
 import {
   ActivityEventSource,
   ActivityEventType,
@@ -108,6 +108,7 @@ export class DevicesService {
     if (!device) {
       throw new ForbiddenException("Device is not registered for this WorkMap user and tenant.");
     }
+    assertLegacyDeviceWriteAllowed(device);
 
     const heartbeatAt = new Date();
     const previousLastSeenAt = device.lastSeenAt;
@@ -186,6 +187,7 @@ export class DevicesService {
     const body = readObject(input, "Agent session body must be an object.");
     const deviceId = readRequiredUuid(body.deviceId, "deviceId");
     const device = await this.findActiveDevice(context, deviceId);
+    assertLegacyDeviceWriteAllowed(device);
     const now = new Date();
     const clientSessionId = readOptionalUuid(body.clientSessionId, "clientSessionId");
 
@@ -269,7 +271,8 @@ export class DevicesService {
     const body = readObject(input, "Agent session body must be an object.");
     const deviceId = readRequiredUuid(body.deviceId, "deviceId");
     const sessionId = readRequiredUuid(body.sessionId, "sessionId");
-    await this.findActiveDevice(context, deviceId);
+    const device = await this.findActiveDevice(context, deviceId);
+    assertLegacyDeviceWriteAllowed(device);
     const session = await this.prisma.agentSession.findFirst({
       where: { id: sessionId, companyId: context.companyId, userId: context.userId, deviceId },
     });
@@ -313,7 +316,9 @@ export class DevicesService {
   async recordDeviceStatus(context: RequestContext, input: unknown, clientType: DeviceClientType) {
     const body = readObject(input, "Device status body must be an object.");
     const deviceId = readRequiredUuid(body.deviceId, "deviceId");
-    await this.findActiveDevice(context, deviceId);
+    const device = await this.findActiveDevice(context, deviceId);
+    const protocolVersion = body.protocolVersion === 2 ? 2 : 1;
+    assertDeviceStatusWriteAllowed(device, protocolVersion);
     const status = readDeviceStatus(body.status);
     const reason = readDeviceStatusReason(body.reason);
     const now = new Date();
@@ -415,6 +420,33 @@ export class DevicesService {
     if (!device) throw new ForbiddenException("Device is not registered for this WorkMap user and tenant.");
     return device;
   }
+}
+
+function assertLegacyDeviceWriteAllowed(device: {
+  protocolActivatedAt: Date | null;
+}) {
+  if (device.protocolActivatedAt) {
+    throw new HttpException(
+      "UPGRADE_REQUIRED: this device has activated protocol v2 and can no longer use legacy status or heartbeat endpoints.",
+      426,
+    );
+  }
+}
+
+function assertDeviceStatusWriteAllowed(
+  device: { protocolActivatedAt: Date | null },
+  protocolVersion: 1 | 2,
+) {
+  if (protocolVersion === 2) {
+    if (!device.protocolActivatedAt) {
+      throw new HttpException(
+        "PROTOCOL_NOT_ACTIVE: protocol v2 lifecycle events require a confirmed activation boundary.",
+        409,
+      );
+    }
+    return;
+  }
+  assertLegacyDeviceWriteAllowed(device);
 }
 
 function toDeviceRegistrationResponse(device: {

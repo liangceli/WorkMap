@@ -3,11 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("MV3 runtime listens to page activity and complete tab/window lifecycle", async () => {
-  const source = await readFile(new URL("../src/background.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/backgroundV2.ts", import.meta.url), "utf8");
   for (const marker of [
     "runtime.onMessage",
     "tabs.onActivated",
-    "tabs.onCreated",
     "tabs.onUpdated",
     "tabs.onRemoved",
     "tabs.onReplaced",
@@ -15,6 +14,9 @@ test("MV3 runtime listens to page activity and complete tab/window lifecycle", a
     "idle.onStateChanged",
     "alarms.onAlarm",
     "runtime.onStartup",
+    "windows.getLastFocused",
+    "idle.queryState",
+    "syncTrackingV2",
   ]) assert(source.includes(marker), `missing ${marker}`);
   assert(!source.includes("setInterval("));
 });
@@ -22,30 +24,39 @@ test("MV3 runtime listens to page activity and complete tab/window lifecycle", a
 test("local extension status does not preserve stale connected state", async () => {
   const manifest = JSON.parse(await readFile(new URL("../manifest.json", import.meta.url), "utf8"));
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-  const background = await readFile(new URL("../src/background.ts", import.meta.url), "utf8");
+  const background = await readFile(new URL("../src/backgroundV2.ts", import.meta.url), "utf8");
   const options = await readFile(new URL("../src/options.ts", import.meta.url), "utf8");
   const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
+  const types = await readFile(new URL("../src/trackingV2Types.ts", import.meta.url), "utf8");
 
-  assert.equal(manifest.version, "0.4.3");
-  assert.equal(packageJson.version, "0.4.3");
-  assert.match(api, /browser-extension-mv3\/0\.4\.3/);
-  assert.match(background, /status\?\.state \?\? "offline"/);
-  assert.doesNotMatch(background, /status\?\.state \?\? "connected"/);
-  assert.match(background, /workmapStatusQueue/);
-  assert.match(background, /sendExtensionStatus/);
+  assert.equal(manifest.version, "0.5.0");
+  assert.equal(packageJson.version, "0.5.0");
+  assert.equal(manifest.background.service_worker, "dist/backgroundV2.js");
+  assert.match(types, /browser-extension-mv3\/0\.5\.0/);
+  assert.match(api, /BROWSER_EXTENSION_VERSION/);
+  assert.match(background, /connectionState === "ONLINE"/);
+  assert.match(background, /connectionState === "AUTH_REQUIRED"/);
+  assert.match(background, /connectionState === "UPGRADE_REQUIRED"/);
   assert.match(background, /ensureDomainContentScriptRegistered\(true\)/);
   assert.match(background, /permissions\.onRemoved/);
-  assert.match(background, /recordTrackingHealth/);
+  assert.match(background, /createHealth/);
+  assert.match(background, /latestSnapshot/);
   assert.match(options, /deriveStatusHealth/);
   assert.match(options, /Signal stale/);
   assert.match(options, /Last server-confirmed heartbeat/);
   assert.doesNotMatch(options, /current\?\.state \?\? "connected"/);
 });
 
-test("activity checkpoints flush before the heartbeat that makes Reports treat the extension as current", async () => {
-  const source = await readFile(new URL("../src/background.ts", import.meta.url), "utf8");
-  const mutation = source.slice(source.indexOf("async function mutateTracker"), source.indexOf("function heartbeatDue"));
-  assert(mutation.indexOf("await flushActivityQueue(config)") < mutation.indexOf("await heartbeat(config)"));
+test("v2 state and intervals are persisted before sync is scheduled", async () => {
+  const source = await readFile(new URL("../src/backgroundV2.ts", import.meta.url), "utf8");
+  const mutation = source.slice(
+    source.indexOf("private async persistUpdate"),
+    source.indexOf("private async requestSync"),
+  );
+  assert(
+    mutation.indexOf("await this.store.persistEngineUpdate") <
+      mutation.indexOf("await this.requestSync"),
+  );
 });
 
 test("options page shows pairing progress and times out stuck Edge permission prompts", async () => {
@@ -61,13 +72,51 @@ test("options page shows pairing progress and times out stuck Edge permission pr
   ]) assert(options.includes(marker), `missing ${marker}`);
 });
 
-test("content script reports only trusted activity timestamps including wheel", async () => {
+test("content script emits only trusted transient pulses and never owns the idle deadline", async () => {
   const source = await readFile(new URL("../src/contentScript.ts", import.meta.url), "utf8");
-  for (const marker of ["event.isTrusted", '"wheel"', '"keydown"', '"pointermove"', '"touchstart"', "activityAt", "lastInputAt", "domain-media-activity", "MEDIA_START_FROM_INTERACTION_MS", '"play"', '"pause"']) {
+  for (const marker of [
+    "event.isTrusted",
+    '"wheel"',
+    '"keydown"',
+    '"pointermove"',
+    '"touchstart"',
+    '"input"',
+    '"change"',
+    "selectionchange",
+    "activityAt",
+  ]) {
     assert(source.includes(marker), `missing ${marker}`);
   }
-  for (const forbidden of ["event.key", "clientX", "clientY", "event.target", "textContent", "innerText", "document.title", "location.href"]) {
+  for (const forbidden of [
+    "event.key",
+    "clientX",
+    "clientY",
+    "event.target",
+    "textContent",
+    "innerText",
+    "document.title",
+    "location.href",
+    "domain-media-activity",
+    "MEDIA_START_FROM_INTERACTION_MS",
+    "IDLE_THRESHOLD_MS",
+    "workmap:domain-idle",
+  ]) {
     assert(!source.includes(forbidden), `content script must not collect ${forbidden}`);
+  }
+});
+
+test("v1 queue is retained until drain and v2 activation uses one boundary", async () => {
+  const source = await readFile(new URL("../src/backgroundV2.ts", import.meta.url), "utf8");
+  for (const marker of [
+    "prepareProtocolV2",
+    "confirmProtocolV2",
+    "closeLegacyTrackerAt",
+    "flushLegacyQueue",
+    'migrationState: "PREPARING_V2"',
+    '"DRAINING_V1"',
+    'removeStoredState(["workmapTracker", "workmapQueue"])',
+  ]) {
+    assert(source.includes(marker), `missing ${marker}`);
   }
 });
 
