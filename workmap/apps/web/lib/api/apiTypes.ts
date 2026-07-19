@@ -475,6 +475,13 @@ export type WorkMapApiTrackingV2LiveActivity = {
       lastSuccessfulHeartbeatAt: string | null;
       lastSuccessfulSyncAt: string | null;
       errorCode: string | null;
+      serverDiagnosticCode:
+        | "SNAPSHOT_POLICY_LEASE_INVALID"
+        | "SNAPSHOT_OBSERVATION_TIME_INVALID"
+        | "SNAPSHOT_OUTSIDE_POLICY_WINDOW"
+        | null;
+      serverDiagnosticRequestId: string | null;
+      serverDiagnosticAt: string | null;
       receivedAt: string | null;
     };
     cursor: null | {

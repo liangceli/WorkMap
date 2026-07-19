@@ -15,6 +15,7 @@ export class AgentApiError extends Error {
     readonly responseCode?: string,
     readonly retryAfterMs?: number,
     readonly requestId?: string,
+    readonly responseStage?: "parse" | "policy" | "transaction" | "response",
   ) {
     super(message);
   }
@@ -217,6 +218,7 @@ async function requestJson<T>(
         detail.code,
         readRetryAfterMs(response),
         detail.requestId ?? options.requestId,
+        detail.stage,
       );
       if ((response.status >= 500 || response.status === 429) && attempt < retries) {
         await retryDelay(attempt);
@@ -241,10 +243,12 @@ async function readErrorDetail(response: Response) {
       const message = extractErrorMessage(parsed);
       const code = extractErrorCode(parsed);
       const requestId = extractRequestId(parsed);
+      const stage = extractTrackingStage(parsed);
       return {
         ...(message ? { message: sanitizeErrorDetail(message) } : {}),
         ...(code ? { code: sanitizeErrorCode(code) } : {}),
         ...(requestId ? { requestId } : {}),
+        ...(stage ? { stage } : {}),
       };
     } catch {
       // Fall back to the raw text below.
@@ -276,6 +280,19 @@ function extractRequestId(value: unknown): string | undefined {
   const requestId = (value as Record<string, unknown>).requestId;
   return typeof requestId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)
     ? requestId.toLowerCase()
+    : undefined;
+}
+
+function extractTrackingStage(value: unknown):
+  | "parse"
+  | "policy"
+  | "transaction"
+  | "response"
+  | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const stage = (value as Record<string, unknown>).stage;
+  return stage === "parse" || stage === "policy" || stage === "transaction" || stage === "response"
+    ? stage
     : undefined;
 }
 

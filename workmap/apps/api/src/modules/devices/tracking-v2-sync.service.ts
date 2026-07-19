@@ -35,6 +35,7 @@ import {
   type ClientHealthV2,
   type LiveFocusSnapshotV2,
   type TrackingSequenceDispositionV2,
+  type TrackingSnapshotRejectionCodeV2,
   type TrackingSyncCursorV2,
   type TrackingSyncItemResultV2,
   type TrackingSyncRequestV2,
@@ -87,6 +88,17 @@ type StoredIntervalIdentity = {
   policyLeaseId: string;
 };
 
+type SnapshotValidationResult =
+  | {
+      status: "ACCEPTED";
+      snapshot: LiveFocusSnapshotV2;
+    }
+  | {
+      status: "REJECTED";
+      rejectionCode: TrackingSnapshotRejectionCodeV2;
+      message: string;
+    };
+
 @Injectable()
 export class TrackingV2SyncService {
   private readonly logger = new Logger(TrackingV2SyncService.name);
@@ -113,7 +125,11 @@ export class TrackingV2SyncService {
         await this.policyService.requireV2DeviceIdentity(context);
       if (!identity.protocolActivatedAt) {
         throw new HttpException(
-          "Protocol v2 has not been activated for this device.",
+          {
+            statusCode: 426,
+            message: "Protocol v2 has not been activated for this device.",
+            code: "TRACKING_PROTOCOL_NOT_ACTIVATED",
+          },
           426,
         );
       }
@@ -123,7 +139,11 @@ export class TrackingV2SyncService {
         protocolActivatedAt.getTime()
       ) {
         throw new HttpException(
-          "Protocol activation boundary does not match this device.",
+          {
+            statusCode: 426,
+            message: "Protocol activation boundary does not match this device.",
+            code: "TRACKING_PROTOCOL_BOUNDARY_MISMATCH",
+          },
           426,
         );
       }
@@ -180,23 +200,27 @@ export class TrackingV2SyncService {
           now,
         });
       }
-      if (request.focusSnapshot) {
-        validateSnapshot(
+      const snapshotValidation = request.focusSnapshot
+        ? validateSnapshot(
           request.focusSnapshot,
           expectedSource,
           identity.browserName,
           protocolActivatedAt,
           leaseById.get(request.focusSnapshot.policyLeaseId),
           now,
-        );
-      }
+        )
+        : null;
+      const acceptedSnapshot =
+        snapshotValidation?.status === "ACCEPTED"
+          ? snapshotValidation.snapshot
+          : undefined;
 
       stage = "transaction";
       const transactionResult = await this.prisma.$transaction(
         async (tx) => {
           const laneKeys = collectLaneKeys(
             candidateIntervals,
-            request.focusSnapshot,
+            acceptedSnapshot,
             expectedSource,
           );
           await lockWriteLanes(tx, context, identity.workstationId, laneKeys);
@@ -340,15 +364,15 @@ export class TrackingV2SyncService {
           );
           const cursorKeys = uniqueCursorKeys(candidateIntervals);
           const cursors = await refreshCursors(tx, context, cursorKeys);
-          const acceptedSnapshotSequence = request.focusSnapshot
+          const acceptedSnapshotSequence = acceptedSnapshot
             ? await storeFocusSnapshot({
                 tx,
                 context,
-                snapshot: request.focusSnapshot,
+                snapshot: acceptedSnapshot,
                 browserName: identity.browserName,
                 workstationId: identity.workstationId,
                 protocolActivatedAt,
-                lease: leaseById.get(request.focusSnapshot.policyLeaseId)!,
+                lease: leaseById.get(acceptedSnapshot.policyLeaseId)!,
                 cursors,
               })
             : null;
@@ -359,6 +383,13 @@ export class TrackingV2SyncService {
             identity.workstationId,
             request.health,
             now,
+            snapshotValidation?.status === "REJECTED"
+              ? {
+                  code: snapshotValidation.rejectionCode,
+                  requestId,
+                  at: now,
+                }
+              : null,
           );
           await tx.device.update({
             where: { id: context.deviceId },
@@ -388,9 +419,32 @@ export class TrackingV2SyncService {
         orderBy: [{ activeFrom: "desc" }, { id: "desc" }],
         select: { policyVersion: true },
       });
-      const activeLease = leases.find(
-        (lease) => lease.policyVersion === activePolicy?.policyVersion,
-      );
+      const activeLease = activePolicy
+        ? await this.prisma.devicePolicyLease.findFirst({
+            where: {
+              companyId: context.companyId,
+              userId: context.userId,
+              deviceId: context.deviceId,
+              policyVersion: activePolicy.policyVersion,
+              expiresAt: { gt: now },
+            },
+            orderBy: [{ expiresAt: "desc" }, { createdAt: "desc" }],
+            select: { id: true },
+          })
+        : null;
+      if (snapshotValidation?.status === "REJECTED") {
+        this.logger.warn(
+          JSON.stringify({
+            event: "tracking_v2_snapshot",
+            outcome: "rejected",
+            requestId,
+            code: snapshotValidation.rejectionCode,
+            snapshotState: request.focusSnapshot?.state ?? null,
+            intervalCount,
+            durationMs: Date.now() - startedAtMs,
+          }),
+        );
+      }
       // Reconciliation is performed by the background worker. A slow or failed
       // aggregate refresh must not delay an accepted client upload or heartbeat.
       stage = "response";
@@ -398,6 +452,21 @@ export class TrackingV2SyncService {
         results: transactionResult.results,
         cursors: transactionResult.cursors,
         acceptedSnapshotSequence: transactionResult.acceptedSnapshotSequence,
+        focusSnapshotResult:
+          snapshotValidation === null
+            ? null
+            : snapshotValidation.status === "ACCEPTED"
+              ? {
+                  status: "ACCEPTED" as const,
+                  acceptedSnapshotSequence:
+                    transactionResult.acceptedSnapshotSequence ??
+                    snapshotValidation.snapshot.snapshotSequence,
+                }
+              : {
+                  status: "REJECTED" as const,
+                  rejectionCode: snapshotValidation.rejectionCode,
+                  message: snapshotValidation.message,
+                },
         serverTime: now.toISOString(),
         activePolicyVersion: activePolicy?.policyVersion ?? "",
         activePolicyLeaseId: activeLease?.id ?? null,
@@ -405,7 +474,8 @@ export class TrackingV2SyncService {
       };
     } catch (error) {
       const status = error instanceof HttpException ? error.getStatus() : 500;
-      const code = trackingSyncErrorCode(error, status);
+      const code = trackingSyncErrorCode(error, status, stage);
+      const message = trackingSyncErrorMessage(error);
       this.logger.warn(
         JSON.stringify({
           event: "tracking_v2_sync",
@@ -415,17 +485,22 @@ export class TrackingV2SyncService {
           intervalCount,
           status,
           code,
+          message,
           durationMs: Date.now() - startedAtMs,
         }),
       );
-      throw withTrackingSyncRequestId(error, requestId, status, code);
+      throw withTrackingSyncRequestId(error, requestId, status, code, stage);
     }
   }
 }
 
 type TrackingV2SyncStage = "parse" | "policy" | "transaction" | "response";
 
-function trackingSyncErrorCode(error: unknown, status: number) {
+function trackingSyncErrorCode(
+  error: unknown,
+  status: number,
+  stage: TrackingV2SyncStage,
+) {
   if (error instanceof HttpException) {
     const response = error.getResponse();
     if (
@@ -438,7 +513,30 @@ function trackingSyncErrorCode(error: unknown, status: number) {
         return code;
     }
   }
-  return status >= 500 ? "TRACKING_SYNC_INTERNAL" : `HTTP_${status}`;
+  if (status >= 500) return "TRACKING_SYNC_INTERNAL";
+  if (stage === "parse") return "TRACKING_PAYLOAD_INVALID";
+  if (stage === "policy") return "TRACKING_POLICY_REJECTED";
+  if (stage === "transaction") return "TRACKING_TRANSACTION_REJECTED";
+  return "TRACKING_RESPONSE_FAILED";
+}
+
+function trackingSyncErrorMessage(error: unknown) {
+  if (error instanceof HttpException) {
+    const response = error.getResponse();
+    const message =
+      typeof response === "string"
+        ? response
+        : typeof response === "object" && response !== null && !Array.isArray(response)
+          ? (response as Record<string, unknown>).message
+          : undefined;
+    const text = Array.isArray(message)
+      ? message.filter((item): item is string => typeof item === "string").join(" ")
+      : typeof message === "string"
+        ? message
+        : "Tracking sync request was rejected.";
+    return text.replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]").replace(/\s+/g, " ").trim().slice(0, 240);
+  }
+  return "Tracking sync failed unexpectedly.";
 }
 
 function withTrackingSyncRequestId(
@@ -446,6 +544,7 @@ function withTrackingSyncRequestId(
   requestId: string,
   status: number,
   code: string,
+  stage: TrackingV2SyncStage,
 ) {
   if (error instanceof HttpException) {
     const response = error.getResponse();
@@ -455,13 +554,14 @@ function withTrackingSyncRequestId(
       !Array.isArray(response)
         ? response
         : { statusCode: status, message: response };
-    return new HttpException({ ...body, requestId }, status);
+    return new HttpException({ ...body, code, stage, requestId }, status);
   }
   return new HttpException(
     {
       statusCode: status,
       message: "Tracking sync could not be completed.",
       code,
+      stage,
       requestId,
     },
     status,
@@ -490,7 +590,14 @@ function parseSyncRequest(input: unknown): TrackingSyncRequestV2 {
     );
   }
   if (body.protocolVersion !== TRACKING_PROTOCOL_VERSION_V2) {
-    throw new HttpException("Protocol v2 is required.", 426);
+    throw new HttpException(
+      {
+        statusCode: 426,
+        message: "Protocol v2 is required.",
+        code: "TRACKING_PROTOCOL_REQUIRED",
+      },
+      426,
+    );
   }
   const protocolActivatedAt = readIso(
     body.protocolActivatedAt,
@@ -649,7 +756,7 @@ function validateSnapshot(
   protocolActivatedAt: Date,
   lease: StoredPolicyLease | undefined,
   now: Date,
-) {
+): SnapshotValidationResult {
   if (snapshot.source !== expectedSource || snapshot.stream !== "FOCUS") {
     throw new ForbiddenException(
       "Focus snapshot source does not match the device credential.",
@@ -667,18 +774,25 @@ function validateSnapshot(
   if (
     !lease ||
     lease.policyVersion !== snapshot.policyVersion ||
-    lease.id !== snapshot.policyLeaseId
+    lease.id !== snapshot.policyLeaseId ||
+    lease.expiresAt.getTime() <= now.getTime()
   ) {
-    throw new BadRequestException("Focus snapshot policy lease is invalid.");
+    return {
+      status: "REJECTED",
+      rejectionCode: "SNAPSHOT_POLICY_LEASE_INVALID",
+      message: "The live focus policy lease must be refreshed.",
+    };
   }
   const observedAt = readIso(snapshot.lastObservedAt, "lastObservedAt");
   if (
     observedAt < protocolActivatedAt ||
     observedAt.getTime() > now.getTime() + MAX_FUTURE_SKEW_MS
   ) {
-    throw new BadRequestException(
-      "Focus snapshot observation time is invalid.",
-    );
+    return {
+      status: "REJECTED",
+      rejectionCode: "SNAPSHOT_OBSERVATION_TIME_INVALID",
+      message: "The live focus observation time could not be verified.",
+    };
   }
   if (
     snapshot.state !== "NONE" &&
@@ -691,10 +805,13 @@ function validateSnapshot(
         readPolicyWindows(lease.allowedUtcWindows),
       ))
   ) {
-    throw new BadRequestException(
-      "Focus snapshot is outside its policy window.",
-    );
+    return {
+      status: "REJECTED",
+      rejectionCode: "SNAPSHOT_OUTSIDE_POLICY_WINDOW",
+      message: "Live focus is outside the configured work window.",
+    };
   }
+  return { status: "ACCEPTED", snapshot };
 }
 
 async function lockWriteLanes(
@@ -1446,6 +1563,11 @@ async function storeClientHealth(
   workstationId: string | null,
   health: ClientHealthV2,
   receivedAt: Date,
+  serverDiagnostic: {
+    code: TrackingSnapshotRejectionCodeV2;
+    requestId: string;
+    at: Date;
+  } | null,
 ) {
   const data = {
     companyId: context.companyId,
@@ -1466,6 +1588,9 @@ async function storeClientHealth(
     lastSuccessfulHeartbeatAt: optionalDate(health.lastSuccessfulHeartbeatAt),
     lastSuccessfulSyncAt: optionalDate(health.lastSuccessfulSyncAt),
     errorCode: health.errorCode as TrackingHealthErrorCode,
+    serverDiagnosticCode: serverDiagnostic?.code ?? null,
+    serverDiagnosticRequestId: serverDiagnostic?.requestId ?? null,
+    serverDiagnosticAt: serverDiagnostic?.at ?? null,
     receivedAt,
   };
   await tx.clientHealthSnapshot.upsert({

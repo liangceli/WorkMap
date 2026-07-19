@@ -58,6 +58,27 @@
               <button id="open-workmap-button" class="secondary" type="button">Open WorkMap</button>
             </div>
             <p class="background-note">Closing this window keeps the Agent running in the system tray.</p>
+            <details id="diagnostics-panel" class="diagnostics-panel">
+              <summary>Diagnostics</summary>
+              <div class="diagnostics-content">
+                <dl class="diagnostics-grid">
+                  <div><dt>Last confirmed sync</dt><dd id="diagnostics-last-sync">Not synced</dd></div>
+                  <div><dt>Last request ID</dt><dd id="diagnostics-request-id">Not available</dd></div>
+                  <div><dt>Tracking v2 queue</dt><dd id="diagnostics-queue">0 pending / 0 rejected</dd></div>
+                  <div><dt>Policy lease</dt><dd id="diagnostics-policy">Not loaded</dd></div>
+                </dl>
+                <div class="diagnostics-errors">
+                  <strong>Recent sync messages</strong>
+                  <ol id="diagnostics-error-list"><li>No recent sync errors.</li></ol>
+                </div>
+                <p class="diagnostics-path"><span>Local logs</span><code id="diagnostics-log-path">Preparing...</code></p>
+                <div class="diagnostics-actions">
+                  <button id="open-diagnostics-folder" class="secondary" type="button">Open logs folder</button>
+                  <button id="export-diagnostics" class="secondary" type="button">Export redacted diagnostics</button>
+                </div>
+                <p id="diagnostics-result" class="field-help" role="status"></p>
+              </div>
+            </details>
           </div>
         </section>
 

@@ -160,6 +160,20 @@ export type TrackingSyncResponseV2 = {
   results: TrackingSyncItemResultV2[];
   cursors: TrackingSyncCursorV2[];
   acceptedSnapshotSequence: number | null;
+  focusSnapshotResult:
+    | {
+        status: "ACCEPTED";
+        acceptedSnapshotSequence: number;
+      }
+    | {
+        status: "REJECTED";
+        rejectionCode:
+          | "SNAPSHOT_POLICY_LEASE_INVALID"
+          | "SNAPSHOT_OBSERVATION_TIME_INVALID"
+          | "SNAPSHOT_OUTSIDE_POLICY_WINDOW";
+        message: string;
+      }
+    | null;
   serverTime: string;
   activePolicyVersion: string;
   activePolicyLeaseId: string | null;
@@ -173,7 +187,9 @@ export type TrackingSyncDiagnosticV2 = {
   intervalCount: number;
   httpStatus: number | null;
   errorCode: string | null;
-  outcome: "CONFIRMED" | "FAILED";
+  errorMessage?: string | null;
+  failureStage?: "parse" | "policy" | "transaction" | "response" | null;
+  outcome: "CONFIRMED" | "CONFIRMED_WITH_WARNING" | "FAILED";
 };
 
 export type ProtocolV2PrepareResponse = {

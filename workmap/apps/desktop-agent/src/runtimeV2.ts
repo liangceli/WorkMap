@@ -26,6 +26,10 @@ import {
   V2QueuePressureError,
 } from "./trackingV2Store.js";
 import {
+  AgentDiagnosticLog,
+  type AgentDiagnosticsBundle,
+} from "./diagnosticLog.js";
+import {
   DESKTOP_V2_HEALTH_SYNC_MS,
   DESKTOP_V2_POLICY_REFRESH_MS,
   DESKTOP_V2_SETTLEMENT_MS,
@@ -69,6 +73,7 @@ type RuntimeV2Options = {
   legacyQueue?: FileEventQueue;
   statusQueue?: FileStatusEventQueue;
   statusWriter?: (status: AgentStatus) => Promise<unknown>;
+  diagnosticLog?: AgentDiagnosticLog;
 };
 
 export class DesktopAgentRuntimeV2 {
@@ -77,6 +82,7 @@ export class DesktopAgentRuntimeV2 {
   private readonly legacyQueue: FileEventQueue;
   private readonly statusQueue: FileStatusEventQueue;
   private readonly statusWriter: (status: AgentStatus) => Promise<unknown>;
+  private readonly diagnosticLog: AgentDiagnosticLog;
   private state: DesktopTrackingRuntimeStateV2;
   private engine: DesktopFocusEngineV2 | null = null;
   private currentHostApp: WindowsActivityAppIdentityV2 | null = null;
@@ -108,6 +114,7 @@ export class DesktopAgentRuntimeV2 {
     this.legacyQueue = options.legacyQueue ?? new FileEventQueue();
     this.statusQueue = options.statusQueue ?? new FileStatusEventQueue();
     this.statusWriter = options.statusWriter ?? writeAgentStatus;
+    this.diagnosticLog = options.diagnosticLog ?? new AgentDiagnosticLog();
     const persistedState = this.store.readRuntimeState();
     this.state = {
       ...createInitialDesktopTrackingV2State(),
@@ -122,6 +129,43 @@ export class DesktopAgentRuntimeV2 {
   async run() {
     if (!this.runPromise) this.runPromise = this.runLoop();
     await this.runPromise;
+  }
+
+  getDiagnosticsBundle(): AgentDiagnosticsBundle {
+    const queue = this.store.stats();
+    return {
+      generatedAt: new Date().toISOString(),
+      agentVersion: this.config.agentVersion,
+      deviceId: this.config.deviceId,
+      logDirectory: this.diagnosticLog.getDirectory(),
+      connectionState: this.connectionState,
+      collectorState: this.collectorState,
+      queue: {
+        pending: queue.pending,
+        ready: queue.ready,
+        deadLetter: queue.deadLetter,
+        deadLetterByCode: this.store.deadLetterSummary(),
+      },
+      policy: {
+        version: this.state.policy?.policyVersion ?? null,
+        leasePresent: Boolean(this.state.policy?.policyLeaseId),
+        leaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
+        acknowledgementState:
+          this.state.policy?.acknowledgementState ?? null,
+      },
+      lastSuccessfulSyncAt: this.state.lastSuccessfulSyncAt,
+      lastSuccessfulHeartbeatAt: this.state.lastSuccessfulHeartbeatAt,
+      lastSyncDiagnostic: this.state.lastSyncDiagnostic,
+      recentSyncFailures: this.state.recentSyncFailures,
+    };
+  }
+
+  exportDiagnostics(filePath: string) {
+    return this.diagnosticLog.exportBundle(filePath, this.getDiagnosticsBundle());
+  }
+
+  getDiagnosticsDirectory() {
+    return this.diagnosticLog.getDirectory();
   }
 
   async shutdown(reason: ShutdownReason = "USER_STOP") {
@@ -146,6 +190,11 @@ export class DesktopAgentRuntimeV2 {
 
   private async runLoop() {
     await this.initializeQueues();
+    await this.diagnosticLog.write({
+      operation: "lifecycle",
+      outcome: "starting",
+      queuePending: this.store.stats().pending,
+    });
     await this.updateUiStatus();
     try {
       let activated = false;
@@ -161,6 +210,12 @@ export class DesktopAgentRuntimeV2 {
         agentVersion: this.config.agentVersion,
       });
       await this.flushStatusQueue();
+      await this.diagnosticLog.write({
+        operation: "lifecycle",
+        outcome: "started",
+        policyVersion: this.state.policy?.policyVersion ?? null,
+        policyLeaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
+      });
 
       while (!this.stopped) {
         await delay(1_000);
@@ -404,6 +459,12 @@ export class DesktopAgentRuntimeV2 {
           : "PAUSED";
         this.lastErrorCode = "NONE";
       }
+      await this.diagnosticLog.write({
+        operation: "native-host",
+        outcome: event.state.toLowerCase(),
+        reasonCode: event.errorCode ?? null,
+        queuePending: this.store.stats().pending,
+      });
       await this.requestSync();
     }
   }
@@ -524,6 +585,7 @@ export class DesktopAgentRuntimeV2 {
   }
 
   private async performSync() {
+    const startedAtMs = Date.now();
     const intervals = this.store.listReady(
       Date.now(),
       DESKTOP_V2_SYNC_BATCH_SIZE,
@@ -541,9 +603,20 @@ export class DesktopAgentRuntimeV2 {
     };
     const requestId = randomUUID();
     const attemptedAt = new Date(serverNow(this.state)).toISOString();
+    await this.diagnosticLog.write({
+      operation: "sync-v2",
+      outcome: "attempted",
+      requestId,
+      intervalCount: intervals.length,
+      snapshotState: request.focusSnapshot?.state ?? null,
+      queuePending: this.store.stats().pending,
+      policyVersion: this.state.policy?.policyVersion ?? null,
+      policyLeaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
+    });
     try {
       const response = await syncTrackingV2(this.config, request, requestId);
       this.applyServerClock(response.serverTime);
+      const snapshotResult = response.focusSnapshotResult ?? null;
       const acknowledged = response.results
         .filter((result) => result.status === "ACCEPTED" || result.status === "DUPLICATE")
         .map((result) => result.clientEventId);
@@ -573,31 +646,89 @@ export class DesktopAgentRuntimeV2 {
           ? "QUEUE_PRESSURE"
           : "NONE";
       const syncedAt = new Date(serverNow(this.state)).toISOString();
+      const syncDiagnostic: TrackingSyncDiagnosticV2 = {
+        requestId: response.requestId ?? requestId,
+        attemptedAt,
+        completedAt: syncedAt,
+        intervalCount: intervals.length,
+        httpStatus: 200,
+        errorCode:
+          snapshotResult?.status === "REJECTED"
+            ? snapshotResult.rejectionCode
+            : null,
+        errorMessage:
+          snapshotResult?.status === "REJECTED"
+            ? snapshotResult.message
+            : null,
+        failureStage:
+          snapshotResult?.status === "REJECTED" ? "policy" : null,
+        outcome:
+          snapshotResult?.status === "REJECTED"
+            ? "CONFIRMED_WITH_WARNING"
+            : "CONFIRMED",
+      };
       this.state = {
         ...this.state,
         lastSuccessfulSyncAt: syncedAt,
         lastSuccessfulHeartbeatAt: syncedAt,
         lastErrorCode: "NONE",
-        lastSyncDiagnostic: {
-          requestId: response.requestId ?? requestId,
-          attemptedAt,
-          completedAt: syncedAt,
-          intervalCount: intervals.length,
-          httpStatus: 200,
-          errorCode: null,
-          outcome: "CONFIRMED",
-        },
+        lastSyncDiagnostic: syncDiagnostic,
+        recentSyncFailures:
+          snapshotResult?.status === "REJECTED"
+            ? prependDiagnostic(this.state.recentSyncFailures, syncDiagnostic)
+            : this.state.recentSyncFailures,
       };
       this.store.writeRuntimeState(this.state);
+      await this.diagnosticLog.write({
+        operation: "sync-v2",
+        outcome:
+          snapshotResult?.status === "REJECTED"
+            ? "confirmed-with-warning"
+            : "confirmed",
+        requestId: response.requestId ?? requestId,
+        intervalCount: intervals.length,
+        snapshotState: request.focusSnapshot?.state ?? null,
+        queuePending: this.store.stats().pending,
+        queueDeadLetter: this.store.stats().deadLetter,
+        httpStatus: 200,
+        reasonCode:
+          snapshotResult?.status === "REJECTED"
+            ? snapshotResult.rejectionCode
+            : null,
+        durationMs: Date.now() - startedAtMs,
+      });
+      if (snapshotResult?.status === "REJECTED") {
+        await this.recoverRejectedSnapshot(snapshotResult.rejectionCode);
+      }
     } catch (error) {
-      this.recordSyncFailure({
+      const legacySnapshotPolicyFailure = isLegacySnapshotPolicyFailure(
+        error,
+        request.focusSnapshot !== undefined,
+      );
+      const diagnostic: TrackingSyncDiagnosticV2 = {
         requestId: error instanceof AgentApiError ? error.requestId ?? requestId : requestId,
         attemptedAt,
         completedAt: new Date(serverNow(this.state)).toISOString(),
         intervalCount: intervals.length,
         httpStatus: error instanceof AgentApiError ? error.status ?? null : null,
         errorCode: syncFailureCode(error),
+        errorMessage: syncFailureMessage(error),
+        failureStage: error instanceof AgentApiError ? error.responseStage ?? null : null,
         outcome: "FAILED",
+      };
+      this.recordSyncFailure(diagnostic);
+      await this.diagnosticLog.write({
+        operation: "sync-v2",
+        outcome: "failed",
+        requestId: diagnostic.requestId,
+        intervalCount: intervals.length,
+        snapshotState: request.focusSnapshot?.state ?? null,
+        queuePending: this.store.stats().pending,
+        queueDeadLetter: this.store.stats().deadLetter,
+        httpStatus: diagnostic.httpStatus,
+        reasonCode: diagnostic.errorCode,
+        retryAt: this.store.stats().nextRetryAt,
+        durationMs: Date.now() - startedAtMs,
       });
       const ids = intervals.map((interval) => interval.clientEventId);
       if (error instanceof AgentApiError && (error.status === 401 || error.status === 403)) {
@@ -605,6 +736,14 @@ export class DesktopAgentRuntimeV2 {
       } else if (isUpgradeRequiredError(error)) {
         this.connectionState = "UPGRADE_REQUIRED";
         this.lastErrorCode = "UPGRADE_REQUIRED";
+      } else if (legacySnapshotPolicyFailure) {
+        this.store.retry(
+          ids,
+          Date.now(),
+          error instanceof AgentApiError ? error.retryAfterMs : undefined,
+        );
+        this.connectionState = "ONLINE";
+        await this.recoverRejectedSnapshot("SNAPSHOT_POLICY_LEASE_INVALID");
       } else if (
         error instanceof AgentApiError &&
         error.status &&
@@ -621,7 +760,7 @@ export class DesktopAgentRuntimeV2 {
         this.store.retry(ids, Date.now(), error instanceof AgentApiError ? error.retryAfterMs : undefined);
         this.connectionState = "OFFLINE";
       }
-      await this.applyFailure(error, false);
+      if (!legacySnapshotPolicyFailure) await this.applyFailure(error, false);
     }
     await this.updateUiStatus();
   }
@@ -683,12 +822,20 @@ export class DesktopAgentRuntimeV2 {
           policy: next,
           clock: null,
           engineCheckpoint: null,
+          latestSnapshot: null,
         };
       } else {
         this.state = { ...this.state, policy: next };
       }
       this.collectorState = policyCollectorState(next, serverNow(this.state));
       this.store.writeRuntimeState(this.state);
+      await this.diagnosticLog.write({
+        operation: "policy",
+        outcome: changed ? "refreshed" : "confirmed",
+        policyVersion: next.policyVersion,
+        policyLeaseExpiresAt: next.policyLeaseExpiresAt,
+        reasonCode: changed ? "POLICY_LEASE_CHANGED" : null,
+      });
     } catch (error) {
       if (!this.state.policy || !policyLeaseValid(this.state.policy, serverNow(this.state))) {
         this.collectorState = "PAUSED";
@@ -804,6 +951,35 @@ export class DesktopAgentRuntimeV2 {
     if (updateStatus) await this.updateUiStatus(safeError(error));
   }
 
+  private async recoverRejectedSnapshot(
+    reasonCode:
+      | "SNAPSHOT_POLICY_LEASE_INVALID"
+      | "SNAPSHOT_OBSERVATION_TIME_INVALID"
+      | "SNAPSHOT_OUTSIDE_POLICY_WINDOW",
+  ) {
+    const monotonicMs = currentMonotonic(this);
+    if (this.engine && monotonicMs !== null) {
+      await this.enqueueHostBoundary(monotonicMs, false);
+    }
+    this.engine = null;
+    this.state = {
+      ...this.state,
+      clock: null,
+      engineCheckpoint: null,
+      latestSnapshot: null,
+    };
+    this.store.writeRuntimeState(this.state);
+    await this.diagnosticLog.write({
+      operation: "policy",
+      outcome: "snapshot-reset",
+      reasonCode,
+      queuePending: this.store.stats().pending,
+      policyVersion: this.state.policy?.policyVersion ?? null,
+      policyLeaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
+    });
+    if (monotonicMs !== null) await this.refreshPolicy(monotonicMs);
+  }
+
   private async updateUiStatus(error?: string) {
     const snapshot = this.state.latestSnapshot;
     const stats = this.store.stats();
@@ -891,6 +1067,12 @@ export class DesktopAgentRuntimeV2 {
     }
     this.connectionState = "OFFLINE";
     await this.updateUiStatus();
+    await this.diagnosticLog.write({
+      operation: "lifecycle",
+      outcome: "stopped",
+      reasonCode: this.shutdownReason ?? "UNKNOWN_INTERRUPTED",
+      queuePending: this.store.stats().pending,
+    });
     this.store.close();
   }
 }
@@ -969,6 +1151,39 @@ function syncFailureCode(error: unknown) {
     return error.responseCode ?? (error.status ? `HTTP_${error.status}` : "NETWORK_ERROR");
   }
   return "UNKNOWN";
+}
+
+function syncFailureMessage(error: unknown) {
+  if (error instanceof AgentApiError) {
+    return error.responseMessage
+      ? error.responseMessage.replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]").slice(0, 240)
+      : null;
+  }
+  return null;
+}
+
+function prependDiagnostic(
+  diagnostics: TrackingSyncDiagnosticV2[],
+  diagnostic: TrackingSyncDiagnosticV2,
+) {
+  return [
+    diagnostic,
+    ...diagnostics.filter(
+      (existing) => existing.requestId !== diagnostic.requestId,
+    ),
+  ].slice(0, 10);
+}
+
+function isLegacySnapshotPolicyFailure(
+  error: unknown,
+  snapshotPresent: boolean,
+) {
+  return (
+    snapshotPresent &&
+    error instanceof AgentApiError &&
+    error.status === 400 &&
+    error.responseStage === "policy"
+  );
 }
 
 function shutdownLifecycle(reason: ShutdownReason): {

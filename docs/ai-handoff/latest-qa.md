@@ -1,5 +1,57 @@
 # Latest QA Handoff
 
+## 2026-07-19 Desktop Agent 0.6.4 Snapshot Isolation And Diagnostics QA
+
+### Reviewed Implementation
+
+- Reviewed the API transaction boundary, snapshot validation, client-health persistence, Agent warning recovery, rolling local diagnostics, Reports reason mapping, migration, and Windows release artifact.
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: an invalid or expired live Focus snapshot no longer rejects valid completed intervals or prevents heartbeat, health, and `lastSeenAt` confirmation.
+- Fixed - High: the API returns one of three exact snapshot warning codes and stores the safe code/request ID/timestamp for Owner-side diagnosis.
+- Fixed - High: the Agent drops only stale provisional snapshot state, refreshes its policy lease, and preserves queued historical intervals.
+- Fixed - High: Agent and Render diagnostics can be correlated by request ID without storing credentials, tokens, complete payloads, URLs, window titles, or content.
+- Fixed - Medium: Owner Reports provides an exact reason and remediation instead of a generic interrupted-state explanation.
+- Remaining - Medium: the coordinated production migration/API/Web/Agent rollout and real Windows manual QA have not been executed.
+
+### Test And Verification Status
+
+- Shared types, Desktop Agent, API, and Web typechecks: pass.
+- Desktop Agent tests: 50/50 pass.
+- Focused API snapshot-isolation test: pass.
+- API and Web production builds: pass.
+- Prisma schema validation: pass without connecting to or modifying a database.
+- Windows 0.6.4 installer build: pass; size and SHA-256 verified.
+- Manual QA: not run.
+
+### Recommendation
+
+- Source and Alpha artifact are ready for a coordinated test deployment. Apply migration `20260719053000_tracking_snapshot_diagnostics` before deploying the matching API. Do not represent production behavior as verified until the real Agent/API/Reports loop is manually exercised.
+
+## 2026-07-19 Tracking V2 Sync Failure Correlation Diagnostics QA
+
+### Reviewed Implementation
+
+- Reviewed the inspected local v2 records: the policy revision and integer duration values are valid, while prior HTTP 400 responses lacked a retained server-side failure stage.
+- Reviewed the correlation changes across the Agent HTTP client, persisted diagnostic model, runtime state, and API sync exception path.
+
+### Findings Ordered By Severity
+
+- Fixed - High: request-level Tracking v2 failures can now be correlated by one request ID across the local Agent status and Render log.
+- Fixed - High: response details are restricted to a known failure-stage allowlist and sanitized short messages; credentials and activity payloads are not persisted or logged.
+- Remaining - Medium: the exact historical HTTP 400 cannot be reconstructed because it occurred before the new diagnostic fields existed.
+
+### Test And Verification Status
+
+- Desktop Agent typecheck: pass.
+- API typecheck: pass.
+- Manual QA: not run; requires a real rejected request after API deployment and Agent 0.6.4 installation.
+
+### Recommendation
+
+- Proceed with the scoped backend deployment and Desktop Agent 0.6.4 build. Do not re-pair an existing installation solely for this update.
+
 ## 2026-07-19 Desktop Agent V2 Integer Interval Repair QA
 
 ### Reviewed Implementation

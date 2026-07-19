@@ -724,6 +724,9 @@ model ClientHealthSnapshot {
   lastSuccessfulHeartbeatAt DateTime?               @db.Timestamptz(3)
   lastSuccessfulSyncAt      DateTime?               @db.Timestamptz(3)
   errorCode                 TrackingHealthErrorCode
+  serverDiagnosticCode      String?                 @db.VarChar(80)
+  serverDiagnosticRequestId String?                 @db.VarChar(80)
+  serverDiagnosticAt        DateTime?               @db.Timestamptz(3)
   receivedAt                DateTime                @default(now()) @db.Timestamptz(3)
   createdAt                 DateTime                @default(now())
   updatedAt                 DateTime                @updatedAt

@@ -218,6 +218,20 @@ export class DesktopTrackingV2Store {
     };
   }
 
+  deadLetterSummary() {
+    const rows = this.database.prepare(`
+      SELECT COALESCE(dead_letter_code, 'REJECTED') AS code, COUNT(*) AS count
+      FROM tracking_interval_queue
+      WHERE state = 'DEAD_LETTER'
+      GROUP BY COALESCE(dead_letter_code, 'REJECTED')
+      ORDER BY count DESC, code ASC
+    `).all() as Array<{ code: unknown; count: unknown }>;
+    return rows.map((row) => ({
+      code: sanitizeDeadLetterCode(String(row.code ?? "REJECTED")),
+      count: Number(row.count ?? 0),
+    }));
+  }
+
   hasCapacity(reserve = 1) {
     return this.pendingAndDeadLetterCount() + Math.max(0, reserve) <= this.capacity;
   }

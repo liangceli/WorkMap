@@ -123,6 +123,9 @@ export class TrackingV2ReportsService {
             lastSuccessfulHeartbeatAt: true,
             lastSuccessfulSyncAt: true,
             errorCode: true,
+            serverDiagnosticCode: true,
+            serverDiagnosticRequestId: true,
+            serverDiagnosticAt: true,
             receivedAt: true,
           },
         },
@@ -249,6 +252,10 @@ export class TrackingV2ReportsService {
                 health.lastSuccessfulSyncAt,
               ),
               errorCode: health.errorCode,
+              serverDiagnosticCode: health.serverDiagnosticCode,
+              serverDiagnosticRequestId:
+                health.serverDiagnosticRequestId,
+              serverDiagnosticAt: iso(health.serverDiagnosticAt),
               receivedAt: iso(health.receivedAt),
             }
           : null,

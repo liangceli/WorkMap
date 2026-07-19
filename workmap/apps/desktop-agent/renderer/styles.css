@@ -74,6 +74,20 @@ button:disabled { cursor: wait; opacity: .62; }
 .metrics dd { overflow: hidden; margin: 5px 0 0; color: #18344f; font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .legacy-backlog { margin: -8px 0 20px; border-left: 3px solid #d68a17; background: #fff7e8; color: #6c501f; padding: 9px 11px; font-size: 12px; line-height: 1.45; }
 .connected-actions { display: flex; gap: 10px; }
+.diagnostics-panel { margin-top: 20px; border-top: 1px solid #e1e8e5; padding-top: 14px; }
+.diagnostics-panel summary { cursor: pointer; color: #294b66; font-size: 13px; font-weight: 800; }
+.diagnostics-content { padding-top: 14px; }
+.diagnostics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; border-top: 1px solid #e1e8e5; border-left: 1px solid #e1e8e5; }
+.diagnostics-grid div { min-width: 0; border-right: 1px solid #e1e8e5; border-bottom: 1px solid #e1e8e5; padding: 10px 12px; }
+.diagnostics-grid dt { color: #788697; font-size: 10px; text-transform: uppercase; }
+.diagnostics-grid dd { overflow-wrap: anywhere; margin: 4px 0 0; color: #18344f; font-size: 12px; font-weight: 750; }
+.diagnostics-errors { margin-top: 14px; color: #294b66; font-size: 12px; }
+.diagnostics-errors ol { display: grid; gap: 7px; margin: 8px 0 0; padding-left: 20px; color: #637287; }
+.diagnostics-errors li { overflow-wrap: anywhere; }
+.diagnostics-path { display: grid; gap: 5px; margin: 14px 0 0; color: #788697; font-size: 11px; }
+.diagnostics-path code { overflow-wrap: anywhere; color: #294b66; }
+.diagnostics-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.diagnostics-actions button { min-height: 38px; font-size: 12px; }
 
 footer { display: flex; justify-content: space-between; border-top: 1px solid #d7e2de; color: #7a8795; padding: 13px 32px; font-size: 11px; }
 [hidden] { display: none !important; }

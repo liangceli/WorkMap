@@ -1,5 +1,108 @@
 # Latest Implementation Handoff
 
+## 2026-07-19 Desktop Agent 0.6.4 Snapshot Isolation And Product Diagnostics
+
+### Original Task Brief
+
+- Fix the repeated Tracking v2 `policy`-stage HTTP 400 failures that left the Agent recording locally while Owner Reports showed a stale or interrupted signal.
+- Make an invalid live snapshot independent from valid completed intervals and heartbeat confirmation.
+- Add privacy-safe, product-level diagnostics on the Agent, API, and Reports surfaces without logging credentials, tokens, window titles, URLs, or activity payloads.
+
+### Changed Files
+
+- Tracking contract and persistence: `workmap/packages/shared-types/src/tracking-v2.ts`, `workmap/prisma/schema.prisma`, and `workmap/prisma/migrations/20260719053000_tracking_snapshot_diagnostics/migration.sql`.
+- API sync and Reports: `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`, `workmap/apps/api/src/modules/reports/tracking-v2-reports.service.ts`, and `workmap/apps/api/test/tracking-v2-snapshot-isolation.test.ts`.
+- Desktop Agent runtime and diagnostics: `workmap/apps/desktop-agent/src/runtimeV2.ts`, `src/diagnosticLog.ts`, `src/trackingV2Store.ts`, `src/trackingV2Types.ts`, `src/apiClient.ts`, Electron/renderer files, release metadata, and focused release tests.
+- Owner Reports presentation: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` and `workmap/apps/web/lib/api/apiTypes.ts`.
+
+### Implementation Summary
+
+- The API now validates the live Focus snapshot separately from completed intervals. An expired/mismatched lease, invalid observation time, or outside-policy-window snapshot returns a precise warning result instead of rejecting the whole sync request.
+- Valid completed intervals, device health, heartbeat, and `lastSeenAt` continue to be confirmed even when the live snapshot is rejected. A stale provisional snapshot can no longer block confirmed history or make a healthy client appear disconnected.
+- The three safe snapshot rejection codes are `SNAPSHOT_POLICY_LEASE_INVALID`, `SNAPSHOT_OBSERVATION_TIME_INVALID`, and `SNAPSHOT_OUTSIDE_POLICY_WINDOW`.
+- The Agent clears only the rejected provisional snapshot/checkpoint, refreshes the current policy lease, and resumes tracking when the refreshed policy permits collection. Confirmed or queued historical intervals are not silently discarded.
+- The Agent writes rolling privacy-safe NDJSON logs to `%LOCALAPPDATA%\WorkMap\DesktopAgent\logs\agent-YYYY-MM-DD.ndjson`, rotates at 5 MB, retains seven days, and offers a Diagnostics panel plus redacted diagnostic export.
+- Agent/API sync diagnostics share the same request ID and record only safe fields such as operation, interval count, snapshot state, queue count, HTTP status, reason code, retry time, and duration.
+- Owner Reports now shows the exact server diagnostic reason and remediation instead of only a generic stale/interrupted message.
+
+### Database And Deployment Boundary
+
+- Added nullable diagnostic columns to `ClientHealthSnapshot`: `serverDiagnosticCode`, `serverDiagnosticRequestId`, and `serverDiagnosticAt`.
+- Migration `20260719053000_tracking_snapshot_diagnostics` was created and validated locally but was not applied to production.
+- Coordinated rollout order is: apply the migration, deploy the matching API, deploy Web, then install Desktop Agent 0.6.4. Existing protected device credentials remain valid; upgrading does not require re-pairing.
+
+### Windows Alpha Artifact
+
+- Installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.4.exe`
+- Size: `115431874` bytes.
+- SHA-256: `2C84BCD5127073E4635051EA47D9A43BF1D2DB3AEC60C3A61D9A3861FC91D97E`.
+
+### Verification
+
+- Shared types, Desktop Agent, API, and Web typechecks passed.
+- Desktop Agent package tests passed: 50/50.
+- Snapshot-isolation API test passed and verified that an expired live lease still permits heartbeat persistence and returns the exact warning code.
+- API production build and Web production build passed.
+- Prisma schema validation passed using an ephemeral local placeholder URL; no database connection or mutation occurred.
+- Desktop Agent 0.6.4 Windows installer build completed and the artifact version, size, and hash were verified.
+
+### Manual QA And Remaining Risk
+
+- Manual production QA and deployment were not run. They remain deferred pending the coordinated migration/API/Web/Agent rollout.
+- Browser Extension runtime and artifact were not changed in this scoped repair.
+- Remaining risk is limited to live environment validation of lease refresh and the new Reports diagnostic display against the production database/API combination.
+
+## 2026-07-19 Tracking V2 Sync Failure Correlation Diagnostics (0.6.4)
+
+### Original Task Brief
+
+- Determine whether the current paired Desktop Agent's local Tracking v2 evidence identifies the cause of HTTP 400 sync failures.
+- Add minimal, safe diagnostics so a future rejected request can be correlated between the Agent and Render without exposing credentials or activity payloads.
+
+### Confirmed Findings
+
+- `policyVersion: "v1"` is the active tracking-policy revision, not an Agent version. It matches the active policy lease and is valid.
+- The inspected terminal records used integer durations (`1981` ms and `203` ms), so the shared-contract integer-duration rule was not the cause of those HTTP 400 responses.
+- Some failed requests contained zero intervals, which means the historical HTTP 400 cannot be attributed solely to an individual activity interval. The earlier client diagnostics retained only `HTTP_400`, making the exact request-level failure stage unavailable.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/src/apiClient.ts`
+- `workmap/apps/desktop-agent/src/runtimeV2.ts`
+- `workmap/apps/desktop-agent/src/trackingV2Types.ts`
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/alpha-windows/package.json`
+- `workmap/apps/desktop-agent/scripts/build-alpha.mjs`
+- `workmap/apps/desktop-agent/src/version.ts`
+- `workmap/apps/desktop-agent/src/windowsActivityHost.ts`
+- `workmap/apps/desktop-agent/test/gui-release.test.ts`
+- `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`
+
+### Implementation Summary
+
+- The API now returns a sanitized `stage` (`parse`, `policy`, `transaction`, or `response`) plus the existing request ID for Tracking v2 request-level failures.
+- Render emits one structured warning per rejected request with the same request ID, stage, status/code, and a sanitized short message. No credentials or activity payloads are logged.
+- Agent `status.json` now persists the last failed sync's HTTP status, request ID, safe error message, and failure stage, while preserving the existing successful-sync status.
+- The Desktop Agent release version is `0.6.4`. Existing paired installations retain their protected device credential and do not require re-pairing after upgrade.
+
+### Verification
+
+- `pnpm.cmd --filter @workmap/desktop-agent typecheck` passed.
+- `pnpm.cmd --filter @workmap/api typecheck` passed.
+- Windows installer build pending in this task round.
+
+### Manual QA
+
+- Not run. After API deployment and Agent 0.6.4 installation, the next rejected sync should be correlated using `lastSyncDiagnostic.requestId` / `recentSyncFailures[].requestId` in local `status.json` and the matching Render log entry.
+
+### Intentionally Not Changed
+
+- No pairing, credential, tenant, policy, activity aggregation, report, schema, or migration behavior was changed.
+
+### Remaining Risk
+
+- This release makes a future request-level rejection conclusive; it does not manufacture acceptance of previously rejected history.
+
 ## 2026-07-19 Desktop Agent V2 Integer Interval Repair
 
 ### Original Task Brief

@@ -144,10 +144,28 @@ export type TrackingSyncCursorV2 = {
   rejectedRanges: TrackingRejectedSequenceRangeV2[];
 };
 
+export type TrackingSnapshotRejectionCodeV2 =
+  | "SNAPSHOT_POLICY_LEASE_INVALID"
+  | "SNAPSHOT_OBSERVATION_TIME_INVALID"
+  | "SNAPSHOT_OUTSIDE_POLICY_WINDOW";
+
+export type TrackingFocusSnapshotResultV2 =
+  | {
+      status: "ACCEPTED";
+      acceptedSnapshotSequence: number;
+    }
+  | {
+      status: "REJECTED";
+      rejectionCode: TrackingSnapshotRejectionCodeV2;
+      message: string;
+    }
+  | null;
+
 export type TrackingSyncResponseV2 = {
   results: TrackingSyncItemResultV2[];
   cursors: TrackingSyncCursorV2[];
   acceptedSnapshotSequence: number | null;
+  focusSnapshotResult: TrackingFocusSnapshotResultV2;
   serverTime: string;
   activePolicyVersion: string;
   activePolicyLeaseId: string | null;

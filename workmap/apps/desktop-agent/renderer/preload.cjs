@@ -5,6 +5,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("workmapAgent", {
   getState: () => ipcRenderer.invoke("agent:get-state"),
+  getDiagnostics: () => ipcRenderer.invoke("agent:get-diagnostics"),
+  openDiagnosticsFolder: () => ipcRenderer.invoke("agent:open-diagnostics-folder"),
+  exportDiagnostics: () => ipcRenderer.invoke("agent:export-diagnostics"),
   pair: (code) => ipcRenderer.invoke("agent:pair", code),
   hide: () => ipcRenderer.invoke("agent:hide"),
   quit: () => ipcRenderer.invoke("agent:quit"),

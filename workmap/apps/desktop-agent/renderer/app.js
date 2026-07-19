@@ -11,8 +11,11 @@ const progressTitle = document.querySelector("#progress-title");
 const progressDetail = document.querySelector("#progress-detail");
 const statusChip = document.querySelector("#status-chip");
 const agentError = document.querySelector("#agent-error");
+const diagnosticsPanel = document.querySelector("#diagnostics-panel");
+const diagnosticsResult = document.querySelector("#diagnostics-result");
 const FRESH_HEARTBEAT_MS = 30_000;
 const STALE_HEARTBEAT_MS = 120_000;
+let lastDiagnosticsRefreshAt = 0;
 
 const progressCopy = {
   waking: ["Connecting to WorkMap...", "The service may need up to a minute to wake securely."],
@@ -33,6 +36,25 @@ pairInput.addEventListener("keydown", (event) => {
 pairButton.addEventListener("click", () => void pair());
 document.querySelector("#hide-button").addEventListener("click", () => api.hide());
 document.querySelector("#open-workmap-button").addEventListener("click", () => api.openWorkMap());
+diagnosticsPanel.addEventListener("toggle", () => {
+  if (diagnosticsPanel.open) void refreshDiagnostics(true);
+});
+document.querySelector("#open-diagnostics-folder").addEventListener("click", async () => {
+  diagnosticsResult.textContent = "";
+  const error = await api.openDiagnosticsFolder();
+  diagnosticsResult.textContent = error || "Opened the local diagnostics folder.";
+});
+document.querySelector("#export-diagnostics").addEventListener("click", async () => {
+  diagnosticsResult.textContent = "Preparing redacted diagnostics...";
+  try {
+    const result = await api.exportDiagnostics();
+    diagnosticsResult.textContent = result.canceled
+      ? "Export cancelled."
+      : `Saved redacted diagnostics to ${result.path}`;
+  } catch (error) {
+    diagnosticsResult.textContent = cleanIpcError(error, "Diagnostics could not be exported.");
+  }
+});
 
 api.onPairProgress((stage) => {
   const copy = progressCopy[stage];
@@ -83,6 +105,38 @@ async function refreshState() {
   const errorCopy = status.error || health.detail;
   agentError.textContent = errorCopy;
   agentError.hidden = !errorCopy;
+  if (diagnosticsPanel.open) await refreshDiagnostics(false);
+}
+
+async function refreshDiagnostics(force) {
+  const now = Date.now();
+  if (!force && now - lastDiagnosticsRefreshAt < 5_000) return;
+  const diagnostics = await api.getDiagnostics();
+  if (!diagnostics) return;
+  lastDiagnosticsRefreshAt = now;
+  document.querySelector("#diagnostics-last-sync").textContent = formatTime(diagnostics.lastSuccessfulSyncAt);
+  document.querySelector("#diagnostics-request-id").textContent = diagnostics.lastSyncDiagnostic?.requestId ?? "Not available";
+  document.querySelector("#diagnostics-queue").textContent = `${diagnostics.queue.pending} pending / ${diagnostics.queue.deadLetter} rejected`;
+  document.querySelector("#diagnostics-policy").textContent = diagnostics.policy.leasePresent
+    ? `${diagnostics.policy.version ?? "Unknown version"} - expires ${formatDateTime(diagnostics.policy.leaseExpiresAt)}`
+    : "No active lease";
+  document.querySelector("#diagnostics-log-path").textContent = diagnostics.logDirectory;
+
+  const list = document.querySelector("#diagnostics-error-list");
+  list.replaceChildren();
+  const failures = diagnostics.recentSyncFailures.slice(0, 10);
+  if (failures.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "No recent sync errors.";
+    list.append(item);
+    return;
+  }
+  for (const failure of failures) {
+    const item = document.createElement("li");
+    const code = failure.errorCode || failure.failureStage || "SYNC_FAILED";
+    item.textContent = `${formatDateTime(failure.completedAt ?? failure.attemptedAt)} - ${code} - request ${failure.requestId}`;
+    list.append(item);
+  }
 }
 
 function setLegacyBacklog(status) {
@@ -168,9 +222,15 @@ function formatTime(value) {
     : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function cleanIpcError(error) {
-  const message = error instanceof Error ? error.message : "Pairing could not be completed.";
-  return message.replace(/^Error invoking remote method 'agent:pair': Error: /, "");
+function formatDateTime(value) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not available" : date.toLocaleString();
+}
+
+function cleanIpcError(error, fallback = "Pairing could not be completed.") {
+  const message = error instanceof Error ? error.message : fallback;
+  return message.replace(/^Error invoking remote method '[^']+': Error: /, "");
 }
 
 void refreshState();

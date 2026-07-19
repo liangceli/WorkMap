@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, shell, Tray } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, powerMonitor, shell, Tray } from "electron";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -84,6 +84,25 @@ function createTray() {
 
 function registerIpc() {
   ipcMain.handle("agent:get-state", getUiState);
+  ipcMain.handle("agent:get-diagnostics", () => runtime?.getDiagnosticsBundle() ?? null);
+  ipcMain.handle("agent:open-diagnostics-folder", async () => {
+    if (!runtime) return "Agent diagnostics are not available yet.";
+    return shell.openPath(runtime.getDiagnosticsDirectory());
+  });
+  ipcMain.handle("agent:export-diagnostics", async () => {
+    if (!runtime) throw new Error("Agent diagnostics are not available yet.");
+    const options = {
+      title: "Export WorkMap diagnostics",
+      defaultPath: `workmap-agent-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    };
+    const selection = mainWindow
+      ? await dialog.showSaveDialog(mainWindow, options)
+      : await dialog.showSaveDialog(options);
+    if (selection.canceled || !selection.filePath) return { canceled: true, path: null };
+    await runtime.exportDiagnostics(selection.filePath);
+    return { canceled: false, path: selection.filePath };
+  });
   ipcMain.handle("agent:pair", async (event, code: unknown) => {
     if (typeof code !== "string") throw new Error("Enter a WorkMap pairing code.");
     const progress = (stage: PairingProgress) => event.sender.send("agent:pair-progress", stage);

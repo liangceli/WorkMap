@@ -482,7 +482,9 @@ function TrackingV2DeviceCard({
   serverTime: string;
   nowMs: number;
 }) {
-  const healthy = device.fresh
+  const serverDiagnostic = describeTrackingV2ServerDiagnostic(device);
+  const healthy = !serverDiagnostic
+    && device.fresh
     && device.health?.connectionState === "ONLINE"
     && device.health.collectorState === "HEALTHY"
     && device.health.policyState === "ACTIVE";
@@ -511,7 +513,7 @@ function TrackingV2DeviceCard({
           <h3 style={styles.clientTitle}>{connectionLabel}</h3>
         </div>
         <span style={{ ...styles.connectionPill, ...(attention ? styles.connectionPillAttention : styles.connectionPillConnected) }}>
-          {device.fresh ? device.health?.migrationState ?? "V2" : "Stale"}
+          {serverDiagnostic?.pill ?? (device.fresh ? device.health?.migrationState ?? "V2" : "Stale")}
         </span>
       </div>
 
@@ -520,7 +522,7 @@ function TrackingV2DeviceCard({
         <strong style={styles.focusValue}>{currentValue}</strong>
         <span style={styles.focusMeta}>
           {device.current
-            ? `${device.current.state === "ACTIVE" ? "Focus active" : "Focused idle"} · ${formatDuration(provisionalMs / 1000)} provisional`
+            ? `${device.current.state === "ACTIVE" ? "Focus active" : "Focused idle"} - ${formatDuration(provisionalMs / 1000)} provisional`
             : device.fresh ? "Client is connected without a current focus subject" : "Fresh activity is unavailable"}
         </span>
         {device.current?.lastActivityEvidenceAt ? (
@@ -549,6 +551,22 @@ function TrackingV2DeviceCard({
         </span>
       </div>
 
+      {serverDiagnostic ? (
+        <div role="status" style={styles.serverDiagnostic}>
+          <AlertTriangle size={17} aria-hidden />
+          <div style={styles.serverDiagnosticBody}>
+            <strong>{serverDiagnostic.title}</strong>
+            <span>{serverDiagnostic.detail}</span>
+            <span><strong>Action:</strong> {serverDiagnostic.action}</span>
+            <small style={styles.serverDiagnosticMeta}>
+              Code {device.health?.serverDiagnosticCode}
+              {device.health?.serverDiagnosticAt ? ` - ${formatDateTime(device.health.serverDiagnosticAt)}` : ""}
+              {device.health?.serverDiagnosticRequestId ? ` - Request ${device.health.serverDiagnosticRequestId}` : ""}
+            </small>
+          </div>
+        </div>
+      ) : null}
+
       {device.correlation && device.clientType === "BROWSER_EXTENSION" ? (
         <p style={styles.correlationText}>
           Browser/App correlation: {formatTrackingState(device.correlation.state)}
@@ -570,6 +588,8 @@ function liveProvisionalDurationMs(device: TrackingV2LiveDevice, serverTime: str
 }
 
 function describeTrackingV2Connection(device: TrackingV2LiveDevice) {
+  const serverDiagnostic = describeTrackingV2ServerDiagnostic(device);
+  if (serverDiagnostic) return serverDiagnostic.title;
   if (!device.fresh) return "Signal interrupted";
   if (!device.health) return "Health pending";
   if (device.health.connectionState === "AUTH_REQUIRED") return "Pairing required";
@@ -579,6 +599,35 @@ function describeTrackingV2Connection(device: TrackingV2LiveDevice) {
   if (device.health.queue.deadLetter > 0) return "Rejected events need attention";
   if ((device.cursor?.missingRanges.length ?? 0) > 0) return "Waiting for missing events";
   return "Connected";
+}
+
+function describeTrackingV2ServerDiagnostic(device: TrackingV2LiveDevice) {
+  const code = device.health?.serverDiagnosticCode;
+  if (code === "SNAPSHOT_POLICY_LEASE_INVALID") {
+    return {
+      pill: "Policy",
+      title: "Policy lease needs refresh",
+      detail: "The server rejected the live snapshot because it used an expired or replaced policy lease.",
+      action: "Keep the client running. It will fetch the current policy and restart its live snapshot automatically.",
+    };
+  }
+  if (code === "SNAPSHOT_OBSERVATION_TIME_INVALID") {
+    return {
+      pill: "Clock",
+      title: "Client time could not be verified",
+      detail: "The live snapshot time was outside the range the server can safely accept.",
+      action: "Enable automatic Windows date, time, and time-zone settings. Restart the client only if the warning persists.",
+    };
+  }
+  if (code === "SNAPSHOT_OUTSIDE_POLICY_WINDOW") {
+    return {
+      pill: "Schedule",
+      title: "Outside configured work hours",
+      detail: "The client sent an active snapshot outside the monitoring window allowed by the current policy.",
+      action: "No manual action is normally required. Tracking resumes in the next allowed work window.",
+    };
+  }
+  return null;
 }
 
 function formatTrackingBrowserName(value: TrackingV2LiveDevice["browserName"]) {
@@ -1515,6 +1564,9 @@ const styles = {
   focusValue: { color: wm.colors.text, fontSize: "20px", lineHeight: 1.25, overflowWrap: "anywhere" as const },
   focusMeta: { color: wm.colors.textSecondary, fontSize: "12px", lineHeight: 1.4, overflowWrap: "anywhere" as const },
   healthGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px 12px", color: wm.colors.textSecondary },
+  serverDiagnostic: { display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", alignItems: "start", gap: "9px", border: `1px solid ${wm.colors.warningBorder}`, borderRadius: wm.radius.md, background: wm.colors.warningBg, color: wm.colors.warning, padding: "11px 12px", fontSize: "12px", lineHeight: 1.45 },
+  serverDiagnosticBody: { display: "grid", gap: "4px", minWidth: 0 },
+  serverDiagnosticMeta: { color: wm.colors.textMuted, overflowWrap: "anywhere" as const },
   correlationText: { margin: 0, color: wm.colors.infoText, fontSize: "11px", fontWeight: 800 },
   clientFooter: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px 16px", flexWrap: "wrap" as const, color: wm.colors.textMuted, fontSize: "11px", fontWeight: 700 },
   browserSignalRows: { display: "grid", gap: "12px" },
