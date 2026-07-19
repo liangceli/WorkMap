@@ -99,3 +99,23 @@ test("duplicate and delayed observations never create negative intervals", () =>
   assert.equal(stopped.intervals[0]?.durationMs, 3_000);
   assert.ok(stopped.intervals.every((interval) => interval.durationMs > 0));
 });
+
+test("persists fractional clock readings as one consistent integer-millisecond interval", () => {
+  const tracker = engine();
+  tracker.acquireFocus(APP_A, 1_000.25);
+
+  const settled = tracker.settle(16_000.75);
+  const interval = settled.intervals[0];
+
+  assert.ok(interval);
+  assert.equal(interval.startedMonotonicMs, 1_000);
+  assert.equal(interval.endedMonotonicMs, 16_001);
+  assert.equal(interval.durationMs, 15_001);
+  assert.ok(Number.isInteger(interval.startedMonotonicMs));
+  assert.ok(Number.isInteger(interval.endedMonotonicMs));
+  assert.ok(Number.isInteger(interval.durationMs));
+  assert.equal(
+    interval.durationMs,
+    interval.endedMonotonicMs - interval.startedMonotonicMs,
+  );
+});

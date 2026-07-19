@@ -1,5 +1,58 @@
 # Latest Implementation Handoff
 
+## 2026-07-19 Desktop Agent V2 Integer Interval Repair
+
+### Original Task Brief
+
+- Diagnose why a paired Desktop Agent could return successful empty sync health updates while activity did not reach Owner Reports.
+
+### Root Cause
+
+- Local Tracking v2 diagnostics showed 32 `DEAD_LETTER` intervals with `lastCode: INVALID_DURATION`.
+- The Windows/native monotonic clock can provide fractional milliseconds, while the Tracking v2 contract requires a positive integer `durationMs`. The Agent had persisted fractional values such as `1806.6998000014573`, so the API correctly rejected those intervals.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/src/desktopFocusEngineV2.ts`
+- `workmap/apps/desktop-agent/test/desktop-focus-v2.test.ts`
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/alpha-windows/package.json`
+- `workmap/apps/desktop-agent/scripts/build-alpha.mjs`
+- `workmap/apps/desktop-agent/src/version.ts`
+- `workmap/apps/desktop-agent/src/windowsActivityHost.ts`
+- `workmap/apps/desktop-agent/test/gui-release.test.ts`
+
+### Implementation Summary
+
+- Tracking v2 now canonicalizes persisted monotonic start/end boundaries to integer milliseconds and derives `durationMs` from those same two persisted values.
+- Intervals that cannot form a positive integer-millisecond range are not queued. This affects only sub-millisecond clock noise; it avoids invalid zero-duration payloads without creating overlap.
+- UTC projection now uses the same millisecond precision.
+- Desktop Agent release version is `0.6.3`.
+- Existing rejected v2 `DEAD_LETTER` rows remain retained for audit. They are not reclassified into valid work time. New Agent activity creates valid v2 intervals.
+
+### Verification Commands And Results
+
+- `pnpm.cmd --filter @workmap/desktop-agent test`: passed, 50/50.
+- `pnpm.cmd --filter @workmap/desktop-agent typecheck`: passed.
+- `pnpm.cmd --filter @workmap/desktop-agent release:windows`: passed after a sandbox-only packaging-download retry.
+- `git diff --check`: passed; only CRLF conversion notices.
+
+### Artifact
+
+- `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.3.exe` (115,431,951 bytes).
+
+### Manual QA
+
+- Not run. The monitored computer must install `0.6.3` before newly generated intervals can be confirmed by the server.
+
+### Intentionally Not Changed
+
+- No API, database, Prisma schema, migration, pairing, credential, Browser Extension, or legacy queue behavior changed.
+
+### Remaining Risks
+
+- The existing rejected v2 rows and retained v1 compatibility queue are historical data, not valid newly confirmed activity. They should remain visible to diagnostics but must not be counted as work time.
+
 ## 2026-07-19 Desktop Agent Queue Status Separation
 
 ### Original Task Brief

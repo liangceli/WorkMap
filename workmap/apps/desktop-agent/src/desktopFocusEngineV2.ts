@@ -201,6 +201,16 @@ export class DesktopFocusEngineV2 {
         endedAtMonotonicMs,
         startedAtMonotonicMs + DESKTOP_V2_MAX_INTERVAL_MS,
       );
+      // Native Windows and Node monotonic clocks can include fractional milliseconds.
+      // The Tracking v2 protocol persists integer millisecond boundaries, so derive all
+      // three persisted values from the same canonical boundaries.
+      const persistedStartedAtMonotonicMs = canonicalMonotonicMs(startedAtMonotonicMs);
+      const persistedEndedAtMonotonicMs = canonicalMonotonicMs(chunkEnd);
+      if (persistedEndedAtMonotonicMs <= persistedStartedAtMonotonicMs) {
+        current.confirmedThroughMonotonicMs = chunkEnd;
+        startedAtMonotonicMs = chunkEnd;
+        continue;
+      }
       const clientEventId = this.createId();
       const sequenceNumber = this.nextIntervalSequence++;
       intervals.push({
@@ -212,12 +222,12 @@ export class DesktopFocusEngineV2 {
         metric: current.state === "ACTIVE" ? "FOCUS_ACTIVE" : "FOCUS_IDLE",
         subjectKey: current.subject.subjectKey,
         displayName: current.subject.displayName,
-        startedAt: this.projectUtc(startedAtMonotonicMs),
-        endedAt: this.projectUtc(chunkEnd),
+        startedAt: this.projectUtc(persistedStartedAtMonotonicMs),
+        endedAt: this.projectUtc(persistedEndedAtMonotonicMs),
         clockEpochId: this.clock.clockEpochId,
-        startedMonotonicMs: startedAtMonotonicMs,
-        endedMonotonicMs: chunkEnd,
-        durationMs: chunkEnd - startedAtMonotonicMs,
+        startedMonotonicMs: persistedStartedAtMonotonicMs,
+        endedMonotonicMs: persistedEndedAtMonotonicMs,
+        durationMs: persistedEndedAtMonotonicMs - persistedStartedAtMonotonicMs,
         policyVersion: this.policy.policyVersion,
         policyLeaseId: this.policy.policyLeaseId!,
       });
@@ -264,10 +274,16 @@ export class DesktopFocusEngineV2 {
 
   private projectUtc(monotonicMs: number) {
     return new Date(
-      Date.parse(this.clock.clockEpochStartedAt) +
-        (monotonicMs - this.clock.clockEpochStartedMonotonicMs),
+      Math.round(
+        Date.parse(this.clock.clockEpochStartedAt) +
+          (monotonicMs - this.clock.clockEpochStartedMonotonicMs),
+      ),
     ).toISOString();
   }
+}
+
+function canonicalMonotonicMs(value: number) {
+  return Math.round(value);
 }
 
 function validateSubject(subject: DesktopFocusSubjectV2) {
