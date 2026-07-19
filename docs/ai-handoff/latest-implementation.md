@@ -1,5 +1,49 @@
 # Latest Implementation Handoff
 
+## 2026-07-19 Desktop Agent 0.6.4 Detailed Sync Failure Reasons
+
+### Original Task Brief
+
+- Replace the Desktop Agent Diagnostics panel's generic `HTTP_400` entries with a safe, complete, actionable reason for every future Tracking v2 sync rejection.
+- Retain one correlation request ID across the Agent UI, privacy-safe local log, and API structured Render log.
+
+### Changed Files
+
+- API failure contract and structured log: `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`.
+- Agent error parsing and persistence: `workmap/apps/desktop-agent/src/apiClient.ts`, `src/runtimeV2.ts`, `src/diagnosticLog.ts`, and `src/trackingV2Types.ts`.
+- Agent Diagnostics presentation: `workmap/apps/desktop-agent/renderer/app.js`, `renderer/index.html`, and `renderer/styles.css`.
+
+### Implementation Summary
+
+- API Tracking v2 failures now return and log a privacy-safe `reasonCode`, `reasonMessage`, `remediation`, `retryable`, `stage`, and `requestId` instead of only a generic HTTP status.
+- The Agent records those same safe fields in its persisted diagnostics and rolling NDJSON log, then shows a separate diagnostic card for each failed request: timestamp, HTTP status, code, stage, clear reason, automatic-retry decision, next action, and request ID.
+- Known server rejection codes include invalid policy lease, invalid observation time, outside-work-window snapshot, invalid duration, protocol-boundary mismatch, malformed payload, transaction failure, and credential authorization failure. Unknown future failures still show the server-safe message plus the request ID rather than being reduced to `HTTP_400`.
+- Historical failures created by older Agent builds cannot be reconstructed because their detailed server reason was never persisted. The UI labels these explicitly as historical rather than fabricating a cause.
+- No activity payload, window title, URL, credential, or token is added to UI diagnostics or logs.
+
+### Deployment Boundary
+
+- No Prisma schema, migration, database operation, pairing flow, or credential storage was changed.
+- Deploy the matching API before installing this rebuilt Agent. Existing device credentials remain valid after a normal 0.6.4 upgrade; re-pairing is not required solely for this diagnostics patch.
+
+### Windows Artifact
+
+- `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.4.exe`
+- Size: `115435291` bytes.
+- SHA-256: `B626573F6EDD3951B040B28B7625604FD2C0B9520227FFB6ACAAB4E2960E3B81`.
+
+### Verification
+
+- `pnpm --filter @workmap/api typecheck`: passed.
+- `pnpm --filter @workmap/desktop-agent typecheck`: passed.
+- `pnpm --filter @workmap/api build`: passed.
+- `pnpm --filter @workmap/desktop-agent release:windows`: passed after the packaging helper download was permitted.
+- `git diff --check`: passed; only existing line-ending notices were reported.
+
+### Manual QA
+
+- Not run. A future intentionally rejected request should show its detailed safe reason in the Agent Diagnostics panel, in `%LOCALAPPDATA%\\WorkMap\\DesktopAgent\\logs\\agent-YYYY-MM-DD.ndjson`, and in Render by searching the same request ID.
+
 ## 2026-07-19 Desktop Agent 0.6.4 Snapshot Isolation And Product Diagnostics
 
 ### Original Task Brief

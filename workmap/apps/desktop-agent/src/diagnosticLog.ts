@@ -30,6 +30,9 @@ export type AgentDiagnosticEvent = {
   queueDeadLetter?: number;
   httpStatus?: number | null;
   reasonCode?: string | null;
+  reasonMessage?: string | null;
+  remediation?: string | null;
+  retryable?: boolean | null;
   retryAt?: string | null;
   durationMs?: number;
   policyVersion?: string | null;

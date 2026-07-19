@@ -133,8 +133,31 @@ async function refreshDiagnostics(force) {
   }
   for (const failure of failures) {
     const item = document.createElement("li");
+    item.className = "diagnostic-error";
+    const heading = document.createElement("strong");
     const code = failure.errorCode || failure.failureStage || "SYNC_FAILED";
-    item.textContent = `${formatDateTime(failure.completedAt ?? failure.attemptedAt)} - ${code} - request ${failure.requestId}`;
+    const status = failure.httpStatus ? `HTTP ${failure.httpStatus}` : "No HTTP response";
+    const stage = failure.failureStage ? ` / ${failure.failureStage}` : "";
+    heading.textContent = `${formatDateTime(failure.completedAt ?? failure.attemptedAt)} - ${status} / ${code}${stage}`;
+    const reason = document.createElement("span");
+    reason.className = "diagnostic-error-reason";
+    reason.textContent = failure.errorMessage
+      ?? "Historical rejection: the Agent version that recorded this request did not save a detailed server reason.";
+    const request = document.createElement("code");
+    request.textContent = `Request ID: ${failure.requestId ?? "Not available"}`;
+    item.append(heading, reason, request);
+    if (failure.remediation) {
+      const remediation = document.createElement("span");
+      remediation.className = "diagnostic-error-remediation";
+      remediation.textContent = `What happens next: ${failure.remediation}`;
+      item.append(remediation);
+    }
+    if (failure.retryable !== null && failure.retryable !== undefined) {
+      const retry = document.createElement("span");
+      retry.className = "diagnostic-error-retry";
+      retry.textContent = failure.retryable ? "Automatic retry: yes" : "Automatic retry: no";
+      item.append(retry);
+    }
     list.append(item);
   }
 }

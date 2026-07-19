@@ -660,6 +660,14 @@ export class DesktopAgentRuntimeV2 {
           snapshotResult?.status === "REJECTED"
             ? snapshotResult.message
             : null,
+        remediation:
+          snapshotResult?.status === "REJECTED"
+            ? snapshotRejectionRemediation(snapshotResult.rejectionCode)
+            : null,
+        retryable:
+          snapshotResult?.status === "REJECTED"
+            ? snapshotRejectionRetryable(snapshotResult.rejectionCode)
+            : null,
         failureStage:
           snapshotResult?.status === "REJECTED" ? "policy" : null,
         outcome:
@@ -695,6 +703,18 @@ export class DesktopAgentRuntimeV2 {
           snapshotResult?.status === "REJECTED"
             ? snapshotResult.rejectionCode
             : null,
+        reasonMessage:
+          snapshotResult?.status === "REJECTED"
+            ? snapshotResult.message
+            : null,
+        remediation:
+          snapshotResult?.status === "REJECTED"
+            ? snapshotRejectionRemediation(snapshotResult.rejectionCode)
+            : null,
+        retryable:
+          snapshotResult?.status === "REJECTED"
+            ? snapshotRejectionRetryable(snapshotResult.rejectionCode)
+            : null,
         durationMs: Date.now() - startedAtMs,
       });
       if (snapshotResult?.status === "REJECTED") {
@@ -713,6 +733,8 @@ export class DesktopAgentRuntimeV2 {
         httpStatus: error instanceof AgentApiError ? error.status ?? null : null,
         errorCode: syncFailureCode(error),
         errorMessage: syncFailureMessage(error),
+        remediation: syncFailureRemediation(error),
+        retryable: syncFailureRetryable(error),
         failureStage: error instanceof AgentApiError ? error.responseStage ?? null : null,
         outcome: "FAILED",
       };
@@ -727,6 +749,9 @@ export class DesktopAgentRuntimeV2 {
         queueDeadLetter: this.store.stats().deadLetter,
         httpStatus: diagnostic.httpStatus,
         reasonCode: diagnostic.errorCode,
+        reasonMessage: diagnostic.errorMessage,
+        remediation: diagnostic.remediation,
+        retryable: diagnostic.retryable,
         retryAt: this.store.stats().nextRetryAt,
         durationMs: Date.now() - startedAtMs,
       });
@@ -1160,6 +1185,33 @@ function syncFailureMessage(error: unknown) {
       : null;
   }
   return null;
+}
+
+function syncFailureRemediation(error: unknown) {
+  return error instanceof AgentApiError
+    ? error.responseRemediation?.replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]").slice(0, 240) ?? null
+    : null;
+}
+
+function syncFailureRetryable(error: unknown) {
+  return error instanceof AgentApiError ? error.responseRetryable ?? null : null;
+}
+
+function snapshotRejectionRemediation(code: string) {
+  if (code === "SNAPSHOT_POLICY_LEASE_INVALID") {
+    return "The Agent will refresh its policy and send a new snapshot.";
+  }
+  if (code === "SNAPSHOT_OBSERVATION_TIME_INVALID") {
+    return "The Agent will create a new snapshot using its current server time anchor.";
+  }
+  if (code === "SNAPSHOT_OUTSIDE_POLICY_WINDOW") {
+    return "Focus collection is paused until the next approved work window.";
+  }
+  return "Use the request ID to inspect the server log if this repeats.";
+}
+
+function snapshotRejectionRetryable(code: string) {
+  return code !== "SNAPSHOT_OUTSIDE_POLICY_WINDOW";
 }
 
 function prependDiagnostic(

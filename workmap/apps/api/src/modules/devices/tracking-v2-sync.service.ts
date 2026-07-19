@@ -474,8 +474,7 @@ export class TrackingV2SyncService {
       };
     } catch (error) {
       const status = error instanceof HttpException ? error.getStatus() : 500;
-      const code = trackingSyncErrorCode(error, status, stage);
-      const message = trackingSyncErrorMessage(error);
+      const failure = describeTrackingSyncFailure(error, status, stage);
       this.logger.warn(
         JSON.stringify({
           event: "tracking_v2_sync",
@@ -484,17 +483,25 @@ export class TrackingV2SyncService {
           stage,
           intervalCount,
           status,
-          code,
-          message,
+          code: failure.code,
+          reasonMessage: failure.reasonMessage,
+          retryable: failure.retryable,
           durationMs: Date.now() - startedAtMs,
         }),
       );
-      throw withTrackingSyncRequestId(error, requestId, status, code, stage);
+      throw withTrackingSyncRequestId(error, requestId, status, failure, stage);
     }
   }
 }
 
 type TrackingV2SyncStage = "parse" | "policy" | "transaction" | "response";
+
+type TrackingSyncFailureDetail = {
+  code: string;
+  reasonMessage: string;
+  remediation: string;
+  retryable: boolean;
+};
 
 function trackingSyncErrorCode(
   error: unknown,
@@ -539,11 +546,112 @@ function trackingSyncErrorMessage(error: unknown) {
   return "Tracking sync failed unexpectedly.";
 }
 
+function describeTrackingSyncFailure(
+  error: unknown,
+  status: number,
+  stage: TrackingV2SyncStage,
+): TrackingSyncFailureDetail {
+  const rawMessage = trackingSyncErrorMessage(error);
+  let code = trackingSyncErrorCode(error, status, stage);
+
+  if (code === "TRACKING_POLICY_REJECTED") {
+    if (/policy lease/i.test(rawMessage)) code = "SNAPSHOT_POLICY_LEASE_INVALID";
+    else if (/observation time|too far in the future/i.test(rawMessage)) {
+      code = "SNAPSHOT_OBSERVATION_TIME_INVALID";
+    } else if (/outside.*work window/i.test(rawMessage)) {
+      code = "SNAPSHOT_OUTSIDE_POLICY_WINDOW";
+    }
+  }
+
+  const known: Record<string, Omit<TrackingSyncFailureDetail, "code">> = {
+    SNAPSHOT_POLICY_LEASE_INVALID: {
+      reasonMessage: "The Agent's live focus snapshot used a policy lease the server no longer accepts.",
+      remediation: "The Agent will refresh its policy and send a new snapshot. Do not reuse the rejected snapshot.",
+      retryable: true,
+    },
+    SNAPSHOT_OBSERVATION_TIME_INVALID: {
+      reasonMessage: "The snapshot time could not be verified against the server clock or protocol activation time.",
+      remediation: "The Agent will create a new snapshot using its current server time anchor.",
+      retryable: true,
+    },
+    SNAPSHOT_OUTSIDE_POLICY_WINDOW: {
+      reasonMessage: "The live focus snapshot falls outside this device's approved work window.",
+      remediation: "The Agent will pause focus collection until the next approved work window.",
+      retryable: false,
+    },
+    INVALID_DURATION: {
+      reasonMessage: "An activity interval had an invalid duration. Durations must be whole positive milliseconds.",
+      remediation: "The rejected interval is not retried. Newly generated intervals use whole milliseconds.",
+      retryable: false,
+    },
+    TRACKING_PROTOCOL_NOT_ACTIVATED: {
+      reasonMessage: "Tracking v2 has not been activated for this paired device.",
+      remediation: "The Agent must complete the v2 activation handshake before syncing activity.",
+      retryable: true,
+    },
+    TRACKING_PROTOCOL_BOUNDARY_MISMATCH: {
+      reasonMessage: "The Agent and server disagree on this device's tracking v2 activation boundary.",
+      remediation: "The Agent must refresh the protocol activation state before uploading activity.",
+      retryable: true,
+    },
+    TRACKING_PAYLOAD_INVALID: {
+      reasonMessage: "The tracking request format was rejected before activity data could be processed.",
+      remediation: "The Agent will retain valid queued records and requires an updated client if this repeats.",
+      retryable: false,
+    },
+    TRACKING_POLICY_REJECTED: {
+      reasonMessage: "The server rejected this tracking request because the current device policy could not authorize it.",
+      remediation: "Refresh the device policy; if the issue continues, use the request ID to inspect the server log.",
+      retryable: true,
+    },
+    TRACKING_TRANSACTION_REJECTED: {
+      reasonMessage: "The server could not safely write this tracking request.",
+      remediation: "The Agent will retry temporary failures. Use the request ID if the same error repeats.",
+      retryable: true,
+    },
+    TRACKING_RESPONSE_FAILED: {
+      reasonMessage: "The server could not finalize the tracking response.",
+      remediation: "The Agent will retry using the same idempotent event identities.",
+      retryable: true,
+    },
+    TRACKING_SYNC_INTERNAL: {
+      reasonMessage: "The WorkMap server could not complete the tracking request.",
+      remediation: "The Agent will retry. Use the request ID to inspect the server log if it persists.",
+      retryable: true,
+    },
+  };
+
+  const detail = known[code];
+  if (detail) return { code, ...detail };
+
+  if (status === 401 || status === 403) {
+    return {
+      code,
+      reasonMessage: "This device credential cannot authorize the requested tracking operation.",
+      remediation: "Pair the device again only if the credential was revoked or the device no longer belongs to this workspace.",
+      retryable: false,
+    };
+  }
+
+  return {
+    code,
+    reasonMessage:
+      status >= 500
+        ? "The WorkMap server could not complete the tracking request."
+        : rawMessage,
+    remediation:
+      status >= 500 || status === 429
+        ? "The Agent will retry automatically. Use the request ID to inspect the server log if it persists."
+        : "Review the reason code and request ID. The Agent will not repeatedly submit a request the server rejected.",
+    retryable: status >= 500 || status === 429,
+  };
+}
+
 function withTrackingSyncRequestId(
   error: unknown,
   requestId: string,
   status: number,
-  code: string,
+  failure: TrackingSyncFailureDetail,
   stage: TrackingV2SyncStage,
 ) {
   if (error instanceof HttpException) {
@@ -554,13 +662,30 @@ function withTrackingSyncRequestId(
       !Array.isArray(response)
         ? response
         : { statusCode: status, message: response };
-    return new HttpException({ ...body, code, stage, requestId }, status);
+    return new HttpException(
+      {
+        ...body,
+        message: failure.reasonMessage,
+        code: failure.code,
+        reasonCode: failure.code,
+        reasonMessage: failure.reasonMessage,
+        remediation: failure.remediation,
+        retryable: failure.retryable,
+        stage,
+        requestId,
+      },
+      status,
+    );
   }
   return new HttpException(
     {
       statusCode: status,
-      message: "Tracking sync could not be completed.",
-      code,
+      message: failure.reasonMessage,
+      code: failure.code,
+      reasonCode: failure.code,
+      reasonMessage: failure.reasonMessage,
+      remediation: failure.remediation,
+      retryable: failure.retryable,
       stage,
       requestId,
     },

@@ -1,5 +1,29 @@
 # Latest QA Handoff
 
+## 2026-07-19 Desktop Agent 0.6.4 Detailed Sync Failure Reasons QA
+
+### Reviewed Implementation
+
+- Reviewed the Tracking v2 API failure response, the Agent response parser and persisted diagnostic data, NDJSON diagnostic logging, and Diagnostics panel rendering.
+
+### Findings Ordered By Severity
+
+- Fixed - High: future Tracking v2 HTTP failures no longer collapse to a generic `HTTP_400`; the Agent retains a safe reason code, human-readable reason, remediation, retryability, stage, and request ID.
+- Fixed - High: the same request ID is present in the Agent display/local log and API structured Render log, allowing one failed request to be traced without exposing payload or credentials.
+- Expected limitation - Medium: historic entries written by earlier builds retain only `HTTP_400`; their unavailable reason is now stated explicitly rather than guessed.
+
+### Verification
+
+- API typecheck and production build: passed.
+- Desktop Agent typecheck and Windows NSIS build: passed.
+- Installer exists and SHA-256 was verified.
+- `git diff --check`: passed, with line-ending notices only.
+- Manual QA: not run; it requires deployment of the matching API plus installation of this rebuilt 0.6.4 Agent.
+
+### Risk
+
+- The UI can show every safe reason returned by the deployed API, but it cannot reconstruct a reason that an older API/Agent never persisted. Exact production wording therefore requires API and Agent to be deployed together.
+
 ## 2026-07-19 Desktop Agent 0.6.4 Snapshot Isolation And Diagnostics QA
 
 ### Reviewed Implementation

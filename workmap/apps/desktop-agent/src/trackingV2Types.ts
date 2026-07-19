@@ -188,6 +188,8 @@ export type TrackingSyncDiagnosticV2 = {
   httpStatus: number | null;
   errorCode: string | null;
   errorMessage?: string | null;
+  remediation?: string | null;
+  retryable?: boolean | null;
   failureStage?: "parse" | "policy" | "transaction" | "response" | null;
   outcome: "CONFIRMED" | "CONFIRMED_WITH_WARNING" | "FAILED";
 };

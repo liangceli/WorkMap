@@ -82,8 +82,13 @@ button:disabled { cursor: wait; opacity: .62; }
 .diagnostics-grid dt { color: #788697; font-size: 10px; text-transform: uppercase; }
 .diagnostics-grid dd { overflow-wrap: anywhere; margin: 4px 0 0; color: #18344f; font-size: 12px; font-weight: 750; }
 .diagnostics-errors { margin-top: 14px; color: #294b66; font-size: 12px; }
-.diagnostics-errors ol { display: grid; gap: 7px; margin: 8px 0 0; padding-left: 20px; color: #637287; }
-.diagnostics-errors li { overflow-wrap: anywhere; }
+.diagnostics-errors ol { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; color: #637287; }
+.diagnostic-error { display: grid; gap: 4px; overflow-wrap: anywhere; border-left: 3px solid #d18618; background: #fffaf0; padding: 9px 10px; }
+.diagnostic-error strong { color: #18344f; font-size: 12px; }
+.diagnostic-error-reason { color: #4b5f74; }
+.diagnostic-error-remediation { color: #27634f; }
+.diagnostic-error-retry { color: #687889; font-size: 11px; }
+.diagnostic-error code { color: #5f7184; font-size: 11px; overflow-wrap: anywhere; }
 .diagnostics-path { display: grid; gap: 5px; margin: 14px 0 0; color: #788697; font-size: 11px; }
 .diagnostics-path code { overflow-wrap: anywhere; color: #294b66; }
 .diagnostics-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

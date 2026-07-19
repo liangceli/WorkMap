@@ -16,6 +16,8 @@ export class AgentApiError extends Error {
     readonly retryAfterMs?: number,
     readonly requestId?: string,
     readonly responseStage?: "parse" | "policy" | "transaction" | "response",
+    readonly responseRemediation?: string,
+    readonly responseRetryable?: boolean,
   ) {
     super(message);
   }
@@ -219,6 +221,8 @@ async function requestJson<T>(
         readRetryAfterMs(response),
         detail.requestId ?? options.requestId,
         detail.stage,
+        detail.remediation,
+        detail.retryable,
       );
       if ((response.status >= 500 || response.status === 429) && attempt < retries) {
         await retryDelay(attempt);
@@ -241,14 +245,21 @@ async function readErrorDetail(response: Response) {
     try {
       const parsed = JSON.parse(text) as unknown;
       const message = extractErrorMessage(parsed);
+      const reasonMessage = extractReasonMessage(parsed);
       const code = extractErrorCode(parsed);
       const requestId = extractRequestId(parsed);
       const stage = extractTrackingStage(parsed);
+      const remediation = extractRemediation(parsed);
+      const retryable = extractRetryable(parsed);
       return {
-        ...(message ? { message: sanitizeErrorDetail(message) } : {}),
+        ...((reasonMessage ?? message)
+          ? { message: sanitizeErrorDetail(reasonMessage ?? message ?? "") }
+          : {}),
         ...(code ? { code: sanitizeErrorCode(code) } : {}),
         ...(requestId ? { requestId } : {}),
         ...(stage ? { stage } : {}),
+        ...(remediation ? { remediation: sanitizeErrorDetail(remediation) } : {}),
+        ...(retryable !== undefined ? { retryable } : {}),
       };
     } catch {
       // Fall back to the raw text below.
@@ -267,6 +278,24 @@ function extractErrorMessage(value: unknown): string | undefined {
   if (typeof body.message === "string") return body.message;
   if (typeof body.error === "string") return body.error;
   return undefined;
+}
+
+function extractReasonMessage(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const reasonMessage = (value as Record<string, unknown>).reasonMessage;
+  return typeof reasonMessage === "string" ? reasonMessage : undefined;
+}
+
+function extractRemediation(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const remediation = (value as Record<string, unknown>).remediation;
+  return typeof remediation === "string" ? remediation : undefined;
+}
+
+function extractRetryable(value: unknown): boolean | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const retryable = (value as Record<string, unknown>).retryable;
+  return typeof retryable === "boolean" ? retryable : undefined;
 }
 
 function extractErrorCode(value: unknown): string | undefined {
