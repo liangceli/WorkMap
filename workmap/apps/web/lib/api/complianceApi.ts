@@ -4,6 +4,7 @@ import type {
   WorkMapApiCompliancePolicy,
   WorkMapApiPolicyAcknowledgement,
   WorkMapApiPolicyScheduleTimeZone,
+  WorkMapApiPolicyWorkHours,
 } from "./apiTypes";
 
 export function getCompliancePolicy(options?: ApiClientOptions) {
@@ -26,6 +27,19 @@ export function confirmCompliancePolicyScheduleTimeZone(
   return workMapApiPatch<WorkMapApiPolicyScheduleTimeZone>(
     `/compliance/policy/${encodeURIComponent(policyId)}/schedule-time-zone`,
     { scheduleTimeZone },
+    options,
+  );
+}
+
+export function updateCompliancePolicyWorkHours(
+  policyId: string,
+  workdayStart: string,
+  workdayEnd: string,
+  options?: ApiClientOptions,
+) {
+  return workMapApiPatch<WorkMapApiPolicyWorkHours>(
+    `/compliance/policy/${encodeURIComponent(policyId)}/work-hours`,
+    { workdayStart, workdayEnd },
     options,
   );
 }

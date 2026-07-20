@@ -32,6 +32,32 @@ test("policy lease windows include Monday work hours in Australia/Adelaide", () 
   );
 });
 
+test("extended Adelaide test schedule remains open until 23:00 local time", () => {
+  const issuedAt = new Date("2026-07-19T08:12:19.000Z");
+  const expiresAt = new Date("2026-07-20T17:12:19.000Z");
+  const windows = buildAllowedUtcWindows({
+    issuedAt,
+    expiresAt,
+    ...policy,
+    workdayEnd: "23:00",
+  });
+
+  assert.ok(
+    windows.some(
+      (window) =>
+        window.startsAt === "2026-07-19T23:30:00.000Z" &&
+        window.endsAt === "2026-07-20T13:30:00.000Z",
+    ),
+  );
+  assert.equal(
+    isInstantInsidePolicyWindowsV2(
+      "2026-07-20T12:45:00.000Z",
+      windows,
+    ),
+    true,
+  );
+});
+
 test("stale stored lease windows are not reused", () => {
   const issuedAt = new Date("2026-07-19T08:12:19.000Z");
   const expiresAt = new Date("2026-07-20T08:12:19.000Z");

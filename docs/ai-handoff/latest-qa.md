@@ -1,5 +1,46 @@
 # Latest QA Handoff
 
+## 2026-07-20 Test Policy Window Extension To 23:00 QA
+
+### Reviewed Implementation
+
+- Reviewed the real policy source, Adelaide timezone conversion, lease reuse rules, Desktop Agent 0.6.6 five-minute refresh behavior, Compliance RBAC, tenant scoping, Web control, demo seed, and the complete current diff.
+
+### Findings Ordered By Severity
+
+- Fixed - High: the active test policy ended at 17:00, so evening App snapshots and intervals were correctly rejected even while secure heartbeat remained online. The workspace can now explicitly extend the schedule to 23:00 through an authenticated policy endpoint.
+- Verified - High: a `09:00-23:00` Adelaide policy creates a lease ending at `13:30Z` for 2026-07-20, and the policy predicates accept evening instants inside that window.
+- Verified - High: no Agent update is required. 0.6.6 refreshes within five minutes, the API rejects stale-window lease reuse, and the changed lease ID makes the runtime adopt the new window.
+- Verified - High: the route requires `manageCompliancePolicy` and scopes the policy lookup to the authenticated company; Employee and cross-tenant attempts fail.
+- Verified - High: in-place changes may expand but cannot narrow the schedule, so an older issued lease cannot temporarily authorize a broader window after a privacy-reducing policy edit.
+- Remaining - High: the production tenant has not yet been updated because there was no authenticated browser session and the new endpoint is not deployed. Source completion is not the same as a live policy mutation.
+- Remaining - Medium: existing schema/onboarding defaults stay at 17:00 for future tenants; this avoids expanding collection globally during a single-workspace testing adjustment.
+
+### Test And Verification Status
+
+- Focused work-hours/policy lease tests: pass, `10/10`.
+- API typecheck/lint/build: pass.
+- Web typecheck/lint/build: pass.
+- Full API suite: fail, `39/40`; only the unrelated fixed-date ingestion test is older than the existing 31-day limit.
+- Full Web suite: fail, `71/75`; all four failures are pre-existing Reports source/render assertions outside the current Compliance diff.
+- `git diff --check`: pass.
+- High-confidence secret scan: pass for the current diff; no credential, token, private URL, or database secret was introduced.
+
+### Manual QA Status
+
+- Not run for the live policy change, real Windows Agent refresh, or evening App interval appearing in Reports.
+- Browser inspection only: no authenticated WorkMap tenant session was available, so no production state was modified.
+
+### Security And Scope Review
+
+- No all-day hardcode, policy deletion, tenant bypass, role weakening, credential change, re-pair, schema migration, production SQL, or new Desktop Agent binary was introduced.
+- The request changes only the current test workspace after an authorised save. Heartbeat remains independent and continues outside the collection schedule.
+
+### Pass/Fail Recommendation
+
+- Pass for the scoped API/Web implementation, Adelaide lease behavior, automated policy boundaries, and build checks.
+- Proceed to commit/push and coordinated API/Web deployment, then perform the Owner save and real-device verification. Do not call the live 09:00-23:00 behavior complete until Agent Diagnostics and one newly confirmed Reports interval prove it.
+
 ## 2026-07-20 Desktop Agent 0.6.6 Real-Time Input Lane And Clock-Correct Health QA
 
 ### Reviewed Implementation

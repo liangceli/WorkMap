@@ -378,6 +378,15 @@ export type WorkMapApiPolicyScheduleTimeZone = {
   scheduleTimeZoneState: "CONFIRMED";
 };
 
+export type WorkMapApiPolicyWorkHours = {
+  id: string;
+  policyVersion: string;
+  workHoursOnly: boolean;
+  workdayStart: string;
+  workdayEnd: string;
+  scheduleTimeZone: string | null;
+};
+
 export type WorkMapApiTrackingAudit = {
   scope: "user" | "company";
   userId: string | null;

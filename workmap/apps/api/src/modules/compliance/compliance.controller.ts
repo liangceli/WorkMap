@@ -61,4 +61,25 @@ export class ComplianceController {
       scheduleTimeZoneState: "CONFIRMED" as const,
     };
   }
+
+  @Patch("policy/:policyId/work-hours")
+  async updatePolicyWorkHours(
+    @CurrentContext() context: RequestContext,
+    @Param("policyId", ParseUUIDPipe) policyId: string,
+    @Body() body: unknown,
+  ) {
+    const policy = await this.compliance.updatePolicyWorkHours(
+      context,
+      policyId,
+      body,
+    );
+    return {
+      id: policy.id,
+      policyVersion: policy.policyVersion,
+      workHoursOnly: policy.workHoursOnly,
+      workdayStart: policy.workdayStart,
+      workdayEnd: policy.workdayEnd,
+      scheduleTimeZone: policy.scheduleTimeZone,
+    };
+  }
 }

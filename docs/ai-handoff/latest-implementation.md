@@ -1,5 +1,62 @@
 # Latest Implementation Handoff
 
+## 2026-07-20 Test Policy Window Extension To 23:00
+
+### Original Task Brief
+
+- Extend the current test workspace monitoring schedule from `09:00-17:00` to `09:00-23:00` in `Australia/Adelaide`, because evening Desktop Agent App activity was correctly outside the old policy window and therefore could not be accepted into Reports.
+- Preserve policy, tenant, role, acknowledgement, device credential, and lease enforcement rather than hardcoding all-day collection or suppressing policy warnings.
+
+### Confirmed Behavior And Scope
+
+- The 17:00 cutoff is stored on the active `MonitoringPolicy`; it is not hardcoded in Desktop Agent 0.6.6. The observed post-17:00 `SNAPSHOT_OUTSIDE_POLICY_WINDOW` rejection was therefore accurate under the old `09:00-17:00` configuration.
+- The change adds a safe tenant-scoped way for an authorised policy administrator to extend the active schedule. It does not perform a cross-tenant production data migration and does not silently change the user's currently deployed tenant without an authenticated Owner/HR Admin action.
+- For Adelaide on 2026-07-20, `09:00-23:00` produces the allowed UTC window `2026-07-19T23:30:00.000Z` through `2026-07-20T13:30:00.000Z`.
+- Desktop Agent 0.6.6 refreshes policy every five minutes and treats a changed `policyLeaseId` as a policy boundary even when `policyVersion` remains `v1`. The API refuses to reuse a lease whose windows do not match the updated schedule, so it creates a matching lease and the installed Agent can adopt it without a new Agent release or re-pair.
+
+### Changed Files
+
+- API work-hours route and validation: `workmap/apps/api/src/modules/compliance/compliance.controller.ts` and `compliance.service.ts`.
+- API policy regression coverage: `workmap/apps/api/test/compliance-work-hours.test.ts` and `tracking-v2-policy-lease.test.ts`.
+- Owner/HR Admin Compliance control and API contract: `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx`, `workmap/apps/web/lib/api/complianceApi.ts`, and `apiTypes.ts`.
+- Demo seed schedule: `workmap/prisma/seed.ts`.
+
+### Implementation Summary
+
+- Added `PATCH /compliance/policy/:policyId/work-hours` for the active policy in the authenticated tenant. It accepts strict 24-hour `HH:MM` times, requires a same-day end later than the start, and retains the existing `manageCompliancePolicy` capability boundary (`OWNER` and `HR_ADMIN`).
+- Cross-tenant policy IDs return not found. Employees cannot mutate policy.
+- An existing policy can only be extended in place. Narrowing requires a new policy version, preventing a still-valid older lease from temporarily preserving a broader collection window.
+- The Compliance page now shows the effective schedule and gives only Owner/HR Admin users start/end inputs plus `Save work hours`. After save it states that clients receive the matching lease within five minutes.
+- Demo seed update/create values now use `09:00-23:00`. This is not a production database mutation by itself.
+
+### Role, Privacy, And Security Behavior
+
+- Tenant isolation, device credentials, policy acknowledgement, collection switches, schedule timezone, lease validation, Owner/Employee report boundaries, and Platform Admin separation remain enforced.
+- No token, credential, URL, window title, keystroke/input, page content, or complete activity payload is logged or rendered.
+- Collection remains work-hours-only. This is a specific test-window extension, not all-day collection and not a removal of policy enforcement.
+
+### Verification
+
+- Focused API work-hours and lease tests: pass, `10/10`. Coverage includes authorised extension, Employee rejection, cross-tenant rejection, superseded-policy rejection, invalid/overnight rejection, narrowing rejection, Adelaide 23:00 UTC conversion, stale-lease non-reuse, and in-window predicates.
+- API typecheck, lint, and production build: pass.
+- Web typecheck, lint, and production build: pass.
+- Full API suite: `39/40`; the only failure is the pre-existing fixed-date `tracking-reports-verification.test.ts`, now older than the 31-day ingestion limit (`Activity event is too old`).
+- Full Web suite: `71/75`; the four pre-existing brittle Reports render/source assertions remain unrelated to the Compliance schedule diff.
+- `git diff --check`: pass. Secret scan status is recorded in the matching QA handoff.
+
+### Manual QA, Intentionally Unchanged, And Remaining Risks
+
+- An in-app browser check found no authenticated production session; it reached the public WorkMap page. Therefore no live tenant row was changed, no API/Web deployment was performed, and no real post-17:00 Agent -> API -> Reports manual loop is claimed as passed.
+- The Prisma schema default and tenant-onboarding default remain `09:00-17:00`. They were intentionally not changed because the request applies to the current test workspace, while changing defaults would alter future tenants globally. The demo seed is `09:00-23:00`.
+- Desktop Agent remains 0.6.6; no installer, re-pair, schema migration, or database migration is required.
+- The currently deployed tenant remains on its existing schedule until the API/Web changes are deployed and an Owner/HR Admin saves `09:00` / `23:00` on Compliance.
+
+### Suggested Next Steps
+
+1. Commit and push this change, then deploy API and Web together. Do not run a broad production seed or cross-tenant SQL update.
+2. Sign in as Owner/HR Admin, open Compliance, set `Start 09:00` and `End 23:00`, and select `Save work hours`.
+3. Within five minutes, verify Agent Diagnostics shows `Australia/Adelaide - 09:00-23:00` and the allowed UTC end is `13:30Z` for 2026-07-20; focus an App long enough to close an interval and confirm Reports increases.
+
 ## 2026-07-20 Desktop Agent 0.6.6 Real-Time Input Lane And Clock-Correct Health
 
 ### Original Task Brief

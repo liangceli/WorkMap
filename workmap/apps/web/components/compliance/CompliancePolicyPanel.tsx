@@ -6,6 +6,7 @@ import {
   acknowledgeCompliancePolicy,
   confirmCompliancePolicyScheduleTimeZone,
   getCompliancePolicy,
+  updateCompliancePolicyWorkHours,
 } from "../../lib/api/complianceApi";
 import { getWorkMapApiAuthOptions, type WorkMapApiAuthResult } from "../../lib/api/apiAuth";
 import type { WorkMapApiCompliancePolicy } from "../../lib/api/apiTypes";
@@ -43,6 +44,10 @@ export function CompliancePolicyPanel() {
   const [loading, setLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState(false);
   const [confirmingTimeZone, setConfirmingTimeZone] = useState(false);
+  const [canManageWorkHours, setCanManageWorkHours] = useState(false);
+  const [workdayStart, setWorkdayStart] = useState("09:00");
+  const [workdayEnd, setWorkdayEnd] = useState("23:00");
+  const [savingWorkHours, setSavingWorkHours] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +67,7 @@ export function CompliancePolicyPanel() {
       }
 
       setAuthSource(auth.source);
+      setCanManageWorkHours(auth.role === "OWNER" || auth.role === "HR_ADMIN");
       const policyResult = await getCompliancePolicy(auth.options);
 
       if (cancelled) {
@@ -77,6 +83,8 @@ export function CompliancePolicyPanel() {
       }
 
       setPolicy(policyResult.data);
+      setWorkdayStart(policyResult.data.workdayStart);
+      setWorkdayEnd(policyResult.data.workdayEnd);
       const storedAcknowledgement = readAcknowledgement(auth, policyResult.data.id);
       setAcknowledgedAt(storedAcknowledgement);
       setStatusText(
@@ -131,7 +139,7 @@ export function CompliancePolicyPanel() {
 
     const auth = await getWorkMapApiAuthOptions();
     if (!auth.available) {
-      setStatusText("Sign in with an Owner or Manager account before confirming the workspace time zone.");
+      setStatusText("Sign in with an authorised policy administrator account before confirming the workspace time zone.");
       return;
     }
 
@@ -154,6 +162,43 @@ export function CompliancePolicyPanel() {
       : current);
     setStatusText(
       `Workspace schedule time zone confirmed as ${result.data.scheduleTimeZone}. Paired tracking clients will retry activation automatically.`,
+    );
+  };
+
+  const saveWorkHours = async () => {
+    if (!policy) return;
+
+    const auth = await getWorkMapApiAuthOptions();
+    if (!auth.available) {
+      setStatusText("Sign in with an authorised policy administrator account before changing work hours.");
+      return;
+    }
+
+    setSavingWorkHours(true);
+    const result = await updateCompliancePolicyWorkHours(
+      policy.id,
+      workdayStart,
+      workdayEnd,
+      auth.options,
+    );
+    setSavingWorkHours(false);
+
+    if (!result.ok) {
+      setStatusText(result.error);
+      return;
+    }
+
+    setPolicy((current) => current
+      ? {
+          ...current,
+          workdayStart: result.data.workdayStart,
+          workdayEnd: result.data.workdayEnd,
+        }
+      : current);
+    setWorkdayStart(result.data.workdayStart);
+    setWorkdayEnd(result.data.workdayEnd);
+    setStatusText(
+      `Collection schedule updated to ${result.data.workdayStart}-${result.data.workdayEnd} ${result.data.scheduleTimeZone ?? "workspace time"}. Paired clients will receive a matching policy lease within five minutes.`,
     );
   };
 
@@ -194,7 +239,7 @@ export function CompliancePolicyPanel() {
             <p style={styles.panelLabel}>Workspace schedule setup</p>
             <h2 style={styles.panelTitle}>Confirm the tracking time zone</h2>
             <p style={styles.panelText}>
-              Paired Desktop Agents and Browser Extensions wait for this Owner or Manager confirmation before tracking starts. The suggested time zone for this browser is {getBrowserTimeZone()}.
+              Paired Desktop Agents and Browser Extensions wait for an authorised policy administrator to confirm this before tracking starts. The suggested time zone for this browser is {getBrowserTimeZone()}.
             </p>
           </div>
           <button
@@ -205,6 +250,50 @@ export function CompliancePolicyPanel() {
           >
             {confirmingTimeZone ? "Confirming time zone..." : `Confirm ${getBrowserTimeZone()}`}
           </button>
+        </section>
+      ) : null}
+
+      {policy?.workHoursOnly ? (
+        <section style={styles.ackPanel}>
+          <div>
+            <p style={styles.panelLabel}>Collection schedule</p>
+            <h2 style={styles.panelTitle}>
+              {policy.workdayStart}-{policy.workdayEnd} {policy.scheduleTimeZone ?? "time zone pending"}
+            </h2>
+            <p style={styles.panelText}>
+              Foreground App collection runs only inside this local workspace window. Secure heartbeats continue outside it. This control extends an active schedule; narrowing it requires a new policy version so existing leases cannot keep a broader window.
+            </p>
+          </div>
+          {canManageWorkHours ? (
+            <div style={styles.scheduleEditor}>
+              <label style={styles.timeField}>
+                <span>Start</span>
+                <input
+                  type="time"
+                  value={workdayStart}
+                  onChange={(event) => setWorkdayStart(event.target.value)}
+                  style={styles.timeInput}
+                />
+              </label>
+              <label style={styles.timeField}>
+                <span>End</span>
+                <input
+                  type="time"
+                  value={workdayEnd}
+                  onChange={(event) => setWorkdayEnd(event.target.value)}
+                  style={styles.timeInput}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void saveWorkHours()}
+                disabled={savingWorkHours}
+                style={styles.primaryButton}
+              >
+                {savingWorkHours ? "Saving schedule..." : "Save work hours"}
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -390,5 +479,27 @@ const styles = {
     ...wmStyles.primaryButton,
     flex: "0 0 auto",
     padding: "10px 14px",
+  },
+  scheduleEditor: {
+    display: "flex",
+    alignItems: "flex-end",
+    gap: "10px",
+    flexWrap: "wrap" as const,
+  },
+  timeField: {
+    display: "grid",
+    gap: "5px",
+    color: wm.colors.textSecondary,
+    fontSize: "12px",
+    fontWeight: 800,
+  },
+  timeInput: {
+    minHeight: "42px",
+    border: `1px solid ${wm.colors.border}`,
+    borderRadius: wm.radius.md,
+    background: wm.colors.surface,
+    color: wm.colors.text,
+    padding: "8px 10px",
+    font: "inherit",
   },
 };

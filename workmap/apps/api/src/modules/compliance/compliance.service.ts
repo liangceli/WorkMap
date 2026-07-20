@@ -129,4 +129,93 @@ export class ComplianceService {
       },
     });
   }
+
+  async updatePolicyWorkHours(
+    context: RequestContext,
+    monitoringPolicyId: string,
+    input: unknown,
+  ) {
+    if (!canManageCompliance(context)) {
+      throw new ForbiddenException(
+        "Only an authorised policy administrator can change monitoring work hours.",
+      );
+    }
+    const body = readBody(input);
+    const workdayStart = readClockTime(body.workdayStart, "workdayStart");
+    const workdayEnd = readClockTime(body.workdayEnd, "workdayEnd");
+    if (clockMinutes(workdayEnd) <= clockMinutes(workdayStart)) {
+      throw new BadRequestException(
+        "workdayEnd must be later than workdayStart on the same day.",
+      );
+    }
+
+    const policy = await this.prisma.monitoringPolicy.findFirst({
+      where: {
+        companyId: context.companyId,
+        activeFrom: { lte: new Date() },
+      },
+      orderBy: { activeFrom: "desc" },
+      select: {
+        id: true,
+        policyVersion: true,
+        workHoursOnly: true,
+        workdayStart: true,
+        workdayEnd: true,
+        scheduleTimeZone: true,
+      },
+    });
+    if (!policy || policy.id !== monitoringPolicyId) {
+      throw new NotFoundException("Active monitoring policy not found.");
+    }
+    if (!policy.workHoursOnly) {
+      throw new BadRequestException(
+        "This policy does not currently restrict collection to work hours.",
+      );
+    }
+    if (
+      clockMinutes(workdayStart) > clockMinutes(policy.workdayStart) ||
+      clockMinutes(workdayEnd) < clockMinutes(policy.workdayEnd)
+    ) {
+      throw new BadRequestException(
+        "The current policy lease can only be extended. Create a new policy version before narrowing work hours.",
+      );
+    }
+    if (
+      policy.workdayStart === workdayStart &&
+      policy.workdayEnd === workdayEnd
+    ) {
+      return policy;
+    }
+
+    return this.prisma.monitoringPolicy.update({
+      where: { id: policy.id },
+      data: { workdayStart, workdayEnd },
+      select: {
+        id: true,
+        policyVersion: true,
+        workHoursOnly: true,
+        workdayStart: true,
+        workdayEnd: true,
+        scheduleTimeZone: true,
+      },
+    });
+  }
+}
+
+function readBody(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function readClockTime(value: unknown, label: string) {
+  if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    throw new BadRequestException(`${label} must use 24-hour HH:MM format.`);
+  }
+  return value;
+}
+
+function clockMinutes(value: string) {
+  const [hours = "0", minutes = "0"] = value.split(":");
+  return Number(hours) * 60 + Number(minutes);
 }
