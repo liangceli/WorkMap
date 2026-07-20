@@ -5016,3 +5016,39 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - Focused Desktop GUI/release tests passed: 3/3.
 - NSIS Windows release build completed in 82.5 seconds and the installer/blockmap were confirmed present and non-empty.
 - No deployment, database, pairing, or runtime queue behavior was changed while producing this artifact.
+
+---
+
+## 2026-07-20 Tracking V2 Monday Policy-Window Recovery
+
+### Original Task Brief
+
+- Investigate a Monday-morning Desktop Agent diagnostic reporting `SNAPSHOT_OUTSIDE_POLICY_WINDOW` even though the configured Adelaide workday should include that time.
+
+### Runtime Fix
+
+- `TrackingV2PolicyService` no longer reuses a non-expired policy lease solely because its ID, policy version, and expiry match. It recomputes the expected UTC work windows for the lease lifetime and replaces a stale or malformed stored window set.
+- Confirmed activity intervals remain strict: their complete start-to-end duration must stay inside an approved policy window before they can enter report totals.
+- Live focus snapshots are now correctly treated as current-state data rather than confirmed duration. Their latest observation must be in an approved window, and their state start must be valid and no later than that observation. This allows a valid Monday live snapshot to recover after an earlier window ended without admitting weekend time into totals.
+
+### Changed Files
+
+- `workmap/apps/api/src/modules/devices/tracking-v2-policy.service.ts`
+- `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`
+- `workmap/packages/shared-types/src/tracking-v2.ts`
+- `workmap/apps/api/test/tracking-v2-policy-lease.test.ts`
+
+### Deployment And Client Behavior
+
+- No Prisma schema, migration, credential, pairing, Desktop Agent package, or Browser Extension package change is required.
+- Deploy the API source change. The next Desktop Agent policy refresh will receive a newly issued lease if its stored lease window set is inconsistent. The normal refresh interval is five minutes; restarting the Agent after deployment requests the policy immediately and preserves its existing pairing/local data.
+
+### Verification
+
+- Focused policy regression tests passed: 3/3, covering Adelaide Monday work hours, stale lease replacement, and recovery of a live snapshot without admitting a cross-window duration.
+- `pnpm.cmd --filter @workmap/api typecheck`: passed.
+- `pnpm.cmd --filter @workmap/api build`: passed.
+
+### Manual QA And Remaining Risk
+
+- Production deployment and Monday-window live validation have not been run in this task. After deployment, verify that a live Desktop Agent snapshot during a configured work window no longer reports `SNAPSHOT_OUTSIDE_POLICY_WINDOW`, while an interval spanning outside the window remains excluded from confirmed totals.

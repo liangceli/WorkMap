@@ -379,7 +379,17 @@ export class TrackingV2PolicyService {
         windowSetHash: true,
       },
     });
-    if (reusable) return reusable;
+    if (
+      reusable &&
+      leaseWindowSetMatchesPolicy(reusable, {
+        scheduleTimeZone,
+        workHoursOnly: policy.workHoursOnly,
+        workdayStart: policy.workdayStart,
+        workdayEnd: policy.workdayEnd,
+      })
+    ) {
+      return reusable;
+    }
 
     const issuedAt = new Date(
       Math.max(now.getTime(), policy.activeFrom.getTime()),
@@ -451,7 +461,7 @@ function assertCompleteV2Identity(device: {
   }
 }
 
-function buildAllowedUtcWindows(input: {
+export function buildAllowedUtcWindows(input: {
   issuedAt: Date;
   expiresAt: Date;
   scheduleTimeZone: string;
@@ -615,6 +625,31 @@ function hashWindows(windows: TrackingPolicyUtcWindowV2[]) {
   return createHash("sha256")
     .update(JSON.stringify(windows))
     .digest("hex");
+}
+
+export function leaseWindowSetMatchesPolicy(
+  lease: {
+    issuedAt: Date;
+    expiresAt: Date;
+    allowedUtcWindows: unknown;
+    windowSetHash: string;
+  },
+  policy: {
+    scheduleTimeZone: string;
+    workHoursOnly: boolean;
+    workdayStart: string;
+    workdayEnd: string;
+  },
+) {
+  const expected = buildAllowedUtcWindows({
+    issuedAt: lease.issuedAt,
+    expiresAt: lease.expiresAt,
+    ...policy,
+  });
+  const expectedHash = hashWindows(expected);
+  const storedHash = hashWindows(readStoredWindows(lease.allowedUtcWindows));
+
+  return lease.windowSetHash === expectedHash && storedHash === expectedHash;
 }
 
 function readStoredWindows(value: unknown): TrackingPolicyUtcWindowV2[] {

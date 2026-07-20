@@ -552,6 +552,29 @@ export function isIntervalInsidePolicyWindowsV2(
   });
 }
 
+/**
+ * Live snapshots are a current-state indicator, not confirmed duration. Their
+ * most recent observation must be inside a policy window, while persisted
+ * activity intervals continue to require their full duration to be inside one.
+ */
+export function isInstantInsidePolicyWindowsV2(
+  instant: string,
+  windows: TrackingPolicyUtcWindowV2[],
+): boolean {
+  const instantMs = parseUtcMs(instant);
+  if (instantMs === null) return false;
+  return windows.some((window) => {
+    const windowStart = parseUtcMs(window.startsAt);
+    const windowEnd = parseUtcMs(window.endsAt);
+    return (
+      windowStart !== null &&
+      windowEnd !== null &&
+      instantMs >= windowStart &&
+      instantMs < windowEnd
+    );
+  });
+}
+
 export type FirstStateProvisionalContextV2 = {
   snapshot: LiveFocusSnapshotV2;
   contiguousThroughSequence: number;

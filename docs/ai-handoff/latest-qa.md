@@ -3372,3 +3372,29 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 
 - No live upgrade or re-pairing test was run. A normal in-place upgrade is designed to retain local pairing, but uninstalling with local-data deletion or a server-side device revoke requires a new pairing code.
 - Matching API diagnostics must be deployed with the `0.6.2` installer to correlate the Agent's local `requestId` with Render logs.
+
+---
+
+## 2026-07-20 Tracking V2 Monday Policy-Window Recovery QA
+
+### Reviewed Implementation
+
+- Reviewed policy-lease reuse and live snapshot validation after a Monday-morning `SNAPSHOT_OUTSIDE_POLICY_WINDOW` diagnostic.
+- Verified the policy-window calculation for Australia/Adelaide includes Monday 10:35 within the configured 09:00-17:00 workday.
+
+### Findings Ordered By Severity
+
+- Fixed - High: a non-expired but stale/malformed stored lease could be reused without revalidating its allowed UTC windows.
+- Fixed - High: live snapshots were validated as if their whole state duration were a confirmed interval; a state spanning a previous policy boundary could prevent a valid in-window current observation from being stored.
+- Preserved - Required privacy/policy boundary: confirmed duration intervals are still rejected unless their full duration stays inside an approved window.
+
+### Verification
+
+- Focused `tracking-v2-policy-lease` tests: 3/3 passed.
+- `pnpm.cmd --filter @workmap/api typecheck`: passed.
+- `pnpm.cmd --filter @workmap/api build`: passed.
+
+### Manual QA Status And Risk
+
+- Deferred pending API deployment. Live production validation is still required because this task cannot exercise the employee Windows session or deployed policy lease.
+- No migration, re-pairing, client reinstall, credential change, or report aggregation schema change is required for this API-only correction.

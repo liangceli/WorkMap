@@ -29,6 +29,7 @@ import {
   canonicalizeActivityIntervalV2,
   computeTrackingSequenceCoverageV2,
   isIntervalInsidePolicyWindowsV2,
+  isInstantInsidePolicyWindowsV2,
   normalizeActivityIntervalV2,
   validateActivityIntervalV2,
   type ActivityIntervalV2,
@@ -919,14 +920,15 @@ function validateSnapshot(
       message: "The live focus observation time could not be verified.",
     };
   }
+  const stateStartedAt = snapshot.stateStartedAt
+    ? readIso(snapshot.stateStartedAt, "stateStartedAt")
+    : null;
   if (
     snapshot.state !== "NONE" &&
-    (!snapshot.stateStartedAt ||
-      !isIntervalInsidePolicyWindowsV2(
-        {
-          startedAt: snapshot.stateStartedAt,
-          endedAt: snapshot.lastObservedAt,
-        },
+    (!stateStartedAt ||
+      stateStartedAt > observedAt ||
+      !isInstantInsidePolicyWindowsV2(
+        snapshot.lastObservedAt,
         readPolicyWindows(lease.allowedUtcWindows),
       ))
   ) {
