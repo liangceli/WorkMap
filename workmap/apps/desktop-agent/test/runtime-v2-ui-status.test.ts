@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDesktopAgentUiStatusV2 } from "../src/runtimeV2.js";
+import {
+  buildDesktopAgentUiStatusV2,
+  shouldImmediatelySyncHostEventV2,
+} from "../src/runtimeV2.js";
 import { createInitialDesktopTrackingV2State } from "../src/trackingV2Store.js";
 
 test("live UI status uses the latest in-memory server-confirmed heartbeat", () => {
   const runtimeState = createInitialDesktopTrackingV2State();
   runtimeState.lastSuccessfulHeartbeatAt = "2026-07-20T05:50:10.000Z";
   runtimeState.lastSuccessfulSyncAt = "2026-07-20T05:50:10.000Z";
+  runtimeState.serverOffsetMs = -131_661;
 
   const status = buildDesktopAgentUiStatusV2({
     deviceId: "device-1",
@@ -22,6 +26,7 @@ test("live UI status uses the latest in-memory server-confirmed heartbeat", () =
   assert.equal(status.state, "connected");
   assert.equal(status.lastHeartbeatAt, "2026-07-20T05:50:10.000Z");
   assert.equal(status.lastUploadAt, "2026-07-20T05:50:10.000Z");
+  assert.equal(status.serverOffsetMs, -131_661);
 });
 
 test("live UI status still reports a real offline or paused runtime", () => {
@@ -51,4 +56,10 @@ test("live UI status still reports a real offline or paused runtime", () => {
     }).state,
     "paused",
   );
+});
+
+test("high-frequency interaction pulses do not request one HTTP sync per pulse", () => {
+  assert.equal(shouldImmediatelySyncHostEventV2("interaction_pulse"), false);
+  assert.equal(shouldImmediatelySyncHostEventV2("foreground_changed"), true);
+  assert.equal(shouldImmediatelySyncHostEventV2("health"), true);
 });

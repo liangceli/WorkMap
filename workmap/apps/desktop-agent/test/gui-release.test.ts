@@ -15,7 +15,7 @@ test("Windows release is a visual NSIS installer", async () => {
   const version = await readFile(new URL("../src/version.ts", import.meta.url), "utf8");
   const electronMain = await readFile(new URL("../src/electron/main.ts", import.meta.url), "utf8");
 
-  assert.equal(packageJson.version, "0.6.5");
+  assert.equal(packageJson.version, "0.6.6");
   assert.equal(packageJson.main, "dist/electron/main.js");
   assert.match(packageJson.scripts?.["release:windows"] ?? "", /electron-builder --win nsis --x64/);
   assert.equal(packageJson.build?.win?.target, "nsis");
@@ -31,13 +31,15 @@ test("Windows release is a visual NSIS installer", async () => {
   assert.match(html, /Historical rejected \/ network diagnostics/);
   assert.match(html, /Never collected/);
   assert.match(renderer, /deriveStatusHealth/);
+  assert.match(renderer, /heartbeatAgeMs\(status\.lastHeartbeatAt, status\.serverOffsetMs\)/);
+  assert.match(renderer, /Date\.now\(\) \+ \(Number\.isFinite\(offset\) \? offset : 0\)/);
   assert.match(renderer, /Signal stale/);
   assert.match(renderer, /Last server-confirmed heartbeat/);
   assert.match(renderer, /Legacy compatibility backlog/);
   assert.match(renderer, /server-confirmed health/);
   assert.match(renderer, /intervalUpload\.accepted/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
-  assert.match(version, /desktop-agent-windows\/0\.6\.5/);
+  assert.match(version, /desktop-agent-windows\/0\.6\.6/);
   assert.match(electronMain, /DesktopAgentRuntimeV2/);
   assert.match(electronMain, /runtime\?\.getUiStatus\(\)/);
   assert.match(
@@ -62,6 +64,10 @@ test("runtime startup does not silently preserve stale connected state", async (
   assert.match(runtime, /queuePending: stats\.pending/);
   assert.match(runtime, /queuedEvents: input\.queuePending/);
   assert.match(runtime, /queuedLegacyEvents: this\.legacyQueue\.size\(\)/);
+  assert.match(
+    runtime,
+    /shouldImmediatelySyncHostEventV2\(event\.eventType\)/,
+  );
 });
 
 test("pairing errors are safe and actionable", () => {

@@ -36,4 +36,7 @@ test("compiled helper source never reads titles, keys, clipboard or screen conte
   assert.match(source, /SetWinEventHook/);
   assert.match(source, /GetLastInputInfo/);
   assert.match(source, /WTSRegisterSessionNotification/);
+  assert.match(source, /InteractionPulseMinIntervalMs = 1_000/);
+  assert.match(source, /pendingInputPulseMonotonicMs/);
+  assert.match(source, /monotonicMs = observedInputMonotonicMs/);
 });

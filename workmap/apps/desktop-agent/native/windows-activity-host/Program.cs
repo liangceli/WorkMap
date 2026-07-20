@@ -60,6 +60,7 @@ internal sealed class ActivityHost : IDisposable
     private const int NotifyForThisSession = 0;
     private const uint InputPollTimer = 1;
     private const uint InputPollMs = 100;
+    private const ulong InteractionPulseMinIntervalMs = 1_000;
     private const ulong ForegroundReconcileMs = 1_000;
     private const ulong DesktopReconcileMs = 1_000;
     private const ulong WtsRetryMs = 5_000;
@@ -78,6 +79,8 @@ internal sealed class ActivityHost : IDisposable
     private bool? inputDesktopAvailable;
     private uint lastInputTick;
     private ulong lastInputMonotonicMs;
+    private ulong? pendingInputPulseMonotonicMs;
+    private ulong lastInputPulseEmittedAtMs;
     private ulong lastForegroundReconcileMs;
     private ulong lastDesktopReconcileMs;
     private ulong lastWtsAttemptMs;
@@ -130,7 +133,7 @@ internal sealed class ActivityHost : IDisposable
             eventType = "health",
             monotonicMs = Native.GetTickCount64(),
             state = "HEALTHY",
-            adapterVersion = "1.0.0",
+            adapterVersion = "1.0.1",
             errorCode = wtsRegistered ? "NONE" : "WTS_REGISTRATION_PENDING",
         });
 
@@ -196,6 +199,7 @@ internal sealed class ActivityHost : IDisposable
         PollInput(now);
         if (now - lastForegroundReconcileMs >= ForegroundReconcileMs) ReconcileForeground(false);
         if (now - lastDesktopReconcileMs >= DesktopReconcileMs) ReconcileDesktop(false);
+        EmitPendingInputPulse(now);
         if (!wtsRegistered && now - lastWtsAttemptMs >= WtsRetryMs) TryRegisterWts();
     }
 
@@ -236,11 +240,33 @@ internal sealed class ActivityHost : IDisposable
             return;
         }
         lastInputMonotonicMs = mapped.Value;
+        pendingInputPulseMonotonicMs = mapped.Value;
+    }
+
+    private void EmitPendingInputPulse(ulong now)
+    {
+        if (sessionLocked || inputDesktopAvailable == false)
+        {
+            pendingInputPulseMonotonicMs = null;
+            return;
+        }
+        if (pendingInputPulseMonotonicMs is null) return;
+        if (
+            lastInputPulseEmittedAtMs > 0 &&
+            now - lastInputPulseEmittedAtMs < InteractionPulseMinIntervalMs)
+        {
+            return;
+        }
+        var observedInputMonotonicMs = pendingInputPulseMonotonicMs.Value;
+        pendingInputPulseMonotonicMs = null;
+        lastInputPulseEmittedAtMs = now;
         SafeJsonWriter.Write(new
         {
             protocolVersion = 1,
             eventType = "interaction_pulse",
-            monotonicMs = mapped.Value,
+            // Coalescing reduces transport/disk pressure while preserving the
+            // exact Windows last-input timestamp used for idle boundaries.
+            monotonicMs = observedInputMonotonicMs,
             evidence = "WINDOWS_SESSION_INPUT_WHILE_FOREGROUND",
         });
     }
@@ -303,6 +329,8 @@ internal sealed class ActivityHost : IDisposable
         if (eventType is null) return;
         if (change == WtsSessionLock) sessionLocked = true;
         if (change == WtsSessionUnlock) sessionLocked = false;
+        if (change is WtsSessionLock or WtsConsoleDisconnect or WtsRemoteDisconnect)
+            pendingInputPulseMonotonicMs = null;
         SafeJsonWriter.Write(new
         {
             protocolVersion = 1,
@@ -323,6 +351,7 @@ internal sealed class ActivityHost : IDisposable
             _ => null,
         };
         if (eventType is null) return;
+        if (change == PbtApmSuspend) pendingInputPulseMonotonicMs = null;
         SafeJsonWriter.Write(new
         {
             protocolVersion = 1,

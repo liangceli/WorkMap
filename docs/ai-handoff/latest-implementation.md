@@ -1,5 +1,68 @@
 # Latest Implementation Handoff
 
+## 2026-07-20 Desktop Agent 0.6.6 Real-Time Input Lane And Clock-Correct Health
+
+### Original Task Brief
+
+- Investigate the real installed 0.6.5 result after Reports showed a received-but-old App snapshot and the Agent simultaneously showed a red `Offline - retrying` header while Diagnostics showed `Online - server-confirmed health`.
+- Fix the underlying delivery and status problems rather than suppressing the warning, then produce a new Windows Agent.
+
+### Confirmed Live Evidence And Root Cause
+
+- Reports and local diagnostics prove data was not completely absent. One App interval was server-confirmed through `2026-07-20T06:42:51.385Z`, the queue returned to zero, and the API continued returning HTTP 200. Reports received a snapshot at approximately 4:24 PM, but that payload's last observation still described approximately 4:13 PM.
+- The installed 0.6.5 runtime at client time `2026-07-20T07:02:14.820Z` had `serverOffsetMs = -131661`, a latest server-confirmed heartbeat at `2026-07-20T07:00:03.034Z`, and a snapshot observation at `2026-07-20T06:43:14.260Z`. The renderer compared the server timestamp directly with uncorrected local `Date.now()`, so a fresh response appeared more than 120 seconds old and produced the false red Offline state. Diagnostics correctly showed Online because it used the runtime connection state.
+- The native process was alive and healthy; this was not a dead sampler. Windows polls last-input changes every 100 ms. The runtime treated every `interaction_pulse` as an immediate sync and awaited the HTTP request on its serialized host-event lane. Production round trips were about four seconds, so input events arrived much faster than they could be processed. The snapshot sequence advanced, but observation time fell roughly 15 minutes behind real time.
+
+### Changed Files
+
+- Runtime scheduling/status contract: `workmap/apps/desktop-agent/src/runtimeV2.ts` and `src/types.ts`.
+- Native Windows input coalescing and rebuilt Alpha helper: `workmap/apps/desktop-agent/native/windows-activity-host/Program.cs` and `alpha-windows/native/windows-activity-host/publish/workmap-windows-activity-host.exe`.
+- Agent renderer: `workmap/apps/desktop-agent/renderer/app.js`.
+- Regression coverage: `workmap/apps/desktop-agent/test/runtime-v2-ui-status.test.ts`, `test/gui-release.test.ts`, and `test/windows-activity-host-v2.test.ts`.
+- 0.6.6 release metadata: `workmap/apps/desktop-agent/package.json`, `alpha-windows/package.json`, `scripts/build-alpha.mjs`, `src/version.ts`, and `src/windowsActivityHost.ts`.
+
+### Implementation Summary
+
+- Agent status now exposes the already maintained server/local clock offset. Heartbeat freshness still uses the existing 30-second fresh and 120-second stale thresholds, but evaluates them on the server-corrected clock. Genuine failed/time-out requests still set the runtime Offline/Auth/Upgrade/Error states.
+- `interaction_pulse` still persists the exact Windows last-input monotonic timestamp locally, but no longer waits for a separate HTTP request. Normal ten-second health sync, fifteen-second settlement, completed intervals, foreground transitions, and lifecycle boundaries continue to trigger server sync.
+- Native input polling remains at 100 ms for precise Windows last-input detection, but output pulses are coalesced to at most one per second. The newest exact input timestamp is retained and any pending pulse is discarded across lock/disconnect/suspend boundaries.
+- Adapter version is `1.0.1`; Agent version is `desktop-agent-windows/0.6.6`.
+- No policy, work-window, lease, tenant/device credential, RBAC, database, API, or Web behavior changed in this round.
+
+### Windows Artifact
+
+- Installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.6.exe`.
+- Size: `115428880` bytes.
+- SHA-256: `BED3199FC7895CD19BA6A7064C58E60EE5EFFCA89BF20EAA7F483AC87C33263F`.
+- Authenticode: `NotSigned`.
+- Packaged executable reports ProductVersion `0.6.6.0` / FileVersion `0.6.6`.
+- Source, Alpha, and packaged native helper hashes are identical: `82575E85884A4F432E8D2AB5DBCEC6DB9EB17334025201DD50A7E89DC9408D68`.
+
+### Verification
+
+- Desktop Agent typecheck: pass.
+- Desktop Agent lint: pass.
+- Desktop Agent tests after rebuilding the native helper: pass, `53/53`.
+- Desktop Agent source/Alpha build: pass.
+- Renderer `node --check`: pass.
+- Windows NSIS release: pass after the sandboxed packaging component download was permitted.
+- Regression coverage asserts server offset propagation, real offline/paused state preservation, no per-input immediate HTTP sync, bounded native pulse output, and preservation of exact observed input timestamps.
+- `git diff --check`: pass. High-confidence scan of the complete changed diff found zero secret matches.
+
+### Manual QA, Intentionally Unchanged, And Remaining Risks
+
+- Real installed 0.6.5 state/log/process diagnosis was performed on Windows. It confirmed the clock skew, HTTP duration, event-lane lag, healthy native process, accepted interval, zero pending queue, and three historical dead letters without exposing credentials, URLs, titles, input, or content.
+- The 0.6.6 installer was not installed in this round. Therefore a real 0.6.6 Agent -> deployed API -> Reports loop is not claimed as passed.
+- Input evidence still waiting only in the old process's in-memory event chain is not a durable queue and cannot be safely reconstructed after upgrade. Do not manufacture the lagging historical period; verify new intervals from 0.6.6 forward.
+- The three pre-existing rejected records were not deleted or retried as confirmed data.
+- No API/Web/database deployment is required for this 0.6.6-only correction. Existing device pairing should remain valid.
+
+### Suggested Next Steps
+
+1. Commit/push the 0.6.6 Agent source and distribute the generated installer.
+2. Close/upgrade the old Agent, install 0.6.6, then verify within one minute that the header and Diagnostics both show Online and snapshot observation time stays near current time.
+3. Keep one App focused for more than fifteen seconds or switch Apps, then confirm `Confirmed interval through` advances and the App duration increases in historical Reports.
+
 ## 2026-07-20 Desktop Agent 0.6.5 Cross-Epoch Snapshot And Live UI Health
 
 ### Original Task Brief

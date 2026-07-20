@@ -251,7 +251,7 @@ function deriveStatusHealth(status) {
     return { state: status.state };
   }
 
-  const heartbeatAge = heartbeatAgeMs(status.lastHeartbeatAt);
+  const heartbeatAge = heartbeatAgeMs(status.lastHeartbeatAt, status.serverOffsetMs);
   if (heartbeatAge === null) {
     return { state: "offline", detail: "Waiting for the first server-confirmed heartbeat." };
   }
@@ -264,11 +264,13 @@ function deriveStatusHealth(status) {
   return { state: heartbeatAge <= STALE_HEARTBEAT_MS ? "stale" : "offline", detail };
 }
 
-function heartbeatAgeMs(value) {
+function heartbeatAgeMs(value, serverOffsetMs) {
   if (!value) return null;
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return null;
-  return Date.now() - time;
+  const offset = Number(serverOffsetMs);
+  const serverNow = Date.now() + (Number.isFinite(offset) ? offset : 0);
+  return Math.max(0, serverNow - time);
 }
 
 function formatTime(value) {

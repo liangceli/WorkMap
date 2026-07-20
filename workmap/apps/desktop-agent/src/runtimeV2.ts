@@ -465,7 +465,15 @@ export class DesktopAgentRuntimeV2 {
     }
     if (event.eventType === "interaction_pulse") {
       if (this.engine && this.currentHostApp && this.captureAllowedAt(event.monotonicMs)) {
-        await this.persistUpdate(this.engine.recordSessionInput(event.monotonicMs), true);
+        // Input can arrive up to ten times per second. It must advance the
+        // durable local clock precisely, but waiting for one HTTP round trip
+        // per pulse makes the serialized host-event lane fall progressively
+        // behind real time on a normal network. The regular health cadence,
+        // settlements, and foreground transitions still trigger sync.
+        await this.persistUpdate(
+          this.engine.recordSessionInput(event.monotonicMs),
+          shouldImmediatelySyncHostEventV2(event.eventType),
+        );
       }
       return;
     }
@@ -1171,6 +1179,7 @@ export function buildDesktopAgentUiStatusV2(input: {
     lastHeartbeatAt:
       input.runtimeState.lastSuccessfulHeartbeatAt ?? undefined,
     lastUploadAt: input.runtimeState.lastSuccessfulSyncAt ?? undefined,
+    serverOffsetMs: input.runtimeState.serverOffsetMs,
     currentActivity:
       snapshot?.state !== "NONE" && snapshot?.displayName && snapshot.stateStartedAt
         ? {
@@ -1202,6 +1211,12 @@ export function buildDesktopAgentUiStatusV2(input: {
     recentSyncFailureCount: input.runtimeState.recentSyncFailures.length,
     error: input.error,
   };
+}
+
+export function shouldImmediatelySyncHostEventV2(
+  eventType: WindowsActivityHostEventV2["eventType"],
+) {
+  return eventType !== "interaction_pulse";
 }
 
 function describeDesktopPolicyRequirement(policy: DeviceTrackingPolicyV2) {

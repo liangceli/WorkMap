@@ -1,5 +1,46 @@
 # Latest QA Handoff
 
+## 2026-07-20 Desktop Agent 0.6.6 Real-Time Input Lane And Clock-Correct Health QA
+
+### Reviewed Implementation
+
+- Compared all three screenshots with the installed 0.6.5 status file, Tracking v2 runtime state, privacy-safe NDJSON logs, live Windows process tree, renderer health calculation, serialized runtime host-event path, and native Windows polling loop.
+- Reviewed the 0.6.6 code diff, rebuilt native helper, packaged native resource, version metadata, and Windows installer.
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: every high-frequency input pulse awaited an immediate network sync on the same serialized lane that advances activity observation. With approximately four-second API latency and input sampling up to ten times per second, App observation fell about 15 minutes behind real time even though health remained online.
+- Fixed - High: input pulses are now durable-local updates served by the normal bounded sync cadence; the native host emits at most one coalesced pulse per second while retaining the exact newest Windows input timestamp.
+- Fixed - High: the renderer compared a server timestamp to an uncorrected client clock. The inspected client was about `131661 ms` ahead, making a current heartbeat look offline. The same thresholds now use the runtime server offset.
+- Verified - High: this is not a cosmetic warning removal. Offline, paused, auth, upgrade, and failed request states remain authoritative; the 30/120-second thresholds are unchanged.
+- Verified - High: the screenshot's `Confirmed - 1 accepted / 0 duplicate / 0 rejected`, `Confirmed interval through 4:12:51 PM`, zero pending queue, and historical Reports totals prove that some App data was accepted. The failure was severe delivery lag, not total absence.
+- Remaining - High: evidence still queued only inside the running 0.6.5 process is not durably recoverable after replacement; it must not be fabricated as confirmed work time.
+- Remaining - Medium: 0.6.6 was built but not installed, so actual post-upgrade snapshot/interval freshness remains a manual QA item.
+
+### Test And Verification Status
+
+- Desktop Agent typecheck/lint/build: pass.
+- Renderer syntax: pass.
+- Desktop Agent tests after native rebuild: pass, `53/53`.
+- Windows NSIS installer: pass; size, hash, file/product version, and packaged native-helper identity verified.
+- Authenticode: `NotSigned`.
+- `git diff --check`: pass. High-confidence scan of the complete changed diff found zero secret matches.
+
+### Security And Scope Review
+
+- No screenshots, window titles, URLs, paths, keystrokes, clipboard, text input, page content, or full activity payloads were added. The helper continues to read only privacy-minimized App identity and last-input timing evidence.
+- No policy weakening,全天采集硬编码, API/Web/schema/database change, auth/RBAC/tenant change, credential reset, or Browser Extension change was introduced.
+
+### Manual QA Status
+
+- Passed for diagnosis of the installed 0.6.5 failure condition only.
+- Not run for installation or end-to-end behavior of 0.6.6.
+
+### Pass/Fail Recommendation
+
+- Pass for the identified root-cause correction, automated checks, native build, and unsigned 0.6.6 artifact.
+- Proceed to commit/distribution and controlled real-device installation. Do not call the production tracking loop fully verified until a fresh snapshot and a newly completed 0.6.6 interval are both visible in Reports.
+
 ## 2026-07-20 Desktop Agent 0.6.5 Cross-Epoch Snapshot And Live UI Health QA
 
 ### Reviewed Implementation

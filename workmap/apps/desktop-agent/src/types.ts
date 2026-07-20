@@ -121,6 +121,8 @@ export type AgentStatus = {
   deviceId?: string;
   lastHeartbeatAt?: string;
   lastUploadAt?: string;
+  /** Difference between the server clock and local Date.now(), in milliseconds. */
+  serverOffsetMs?: number;
   sessionId?: string;
   clientSessionId?: string;
   currentActivity?: CurrentAppActivity | null;
