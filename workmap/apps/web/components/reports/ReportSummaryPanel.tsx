@@ -18,6 +18,11 @@ import { WorkMapButton } from "../ui/WorkMapButton";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
 import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
 import {
+  trackingV2ConnectionPresentation,
+  trackingV2SnapshotPresentation,
+  type TrackingV2LiveDevice,
+} from "./trackingV2LivePresentation";
+import {
   defaultReportFilters,
   utcToday,
   persistReportFilters,
@@ -444,7 +449,8 @@ function TrackingV2LiveOverview({ live }: { live: WorkMapApiTrackingV2LiveActivi
         </div>
         <div style={styles.liveCoverage}>
           <Activity size={20} aria-hidden />
-          <strong>{live.coverage.fresh}/{live.coverage.total} fresh</strong>
+          <strong>{live.coverage.connected}/{live.coverage.total} connected</strong>
+          <span>{live.coverage.freshSnapshots} confirmed snapshot(s)</span>
         </div>
       </div>
       <div style={styles.twoColumnGrid}>
@@ -471,8 +477,6 @@ function TrackingV2LiveOverview({ live }: { live: WorkMapApiTrackingV2LiveActivi
   );
 }
 
-type TrackingV2LiveDevice = WorkMapApiTrackingV2LiveActivity["devices"][number];
-
 function TrackingV2DeviceCard({
   device,
   serverTime,
@@ -483,19 +487,15 @@ function TrackingV2DeviceCard({
   nowMs: number;
 }) {
   const serverDiagnostic = describeTrackingV2ServerDiagnostic(device);
-  const healthy = !serverDiagnostic
-    && device.fresh
-    && device.health?.connectionState === "ONLINE"
-    && device.health.collectorState === "HEALTHY"
-    && device.health.policyState === "ACTIVE";
-  const attention = !healthy;
+  const connection = trackingV2ConnectionPresentation(device);
+  const snapshot = trackingV2SnapshotPresentation(device);
+  const attention = !connection.connected;
   const clientName = device.clientType === "DESKTOP_AGENT"
     ? "Desktop Agent"
     : `${formatTrackingBrowserName(device.browserName)} Extension`;
-  const connectionLabel = describeTrackingV2Connection(device);
   const provisionalMs = liveProvisionalDurationMs(device, serverTime, nowMs);
   const currentLabel = device.source === "DESKTOP_APP" ? "Current app" : "Current domain";
-  const currentValue = device.current?.displayName ?? "No current focus";
+  const currentValue = snapshot.label;
 
   return (
     <article
@@ -510,10 +510,10 @@ function TrackingV2DeviceCard({
         </span>
         <div style={styles.clientHeading}>
           <p style={styles.clientLabel}>{clientName}</p>
-          <h3 style={styles.clientTitle}>{connectionLabel}</h3>
+          <h3 style={styles.clientTitle}>{connection.label}</h3>
         </div>
         <span style={{ ...styles.connectionPill, ...(attention ? styles.connectionPillAttention : styles.connectionPillConnected) }}>
-          {serverDiagnostic?.pill ?? (device.fresh ? device.health?.migrationState ?? "V2" : "Stale")}
+          {connection.pill}
         </span>
       </div>
 
@@ -521,9 +521,9 @@ function TrackingV2DeviceCard({
         <span style={styles.focusLabel}>{currentLabel}</span>
         <strong style={styles.focusValue}>{currentValue}</strong>
         <span style={styles.focusMeta}>
-          {device.current
+          {device.snapshotStatus === "CURRENT" && device.current
             ? `${device.current.state === "ACTIVE" ? "Focus active" : "Focused idle"} - ${formatDuration(provisionalMs / 1000)} provisional`
-            : device.fresh ? "Client is connected without a current focus subject" : "Fresh activity is unavailable"}
+            : snapshot.detail}
         </span>
         {device.current?.lastActivityEvidenceAt ? (
           <span style={styles.focusMeta}>
@@ -533,6 +533,14 @@ function TrackingV2DeviceCard({
       </div>
 
       <div style={styles.healthGrid}>
+        <span>
+          <small>Connection confirmed</small>
+          <strong>{device.connectionConfirmedAt ? formatDateTime(device.connectionConfirmedAt) : "Not confirmed"}</strong>
+        </span>
+        <span>
+          <small>Snapshot received</small>
+          <strong>{device.snapshot?.receivedAt ? formatDateTime(device.snapshot.receivedAt) : snapshot.pill}</strong>
+        </span>
         <span>
           <small>Queue</small>
           <strong>{device.health?.queue.pending ?? 0} pending</strong>
@@ -581,24 +589,10 @@ function TrackingV2DeviceCard({
 }
 
 function liveProvisionalDurationMs(device: TrackingV2LiveDevice, serverTime: string, nowMs: number) {
-  if (!device.fresh || !device.current || device.current.provisionalDurationMs === null) return 0;
+  if (!device.snapshotFresh || !device.current || device.current.provisionalDurationMs === null) return 0;
   const serverMs = Date.parse(serverTime);
   const elapsedSinceResponse = Number.isFinite(serverMs) ? Math.max(0, nowMs - serverMs) : 0;
   return device.current.provisionalDurationMs + elapsedSinceResponse;
-}
-
-function describeTrackingV2Connection(device: TrackingV2LiveDevice) {
-  const serverDiagnostic = describeTrackingV2ServerDiagnostic(device);
-  if (serverDiagnostic) return serverDiagnostic.title;
-  if (!device.fresh) return "Signal interrupted";
-  if (!device.health) return "Health pending";
-  if (device.health.connectionState === "AUTH_REQUIRED") return "Pairing required";
-  if (device.health.connectionState === "UPGRADE_REQUIRED") return "Upgrade required";
-  if (device.health.policyState !== "ACTIVE") return `Policy ${formatTrackingState(device.health.policyState)}`;
-  if (device.health.collectorState !== "HEALTHY") return `Collector ${formatTrackingState(device.health.collectorState)}`;
-  if (device.health.queue.deadLetter > 0) return "Rejected events need attention";
-  if ((device.cursor?.missingRanges.length ?? 0) > 0) return "Waiting for missing events";
-  return "Connected";
 }
 
 function describeTrackingV2ServerDiagnostic(device: TrackingV2LiveDevice) {

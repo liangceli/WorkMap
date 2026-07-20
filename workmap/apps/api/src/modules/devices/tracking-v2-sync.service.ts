@@ -391,6 +391,7 @@ export class TrackingV2SyncService {
                   at: now,
                 }
               : null,
+            acceptedSnapshotSequence !== null,
           );
           await tx.device.update({
             where: { id: context.deviceId },
@@ -925,12 +926,20 @@ function validateSnapshot(
     : null;
   if (
     snapshot.state !== "NONE" &&
-    (!stateStartedAt ||
-      stateStartedAt > observedAt ||
-      !isInstantInsidePolicyWindowsV2(
-        snapshot.lastObservedAt,
-        readPolicyWindows(lease.allowedUtcWindows),
-      ))
+    (!stateStartedAt || stateStartedAt > observedAt)
+  ) {
+    return {
+      status: "REJECTED",
+      rejectionCode: "SNAPSHOT_OBSERVATION_TIME_INVALID",
+      message: "The live focus state timing could not be verified.",
+    };
+  }
+  if (
+    snapshot.state !== "NONE" &&
+    !isInstantInsidePolicyWindowsV2(
+      snapshot.lastObservedAt,
+      readPolicyWindows(lease.allowedUtcWindows),
+    )
   ) {
     return {
       status: "REJECTED",
@@ -1695,6 +1704,7 @@ async function storeClientHealth(
     requestId: string;
     at: Date;
   } | null,
+  clearServerDiagnostic: boolean,
 ) {
   const data = {
     companyId: context.companyId,
@@ -1715,11 +1725,21 @@ async function storeClientHealth(
     lastSuccessfulHeartbeatAt: optionalDate(health.lastSuccessfulHeartbeatAt),
     lastSuccessfulSyncAt: optionalDate(health.lastSuccessfulSyncAt),
     errorCode: health.errorCode as TrackingHealthErrorCode,
-    serverDiagnosticCode: serverDiagnostic?.code ?? null,
-    serverDiagnosticRequestId: serverDiagnostic?.requestId ?? null,
-    serverDiagnosticAt: serverDiagnostic?.at ?? null,
     receivedAt,
   };
+  const diagnosticUpdate = serverDiagnostic
+    ? {
+        serverDiagnosticCode: serverDiagnostic.code,
+        serverDiagnosticRequestId: serverDiagnostic.requestId,
+        serverDiagnosticAt: serverDiagnostic.at,
+      }
+    : clearServerDiagnostic
+      ? {
+          serverDiagnosticCode: null,
+          serverDiagnosticRequestId: null,
+          serverDiagnosticAt: null,
+        }
+      : {};
   await tx.clientHealthSnapshot.upsert({
     where: {
       deviceId_source: {
@@ -1727,11 +1747,17 @@ async function storeClientHealth(
         source,
       },
     },
-    update: data,
+    // A health-only request confirms connectivity but says nothing about the
+    // last rejected live snapshot. Keep that snapshot diagnostic until a newer
+    // valid snapshot is accepted and explicitly clears it.
+    update: { ...data, ...diagnosticUpdate },
     create: {
       ...data,
       deviceId: context.deviceId,
       source,
+      serverDiagnosticCode: serverDiagnostic?.code ?? null,
+      serverDiagnosticRequestId: serverDiagnostic?.requestId ?? null,
+      serverDiagnosticAt: serverDiagnostic?.at ?? null,
     },
   });
 }

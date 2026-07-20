@@ -426,9 +426,24 @@ export type WorkMapApiTrackingV2LiveActivity = {
     hostname: string | null;
     clientVersion: string | null;
     protocolActivatedAt: string | null;
+    /** Backward-compatible alias for connectionFresh. */
     fresh: boolean;
+    /** Backward-compatible alias for connectionFreshnessAgeMs. */
     freshnessAgeMs: number | null;
     freshnessLimitMs: number;
+    connectionFresh: boolean;
+    connectionFreshnessAgeMs: number | null;
+    connectionFreshnessLimitMs: number;
+    connectionConfirmedAt: string | null;
+    snapshotFresh: boolean;
+    snapshotFreshnessAgeMs: number | null;
+    snapshotFreshnessLimitMs: number;
+    snapshotStatus:
+      | "CURRENT"
+      | "NO_CURRENT_FOCUS"
+      | "STALE"
+      | "REJECTED"
+      | "NOT_RECEIVED";
     current: null | {
       state: "ACTIVE" | "IDLE";
       subjectKey: string | null;
@@ -503,6 +518,11 @@ export type WorkMapApiTrackingV2LiveActivity = {
     total: number;
     fresh: number;
     stale: number;
+    connected: number;
+    disconnected: number;
+    freshSnapshots: number;
+    staleSnapshots: number;
+    rejectedSnapshots: number;
     withSequenceGaps: number;
     withDeadLetters: number;
   };

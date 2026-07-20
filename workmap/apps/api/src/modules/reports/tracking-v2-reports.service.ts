@@ -165,13 +165,37 @@ export class TrackingV2ReportsService {
         source === TrackingActivitySource.DESKTOP_APP
           ? DESKTOP_FRESH_MS
           : BROWSER_FRESH_MS;
-      const observedAt = snapshot?.receivedAt ?? health?.receivedAt ?? null;
-      const ageMs = observedAt
-        ? Math.max(0, now.getTime() - observedAt.getTime())
+      const connectionObservedAt = health?.receivedAt ?? null;
+      const connectionAgeMs = connectionObservedAt
+        ? Math.max(0, now.getTime() - connectionObservedAt.getTime())
         : null;
-      const fresh = ageMs !== null && ageMs <= freshnessLimitMs;
+      const connectionFresh =
+        connectionAgeMs !== null && connectionAgeMs <= freshnessLimitMs;
+      const snapshotObservedAt = snapshot?.receivedAt ?? null;
+      const snapshotAgeMs = snapshotObservedAt
+        ? Math.max(0, now.getTime() - snapshotObservedAt.getTime())
+        : null;
+      const snapshotFresh =
+        snapshotAgeMs !== null && snapshotAgeMs <= freshnessLimitMs;
+      const snapshotDiagnosticIsCurrent = Boolean(
+        health?.serverDiagnosticCode &&
+          health.serverDiagnosticAt &&
+          (!snapshotObservedAt || health.serverDiagnosticAt >= snapshotObservedAt),
+      );
+      const snapshotStatus = snapshotDiagnosticIsCurrent
+        ? "REJECTED"
+        : snapshotFresh && snapshot?.state !== "NONE"
+          ? "CURRENT"
+          : snapshotFresh
+            ? "NO_CURRENT_FOCUS"
+            : snapshot
+              ? "STALE"
+              : "NOT_RECEIVED";
       const current =
-        fresh && snapshot && snapshot.state !== "NONE"
+        snapshotFresh &&
+        !snapshotDiagnosticIsCurrent &&
+        snapshot &&
+        snapshot.state !== "NONE"
           ? {
               state: snapshot.state,
               subjectKey: snapshot.subjectKey,
@@ -208,9 +232,19 @@ export class TrackingV2ReportsService {
             : null,
         clientVersion: health?.clientVersion ?? device.agentVersion,
         protocolActivatedAt: iso(device.protocolActivatedAt),
-        fresh,
-        freshnessAgeMs: ageMs,
+        // Backward-compatible aliases now describe the server-confirmed
+        // connection health lane. Snapshot freshness is intentionally separate.
+        fresh: connectionFresh,
+        freshnessAgeMs: connectionAgeMs,
         freshnessLimitMs,
+        connectionFresh,
+        connectionFreshnessAgeMs: connectionAgeMs,
+        connectionFreshnessLimitMs: freshnessLimitMs,
+        connectionConfirmedAt: iso(connectionObservedAt),
+        snapshotFresh,
+        snapshotFreshnessAgeMs: snapshotAgeMs,
+        snapshotFreshnessLimitMs: freshnessLimitMs,
+        snapshotStatus,
         current,
         snapshot: snapshot
           ? {
@@ -287,8 +321,21 @@ export class TrackingV2ReportsService {
       devices: rows,
       coverage: {
         total: rows.length,
-        fresh: rows.filter((row) => row.fresh).length,
-        stale: rows.filter((row) => !row.fresh).length,
+        fresh: rows.filter((row) => row.connectionFresh).length,
+        stale: rows.filter((row) => !row.connectionFresh).length,
+        connected: rows.filter((row) => row.connectionFresh).length,
+        disconnected: rows.filter((row) => !row.connectionFresh).length,
+        freshSnapshots: rows.filter(
+          (row) =>
+            row.snapshotStatus === "CURRENT" ||
+            row.snapshotStatus === "NO_CURRENT_FOCUS",
+        ).length,
+        staleSnapshots: rows.filter(
+          (row) => row.snapshotStatus === "STALE",
+        ).length,
+        rejectedSnapshots: rows.filter(
+          (row) => row.snapshotStatus === "REJECTED",
+        ).length,
         withSequenceGaps: rows.filter(
           (row) => (row.cursor?.missingRanges.length ?? 0) > 0,
         ).length,
