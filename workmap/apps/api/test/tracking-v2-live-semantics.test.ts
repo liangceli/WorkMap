@@ -14,6 +14,7 @@ const DEVICE_ID = "11111111-1111-4111-8111-111111111111";
 const WORKSTATION_ID = "22222222-2222-4222-8222-222222222222";
 const LEASE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CLOCK_ID = "99999999-9999-4999-8999-999999999999";
+const NEW_CLOCK_ID = "12121212-1212-4212-8212-121212121212";
 const REQUEST_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 test("fresh server-confirmed health stays connected when the App snapshot is rejected", async () => {
@@ -193,6 +194,63 @@ test("an older or duplicate valid snapshot cannot clear a newer rejection diagno
     Object.hasOwn(prisma.healthUpdate, "serverDiagnosticCode"),
     false,
     "a non-written snapshot leaves a newer persisted warning untouched",
+  );
+});
+
+test("a newer clock epoch can replace a higher snapshot sequence from the prior epoch", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  prisma.liveSnapshotSequence = 900;
+  prisma.liveSnapshotClockEpochId = CLOCK_ID;
+  prisma.liveSnapshotLastObservedAt = new Date(now - 60_000);
+  const service = new TrackingV2SyncService(
+    prisma as any,
+    policyService(now) as any,
+  );
+
+  const response = await service.sync(
+    context(now),
+    syncRequest(now, {
+      focusSnapshot: noneSnapshot(now, 1, {
+        clockEpochId: NEW_CLOCK_ID,
+        lastObservedAt: new Date(now - 500).toISOString(),
+      }),
+    }),
+    REQUEST_ID,
+  );
+
+  assert.equal(response.acceptedSnapshotSequence, 1);
+  assert.equal(prisma.savedSnapshot?.clockEpochId, NEW_CLOCK_ID);
+  assert.equal(prisma.savedSnapshot?.snapshotSequence, 1);
+});
+
+test("a delayed prior clock epoch cannot overwrite a newer observed snapshot", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  prisma.liveSnapshotSequence = 1;
+  prisma.liveSnapshotClockEpochId = NEW_CLOCK_ID;
+  prisma.liveSnapshotLastObservedAt = new Date(now - 500);
+  const service = new TrackingV2SyncService(
+    prisma as any,
+    policyService(now) as any,
+  );
+
+  const response = await service.sync(
+    context(now),
+    syncRequest(now, {
+      focusSnapshot: noneSnapshot(now, 901, {
+        clockEpochId: CLOCK_ID,
+        lastObservedAt: new Date(now - 60_000).toISOString(),
+      }),
+    }),
+    REQUEST_ID,
+  );
+
+  assert.equal(response.acceptedSnapshotSequence, null);
+  assert.equal(prisma.savedSnapshot, null);
+  assert.equal(
+    Object.hasOwn(prisma.healthUpdate, "serverDiagnosticCode"),
+    false,
   );
 });
 
@@ -396,14 +454,18 @@ function syncRequest(
   };
 }
 
-function noneSnapshot(now: number, snapshotSequence: number) {
+function noneSnapshot(
+  now: number,
+  snapshotSequence: number,
+  overrides: { clockEpochId?: string; lastObservedAt?: string } = {},
+) {
   return {
     snapshotSequence,
     activitySessionId: null,
     currentStateId: null,
     source: "DESKTOP_APP",
     stream: "FOCUS",
-    clockEpochId: CLOCK_ID,
+    clockEpochId: overrides.clockEpochId ?? CLOCK_ID,
     policyVersion: "v1",
     policyLeaseId: LEASE_ID,
     subjectKey: null,
@@ -416,7 +478,8 @@ function noneSnapshot(now: number, snapshotSequence: number) {
     latestEmittedIntervalSequence: null,
     latestEmittedClientEventId: null,
     nextIntervalSequence: 1,
-    lastObservedAt: new Date(now - 500).toISOString(),
+    lastObservedAt:
+      overrides.lastObservedAt ?? new Date(now - 500).toISOString(),
     collectorState: "HEALTHY",
   };
 }
@@ -429,6 +492,8 @@ class SyncPrisma {
   subjects: any[] = [];
   targets: any[] = [];
   liveSnapshotSequence: number | null = null;
+  liveSnapshotClockEpochId = CLOCK_ID;
+  liveSnapshotLastObservedAt: Date | null = null;
   savedSnapshot: any = null;
   healthUpdate: any = null;
   deviceHeartbeatWritten = false;
@@ -535,10 +600,17 @@ class SyncPrisma {
     findUnique: async () =>
       this.liveSnapshotSequence === null
         ? null
-        : { snapshotSequence: this.liveSnapshotSequence },
+        : {
+            snapshotSequence: this.liveSnapshotSequence,
+            clockEpochId: this.liveSnapshotClockEpochId,
+            lastObservedAt:
+              this.liveSnapshotLastObservedAt ?? new Date(this.now - 1_000),
+          },
     upsert: async ({ update }: any) => {
       this.savedSnapshot = update;
       this.liveSnapshotSequence = update.snapshotSequence;
+      this.liveSnapshotClockEpochId = update.clockEpochId;
+      this.liveSnapshotLastObservedAt = update.lastObservedAt;
       return update;
     },
   };

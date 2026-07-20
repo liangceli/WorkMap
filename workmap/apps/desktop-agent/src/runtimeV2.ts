@@ -101,6 +101,7 @@ export class DesktopAgentRuntimeV2 {
   private collectorState: TrackingCollectorStateV2 = "PAUSED";
   private lastErrorCode: TrackingHealthErrorCodeV2 = "NONE";
   private policySetupMessage: string | null = null;
+  private uiError: string | undefined;
   private shutdownReason: ShutdownReason;
   private queuesInitialized = false;
   private legacyCheckpoint: TrackingCheckpoint | null = null;
@@ -190,6 +191,21 @@ export class DesktopAgentRuntimeV2 {
       lastSyncDiagnostic: this.state.lastSyncDiagnostic,
       recentSyncFailures: this.state.recentSyncFailures,
     };
+  }
+
+  getUiStatus(): AgentStatus {
+    const stats = this.store.stats();
+    return buildDesktopAgentUiStatusV2({
+      deviceId: this.config.deviceId,
+      runtimeState: this.state,
+      connectionState: this.connectionState,
+      collectorState: this.collectorState,
+      policySetupMessage: this.policySetupMessage,
+      queuePending: stats.pending,
+      queuedStatusEvents: this.statusQueue.size(),
+      queuedLegacyEvents: this.legacyQueue.size(),
+      error: this.uiError,
+    });
   }
 
   exportDiagnostics(filePath: string) {
@@ -1076,56 +1092,8 @@ export class DesktopAgentRuntimeV2 {
   }
 
   private async updateUiStatus(error?: string) {
-    const snapshot = this.state.latestSnapshot;
-    const stats = this.store.stats();
-    const state: AgentStatus["state"] =
-      this.policySetupMessage
-        ? "policy_required"
-        : this.connectionState === "ONLINE"
-        ? this.collectorState === "PAUSED" ? "paused" : "connected"
-        : this.connectionState === "AUTH_REQUIRED"
-          ? "auth_required"
-          : this.connectionState === "UPGRADE_REQUIRED"
-            ? "upgrade_required"
-            : this.connectionState === "ERROR"
-              ? "error"
-              : "offline";
-    await this.statusWriter({
-      state,
-      deviceId: this.config.deviceId,
-      lastHeartbeatAt: this.state.lastSuccessfulHeartbeatAt ?? undefined,
-      lastUploadAt: this.state.lastSuccessfulSyncAt ?? undefined,
-      currentActivity:
-        snapshot?.state !== "NONE" && snapshot?.displayName && snapshot.stateStartedAt
-          ? {
-              appName: snapshot.displayName,
-              startedAt: snapshot.stateStartedAt,
-              lastObservedAt: snapshot.lastObservedAt,
-              activeSeconds:
-                snapshot.state === "ACTIVE"
-                  ? Math.max(
-                      0,
-                      Math.floor(
-                        (Date.parse(snapshot.lastObservedAt) -
-                          Date.parse(snapshot.stateStartedAt)) /
-                          1_000,
-                      ),
-                    )
-                  : 0,
-              isIdle: snapshot.state === "IDLE",
-            }
-          : null,
-      // Keep the durable v2 queue separate from retained v1 compatibility
-      // records. Mixing the counts made an old queue.json look like a v2 sync
-      // failure in the desktop UI.
-      queuedEvents: stats.pending,
-      queuedStatusEvents: this.statusQueue.size(),
-      queuedLegacyEvents: this.legacyQueue.size(),
-      trackingMigrationState: this.state.migrationState,
-      lastSyncDiagnostic: this.state.lastSyncDiagnostic,
-      recentSyncFailureCount: this.state.recentSyncFailures.length,
-      error,
-    });
+    this.uiError = error;
+    await this.statusWriter(this.getUiStatus());
   }
 
   private async waitForActivationRetry() {
@@ -1170,6 +1138,70 @@ export class DesktopAgentRuntimeV2 {
     });
     this.store.close();
   }
+}
+
+export function buildDesktopAgentUiStatusV2(input: {
+  deviceId: string;
+  runtimeState: DesktopTrackingRuntimeStateV2;
+  connectionState: TrackingConnectionStateV2;
+  collectorState: TrackingCollectorStateV2;
+  policySetupMessage: string | null;
+  queuePending: number;
+  queuedStatusEvents: number;
+  queuedLegacyEvents: number;
+  error?: string;
+}): AgentStatus {
+  const snapshot = input.runtimeState.latestSnapshot;
+  const state: AgentStatus["state"] = input.policySetupMessage
+    ? "policy_required"
+    : input.connectionState === "ONLINE"
+      ? input.collectorState === "PAUSED"
+        ? "paused"
+        : "connected"
+      : input.connectionState === "AUTH_REQUIRED"
+        ? "auth_required"
+        : input.connectionState === "UPGRADE_REQUIRED"
+          ? "upgrade_required"
+          : input.connectionState === "ERROR"
+            ? "error"
+            : "offline";
+  return {
+    state,
+    deviceId: input.deviceId,
+    lastHeartbeatAt:
+      input.runtimeState.lastSuccessfulHeartbeatAt ?? undefined,
+    lastUploadAt: input.runtimeState.lastSuccessfulSyncAt ?? undefined,
+    currentActivity:
+      snapshot?.state !== "NONE" && snapshot?.displayName && snapshot.stateStartedAt
+        ? {
+            appName: snapshot.displayName,
+            startedAt: snapshot.stateStartedAt,
+            lastObservedAt: snapshot.lastObservedAt,
+            activeSeconds:
+              snapshot.state === "ACTIVE"
+                ? Math.max(
+                    0,
+                    Math.floor(
+                      (Date.parse(snapshot.lastObservedAt) -
+                        Date.parse(snapshot.stateStartedAt)) /
+                        1_000,
+                    ),
+                  )
+                : 0,
+            isIdle: snapshot.state === "IDLE",
+          }
+        : null,
+    // Keep the durable v2 queue separate from retained v1 compatibility
+    // records. Mixing the counts made an old queue.json look like a v2 sync
+    // failure in the desktop UI.
+    queuedEvents: input.queuePending,
+    queuedStatusEvents: input.queuedStatusEvents,
+    queuedLegacyEvents: input.queuedLegacyEvents,
+    trackingMigrationState: input.runtimeState.migrationState,
+    lastSyncDiagnostic: input.runtimeState.lastSyncDiagnostic,
+    recentSyncFailureCount: input.runtimeState.recentSyncFailures.length,
+    error: input.error,
+  };
 }
 
 function describeDesktopPolicyRequirement(policy: DeviceTrackingPolicyV2) {

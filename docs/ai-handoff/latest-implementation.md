@@ -1,5 +1,63 @@
 # Latest Implementation Handoff
 
+## 2026-07-20 Desktop Agent 0.6.5 Cross-Epoch Snapshot And Live UI Health
+
+### Original Task Brief
+
+- Fix the remaining real condition shown after the Reports connection/snapshot separation was deployed: Reports is correctly `Connected`, but the App snapshot remains old while the running Agent continues to send HTTP 200 health/snapshot syncs, and the local Agent window can still show a red heartbeat warning.
+- Produce a new Windows Agent without hiding real failures, weakening the policy, or merely changing warning colors.
+
+### Confirmed Root Cause
+
+- The policy is not misconfigured. The inspected policy remains `Australia/Adelaide`, work-hours-only `09:00-17:00`, App focus enabled, acknowledgement complete, and its lease/allowed UTC windows are valid for the inspected time.
+- The initial `SNAPSHOT_OUTSIDE_POLICY_WINDOW` was a real, expected rejection outside the configured collection window. It explains why that particular provisional snapshot was not stored, while its HTTP 200 health was still confirmed.
+- The additional in-window stale snapshot had a separate API ordering bug. `DesktopFocusEngineV2` creates a new `clockEpochId` and restarts `snapshotSequence` at one after lock/resume, restart, or policy-boundary recovery. The API compared the incoming sequence against the last stored sequence globally, without considering `clockEpochId`, so a fresh new-epoch sequence such as `1` could be silently ignored behind an old-epoch sequence such as `900` even though the new observation was later.
+- The red local Agent window had a separate display-source problem. The active runtime retained current server-confirmed heartbeat/sync state in memory, but Electron IPC always reread `status.json`. A delayed/failed local file update could therefore show an old heartbeat even while runtime sync logs and Reports health were current.
+
+### Changed Files
+
+- API snapshot ordering and regression coverage: `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts` and `workmap/apps/api/test/tracking-v2-live-semantics.test.ts`.
+- Agent live UI state: `workmap/apps/desktop-agent/src/runtimeV2.ts`, `src/electron/main.ts`, `test/runtime-v2-ui-status.test.ts`, and `test/gui-release.test.ts`.
+- Agent 0.6.5 release metadata: `workmap/apps/desktop-agent/package.json`, `alpha-windows/package.json`, `scripts/build-alpha.mjs`, `src/version.ts`, and `src/windowsActivityHost.ts`.
+
+### Implementation Summary
+
+- Snapshot ordering is now scoped correctly: within the same clock epoch, monotonic `snapshotSequence` wins; across different epochs, the already policy/time-validated `lastObservedAt` wins. This lets a genuinely newer restarted session replace an old high sequence while preventing a delayed older epoch from overwriting current state.
+- While the runtime is active, the Agent UI now reads the runtime's in-memory server-confirmed health/sync state. `status.json` remains only the startup/runtime-unavailable fallback.
+- The real freshness behavior is unchanged: the renderer still applies its existing 30-second fresh and 120-second stale thresholds. A genuinely old server-confirmed heartbeat, offline runtime, paused collector, auth problem, upgrade requirement, or policy setup requirement is still shown accurately.
+- Policy validation, lease enforcement, work hours, tenant/device credentials, and Owner/Employee boundaries are unchanged.
+- Agent version is now `desktop-agent-windows/0.6.5`.
+
+### Deployment And Artifact
+
+- No Prisma schema or database migration is required for this round.
+- Deploy the API change first. The already deployed Reports Web UI does not require another change for this round. Then install Desktop Agent 0.6.5 to fix the local red stale-file display; existing pairing credentials should remain valid.
+- Windows installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.5.exe`.
+- Size: `115436850` bytes.
+- SHA-256: `500C1F1063B88F92A1ED396EE290986B26D912EDD3FE5C421057A596E8A9CB86`.
+- Windows Authenticode status: `NotSigned`; do not describe this build as code-signed.
+
+### Verification
+
+- Focused API live semantics: pass, `7/7`. Coverage includes rejected snapshot plus confirmed health, valid snapshot replacement, accepted interval insertion/Reports display, new-epoch low-sequence replacement, and delayed old-epoch rejection.
+- Desktop Agent typecheck, lint, source/Alpha build, and Windows NSIS release: pass.
+- Desktop Agent tests: pass, `52/52`, including in-memory connected state and preservation of real offline/paused states.
+- API typecheck, lint, and build: pass.
+- Full API suite: `34/35`; the one unrelated existing fixed-date Reports verification now exceeds the 31-day ingestion limit and fails with `Activity event is too old`.
+- `git diff --check`: pass after the handoff update. The high-confidence secret scan found no new secret; its only repository match is the unchanged synthetic Prisma URL parsing fixture already documented in prior QA.
+
+### Manual QA, Intentionally Unchanged, And Remaining Risks
+
+- No installer was installed and no real Windows Agent -> deployed API -> Reports end-to-end manual QA was run. The installer was built and inspected only; production behavior is not claimed as manually verified.
+- Existing three dead-letter records were not deleted or rewritten. Two historical `HTTP_400` rows and one historical `POLICY_REJECTED` row still lack enough persisted old-client detail to reconstruct exact reasons.
+- No Web, policy configuration, schedule, timezone, lease duration, database schema/data, auth/RBAC, tenant boundary, pairing credential, or Browser Extension behavior was changed.
+- After API deployment and 0.6.5 installation, verify that the local heartbeat remains current, the in-window Reports snapshot advances past the old timestamp, a completed interval advances `Confirmed through`, and the corresponding App duration appears in historical Reports. Outside work hours, connection should remain online while current App is explicitly unconfirmed/outside collection time.
+
+### Suggested Next Steps
+
+1. Commit and push this source change, deploy the API, then distribute/install the generated 0.6.5 installer.
+2. Run the real-device checks above before calling the production loop fully verified.
+
 ## 2026-07-20 Desktop Agent / Reports Connection And Snapshot Separation
 
 ### Original Task Brief

@@ -122,12 +122,17 @@ function registerIpc() {
 }
 
 async function getUiState() {
-  const status = await readJson<AgentStatus>(join(getAgentDataDirectory(), "status.json"), {
-    state: paired ? "offline" : "unpaired",
-    queuedEvents: 0,
-  });
   const config = await loadAgentConfig();
   paired = Boolean(config);
+  // While the runtime is active, show its in-memory server-confirmed state.
+  // status.json remains a startup/failure fallback, but a delayed file write
+  // must not make a healthy runtime appear disconnected.
+  const status =
+    runtime?.getUiStatus() ??
+    (await readJson<AgentStatus>(join(getAgentDataDirectory(), "status.json"), {
+      state: paired ? "offline" : "unpaired",
+      queuedEvents: 0,
+    }));
   return {
     paired,
     status,

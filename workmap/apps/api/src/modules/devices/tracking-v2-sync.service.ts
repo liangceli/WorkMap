@@ -1500,13 +1500,26 @@ async function storeFocusSnapshot(input: {
         source: input.snapshot.source as TrackingActivitySource,
       },
     },
-    select: { snapshotSequence: true },
+    select: {
+      snapshotSequence: true,
+      clockEpochId: true,
+      lastObservedAt: true,
+    },
   });
-  if (
-    existing &&
-    existing.snapshotSequence >= input.snapshot.snapshotSequence
-  ) {
-    return null;
+  if (existing) {
+    const sameClockEpoch = existing.clockEpochId === input.snapshot.clockEpochId;
+    const incomingObservedAt = new Date(input.snapshot.lastObservedAt);
+    // Snapshot sequences are monotonic only within one clock epoch. Lock,
+    // resume, restart, or policy-boundary recovery creates a new epoch whose
+    // sequence starts at one, so a newer epoch must be ordered by its already
+    // validated observation time instead of the previous epoch's sequence.
+    if (
+      (sameClockEpoch &&
+        existing.snapshotSequence >= input.snapshot.snapshotSequence) ||
+      (!sameClockEpoch && existing.lastObservedAt >= incomingObservedAt)
+    ) {
+      return null;
+    }
   }
   let subjectId: string | null = null;
   if (input.snapshot.subjectKey && input.snapshot.displayName) {

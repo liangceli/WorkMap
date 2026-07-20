@@ -1,5 +1,49 @@
 # Latest QA Handoff
 
+## 2026-07-20 Desktop Agent 0.6.5 Cross-Epoch Snapshot And Live UI Health QA
+
+### Reviewed Implementation
+
+- Reviewed the remaining deployed Reports screenshot against the current Agent runtime/log state and the API snapshot upsert path.
+- Reviewed the Desktop engine epoch/sequence lifecycle, Electron UI state source, real heartbeat freshness thresholds, release metadata, and generated Windows installer.
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: the API treated `snapshotSequence` as globally monotonic even though it resets inside every new `clockEpochId`. A current in-window snapshot from a restarted/resumed epoch could therefore be silently ignored behind an older epoch's higher sequence.
+- Verified - Critical: cross-epoch ordering now uses the already validated `lastObservedAt`; same-epoch ordering still uses sequence. Automated tests prove a new epoch sequence `1` replaces old epoch sequence `900`, while a delayed old epoch sequence `901` cannot overwrite the newer observation.
+- Fixed - High: the active Agent window no longer depends exclusively on a potentially stale `status.json`; it reads the running runtime's current server-confirmed heartbeat and sync state.
+- Verified - High: this is not a cosmetic green-state override. Automated tests retain genuine `offline` and online-but-`paused` states, and the renderer's existing freshness thresholds were not changed.
+- Verified - High: accepted App intervals still enter the official activity ledger/report day fragment and are returned by Reports history; the focused API integration-style test covers one confirmed `10,000 ms` interval.
+- Unchanged - Medium: a real outside-work-window snapshot continues to be rejected while health may succeed. Reports should show connection online plus current activity unconfirmed/outside collection time, not a disconnect.
+- Remaining - Medium: the real deployed API plus installed 0.6.5 Windows loop has not been manually tested.
+
+### Test And Verification Status
+
+- Focused API live-semantics tests: pass, `7/7`.
+- Desktop Agent tests: pass, `52/52`.
+- Desktop Agent typecheck/lint/build: pass.
+- Desktop Agent Windows NSIS release: pass; artifact size and SHA-256 verified.
+- API typecheck/lint/build: pass.
+- Full API suite: fail, `34/35`; only the unrelated fixed-date `tracking-reports-verification.test.ts` exceeds the existing 31-day age limit.
+- Windows installer Authenticode check: `NotSigned`.
+- `git diff --check`: pass after the handoff update.
+- High-confidence secret scan: no new secret; the only repository match is the unchanged synthetic Prisma URL parsing test fixture.
+
+### Manual QA Status
+
+- Not run. The installer was not installed, no API deployment was performed, and no real in-window/outside-window Reports observation was performed in this round.
+
+### Security And Scope Review
+
+- No policy weakening,全天采集硬编码, schema/migration, production database mutation, credential change, re-pair, RBAC/tenant change, or Web change was introduced.
+- No token, credential, full URL, window title, user input, page content, or activity payload was added to logs or UI.
+- Build-generated native binary timestamp noise was restored to HEAD and excluded from the implementation diff.
+
+### Pass/Fail Recommendation
+
+- Pass for source, focused semantics, package verification, and creation of the unsigned 0.6.5 installer.
+- Proceed to API deployment and controlled 0.6.5 installation/manual QA. Do not call the production end-to-end loop verified until the Reports snapshot and a subsequently completed interval are observed on the real device.
+
 ## 2026-07-20 Desktop Agent / Reports Connection And Snapshot Separation QA
 
 ### Reviewed Implementation
