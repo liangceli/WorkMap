@@ -114,11 +114,40 @@ async function refreshDiagnostics(force) {
   const diagnostics = await api.getDiagnostics();
   if (!diagnostics) return;
   lastDiagnosticsRefreshAt = now;
+  document.querySelector("#diagnostics-connection").textContent =
+    `${formatDiagnosticState(diagnostics.connection?.state ?? diagnostics.connectionState)} - server-confirmed health`;
+  document.querySelector("#diagnostics-last-heartbeat").textContent =
+    formatTime(diagnostics.connection?.lastSuccessfulHeartbeatAt ?? diagnostics.lastSuccessfulHeartbeatAt);
+  const snapshotResult = diagnostics.snapshot?.lastServerResult;
+  const snapshotReason = snapshotResult?.reasonCode
+    ? ` / ${snapshotResult.reasonCode}`
+    : "";
+  document.querySelector("#diagnostics-snapshot").textContent =
+    `${formatDiagnosticState(diagnostics.snapshot?.syncStatus ?? "NOT_AVAILABLE")}${snapshotReason}`;
+  document.querySelector("#diagnostics-snapshot-observed").textContent =
+    formatDateTime(diagnostics.snapshot?.localObservedAt ?? snapshotResult?.observedAt);
+  const intervalUpload = diagnostics.intervalUpload;
+  document.querySelector("#diagnostics-interval-upload").textContent = intervalUpload
+    ? `${formatDiagnosticState(intervalUpload.status)} - ${intervalUpload.accepted} accepted / ${intervalUpload.duplicate} duplicate / ${intervalUpload.rejected} rejected`
+    : "No interval upload confirmed";
+  document.querySelector("#diagnostics-confirmed-through").textContent =
+    formatDateTime(intervalUpload?.latestAcceptedEndedAt);
   document.querySelector("#diagnostics-last-sync").textContent = formatTime(diagnostics.lastSuccessfulSyncAt);
   document.querySelector("#diagnostics-request-id").textContent = diagnostics.lastSyncDiagnostic?.requestId ?? "Not available";
   document.querySelector("#diagnostics-queue").textContent = `${diagnostics.queue.pending} pending / ${diagnostics.queue.deadLetter} rejected`;
   document.querySelector("#diagnostics-policy").textContent = diagnostics.policy.leasePresent
-    ? `${diagnostics.policy.version ?? "Unknown version"} - expires ${formatDateTime(diagnostics.policy.leaseExpiresAt)}`
+    ? `${diagnostics.policy.version ?? "Unknown version"} - App focus ${diagnostics.policy.collectAppFocus ? "enabled" : "disabled"} - ${formatDiagnosticState(diagnostics.policy.acknowledgementState ?? "UNKNOWN")}`
+    : "No active lease";
+  document.querySelector("#diagnostics-policy-schedule").textContent =
+    `${diagnostics.policy.scheduleTimeZone ?? "Time zone unavailable"} - ${diagnostics.policy.workHoursOnly ? `${diagnostics.policy.workdayStart ?? "?"}-${diagnostics.policy.workdayEnd ?? "?"}` : "all approved hours"}`;
+  const policyWindows = diagnostics.policy.allowedUtcWindows ?? [];
+  const relevantWindow = policyWindows.find((window) => Date.parse(window.endsAt) >= Date.now())
+    ?? policyWindows.at(-1);
+  document.querySelector("#diagnostics-policy-window").textContent = relevantWindow
+    ? `${relevantWindow.startsAt} to ${relevantWindow.endsAt}`
+    : "No allowed UTC window";
+  document.querySelector("#diagnostics-policy-lease").textContent = diagnostics.policy.leasePresent
+    ? `Issued ${formatDateTime(diagnostics.policy.leaseIssuedAt)} - expires ${formatDateTime(diagnostics.policy.leaseExpiresAt)}`
     : "No active lease";
   document.querySelector("#diagnostics-log-path").textContent = diagnostics.logDirectory;
 
@@ -160,6 +189,13 @@ async function refreshDiagnostics(force) {
     }
     list.append(item);
   }
+}
+
+function formatDiagnosticState(value) {
+  return String(value ?? "UNKNOWN")
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
 function setLegacyBacklog(status) {

@@ -194,6 +194,25 @@ export type TrackingSyncDiagnosticV2 = {
   outcome: "CONFIRMED" | "CONFIRMED_WITH_WARNING" | "FAILED";
 };
 
+export type TrackingSnapshotSyncStatusV2 = {
+  status: "CONFIRMED" | "REJECTED";
+  requestId: string;
+  completedAt: string;
+  snapshotState: "ACTIVE" | "IDLE" | "NONE";
+  observedAt: string;
+  reasonCode: string | null;
+};
+
+export type TrackingIntervalUploadStatusV2 = {
+  status: "CONFIRMED" | "CONFIRMED_WITH_REJECTIONS";
+  requestId: string;
+  completedAt: string;
+  accepted: number;
+  duplicate: number;
+  rejected: number;
+  latestAcceptedEndedAt: string | null;
+};
+
 export type ProtocolV2PrepareResponse = {
   activationId: string | null;
   state: "PREPARED" | "CONFIRMED";
@@ -261,6 +280,8 @@ export type DesktopTrackingRuntimeStateV2 = {
   lastErrorCode: TrackingHealthErrorCodeV2;
   lastSyncDiagnostic: TrackingSyncDiagnosticV2 | null;
   recentSyncFailures: TrackingSyncDiagnosticV2[];
+  lastSnapshotSyncStatus: TrackingSnapshotSyncStatusV2 | null;
+  lastIntervalUploadStatus: TrackingIntervalUploadStatusV2 | null;
 };
 
 export type DesktopV2QueueStats = {

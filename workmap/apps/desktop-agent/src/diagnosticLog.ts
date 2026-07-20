@@ -9,6 +9,10 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { getAgentDataDirectory } from "./fileStore.js";
+import type {
+  TrackingIntervalUploadStatusV2,
+  TrackingSnapshotSyncStatusV2,
+} from "./trackingV2Types.js";
 
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
 const RETENTION_DAYS = 7;
@@ -46,6 +50,11 @@ export type AgentDiagnosticsBundle = {
   logDirectory: string;
   connectionState: string;
   collectorState: string;
+  connection: {
+    state: string;
+    lastSuccessfulHeartbeatAt: string | null;
+    lastSuccessfulSyncAt: string | null;
+  };
   queue: {
     pending: number;
     ready: number;
@@ -55,9 +64,24 @@ export type AgentDiagnosticsBundle = {
   policy: {
     version: string | null;
     leasePresent: boolean;
+    leaseIssuedAt: string | null;
     leaseExpiresAt: string | null;
+    scheduleTimeZone: string | null;
+    scheduleTimeZoneState: string | null;
+    workHoursOnly: boolean | null;
+    workdayStart: string | null;
+    workdayEnd: string | null;
+    collectAppFocus: boolean | null;
+    allowedUtcWindows: Array<{ startsAt: string; endsAt: string }>;
     acknowledgementState: string | null;
   };
+  snapshot: {
+    localState: string | null;
+    localObservedAt: string | null;
+    syncStatus: string;
+    lastServerResult: TrackingSnapshotSyncStatusV2 | null;
+  };
+  intervalUpload: TrackingIntervalUploadStatusV2 | null;
   lastSuccessfulSyncAt: string | null;
   lastSuccessfulHeartbeatAt: string | null;
   lastSyncDiagnostic: unknown;

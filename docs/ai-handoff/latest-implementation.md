@@ -1,5 +1,71 @@
 # Latest Implementation Handoff
 
+## 2026-07-20 Desktop Agent / Reports Connection And Snapshot Separation
+
+### Original Task Brief
+
+- Independently verify the Desktop Agent 0.6.4 Tracking Protocol v2 sync path instead of trusting prior handoff completion claims.
+- Determine why server-confirmed heartbeat timestamps remain current while the live App snapshot remains old and Owner `/reports` shows `Signal interrupted / Stale`.
+- Keep health, current snapshot, historical diagnostics, and confirmed interval upload as separate state lanes; preserve tenant, credential, acknowledgement, lease, work-window, and role boundaries.
+- Add automated evidence for snapshot rejection with successful health, valid snapshot replacement, and valid App interval insertion/reporting.
+
+### Root Cause And Local Evidence
+
+- Heartbeat is genuinely server-confirmed. The sync transaction stores `ClientHealthSnapshot`, updates device `lastSeenAt`, and returns HTTP 200 even when the optional live snapshot has a warning result. Privacy-safe local runtime/log inspection also showed recent confirmed heartbeat/sync timestamps, `pending = 0`, and later accepted in-window snapshots/intervals.
+- A rejected live snapshot is intentionally not written over the last accepted `LiveFocusSnapshot`. That explains why `snapshot.receivedAt` can remain old while health is current. The old Reports implementation then used `snapshot.receivedAt ?? health.receivedAt` for a single freshness value, so the old snapshot masked the new health timestamp and produced the false red disconnect state.
+- The inspected local policy is internally consistent: `Australia/Adelaide`, work-hours-only `09:00-17:00`, App focus enabled, acknowledgement `ACKNOWLEDGED`, a 24-hour lease issued at `2026-07-19T08:42:19Z` and expiring at `2026-07-20T08:42:19Z`, with the relevant allowed UTC window `2026-07-19T23:30:00Z` through `2026-07-20T07:30:00Z`. No schedule, timezone, lease duration, or collection switch was changed.
+- The observed `SNAPSHOT_OUTSIDE_POLICY_WINDOW` warning proves the snapshot lane was rejected by policy, but it does not prove the configured Adelaide schedule was wrong. The prior validator also used that same code for invalid/missing state timing. Validation now reports `SNAPSHOT_OBSERVATION_TIME_INVALID` for timing faults and reserves `SNAPSHOT_OUTSIDE_POLICY_WINDOW` for the actual window check.
+- Three local dead letters were inspected without exposing App names or payloads: two historical `HTTP_400` records and one `POLICY_REJECTED` record. Older builds persisted no safe server subreason/request correlation for those rows, so their exact causes cannot be reconstructed. Fabricating a more precise reason would be incorrect.
+
+### Changed Files
+
+- API sync and health/snapshot persistence: `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`.
+- API live Reports semantics: `workmap/apps/api/src/modules/reports/tracking-v2-reports.service.ts`.
+- API regression coverage: `workmap/apps/api/test/tracking-v2-live-semantics.test.ts`.
+- Owner Reports types and rendering: `workmap/apps/web/lib/api/apiTypes.ts`, `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`, and `workmap/apps/web/components/reports/trackingV2LivePresentation.ts`.
+- Owner Reports regression coverage: `workmap/apps/web/test/tracking-v2-live-presentation.test.ts`.
+- Desktop diagnostics state/persistence: `workmap/apps/desktop-agent/src/runtimeV2.ts`, `src/trackingV2Store.ts`, `src/trackingV2Types.ts`, and `src/diagnosticLog.ts`.
+- Desktop diagnostics UI/tests: `workmap/apps/desktop-agent/renderer/app.js`, `renderer/index.html`, and `test/gui-release.test.ts`.
+
+### Implementation Summary
+
+- Live-activity connection freshness now uses only the latest server-received health timestamp. Legacy `fresh` fields remain as compatibility aliases for this connection lane.
+- Snapshot freshness/status is independent and reports `CURRENT`, `NO_CURRENT_FOCUS`, `STALE`, `REJECTED`, or `NOT_RECEIVED`. A newer snapshot warning takes precedence over an older stored snapshot, while a newer accepted snapshot clears the warning.
+- Owner Reports shows `Connected` for fresh server-confirmed health even when the current App snapshot is rejected, stale, or unavailable. Snapshot copy separately says `Current activity not confirmed`, `Outside collection window`, `Snapshot stale`, or `No current App snapshot`; only stale/missing health produces `Signal interrupted`.
+- A health-only sync preserves the latest snapshot diagnostic because it does not prove a new snapshot was accepted. A valid accepted snapshot explicitly clears that diagnostic.
+- A duplicate or older snapshot that passes policy validation but does not replace the stored sequence cannot clear a newer rejection diagnostic.
+- Desktop Diagnostics now separates connection/heartbeat, local and server-confirmed snapshot state, historical rejected/network diagnostics, and the last interval upload result. Policy timezone, local schedule, exact allowed UTC window, App focus switch, acknowledgement, and lease issue/expiry are visible without storing credentials, URLs, titles, user input, or content.
+- Interval diagnostics record accepted/duplicate/rejected counts and the latest server-confirmed cursor time. HTTP 200 is still not presented as proof that every interval was accepted.
+
+### Role And Security Boundaries
+
+- No policy enforcement was removed or weakened. Tenant/device checks, protected device credentials, protocol activation, acknowledgement, collection switches, lease validity, work windows, and Owner/Employee access boundaries are unchanged.
+- No auth, RBAC, Prisma schema/migration, deployment configuration, pairing flow, Browser Extension behavior, or Platform Admin behavior was changed.
+- Diagnostics remain privacy-minimized: no token, credential, full URL, window title, keystroke/input, screen/page content, or complete activity payload is logged or rendered.
+
+### Verification
+
+- Desktop Agent: typecheck, lint, build, renderer `node --check`, and package tests passed; package tests are `50/50`.
+- API: typecheck, lint, and production build passed.
+- Focused API live-semantics tests passed `5/5`: health confirmation despite snapshot rejection, precise invalid-timing rejection, newer valid snapshot replacement/diagnostic clearing, duplicate snapshot warning preservation, and accepted App interval insertion plus Reports ledger display (`10,000 ms`).
+- Existing policy lease tests passed `3/3`, including Adelaide Monday work-window generation and stale-window non-reuse.
+- Web: typecheck, lint, and production build passed. Focused connection/snapshot presentation tests passed `2/2`.
+- Full API suite is `32/33`: the unrelated existing `tracking-reports-verification.test.ts` uses a fixed June date that is now older than the 31-day ingestion limit and fails with `Activity event is too old`.
+- Full Web suite is `71/75`: four unrelated existing source/render assertions fail (`expanded domain card...`, `failed summary revision...`, `initial report loads...`, and responsive section padding). The relevant failing HEAD facts were verified unchanged by this diff; for example HEAD already contains three detail sections while the test expects two.
+- `git diff --check` passed. The high-confidence repository secret scan found no production secret; its only match was an existing synthetic Prisma URL parsing test fixture, which was reviewed with credentials redacted.
+
+### Manual QA, Intentionally Unchanged, And Remaining Risks
+
+- Real Windows Agent -> deployed API -> Owner Reports end-to-end manual QA was not run. No production deployment, policy mutation, database write, installer installation, re-pair, or real-device work-window transition was performed.
+- A source/Alpha package build was run, but no new version bump or distributable NSIS release was created for this round.
+- Required real-device QA: deploy matching API/Web, install a rebuilt Agent, verify fresh health plus outside-window snapshot copy, verify in-window current App replacement, wait for a completed interval, and confirm the same App duration appears in historical Reports.
+- Build/typecheck rewrote two tracked generated files (the Alpha native-host executable copy and Web `tsconfig.tsbuildinfo`). After explicit user authorization, both were restored to HEAD and excluded from the implementation commits.
+
+### Suggested Next Steps
+
+1. Fix or time-anchor the unrelated API fixed-date test and update the four stale Web assertions in a separate maintenance round.
+2. Run the coordinated real Windows QA sequence above before calling the production loop verified.
+
 ## 2026-07-19 Desktop Agent 0.6.4 Detailed Sync Failure Reasons
 
 ### Original Task Brief

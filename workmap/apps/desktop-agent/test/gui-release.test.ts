@@ -24,11 +24,18 @@ test("Windows release is a visual NSIS installer", async () => {
   assert.match(html, /id="pair-code"/);
   assert.match(html, /id="agent-error"/);
   assert.match(html, /id="legacy-backlog"/);
+  assert.match(html, /id="diagnostics-connection"/);
+  assert.match(html, /id="diagnostics-snapshot"/);
+  assert.match(html, /id="diagnostics-interval-upload"/);
+  assert.match(html, /id="diagnostics-policy-window"/);
+  assert.match(html, /Historical rejected \/ network diagnostics/);
   assert.match(html, /Never collected/);
   assert.match(renderer, /deriveStatusHealth/);
   assert.match(renderer, /Signal stale/);
   assert.match(renderer, /Last server-confirmed heartbeat/);
   assert.match(renderer, /Legacy compatibility backlog/);
+  assert.match(renderer, /server-confirmed health/);
+  assert.match(renderer, /intervalUpload\.accepted/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
   assert.match(version, /desktop-agent-windows\/0\.6\.4/);
   assert.match(electronMain, /DesktopAgentRuntimeV2/);

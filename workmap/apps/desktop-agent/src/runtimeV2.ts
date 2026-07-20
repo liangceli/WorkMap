@@ -123,6 +123,10 @@ export class DesktopAgentRuntimeV2 {
       recentSyncFailures: Array.isArray(persistedState?.recentSyncFailures)
         ? persistedState.recentSyncFailures.slice(0, 10)
         : [],
+      lastSnapshotSyncStatus:
+        persistedState?.lastSnapshotSyncStatus ?? null,
+      lastIntervalUploadStatus:
+        persistedState?.lastIntervalUploadStatus ?? null,
     };
   }
 
@@ -140,6 +144,11 @@ export class DesktopAgentRuntimeV2 {
       logDirectory: this.diagnosticLog.getDirectory(),
       connectionState: this.connectionState,
       collectorState: this.collectorState,
+      connection: {
+        state: this.connectionState,
+        lastSuccessfulHeartbeatAt: this.state.lastSuccessfulHeartbeatAt,
+        lastSuccessfulSyncAt: this.state.lastSuccessfulSyncAt,
+      },
       queue: {
         pending: queue.pending,
         ready: queue.ready,
@@ -149,10 +158,33 @@ export class DesktopAgentRuntimeV2 {
       policy: {
         version: this.state.policy?.policyVersion ?? null,
         leasePresent: Boolean(this.state.policy?.policyLeaseId),
+        leaseIssuedAt: this.state.policy?.policyLeaseIssuedAt ?? null,
         leaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
+        scheduleTimeZone: this.state.policy?.scheduleTimeZone ?? null,
+        scheduleTimeZoneState:
+          this.state.policy?.scheduleTimeZoneState ?? null,
+        workHoursOnly: this.state.policy?.workHoursOnly ?? null,
+        workdayStart: this.state.policy?.workdayStart ?? null,
+        workdayEnd: this.state.policy?.workdayEnd ?? null,
+        collectAppFocus: this.state.policy?.collectAppFocus ?? null,
+        allowedUtcWindows:
+          this.state.policy?.allowedUtcWindows.map((window) => ({
+            startsAt: window.startsAt,
+            endsAt: window.endsAt,
+          })) ?? [],
         acknowledgementState:
           this.state.policy?.acknowledgementState ?? null,
       },
+      snapshot: {
+        localState: this.state.latestSnapshot?.state ?? null,
+        localObservedAt: this.state.latestSnapshot?.lastObservedAt ?? null,
+        syncStatus: snapshotDiagnosticStatus(
+          this.state.latestSnapshot,
+          this.state.lastSnapshotSyncStatus,
+        ),
+        lastServerResult: this.state.lastSnapshotSyncStatus,
+      },
+      intervalUpload: this.state.lastIntervalUploadStatus,
       lastSuccessfulSyncAt: this.state.lastSuccessfulSyncAt,
       lastSuccessfulHeartbeatAt: this.state.lastSuccessfulHeartbeatAt,
       lastSyncDiagnostic: this.state.lastSyncDiagnostic,
@@ -646,6 +678,42 @@ export class DesktopAgentRuntimeV2 {
           ? "QUEUE_PRESSURE"
           : "NONE";
       const syncedAt = new Date(serverNow(this.state)).toISOString();
+      const snapshotSyncStatus = request.focusSnapshot && snapshotResult
+        ? {
+            status:
+              snapshotResult.status === "ACCEPTED"
+                ? "CONFIRMED" as const
+                : "REJECTED" as const,
+            requestId: response.requestId ?? requestId,
+            completedAt: syncedAt,
+            snapshotState: request.focusSnapshot.state,
+            observedAt: request.focusSnapshot.lastObservedAt,
+            reasonCode:
+              snapshotResult.status === "REJECTED"
+                ? snapshotResult.rejectionCode
+                : null,
+          }
+        : this.state.lastSnapshotSyncStatus;
+      const intervalUploadStatus = intervals.length > 0
+        ? {
+            status:
+              response.results.some((result) => result.status === "REJECTED")
+                ? "CONFIRMED_WITH_REJECTIONS" as const
+                : "CONFIRMED" as const,
+            requestId: response.requestId ?? requestId,
+            completedAt: syncedAt,
+            accepted: response.results.filter(
+              (result) => result.status === "ACCEPTED",
+            ).length,
+            duplicate: response.results.filter(
+              (result) => result.status === "DUPLICATE",
+            ).length,
+            rejected: response.results.filter(
+              (result) => result.status === "REJECTED",
+            ).length,
+            latestAcceptedEndedAt: latestCursorAcceptedAt(response.cursors),
+          }
+        : this.state.lastIntervalUploadStatus;
       const syncDiagnostic: TrackingSyncDiagnosticV2 = {
         requestId: response.requestId ?? requestId,
         attemptedAt,
@@ -685,6 +753,8 @@ export class DesktopAgentRuntimeV2 {
           snapshotResult?.status === "REJECTED"
             ? prependDiagnostic(this.state.recentSyncFailures, syncDiagnostic)
             : this.state.recentSyncFailures,
+        lastSnapshotSyncStatus: snapshotSyncStatus,
+        lastIntervalUploadStatus: intervalUploadStatus,
       };
       this.store.writeRuntimeState(this.state);
       await this.diagnosticLog.write({
@@ -1212,6 +1282,38 @@ function snapshotRejectionRemediation(code: string) {
 
 function snapshotRejectionRetryable(code: string) {
   return code !== "SNAPSHOT_OUTSIDE_POLICY_WINDOW";
+}
+
+function snapshotDiagnosticStatus(
+  snapshot: DesktopTrackingRuntimeStateV2["latestSnapshot"],
+  serverResult: DesktopTrackingRuntimeStateV2["lastSnapshotSyncStatus"],
+) {
+  if (!snapshot) return serverResult?.status ?? "NOT_AVAILABLE";
+  if (
+    serverResult?.status === "CONFIRMED" &&
+    serverResult.observedAt === snapshot.lastObservedAt
+  ) {
+    return "CONFIRMED";
+  }
+  if (
+    serverResult?.status === "REJECTED" &&
+    serverResult.observedAt === snapshot.lastObservedAt
+  ) {
+    return "REJECTED";
+  }
+  return "LOCAL_PENDING";
+}
+
+function latestCursorAcceptedAt(
+  cursors: Array<{ latestAcceptedEndedAt: string | null }>,
+) {
+  return cursors.reduce<string | null>((latest, cursor) => {
+    if (!cursor.latestAcceptedEndedAt) return latest;
+    if (!latest) return cursor.latestAcceptedEndedAt;
+    return Date.parse(cursor.latestAcceptedEndedAt) > Date.parse(latest)
+      ? cursor.latestAcceptedEndedAt
+      : latest;
+  }, null);
 }
 
 function prependDiagnostic(

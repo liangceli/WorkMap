@@ -62,13 +62,22 @@
               <summary>Diagnostics</summary>
               <div class="diagnostics-content">
                 <dl class="diagnostics-grid">
+                  <div><dt>Connection</dt><dd id="diagnostics-connection">Not confirmed</dd></div>
+                  <div><dt>Last secure heartbeat</dt><dd id="diagnostics-last-heartbeat">Not confirmed</dd></div>
+                  <div><dt>Current App snapshot</dt><dd id="diagnostics-snapshot">Not available</dd></div>
+                  <div><dt>Snapshot observed</dt><dd id="diagnostics-snapshot-observed">Not available</dd></div>
+                  <div><dt>Last interval upload</dt><dd id="diagnostics-interval-upload">No interval upload</dd></div>
+                  <div><dt>Confirmed interval through</dt><dd id="diagnostics-confirmed-through">No confirmed interval</dd></div>
                   <div><dt>Last confirmed sync</dt><dd id="diagnostics-last-sync">Not synced</dd></div>
                   <div><dt>Last request ID</dt><dd id="diagnostics-request-id">Not available</dd></div>
                   <div><dt>Tracking v2 queue</dt><dd id="diagnostics-queue">0 pending / 0 rejected</dd></div>
-                  <div><dt>Policy lease</dt><dd id="diagnostics-policy">Not loaded</dd></div>
+                  <div><dt>Policy</dt><dd id="diagnostics-policy">Not loaded</dd></div>
+                  <div><dt>Collection schedule</dt><dd id="diagnostics-policy-schedule">Not loaded</dd></div>
+                  <div><dt>Allowed UTC window</dt><dd id="diagnostics-policy-window">Not loaded</dd></div>
+                  <div><dt>Policy lease</dt><dd id="diagnostics-policy-lease">Not loaded</dd></div>
                 </dl>
                 <div class="diagnostics-errors">
-                  <strong>Recent sync diagnostics</strong>
+                  <strong>Historical rejected / network diagnostics</strong>
                   <ol id="diagnostics-error-list"><li>No recent sync errors.</li></ol>
                 </div>
                 <p class="diagnostics-path"><span>Local logs</span><code id="diagnostics-log-path">Preparing...</code></p>

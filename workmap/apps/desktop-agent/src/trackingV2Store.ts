@@ -284,6 +284,8 @@ export function createInitialDesktopTrackingV2State(): DesktopTrackingRuntimeSta
     lastErrorCode: "NONE",
     lastSyncDiagnostic: null,
     recentSyncFailures: [],
+    lastSnapshotSyncStatus: null,
+    lastIntervalUploadStatus: null,
   };
 }
 

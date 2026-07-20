@@ -1,5 +1,61 @@
 # Latest QA Handoff
 
+## 2026-07-20 Desktop Agent / Reports Connection And Snapshot Separation QA
+
+### Reviewed Implementation
+
+- Independently reviewed the Desktop v2 runtime, API client/store/types/focus engine and diagnostic UI; the API sync, policy, device controller, and Reports services; Owner Reports live-activity types/rendering; local privacy-safe SQLite/runtime/log state; and all current changes against HEAD.
+- Verified the actual transaction and presentation semantics rather than relying on the prior handoff's completion language.
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: Reports used `snapshot.receivedAt ?? health.receivedAt`; an old snapshot therefore masked a current server-confirmed health signal and falsely rendered a red `Signal interrupted / Stale` state.
+- Fixed - High: connection freshness is now based only on server-received health; snapshot freshness/rejection/current-state is a separate lane. Snapshot policy rejection cannot turn current health into a disconnect.
+- Fixed - High: a newer snapshot rejection is retained across health-only syncs and suppresses the older stored snapshot from being presented as current. A newer accepted snapshot replaces the old row and clears the warning.
+- Fixed - High: an older or duplicate snapshot cannot clear a newer rejection warning merely because its payload passes policy validation; warning clearing requires an actual sequence replacement.
+- Verified - High: HTTP 200 confirms the sync/health transaction, not blanket interval acceptance. A focused integration-style service test demonstrates one valid `10,000 ms` App interval is accepted into `ActivityInterval`, receives a report day fragment, and appears in the Reports ledger fallback.
+- Fixed - Medium: the validator no longer conflates invalid state timing with an outside-window result. `SNAPSHOT_OUTSIDE_POLICY_WINDOW` is reserved for the actual window predicate; invalid/missing timing returns `SNAPSHOT_OBSERVATION_TIME_INVALID`.
+- Fixed - Medium: Desktop Diagnostics separately display connection/heartbeat, current App snapshot, historical rejected/network items, last confirmed interval upload, and exact policy/lease/window details.
+- Verified limitation - Medium: exact reasons for the two historical generic `HTTP_400` dead letters and one generic `POLICY_REJECTED` dead letter cannot be recovered because older local persistence omitted the detailed safe reason/request correlation.
+- Remaining - Medium: no real deployed Windows Agent/API/Reports loop was manually tested, so production behavior is not claimed as verified.
+
+### Policy Assessment
+
+- Inspected configuration: `Australia/Adelaide`, `09:00-17:00`, work-hours-only, App focus enabled, acknowledgement `ACKNOWLEDGED`, 24-hour lease, and relevant allowed UTC window `2026-07-19T23:30:00Z` to `2026-07-20T07:30:00Z`.
+- Recommendation: do not change the schedule/timezone/lease based on the available evidence. Policy rejection explains why a particular snapshot was not accepted, but the configuration itself is not proven wrong. No policy behavior was weakened in this round.
+
+### Test And Verification Status
+
+- Desktop Agent typecheck/lint/build/renderer syntax: pass.
+- Desktop Agent package tests: pass, `50/50`.
+- API typecheck/lint/build: pass.
+- Focused API live-semantics tests: pass, `5/5`.
+- API policy lease tests: pass, `3/3`.
+- Web typecheck/lint/build: pass.
+- Focused Web live-presentation tests: pass, `2/2`.
+- Full API package suite: fail, `32/33`; unrelated fixed-date test is now outside the 31-day ingestion window.
+- Full Web package suite: fail, `71/75`; four stale/brittle assertions already conflict with HEAD and are unrelated to the current diff.
+- `git diff --check`: pass.
+- High-confidence secret scan: pass for the current change; the only repository match was an existing synthetic Prisma URL parsing fixture, reviewed with its credential segment redacted.
+
+### Manual QA Status
+
+- Not run. No real Windows installation, production API/Web deployment, real work-window transition, or Owner Reports browser verification was performed.
+- Required manual evidence remains: outside-window heartbeat stays Connected with unconfirmed App copy; in-window snapshot becomes current; a subsequently completed interval is visible in historical Reports.
+
+### Risks
+
+- The deployed API and Web must be updated together because Web now consumes the new independent live-activity fields.
+- A new Desktop installer/release is needed to expose the improved Agent Diagnostics UI; this round only ran the package build and did not version or publish an installer.
+- The two tracked files rewritten by required verification were restored to HEAD after explicit user authorization and are not part of the implementation diff.
+- Existing API/Web test debt should be repaired separately rather than mixed into this sync-status correction.
+
+### Pass/Fail Recommendation
+
+- Pass for the scoped source correction and focused automated semantics.
+- Do not claim production completion until the real Windows Agent/API/Web/Reports loop is manually exercised.
+- The next implementation round may proceed; production rollout should proceed only to coordinated QA, not directly to a verified-complete claim.
+
 ## 2026-07-19 Desktop Agent 0.6.4 Detailed Sync Failure Reasons QA
 
 ### Reviewed Implementation
