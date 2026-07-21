@@ -200,6 +200,95 @@ export class ComplianceService {
       },
     });
   }
+
+  async enableOpenRuntimeCollection(
+    context: RequestContext,
+    monitoringPolicyId: string,
+  ) {
+    if (!canManageCompliance(context)) {
+      throw new ForbiddenException(
+        "Only an authorised policy administrator can enable App open/runtime collection.",
+      );
+    }
+
+    const now = new Date();
+    const policy = await this.prisma.monitoringPolicy.findFirst({
+      where: {
+        companyId: context.companyId,
+        activeFrom: { lte: now },
+      },
+      orderBy: [{ activeFrom: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        companyId: true,
+        name: true,
+        collectAppUsage: true,
+        collectOpenRuntime: true,
+        collectWebsiteDomain: true,
+        collectFullUrl: true,
+        collectScreenshots: true,
+        collectKeystrokes: true,
+        workHoursOnly: true,
+        workdayStart: true,
+        workdayEnd: true,
+        scheduleTimeZone: true,
+        retentionDays: true,
+        employeeCanViewOwnData: true,
+        policyVersion: true,
+        activeFrom: true,
+      },
+    });
+    if (!policy || policy.id !== monitoringPolicyId) {
+      throw new NotFoundException("Active monitoring policy not found.");
+    }
+    if (!policy.collectAppUsage) {
+      throw new BadRequestException(
+        "App open/runtime collection requires App usage collection to remain enabled.",
+      );
+    }
+    if (policy.collectOpenRuntime) return policy;
+
+    const versions = await this.prisma.monitoringPolicy.findMany({
+      where: { companyId: context.companyId },
+      select: { policyVersion: true },
+    });
+    const policyVersion = nextPolicyVersion(
+      versions.map((item) => item.policyVersion),
+    );
+    return this.prisma.monitoringPolicy.create({
+      data: {
+        companyId: policy.companyId,
+        name: policy.name,
+        collectAppUsage: policy.collectAppUsage,
+        collectOpenRuntime: true,
+        collectWebsiteDomain: policy.collectWebsiteDomain,
+        collectFullUrl: policy.collectFullUrl,
+        collectScreenshots: policy.collectScreenshots,
+        collectKeystrokes: policy.collectKeystrokes,
+        workHoursOnly: policy.workHoursOnly,
+        workdayStart: policy.workdayStart,
+        workdayEnd: policy.workdayEnd,
+        scheduleTimeZone: policy.scheduleTimeZone,
+        retentionDays: policy.retentionDays,
+        employeeCanViewOwnData: policy.employeeCanViewOwnData,
+        policyVersion,
+        activeFrom: new Date(
+          Math.max(now.getTime(), policy.activeFrom.getTime() + 1),
+        ),
+      },
+    });
+  }
+}
+
+export function nextPolicyVersion(versions: string[]) {
+  const highest = versions.reduce((current, version) => {
+    const match = /^v(\d+)$/.exec(version.trim());
+    return match ? Math.max(current, Number(match[1])) : current;
+  }, 0);
+  let candidate = Math.max(1, highest + 1);
+  const existing = new Set(versions);
+  while (existing.has(`v${candidate}`)) candidate += 1;
+  return `v${candidate}`;
 }
 
 function readBody(value: unknown): Record<string, unknown> {

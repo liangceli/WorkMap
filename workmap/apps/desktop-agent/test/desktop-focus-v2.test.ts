@@ -66,6 +66,41 @@ test("transitions to idle exactly sixty seconds after trusted evidence", () => {
   assert.equal(idle.snapshot.stateStartedAt, "2026-07-17T00:01:09.000Z");
 });
 
+test("ninety seconds without input becomes sixty seconds active and thirty seconds focused idle", () => {
+  const tracker = engine();
+  tracker.acquireFocus(APP_A, 1_000);
+
+  const settled = tracker.settle(91_000);
+  assert.equal(settled.intervals.length, 2);
+  assert.deepEqual(
+    settled.intervals.map((interval) => ({
+      metric: interval.metric,
+      durationMs: interval.durationMs,
+    })),
+    [
+      { metric: "FOCUS_ACTIVE", durationMs: 60_000 },
+      { metric: "FOCUS_IDLE", durationMs: 30_000 },
+    ],
+  );
+});
+
+test("a transient unidentified foreground gap stays on one non-overlapping clock epoch", () => {
+  const tracker = engine();
+  tracker.acquireFocus(APP_A, 1_000);
+  const cleared = tracker.clearFocus(5_000);
+  const resumed = tracker.acquireFocus(APP_B, 6_000);
+  const settled = tracker.settle(16_000);
+
+  const intervals = [...cleared.intervals, ...resumed.intervals, ...settled.intervals];
+  assert.ok(intervals.every((interval) => interval.clockEpochId === CLOCK.clockEpochId));
+  for (let index = 1; index < intervals.length; index += 1) {
+    assert.ok(
+      Date.parse(intervals[index - 1]!.endedAt) <=
+        Date.parse(intervals[index]!.startedAt),
+    );
+  }
+});
+
 test("periodic settlement keeps one logical session and stable sequence", () => {
   const tracker = engine();
   const started = tracker.acquireFocus(APP_A, 1_000);

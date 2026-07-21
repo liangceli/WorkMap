@@ -254,15 +254,16 @@ test("a delayed prior clock epoch cannot overwrite a newer observed snapshot", a
   );
 });
 
-test("a valid App interval is inserted into the confirmed ledger and displayed by Reports", async () => {
+test("valid Focus active and focused-idle intervals enter the ledger and Reports", async () => {
   const now = Date.now();
   const prisma = new SyncPrisma(now);
   const sync = new TrackingV2SyncService(
     prisma as any,
     policyService(now) as any,
   );
-  const startedAt = new Date(now - 20_000);
-  const endedAt = new Date(now - 10_000);
+  const startedAt = new Date(now - 50_000);
+  const endedAt = new Date(now - 40_000);
+  const idleEndedAt = new Date(now - 10_000);
 
   const response = await sync.sync(
     context(now),
@@ -286,14 +287,32 @@ test("a valid App interval is inserted into the confirmed ledger and displayed b
           policyVersion: "v1",
           policyLeaseId: LEASE_ID,
         },
+        {
+          clientEventId: "79797979-7979-4979-8979-797979797979",
+          activitySessionId: "88888888-8888-4888-8888-888888888888",
+          sequenceNumber: 2,
+          source: "DESKTOP_APP",
+          stream: "FOCUS",
+          metric: "FOCUS_IDLE",
+          subjectKey: "app:test",
+          displayName: "Test App",
+          startedAt: endedAt.toISOString(),
+          endedAt: idleEndedAt.toISOString(),
+          clockEpochId: CLOCK_ID,
+          startedMonotonicMs: 11_000,
+          endedMonotonicMs: 41_000,
+          durationMs: 30_000,
+          policyVersion: "v1",
+          policyLeaseId: LEASE_ID,
+        },
       ],
     }),
     REQUEST_ID,
   );
 
-  assert.equal(response.results[0]?.status, "ACCEPTED");
-  assert.equal(prisma.intervals.length, 1, "the accepted interval is in the official ledger");
-  assert.equal(prisma.fragments.length, 1, "the ledger interval has a report day fragment");
+  assert.deepEqual(response.results.map((result) => result.status), ["ACCEPTED", "ACCEPTED"]);
+  assert.equal(prisma.intervals.length, 2, "accepted intervals are in the official ledger");
+  assert.equal(prisma.fragments.length, 2, "ledger intervals have report day fragments");
   assert.equal(
     Object.hasOwn(prisma.healthUpdate, "serverDiagnosticCode"),
     false,
@@ -320,7 +339,185 @@ test("a valid App interval is inserted into the confirmed ledger and displayed b
   assert(usage);
   assert.equal(usage.apps[0]?.appName, "Test App");
   assert.equal(usage.apps[0]?.focusActiveMs, 10_000);
+  assert.equal(usage.apps[0]?.focusedIdleMs, 30_000);
   assert.equal(usage.coverage.reconciliationState, "LEDGER_FALLBACK");
+});
+
+test("overlapping open/runtime for different Apps is accepted and displayed without becoming Focus time", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  const sync = new TrackingV2SyncService(
+    prisma as any,
+    policyService(now) as any,
+  );
+  const startedAt = new Date(now - 20_000);
+  const endedAt = new Date(now - 10_000);
+  const runtimeInterval = (
+    clientEventId: string,
+    sequenceNumber: number,
+    subjectKey: string,
+    displayName: string,
+  ) => ({
+    clientEventId,
+    activitySessionId: `${sequenceNumber}8888888-8888-4888-8888-888888888888`,
+    sequenceNumber,
+    source: "DESKTOP_APP",
+    stream: "OPEN_RUNTIME",
+    metric: "OPEN_RUNTIME",
+    subjectKey,
+    displayName,
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    clockEpochId: NEW_CLOCK_ID,
+    startedMonotonicMs: 1_000,
+    endedMonotonicMs: 11_000,
+    durationMs: 10_000,
+    policyVersion: "v1",
+    policyLeaseId: LEASE_ID,
+  });
+
+  const response = await sync.sync(
+    context(now),
+    syncRequest(now, {
+      intervals: [
+        runtimeInterval(
+          "71717171-7171-4171-8171-717171717171",
+          1,
+          "app:codex",
+          "Codex",
+        ),
+        runtimeInterval(
+          "72727272-7272-4272-8272-727272727272",
+          2,
+          "app:teams",
+          "Microsoft Teams",
+        ),
+      ],
+    }),
+    REQUEST_ID,
+  );
+
+  assert.deepEqual(response.results.map((result) => result.status), [
+    "ACCEPTED",
+    "ACCEPTED",
+  ]);
+  assert.equal(prisma.intervals.length, 2);
+
+  const reports = new TrackingV2ReportsService(
+    prisma as any,
+    {
+      reconcileTargets: async () => {
+        throw new Error("Use the ledger fallback in this focused test.");
+      },
+    } as any,
+  );
+  const usage = await reports.getConfirmedUsage({
+    companyId: COMPANY_ID,
+    userId: USER_ID,
+    range: {
+      from: new Date(`${startedAt.toISOString().slice(0, 10)}T00:00:00.000Z`),
+      to: new Date(`${startedAt.toISOString().slice(0, 10)}T23:59:59.999Z`),
+    },
+  });
+
+  assert(usage);
+  assert.equal(usage.coverage.openRuntimeEnabled, true);
+  assert.deepEqual(
+    usage.apps.map((row) => ({
+      appName: row.appName,
+      focusActiveMs: row.focusActiveMs,
+      openRuntimeMs: row.openRuntimeMs,
+    })).sort((left, right) => left.appName.localeCompare(right.appName)),
+    [
+      { appName: "Codex", focusActiveMs: 0, openRuntimeMs: 10_000 },
+      { appName: "Microsoft Teams", focusActiveMs: 0, openRuntimeMs: 10_000 },
+    ],
+  );
+});
+
+test("overlapping open/runtime for the same App remains rejected", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  const sync = new TrackingV2SyncService(
+    prisma as any,
+    policyService(now) as any,
+  );
+  const startedAt = new Date(now - 30_000);
+  const endedAt = new Date(now - 10_000);
+  const interval = (clientEventId: string, sequenceNumber: number) => ({
+    clientEventId,
+    activitySessionId: `${sequenceNumber}9999999-9999-4999-8999-999999999999`,
+    sequenceNumber,
+    source: "DESKTOP_APP",
+    stream: "OPEN_RUNTIME",
+    metric: "OPEN_RUNTIME",
+    subjectKey: "app:codex",
+    displayName: "Codex",
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    clockEpochId: NEW_CLOCK_ID,
+    startedMonotonicMs: 1_000,
+    endedMonotonicMs: 21_000,
+    durationMs: 20_000,
+    policyVersion: "v1",
+    policyLeaseId: LEASE_ID,
+  });
+
+  const response = await sync.sync(
+    context(now),
+    syncRequest(now, {
+      intervals: [
+        interval("73737373-7373-4373-8373-737373737373", 1),
+        interval("74747474-7474-4474-8474-747474747474", 2),
+      ],
+    }),
+    REQUEST_ID,
+  );
+
+  assert.equal(response.results[0]?.status, "ACCEPTED");
+  assert.equal(response.results[1]?.status, "REJECTED");
+  assert.equal(response.results[1]?.rejectionCode, "RUNTIME_OVERLAP");
+});
+
+test("open/runtime is rejected until the active policy explicitly enables it", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  prisma.lease.monitoringPolicy.collectOpenRuntime = false;
+  const sync = new TrackingV2SyncService(
+    prisma as any,
+    policyService(now) as any,
+  );
+  const startedAt = new Date(now - 20_000);
+  const endedAt = new Date(now - 10_000);
+
+  const response = await sync.sync(
+    context(now),
+    syncRequest(now, {
+      intervals: [{
+        clientEventId: "75757575-7575-4575-8575-757575757575",
+        activitySessionId: "76767676-7676-4676-8676-767676767676",
+        sequenceNumber: 1,
+        source: "DESKTOP_APP",
+        stream: "OPEN_RUNTIME",
+        metric: "OPEN_RUNTIME",
+        subjectKey: "app:codex",
+        displayName: "Codex",
+        startedAt: startedAt.toISOString(),
+        endedAt: endedAt.toISOString(),
+        clockEpochId: NEW_CLOCK_ID,
+        startedMonotonicMs: 1_000,
+        endedMonotonicMs: 11_000,
+        durationMs: 10_000,
+        policyVersion: "v1",
+        policyLeaseId: LEASE_ID,
+      }],
+    }),
+    REQUEST_ID,
+  );
+
+  assert.equal(response.results[0]?.status, "REJECTED");
+  assert.equal(response.results[0]?.rejectionCode, "OPEN_RUNTIME_NOT_ENABLED");
+  assert.equal(prisma.intervals.length, 0);
 });
 
 function liveDevice(input: {
@@ -516,6 +713,7 @@ class SyncPrisma {
       ],
       monitoringPolicy: {
         collectAppUsage: true,
+        collectOpenRuntime: true,
         collectWebsiteDomain: true,
       },
     };
@@ -526,7 +724,7 @@ class SyncPrisma {
     findFirst: async () => ({ id: LEASE_ID }),
   };
   monitoringPolicy = {
-    findFirst: async () => ({ policyVersion: "v1" }),
+    findFirst: async () => ({ policyVersion: "v1", collectOpenRuntime: true }),
   };
   clientWriteLane = {
     upsert: async () => ({ id: "12121212-1212-4212-8212-121212121212" }),

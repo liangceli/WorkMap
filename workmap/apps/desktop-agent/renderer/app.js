@@ -134,9 +134,13 @@ async function refreshDiagnostics(force) {
     formatDateTime(intervalUpload?.latestAcceptedEndedAt);
   document.querySelector("#diagnostics-last-sync").textContent = formatTime(diagnostics.lastSuccessfulSyncAt);
   document.querySelector("#diagnostics-request-id").textContent = diagnostics.lastSyncDiagnostic?.requestId ?? "Not available";
-  document.querySelector("#diagnostics-queue").textContent = `${diagnostics.queue.pending} pending / ${diagnostics.queue.deadLetter} rejected`;
+  const deadLetterSummary = (diagnostics.queue.deadLetterByCode ?? [])
+    .map((item) => `${item.code} ${item.count}`)
+    .join(", ");
+  document.querySelector("#diagnostics-queue").textContent =
+    `${diagnostics.queue.pending} pending / ${diagnostics.queue.deadLetter} rejected${deadLetterSummary ? ` (${deadLetterSummary})` : ""}`;
   document.querySelector("#diagnostics-policy").textContent = diagnostics.policy.leasePresent
-    ? `${diagnostics.policy.version ?? "Unknown version"} - App focus ${diagnostics.policy.collectAppFocus ? "enabled" : "disabled"} - ${formatDiagnosticState(diagnostics.policy.acknowledgementState ?? "UNKNOWN")}`
+    ? `${diagnostics.policy.version ?? "Unknown version"} - App focus ${diagnostics.policy.collectAppFocus ? "enabled" : "disabled"} - Open/runtime ${diagnostics.policy.collectOpenRuntime ? "enabled" : "disabled"} - ${formatDiagnosticState(diagnostics.policy.acknowledgementState ?? "UNKNOWN")}`
     : "No active lease";
   document.querySelector("#diagnostics-policy-schedule").textContent =
     `${diagnostics.policy.scheduleTimeZone ?? "Time zone unavailable"} - ${diagnostics.policy.workHoursOnly ? `${diagnostics.policy.workdayStart ?? "?"}-${diagnostics.policy.workdayEnd ?? "?"}` : "all approved hours"}`;

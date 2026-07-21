@@ -81,6 +81,26 @@ export class DesktopTrackingV2Store {
     snapshot: LiveFocusSnapshotV2,
     nowMs = Date.now(),
   ) {
+    this.persistIntervalsAndState(
+      intervals,
+      { ...state, latestSnapshot: snapshot },
+      nowMs,
+    );
+  }
+
+  persistRuntimeUpdate(
+    intervals: ActivityIntervalV2[],
+    state: DesktopTrackingRuntimeStateV2,
+    nowMs = Date.now(),
+  ) {
+    this.persistIntervalsAndState(intervals, state, nowMs);
+  }
+
+  private persistIntervalsAndState(
+    intervals: ActivityIntervalV2[],
+    state: DesktopTrackingRuntimeStateV2,
+    nowMs: number,
+  ) {
     this.transaction(() => {
       const currentCount = this.pendingAndDeadLetterCount();
       const insert = this.database.prepare(`
@@ -133,7 +153,7 @@ export class DesktopTrackingV2Store {
         );
         newlyInserted += Number(result.changes);
       }
-      this.writeMeta(RUNTIME_STATE_KEY, { ...state, latestSnapshot: snapshot });
+      this.writeMeta(RUNTIME_STATE_KEY, state);
     });
   }
 
@@ -278,6 +298,8 @@ export function createInitialDesktopTrackingV2State(): DesktopTrackingRuntimeSta
     clientInstanceId: randomUUID(),
     clock: null,
     engineCheckpoint: null,
+    openRuntimeClock: null,
+    openRuntimeCheckpoint: null,
     latestSnapshot: null,
     lastSuccessfulSyncAt: null,
     lastSuccessfulHeartbeatAt: null,

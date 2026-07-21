@@ -23,6 +23,12 @@ export type WindowsActivityHostEventV2 =
     }
   | {
       protocolVersion: 1;
+      eventType: "visible_apps_changed";
+      monotonicMs: number;
+      apps: WindowsActivityAppIdentityV2[];
+    }
+  | {
+      protocolVersion: 1;
       eventType:
         | "session_locked"
         | "session_unlocked"
@@ -66,7 +72,7 @@ export class WindowsActivityHostAdapterV2 {
   start(listener: WindowsActivityHostListenerV2) {
     if (this.process) return;
     if (process.platform !== "win32") {
-      throw new Error("WorkMap Desktop Agent 0.6.6 supports Windows only.");
+      throw new Error("WorkMap Desktop Agent 0.6.7 supports Windows only.");
     }
     if (!existsSync(this.executablePath)) {
       throw new Error(
@@ -144,6 +150,20 @@ export function parseWindowsActivityHostLine(line: string): WindowsActivityHostE
     if (value.eventType === "interaction_pulse") {
       if (value.evidence !== "WINDOWS_SESSION_INPUT_WHILE_FOREGROUND") return null;
       return { ...base, eventType: value.eventType, evidence: value.evidence };
+    }
+    if (value.eventType === "visible_apps_changed") {
+      if (
+        !Array.isArray(value.apps) ||
+        value.apps.length > 256 ||
+        value.apps.some((app) => !validApp(app))
+      ) {
+        return null;
+      }
+      const apps = value.apps as WindowsActivityAppIdentityV2[];
+      if (new Set(apps.map((app) => app.subjectKey)).size !== apps.length) {
+        return null;
+      }
+      return { ...base, eventType: value.eventType, apps };
     }
     if (
       value.eventType === "session_locked" ||

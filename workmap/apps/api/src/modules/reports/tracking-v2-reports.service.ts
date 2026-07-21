@@ -351,13 +351,23 @@ export class TrackingV2ReportsService {
   }
 
   async getConfirmedUsage(filter: ConfirmedUsageFilter) {
-    const activatedDeviceCount = await this.prisma.device.count({
-      where: {
-        companyId: filter.companyId,
-        ...identityFilter(filter),
-        protocolActivatedAt: { not: null },
-      },
-    });
+    const [activatedDeviceCount, activePolicy] = await Promise.all([
+      this.prisma.device.count({
+        where: {
+          companyId: filter.companyId,
+          ...identityFilter(filter),
+          protocolActivatedAt: { not: null },
+        },
+      }),
+      this.prisma.monitoringPolicy.findFirst({
+        where: {
+          companyId: filter.companyId,
+          activeFrom: { lte: new Date() },
+        },
+        orderBy: [{ activeFrom: "desc" }, { id: "desc" }],
+        select: { collectOpenRuntime: true },
+      }),
+    ]);
     if (activatedDeviceCount === 0) return null;
 
     const dateFilter = {
@@ -546,6 +556,7 @@ export class TrackingV2ReportsService {
 
     return buildConfirmedUsageResponse({
       activatedDeviceCount,
+      openRuntimeEnabled: activePolicy?.collectOpenRuntime ?? false,
       subjectDays,
       userDays,
       dirtyTargets: targets,
@@ -652,6 +663,7 @@ function correlateBrowserFocus(
 
 function buildConfirmedUsageResponse(input: {
   activatedDeviceCount: number;
+  openRuntimeEnabled: boolean;
   subjectDays: ConfirmedSubjectDay[];
   userDays: ConfirmedUserDay[];
   dirtyTargets: Array<{
@@ -763,7 +775,7 @@ function buildConfirmedUsageResponse(input: {
     daily,
     coverage: {
       activatedDeviceCount: input.activatedDeviceCount,
-      openRuntimeEnabled: false,
+      openRuntimeEnabled: input.openRuntimeEnabled,
       reconciliationState:
         input.dirtyTargets.length > 0 ? "LEDGER_FALLBACK" : "RECONCILED",
       dirtyDates: input.dirtyTargets.map((target) => ({

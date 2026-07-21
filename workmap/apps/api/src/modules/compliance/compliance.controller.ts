@@ -17,6 +17,7 @@ export class ComplianceController {
       id: policy.id,
       name: policy.name,
       collectAppUsage: policy.collectAppUsage,
+      collectOpenRuntime: policy.collectOpenRuntime,
       collectWebsiteDomain: policy.collectWebsiteDomain,
       collectFullUrl: policy.collectFullUrl,
       collectScreenshots: policy.collectScreenshots,
@@ -80,6 +81,36 @@ export class ComplianceController {
       workdayStart: policy.workdayStart,
       workdayEnd: policy.workdayEnd,
       scheduleTimeZone: policy.scheduleTimeZone,
+    };
+  }
+
+  @Post("policy/:policyId/open-runtime-version")
+  async enableOpenRuntimeCollection(
+    @CurrentContext() context: RequestContext,
+    @Param("policyId", ParseUUIDPipe) policyId: string,
+  ) {
+    const policy = await this.compliance.enableOpenRuntimeCollection(
+      context,
+      policyId,
+    );
+    return {
+      id: policy.id,
+      name: policy.name,
+      collectAppUsage: policy.collectAppUsage,
+      collectOpenRuntime: policy.collectOpenRuntime,
+      collectWebsiteDomain: policy.collectWebsiteDomain,
+      collectFullUrl: policy.collectFullUrl,
+      collectScreenshots: policy.collectScreenshots,
+      collectKeystrokes: policy.collectKeystrokes,
+      workHoursOnly: policy.workHoursOnly,
+      workdayStart: policy.workdayStart,
+      workdayEnd: policy.workdayEnd,
+      scheduleTimeZone: policy.scheduleTimeZone,
+      retentionDays: policy.retentionDays,
+      employeeCanViewOwnData: policy.employeeCanViewOwnData,
+      policyVersion: policy.policyVersion,
+      activeFrom: policy.activeFrom.toISOString(),
+      acknowledgementRequired: true,
     };
   }
 }

@@ -210,6 +210,7 @@ export type WorkMapApiCompliancePolicy = {
   id: string;
   name: string;
   collectAppUsage: boolean;
+  collectOpenRuntime: boolean;
   collectWebsiteDomain: boolean;
   collectFullUrl: boolean;
   collectScreenshots: boolean;
@@ -385,6 +386,10 @@ export type WorkMapApiPolicyWorkHours = {
   workdayStart: string;
   workdayEnd: string;
   scheduleTimeZone: string | null;
+};
+
+export type WorkMapApiOpenRuntimePolicyVersion = WorkMapApiCompliancePolicy & {
+  acknowledgementRequired: true;
 };
 
 export type WorkMapApiTrackingAudit = {

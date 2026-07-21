@@ -97,6 +97,8 @@ Development overrides:
 - `GET /integrations/contact-links/:targetUserId`
 - `GET /compliance/policy`
 - `POST /compliance/policy/:policyId/acknowledgement`
+- `PATCH /compliance/policy/:policyId/work-hours`
+- `POST /compliance/policy/:policyId/open-runtime-version`
 
 ## Health Contract
 
@@ -163,9 +165,11 @@ App timing semantics:
 
 - `focusActiveSeconds` is the primary actual-use metric. It counts only the Windows foreground/focused app while the device has recent input under the idle threshold.
 - `focusedIdleSeconds` counts the foreground/focused app after the idle threshold is reached. It is not active use.
-- `openRuntimeSeconds` is secondary context from Desktop Agent runtime/open-window events. It can include foreground, visible-but-not-focused, and minimized windows, and must not be labeled as active use.
+- Tracking Protocol v2 uses a 60-second trusted-input idle threshold. The first 60 seconds after the last trusted keyboard/mouse evidence remain Focus active; subsequent time while the same App stays foreground is Focused idle.
+- `openRuntimeSeconds` is secondary context from a policy-enabled Desktop Agent visible-window lane. It counts an App while at least one eligible user-visible top-level Windows window exists, including focused, covered, or minimized windows; it excludes tray-only/background helper processes and must not be labeled as active use.
+- Multiple windows for the same App are de-duplicated by App identity. Different Apps can accrue open/runtime concurrently, so runtime totals are not wall-clock work totals and must never be added to Focus active time.
 - Backward-compatible `activeSeconds` maps to `focusActiveSeconds`; backward-compatible `idleSeconds` maps to `focusedIdleSeconds`.
-- Desktop Agent runtime/open-window APP events use `isActiveWindow: false` and `isIdle: false`. The API stores those raw events and uses them for `openRuntimeSeconds`, but does not add them to app active/idle summaries.
+- Tracking Protocol v2 Desktop open/runtime intervals use `stream: "OPEN_RUNTIME"` and `metric: "OPEN_RUNTIME"`. They remain separate from `FOCUS_ACTIVE` and `FOCUS_IDLE` in the ledger and Reports aggregation.
 
 Current reporting boundary:
 
@@ -462,7 +466,7 @@ Storage rule:
 
 ## Compliance Contract
 
-`GET /compliance/policy` returns active policy fields such as id, name, collection flags, work hours, retention, policy version, and active date.
+`GET /compliance/policy` returns active policy fields such as id, name, collection flags (including `collectOpenRuntime`), work hours, retention, policy version, and active date.
 
 `POST /compliance/policy/:policyId/acknowledgement` records acknowledgement for the authenticated current user and returns:
 
@@ -471,6 +475,10 @@ Storage rule:
 - `acknowledgedAt`
 
 Current limitation: `GET /compliance/policy` does not return acknowledgement status, so the frontend stores a browser marker after successful backend acknowledgement for pilot refresh readability.
+
+`PATCH /compliance/policy/:policyId/work-hours` updates the active tenant policy schedule only for roles with compliance-policy management capability. In-place changes may extend but may not narrow an already leased collection window.
+
+`POST /compliance/policy/:policyId/open-runtime-version` enables App open/runtime by creating a new active policy version with the prior policy's scope, privacy flags, timezone, and work hours copied unchanged. It returns the new policy plus `acknowledgementRequired: true`. Existing acknowledgements are bound to the old policy id; therefore no Desktop Agent runtime lease is issued until the employee acknowledges the new version. Existing tenant/device/RBAC boundaries and work-window validation remain mandatory.
 
 ## Virtual Office Response Shapes
 

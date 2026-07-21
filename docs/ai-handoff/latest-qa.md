@@ -1,5 +1,55 @@
 # Latest QA Handoff
 
+## 2026-07-21 Desktop Agent 0.6.7 Focus/Idle/Open-runtime QA
+
+### Reviewed Implementation
+
+- Independently reviewed the 0.6.6 Windows event lane, monotonic-to-UTC projection, Focus engine lifecycle, SQLite interval queue, HTTP 200 sync response handling, native Windows privacy boundary, policy/lease/acknowledgement flow, API overlap validation, ledger/report aggregation, Compliance UI, and the complete current diff.
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: delayed native foreground events could be re-anchored to processing time after an awaited HTTP request, and a transient null foreground identity reset the Focus epoch. Together these created client-generated UTC overlaps and terminal `FOCUS_OVERLAP` dead letters. Events now retain their delivery-time monotonic offset and transient gaps remain on one Focus clock lane.
+- Fixed - High: HTTP 200 interval rejections were omitted from Agent recent diagnostics/NDJSON even as SQLite rejected counts increased. New responses now preserve exact safe rejection codes/counts, request ID, interval stage, terminal/retry status, and remediation. Server logs receive only privacy-safe aggregates.
+- Verified - High: Focused idle uses the policy's 60-second threshold. A 90-second no-input foreground scenario splits into 60 seconds Focus active and 30 seconds Focused idle; both are accepted into the ledger and returned by Reports.
+- Implemented/verified - High: policy-enabled v2 open/runtime is separate from Focus. Different visible Apps can accrue concurrently, the same App is de-duplicated across windows/processes, and same-App overlapping ledger intervals remain rejected as `RUNTIME_OVERLAP`.
+- Verified - High: runtime-disabled policy rejects `OPEN_RUNTIME` as `OPEN_RUNTIME_NOT_ENABLED` and stores no official interval. Enabling runtime creates a new tenant policy version and does not inherit the employee's old acknowledgement.
+- Verified - High: Reports `openRuntimeEnabled` follows the active policy, and accepted runtime intervals display as runtime only with zero Focus time.
+- Verified - High: no title, full URL, message/content, input text, clipboard, screenshot, file content, camera, microphone, token, or complete activity payload was added to collection/logging.
+- Verified - High: the approved retry generated a real 0.6.7 NSIS installer. Installer and unpacked executable versions, ASAR runtime files/version literal, and packaged native-helper identity were inspected without running the installer.
+- Remaining - Medium: existing dead letters are retained. SQLite can now show their stored code totals, but exact historical request/time diagnostics missing from older versions cannot be reconstructed.
+- Remaining - Medium: no production migration/deployment or real Windows end-to-end test was run.
+
+### Test And Verification Status
+
+- Prisma generate/validate: pass; validate used a non-secret local placeholder URL and did not connect to a database.
+- Desktop Agent typecheck/lint/native/source/Alpha build and renderer syntax: pass. Tests: `61/61` pass.
+- Focused API semantics/compliance tests: `18/18` pass. API typecheck/lint/build: pass.
+- Full API suite: `46/47`; unrelated existing fixed-date Reports verification is now older than the permitted ingestion window.
+- New Web runtime-policy tests: `2/2` pass. Web typecheck/lint/build: pass.
+- Full Web suite: `73/77`; four unrelated pre-existing brittle Reports render/source assertions remain.
+- Native source/Alpha helper hash match: SHA-256 `CF85768D015BC7D8350EA0D2B026DFA39A6F1C0391BDB528219FE825C0887A2D`.
+- `git diff --check`: pass. Changed-file high-confidence secret scan: zero matches.
+- NSIS release: pass. `WorkMap-Desktop-Agent-Setup-0.6.7.exe` is `115,429,898` bytes, SHA-256 `9421839744780102CC8DB5B42422AB4205CFD52DEE9C7D88FF8D3FE1E7AD675A`, and Authenticode `NotSigned`. The unpacked executable reports ProductVersion `0.6.7.0` / FileVersion `0.6.7`.
+- Follow-up focused rerun: Desktop `61/61`, API `18/18`, and Web runtime/live-status `4/4` pass.
+
+### Manual QA Status
+
+- Not run. No real 0.6.7 installation, production DB migration, API/Web deployment, new policy acknowledgement, Windows multi-App observation, or `/reports` browser verification was performed.
+
+### Risks And Deployment Order
+
+- Deploy the additive migration before the API, then deploy Web with the API contract. Existing policy rows remain runtime-disabled by default.
+- Migration remains blocked because no `DATABASE_URL` is visible in the repository `.env*`, current process, Windows User environment, or Windows Machine environment. No database target was guessed and no migration/seed was run.
+- An authorised Owner/HR Admin must create the new runtime-enabled policy version, and the employee must acknowledge it before a valid runtime lease is issued. The existing `09:00-23:00 Australia/Adelaide` schedule is copied, not bypassed.
+- Runtime has approximately two-second visible-window sampling granularity. Concurrent runtime totals are not wall-clock work totals and must remain separate from Focus active.
+- Do not delete old rejected rows or call them confirmed data. Verify that new rejections carry request-correlated diagnostics instead.
+
+### Pass/Fail Recommendation
+
+- Pass for source correctness, privacy/RBAC/policy boundaries, focused automated semantics, native build, and the inspected unsigned 0.6.7 artifact.
+- Proceed to commit only after normal diff review. Deployment cannot proceed safely until the intended database configuration is visible and the additive migration is applied.
+- After migration/API/Web deployment, perform controlled real-device QA. Do not call Focused idle or open/runtime production-verified until newly completed 0.6.7 intervals are confirmed in `/reports`.
+
 ## 2026-07-20 Test Policy Window Extension To 23:00 QA
 
 ### Reviewed Implementation

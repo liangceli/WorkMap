@@ -63,6 +63,7 @@ internal sealed class ActivityHost : IDisposable
     private const ulong InteractionPulseMinIntervalMs = 1_000;
     private const ulong ForegroundReconcileMs = 1_000;
     private const ulong DesktopReconcileMs = 1_000;
+    private const ulong VisibleAppReconcileMs = 2_000;
     private const ulong WtsRetryMs = 5_000;
     private const ulong MaximumTrustedInputAgeMs = 24 * 60 * 60 * 1_000;
 
@@ -83,8 +84,10 @@ internal sealed class ActivityHost : IDisposable
     private ulong lastInputPulseEmittedAtMs;
     private ulong lastForegroundReconcileMs;
     private ulong lastDesktopReconcileMs;
+    private ulong lastVisibleAppReconcileMs;
     private ulong lastWtsAttemptMs;
     private AppIdentity? currentApp;
+    private IReadOnlyList<AppIdentity> currentVisibleApps = Array.Empty<AppIdentity>();
 
     public ActivityHost()
     {
@@ -125,7 +128,6 @@ internal sealed class ActivityHost : IDisposable
 
         TryRegisterWts();
         PrimeInputBaseline();
-        ReconcileForeground(true);
         ReconcileDesktop(true);
         SafeJsonWriter.Write(new
         {
@@ -133,7 +135,7 @@ internal sealed class ActivityHost : IDisposable
             eventType = "health",
             monotonicMs = Native.GetTickCount64(),
             state = "HEALTHY",
-            adapterVersion = "1.0.1",
+            adapterVersion = "1.1.0",
             errorCode = wtsRegistered ? "NONE" : "WTS_REGISTRATION_PENDING",
         });
 
@@ -199,6 +201,7 @@ internal sealed class ActivityHost : IDisposable
         PollInput(now);
         if (now - lastForegroundReconcileMs >= ForegroundReconcileMs) ReconcileForeground(false);
         if (now - lastDesktopReconcileMs >= DesktopReconcileMs) ReconcileDesktop(false);
+        if (now - lastVisibleAppReconcileMs >= VisibleAppReconcileMs) ReconcileVisibleApps(false);
         EmitPendingInputPulse(now);
         if (!wtsRegistered && now - lastWtsAttemptMs >= WtsRetryMs) TryRegisterWts();
     }
@@ -313,6 +316,25 @@ internal sealed class ActivityHost : IDisposable
             inputDesktopAvailable = available,
         });
         if (available) ReconcileForeground(true);
+        ReconcileVisibleApps(true);
+    }
+
+    private void ReconcileVisibleApps(bool force)
+    {
+        var now = Native.GetTickCount64();
+        lastVisibleAppReconcileMs = now;
+        var next = sessionLocked || inputDesktopAvailable == false
+            ? Array.Empty<AppIdentity>()
+            : AppIdentityResolver.ResolveVisibleApps();
+        if (!force && AppIdentity.SameSet(currentVisibleApps, next)) return;
+        currentVisibleApps = next;
+        SafeJsonWriter.Write(new
+        {
+            protocolVersion = 1,
+            eventType = "visible_apps_changed",
+            monotonicMs = now,
+            apps = next,
+        });
     }
 
     private void HandleSessionChange(int change)
@@ -339,7 +361,14 @@ internal sealed class ActivityHost : IDisposable
             sessionLocked,
         });
         if (change is WtsSessionUnlock or WtsConsoleConnect or WtsRemoteConnect)
+        {
             ReconcileForeground(true);
+            ReconcileVisibleApps(true);
+        }
+        else if (change is WtsSessionLock or WtsConsoleDisconnect or WtsRemoteDisconnect)
+        {
+            ReconcileVisibleApps(true);
+        }
     }
 
     private void HandlePowerBroadcast(uint change)
@@ -358,7 +387,11 @@ internal sealed class ActivityHost : IDisposable
             eventType,
             monotonicMs = Native.GetTickCount64(),
         });
-        if (eventType == "resume") ReconcileForeground(true);
+        if (eventType == "resume")
+        {
+            ReconcileForeground(true);
+            ReconcileVisibleApps(true);
+        }
     }
 
     private void TryRegisterWts()
@@ -396,10 +429,39 @@ internal sealed record AppIdentity(string SubjectKey, string DisplayName)
 {
     public static bool Same(AppIdentity? left, AppIdentity? right) =>
         left?.SubjectKey == right?.SubjectKey;
+
+    public static bool SameSet(
+        IReadOnlyList<AppIdentity> left,
+        IReadOnlyList<AppIdentity> right) =>
+        left.Count == right.Count &&
+        left.Select(item => item.SubjectKey).SequenceEqual(
+            right.Select(item => item.SubjectKey),
+            StringComparer.Ordinal);
 }
 
 internal static class AppIdentityResolver
 {
+    private const int GwlExStyle = -20;
+    private const uint GwOwner = 4;
+    private const long WsExToolWindow = 0x00000080L;
+    private const long WsExAppWindow = 0x00040000L;
+    private const uint DwmwaCloaked = 14;
+
+    public static IReadOnlyList<AppIdentity> ResolveVisibleApps()
+    {
+        var identities = new Dictionary<string, AppIdentity>(StringComparer.Ordinal);
+        Native.EnumWindows((hwnd, _) =>
+        {
+            if (!IsUserVisibleTopLevelWindow(hwnd)) return true;
+            var identity = Resolve(hwnd);
+            if (identity is not null) identities[identity.SubjectKey] = identity;
+            return true;
+        }, IntPtr.Zero);
+        return identities.Values
+            .OrderBy(identity => identity.SubjectKey, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     public static AppIdentity? Resolve(IntPtr hwnd)
     {
         Native.GetWindowThreadProcessId(hwnd, out var processId);
@@ -457,6 +519,33 @@ internal static class AppIdentityResolver
             return hosted == processId;
         }, IntPtr.Zero);
         return hosted;
+    }
+
+    private static bool IsUserVisibleTopLevelWindow(IntPtr hwnd)
+    {
+        if (!Native.IsWindowVisible(hwnd) && !Native.IsIconic(hwnd)) return false;
+        var exStyle = Native.GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
+        var appWindow = (exStyle & WsExAppWindow) != 0;
+        if ((exStyle & WsExToolWindow) != 0 && !appWindow) return false;
+        if (Native.GetWindow(hwnd, GwOwner) != IntPtr.Zero && !appWindow) return false;
+        try
+        {
+            if (
+                Native.DwmGetWindowAttribute(
+                    hwnd,
+                    DwmwaCloaked,
+                    out var cloaked,
+                    Marshal.SizeOf<int>()) == 0 &&
+                cloaked != 0)
+            {
+                return false;
+            }
+        }
+        catch (DllNotFoundException)
+        {
+            // User32 visibility remains the fallback on older Windows builds.
+        }
+        return true;
     }
 
     private static bool IsShellOnly(string processName) =>
@@ -606,6 +695,16 @@ internal static class Native
     [DllImport("user32.dll")]
     internal static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]
+    internal static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+    [DllImport("user32.dll")]
+    internal static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")]
+    internal static extern bool IsIconic(IntPtr hwnd);
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    internal static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+    [DllImport("user32.dll")]
     internal static extern uint GetWindowThreadProcessId(IntPtr hwnd, out int processId);
     [DllImport("user32.dll")]
     internal static extern bool GetLastInputInfo(ref LastInputInfo lastInputInfo);
@@ -619,4 +718,10 @@ internal static class Native
     internal static extern bool WTSRegisterSessionNotification(IntPtr hwnd, int flags);
     [DllImport("wtsapi32.dll")]
     internal static extern bool WTSUnRegisterSessionNotification(IntPtr hwnd);
+    [DllImport("dwmapi.dll")]
+    internal static extern int DwmGetWindowAttribute(
+        IntPtr hwnd,
+        uint attribute,
+        out int value,
+        int valueSize);
 }

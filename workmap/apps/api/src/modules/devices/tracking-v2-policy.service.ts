@@ -42,7 +42,7 @@ type DeviceTrackingPolicy = {
   idleThresholdMs: number;
   collectAppFocus: boolean;
   collectDomainFocus: boolean;
-  collectOpenRuntime: false;
+  collectOpenRuntime: boolean;
   acknowledgementState: "ACKNOWLEDGED" | "REQUIRED";
   acknowledgedAt: string | null;
 };
@@ -125,7 +125,9 @@ export class TrackingV2PolicyService {
       idleThresholdMs: FOCUS_IDLE_THRESHOLD_MS,
       collectAppFocus: policy.collectAppUsage,
       collectDomainFocus: policy.collectWebsiteDomain,
-      collectOpenRuntime: false,
+      collectOpenRuntime:
+        identity.clientType === DeviceClientType.DESKTOP_AGENT &&
+        policy.collectOpenRuntime,
       acknowledgementState: acknowledgement ? "ACKNOWLEDGED" : "REQUIRED",
       acknowledgedAt: acknowledgement?.acknowledgedAt.toISOString() ?? null,
     };

@@ -1,5 +1,76 @@
 # Latest Implementation Handoff
 
+## 2026-07-21 Desktop Agent 0.6.7 Focus Integrity, Diagnostics, Focused Idle, And Policy-Gated Open/runtime
+
+### Original Task Brief
+
+- Repair the real increase in Tracking v2 rejected rows where local SQLite showed new rejected intervals but `Historical rejected / network diagnostics` and the privacy-safe NDJSON file showed only HTTP 200.
+- Fix the underlying `FOCUS_OVERLAP` production path instead of hiding the red/rejected signal.
+- Make Focused idle accurate under the agreed rule: the foreground App remains Focus active for 60 seconds after the last trusted Windows keyboard/mouse evidence, then accrues Focused idle until new input, App switch, lock, exit, or policy boundary.
+- Add App open/runtime as a separate policy-controlled metric: one eligible user-visible top-level Windows window means the App is open, covered/minimized windows count, tray-only/background helpers do not, the same App is de-duplicated, and different Apps may accrue concurrently without inflating Focus active.
+- Preserve policy acknowledgement, tenant/device credential, work-window, role, and privacy boundaries, and produce Desktop Agent `0.6.7` if verification succeeds.
+
+### Confirmed Root Causes
+
+- `POST /device-client/sync-v2` correctly returned HTTP 200 when health succeeded even if one or more interval results were rejected. Desktop Agent 0.6.6 inspected the snapshot result but did not persist `response.results[]` interval rejection codes into recent diagnostics or NDJSON, so the queue dead-letter count increased without an actionable current diagnostic.
+- `FOCUS_OVERLAP` was produced by a client time-line defect, not by valid simultaneous App work. A transient null foreground identity destroyed the Focus engine/clock epoch, and foreground events queued behind a multi-second HTTP request were re-anchored near processing time rather than their original Windows monotonic event time. The replacement interval could therefore project into UTC time already occupied by the preceding interval.
+- Focused idle was already represented in the v2 engine but lacked the requested full-chain regression evidence. The production v2 policy threshold is 60 seconds.
+- Tracking v2 schema/report enums already had an `OPEN_RUNTIME` lane, but active policy leases hardcoded it off and the Windows v2 host emitted no visible-App set, so v2 could not produce open/runtime rows.
+
+### Changed Files
+
+- Desktop runtime, durable state, diagnostics, renderer, native host, and version metadata: `workmap/apps/desktop-agent/src/runtimeV2.ts`, `desktopOpenRuntimeEngineV2.ts`, `trackingV2Store.ts`, `trackingV2Types.ts`, `diagnosticLog.ts`, `windowsActivityHost.ts`, `renderer/app.js`, native `Program.cs`, package/build/version files, rebuilt Alpha native executable, and Desktop tests.
+- API policy/sync/report/compliance code and tests: `workmap/apps/api/src/modules/devices/tracking-v2-policy.service.ts`, `tracking-v2-sync.service.ts`, `modules/reports/tracking-v2-reports.service.ts`, compliance controller/service, and focused tests.
+- Web Compliance/Reports contract and tests: `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx`, `PolicyAcknowledgementModal.tsx`, `components/reports/ReportSummaryPanel.tsx`, API types/client, and `compliance-open-runtime-policy.test.ts`.
+- Additive schema/migration: `workmap/prisma/schema.prisma` and `workmap/prisma/migrations/20260721120000_monitoring_open_runtime_policy/migration.sql`.
+- Long-lived contract/handoff: `docs/skills/api-contract-skill.md`, this file, and `docs/ai-handoff/latest-qa.md`.
+
+### Implementation Summary And Expected Behavior
+
+- The host-to-runtime clock offset is now captured as soon as native stdout delivers an event. A delayed event keeps its original UTC projection. A transient unidentified foreground gap closes the current Focus segment but retains the same engine epoch and sequence lane. These changes prevent new client-generated `FOCUS_OVERLAP` intervals while preserving genuine server overlap validation.
+- Every HTTP 200 sync now aggregates rejected interval results by safe code/count. A new rejection is saved to recent diagnostics and NDJSON with request ID, stage `interval`, terminal/retry state, safe explanation, and remediation. The SQLite queue line also shows existing dead-letter code counts. Existing historical rows can reveal their stored rejection code, but old versions did not persist enough time/request context to reconstruct a missing historical diagnostic item.
+- Focused idle remains foreground-only. Automated evidence proves 90 seconds with no input becomes exactly 60 seconds Focus active plus 30 seconds Focused idle and that both accepted intervals enter the official ledger and Reports.
+- The native Windows host now enumerates eligible top-level windows every two seconds using only window visibility/minimized state plus privacy-minimized process identity. It does not read window titles, URLs, messages, input text, page content, screenshots, clipboard, files, camera, or microphone.
+- Open/runtime is a separate `OPEN_RUNTIME` stream. Multiple windows with the same App identity count once; Codex and Teams can accrue concurrently; closing the final eligible window, lock/disconnect/suspend, policy expiry, queue pressure, or Agent shutdown closes the interval. Runtime is never added to Focus active or Focused idle.
+- Existing policies default `collectOpenRuntime` to false. An Owner/HR Admin must explicitly create a new active policy version from Compliance. The new version copies the existing timezone and `09:00-23:00` schedule, requires a new employee acknowledgement, and receives no valid Desktop runtime lease before acknowledgement. Cross-tenant, device identity, lease, schedule, and source validation remain enforced.
+- Reports now labels runtime as enabled only when the API confirms the active policy flag. Confirmed `OPEN_RUNTIME` ledger rows appear as `openRuntimeSeconds` separately from focus time.
+- Source/Alpha version metadata is `desktop-agent-windows/0.6.7`; native adapter protocol version is `1.1.0`.
+
+### Role, Privacy, And Security Behavior
+
+- Only roles with the existing compliance-management capability (`OWNER` and `HR_ADMIN`) can create the runtime-enabled policy version. Employee and wrong-tenant policy mutation remains rejected.
+- Existing employee acknowledgement is tied to the old policy id and cannot silently authorize the new collection field.
+- No policy was deleted, no all-day collection was hardcoded, and tenant, device credential, protocol activation, lease, Owner/Employee Reports, and Platform Admin boundaries were not weakened.
+- Server interval-rejection logs contain only request ID, rejection code/count, interval count, and duration; they do not contain App names, titles, URLs, tokens, or activity payloads.
+
+### Verification
+
+- Prisma client generation: pass. Prisma static validation: pass using an explicit non-secret local placeholder URL; no database connection or migration execution was performed.
+- Desktop Agent typecheck/lint/build/native build: pass. Renderer syntax: pass. Desktop tests: `61/61` pass.
+- Focused API tests: `18/18` pass, including health confirmed plus rejected snapshot, newer snapshot replacement, Focus active + Focused idle ledger/report insertion, concurrent different-App runtime report insertion, same-App runtime overlap rejection, runtime-disabled policy rejection, and new policy version/re-acknowledgement.
+- API typecheck/lint/build: pass. Full API suite: `46/47`; only the pre-existing fixed-date `tracking-reports-verification.test.ts` fails the 31-day ingestion limit.
+- New Web runtime-policy tests: `2/2` pass. Web typecheck/lint/build: pass. Full Web suite: `73/77`; the same four pre-existing brittle Reports render/source assertions fail and are unrelated to this change.
+- Native source/Alpha executables are identical: `70,923,615` bytes, SHA-256 `CF85768D015BC7D8350EA0D2B026DFA39A6F1C0391BDB528219FE825C0887A2D`.
+- `git diff --check`: pass. High-confidence secret scan across changed/untracked text files: zero matches.
+- Windows NSIS packaging: pass after the explicitly approved network-enabled retry. Installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.7.exe`; size `115,429,898` bytes; SHA-256 `9421839744780102CC8DB5B42422AB4205CFD52DEE9C7D88FF8D3FE1E7AD675A`; Authenticode `NotSigned`.
+- The unpacked application reports ProductVersion `0.6.7.0` / FileVersion `0.6.7`. Its ASAR contains `desktopOpenRuntimeEngineV2.js`, `runtimeV2.js`, and the literal client version `desktop-agent-windows/0.6.7`. The packaged/source/Alpha native helper hashes are identical.
+
+### Manual QA, Intentionally Unchanged, And Remaining Risks
+
+- No real 0.6.7 installation, production database migration, API/Web deployment, policy-version creation, employee acknowledgement, or real Windows Agent -> API -> Reports loop was run. Automated evidence is strong, but real-device behavior is not claimed as passed.
+- Existing rejected/dead-letter rows were not deleted, retried as confirmed work, or backfilled. Their counts remain visible; missing old request/time detail cannot be recovered safely.
+- Open/runtime uses a two-second visible-window observation cadence, so open/close edges have sampling granularity. It is context, not proof of work, and concurrent App runtime can exceed wall-clock time.
+- The migration must deploy before the updated API. API and Web should then deploy together. Runtime stays off until an authorised administrator enables it and the employee acknowledges the new version.
+- Database migration is still not run. On the final follow-up, `workmap/.env` did not exist, no other `.env.*` file was present, and `DATABASE_URL` was absent from process, Windows User, and Windows Machine environment scopes. The target database therefore could not be identified safely despite the reported setup; no guessed connection or external write was attempted.
+- `apps/web/tsconfig.tsbuildinfo` was regenerated by the required Web checks and remains a tracked generated diff.
+
+### Suggested Next Steps
+
+1. Make `DATABASE_URL` available to the same PowerShell/Codex process (or create ignored `C:\Users\liangceli\WorkMap\workmap\.env`) without pasting the credential into chat or committing it. Run `prisma migrate status`, then `prisma migrate deploy` only against the intended target.
+2. Commit/push after reviewing the current diff, then deploy API plus Web after the migration. Do not enable the field with direct SQL or a broad seed.
+3. As Owner/HR Admin, enable App open/runtime in Compliance; verify the new policy preserves `Australia/Adelaide 09:00-23:00`. As the employee, review and acknowledge that new version.
+4. Install the verified 0.6.7 artifact and test: no new `FOCUS_OVERLAP`; 90 seconds no input yields about 60s Focus active + 30s Focused idle; two simultaneously open Apps gain separate runtime; closed/tray-only Apps do not; completed intervals appear in `/reports` without changing connection health semantics.
+
 ## 2026-07-20 Test Policy Window Extension To 23:00
 
 ### Original Task Brief

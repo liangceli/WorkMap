@@ -6,7 +6,10 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
-import { ComplianceService } from "../src/modules/compliance/compliance.service.js";
+import {
+  ComplianceService,
+  nextPolicyVersion,
+} from "../src/modules/compliance/compliance.service.js";
 
 const COMPANY_ID = "11111111-1111-4111-8111-111111111111";
 const POLICY_ID = "22222222-2222-4222-8222-222222222222";
@@ -107,6 +110,32 @@ test("an in-place work-hours update cannot narrow an already issued policy lease
   assert.equal(prisma.lastUpdate, null);
 });
 
+test("enabling open/runtime creates a new policy version that requires a new acknowledgement", async () => {
+  const prisma = new OpenRuntimePrisma();
+  const service = new ComplianceService(prisma as any);
+
+  const result = await service.enableOpenRuntimeCollection(
+    context("OWNER"),
+    POLICY_ID,
+  );
+
+  assert.equal(result.id, "55555555-5555-4555-8555-555555555555");
+  assert.equal(result.policyVersion, "v2");
+  assert.equal(result.collectOpenRuntime, true);
+  assert.equal(result.workdayEnd, "23:00", "the authorised test schedule is copied");
+  assert.equal(
+    prisma.acknowledgements.some(
+      (item) => item.monitoringPolicyId === result.id,
+    ),
+    false,
+    "acknowledgements remain bound to the prior policy id",
+  );
+});
+
+test("policy version generation advances numeric versions without reusing an id", () => {
+  assert.equal(nextPolicyVersion(["v1", "v2", "custom"]), "v3");
+});
+
 function context(role: "OWNER" | "EMPLOYEE") {
   return {
     companyId: COMPANY_ID,
@@ -139,5 +168,37 @@ class CompliancePrisma {
       this.policy = { ...this.policy, ...input.data };
       return { ...this.policy };
     },
+  };
+}
+
+class OpenRuntimePrisma {
+  acknowledgements = [{ monitoringPolicyId: POLICY_ID }];
+  private readonly policy = {
+    id: POLICY_ID,
+    companyId: COMPANY_ID,
+    name: "Transparent activity policy",
+    collectAppUsage: true,
+    collectOpenRuntime: false,
+    collectWebsiteDomain: true,
+    collectFullUrl: false,
+    collectScreenshots: false,
+    collectKeystrokes: false,
+    workHoursOnly: true,
+    workdayStart: "09:00",
+    workdayEnd: "23:00",
+    scheduleTimeZone: "Australia/Adelaide",
+    retentionDays: 90,
+    employeeCanViewOwnData: true,
+    policyVersion: "v1",
+    activeFrom: new Date("2026-07-20T00:00:00.000Z"),
+  };
+
+  monitoringPolicy = {
+    findFirst: async () => ({ ...this.policy }),
+    findMany: async () => [{ policyVersion: "v1" }],
+    create: async ({ data }: any) => ({
+      id: "55555555-5555-4555-8555-555555555555",
+      ...data,
+    }),
   };
 }

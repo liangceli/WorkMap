@@ -6,11 +6,12 @@ type PolicyAcknowledgementModalProps = {
   open: boolean;
   busy?: boolean;
   policyVersion?: string;
+  collectOpenRuntime?: boolean;
   onClose: () => void;
   onAcknowledge: () => void | Promise<void>;
 };
 
-export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, onClose, onAcknowledge }: PolicyAcknowledgementModalProps) {
+export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, collectOpenRuntime = false, onClose, onAcknowledge }: PolicyAcknowledgementModalProps) {
   if (!open) {
     return null;
   }
@@ -31,6 +32,7 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
         <p style={styles.bodyText}>
           WorkMap may collect presence, avatar location, workspace status, desktop app name and usage duration, browser domain and
           usage duration, device heartbeat, freshness, and last-seen context so workspace activity summaries stay transparent.
+          {collectOpenRuntime ? " The current policy also measures how long an App has a user-visible Windows window open; this is separate from Focus active time." : ""}
           WorkMap messages, waves, reactions, and Notice read state are stored when users intentionally send them. It does not
           collect screenshots, screen recordings, keystrokes, clipboard data, webcam or microphone data, external private
           message, Teams, or email body content, webpage body content, form inputs, or passwords.
@@ -43,6 +45,7 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
               <li>Desktop app name</li>
               <li>Browser domain name</li>
               <li>Usage duration and timestamps for summaries</li>
+              {collectOpenRuntime ? <li>App open/runtime for user-visible Windows windows</li> : null}
               <li>Device heartbeat status</li>
               <li>Avatar room or office area</li>
               <li>Workspace status and freshness</li>

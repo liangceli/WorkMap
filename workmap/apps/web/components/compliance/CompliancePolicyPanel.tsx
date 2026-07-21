@@ -5,6 +5,7 @@ import { PolicyAcknowledgementModal } from "./PolicyAcknowledgementModal";
 import {
   acknowledgeCompliancePolicy,
   confirmCompliancePolicyScheduleTimeZone,
+  enableComplianceOpenRuntime,
   getCompliancePolicy,
   updateCompliancePolicyWorkHours,
 } from "../../lib/api/complianceApi";
@@ -48,6 +49,7 @@ export function CompliancePolicyPanel() {
   const [workdayStart, setWorkdayStart] = useState("09:00");
   const [workdayEnd, setWorkdayEnd] = useState("23:00");
   const [savingWorkHours, setSavingWorkHours] = useState(false);
+  const [enablingOpenRuntime, setEnablingOpenRuntime] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,6 +204,29 @@ export function CompliancePolicyPanel() {
     );
   };
 
+  const enableOpenRuntime = async () => {
+    if (!policy || policy.collectOpenRuntime) return;
+    const auth = await getWorkMapApiAuthOptions();
+    if (!auth.available) {
+      setStatusText("Sign in with an authorised policy administrator account before enabling App open/runtime collection.");
+      return;
+    }
+
+    setEnablingOpenRuntime(true);
+    const result = await enableComplianceOpenRuntime(policy.id, auth.options);
+    setEnablingOpenRuntime(false);
+    if (!result.ok) {
+      setStatusText(result.error);
+      return;
+    }
+
+    setPolicy(result.data);
+    setAcknowledgedAt(null);
+    setStatusText(
+      `Policy ${result.data.policyVersion} now includes App open/runtime collection. Review and acknowledge this new version before the Agent receives an authorised runtime lease.`,
+    );
+  };
+
   return (
     <div className="wm-compliance-policy" style={styles.stack}>
       <section className="wm-compliance-card-grid" style={styles.policyGrid}>
@@ -297,6 +322,30 @@ export function CompliancePolicyPanel() {
         </section>
       ) : null}
 
+      {policy ? (
+        <section style={styles.ackPanel}>
+          <div>
+            <p style={styles.panelLabel}>App open/runtime</p>
+            <h2 style={styles.panelTitle}>
+              {policy.collectOpenRuntime ? "Enabled by the current policy" : "Not enabled"}
+            </h2>
+            <p style={styles.panelText}>
+              Open/runtime measures how long an App has at least one user-visible top-level Windows window, including covered or minimized windows. It excludes tray-only/background helper processes and is never added to Focus active time. Different Apps may accumulate runtime at the same time.
+            </p>
+          </div>
+          {canManageWorkHours && !policy.collectOpenRuntime ? (
+            <button
+              type="button"
+              onClick={() => void enableOpenRuntime()}
+              disabled={enablingOpenRuntime}
+              style={styles.primaryButton}
+            >
+              {enablingOpenRuntime ? "Creating policy version..." : "Enable and create new policy version"}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
       <section style={styles.ackPanel}>
         <div>
           <p style={styles.panelLabel}>Policy acknowledgement</p>
@@ -322,6 +371,7 @@ export function CompliancePolicyPanel() {
         open={modalOpen}
         busy={acknowledging}
         policyVersion={policy?.policyVersion}
+        collectOpenRuntime={policy?.collectOpenRuntime}
         onClose={() => setModalOpen(false)}
         onAcknowledge={acknowledgePolicy}
       />

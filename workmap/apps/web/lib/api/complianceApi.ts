@@ -3,6 +3,7 @@ import type {
   ApiClientOptions,
   WorkMapApiCompliancePolicy,
   WorkMapApiPolicyAcknowledgement,
+  WorkMapApiOpenRuntimePolicyVersion,
   WorkMapApiPolicyScheduleTimeZone,
   WorkMapApiPolicyWorkHours,
 } from "./apiTypes";
@@ -40,6 +41,17 @@ export function updateCompliancePolicyWorkHours(
   return workMapApiPatch<WorkMapApiPolicyWorkHours>(
     `/compliance/policy/${encodeURIComponent(policyId)}/work-hours`,
     { workdayStart, workdayEnd },
+    options,
+  );
+}
+
+export function enableComplianceOpenRuntime(
+  policyId: string,
+  options?: ApiClientOptions,
+) {
+  return workMapApiPost<WorkMapApiOpenRuntimePolicyVersion>(
+    `/compliance/policy/${encodeURIComponent(policyId)}/open-runtime-version`,
+    undefined,
     options,
   );
 }

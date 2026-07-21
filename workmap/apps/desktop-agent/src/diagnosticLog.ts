@@ -41,6 +41,12 @@ export type AgentDiagnosticEvent = {
   durationMs?: number;
   policyVersion?: string | null;
   policyLeaseExpiresAt?: string | null;
+  intervalRejected?: number;
+  intervalRejectionCodes?: Array<{
+    code: string;
+    count: number;
+    terminal: boolean;
+  }>;
 };
 
 export type AgentDiagnosticsBundle = {
@@ -72,6 +78,7 @@ export type AgentDiagnosticsBundle = {
     workdayStart: string | null;
     workdayEnd: string | null;
     collectAppFocus: boolean | null;
+    collectOpenRuntime: boolean | null;
     allowedUtcWindows: Array<{ startsAt: string; endsAt: string }>;
     acknowledgementState: string | null;
   };

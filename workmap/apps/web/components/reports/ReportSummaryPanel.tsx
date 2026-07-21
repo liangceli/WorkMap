@@ -279,7 +279,8 @@ export function ReportSummaryPanel() {
   const liveUser = liveStatus?.scope === "user" ? liveStatus : null;
   const hasRows = Boolean(summary && (summary.apps.length > 0 || summary.websites.length > 0));
   const scopeLabel = getScopeLabel(summary, selectedUser, departments);
-  const openRuntimeEnabled = summary?.trackingV2Coverage?.openRuntimeEnabled !== false;
+  const openRuntimeEnabled =
+    summary?.trackingV2Coverage?.openRuntimeEnabled === true;
 
   return (
     <div className="wm-report-summary" style={styles.stack}>

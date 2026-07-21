@@ -58,7 +58,7 @@ export type DeviceTrackingPolicyV2 = {
   idleThresholdMs: number;
   collectAppFocus: boolean;
   collectDomainFocus: boolean;
-  collectOpenRuntime: false;
+  collectOpenRuntime: boolean;
   acknowledgementState: "ACKNOWLEDGED" | "REQUIRED";
   acknowledgedAt: string | null;
 };
@@ -68,8 +68,8 @@ export type ActivityIntervalV2 = {
   activitySessionId: string;
   sequenceNumber: number;
   source: "DESKTOP_APP";
-  stream: "FOCUS";
-  metric: "FOCUS_ACTIVE" | "FOCUS_IDLE";
+  stream: "FOCUS" | "OPEN_RUNTIME";
+  metric: "FOCUS_ACTIVE" | "FOCUS_IDLE" | "OPEN_RUNTIME";
   subjectKey: string;
   displayName: string;
   startedAt: string;
@@ -148,7 +148,7 @@ export type TrackingSyncItemResultV2 = {
 
 export type TrackingSyncCursorV2 = {
   source: "DESKTOP_APP";
-  stream: "FOCUS";
+  stream: "FOCUS" | "OPEN_RUNTIME";
   clockEpochId: string;
   contiguousThroughSequence: number;
   latestAcceptedEndedAt: string | null;
@@ -190,7 +190,13 @@ export type TrackingSyncDiagnosticV2 = {
   errorMessage?: string | null;
   remediation?: string | null;
   retryable?: boolean | null;
-  failureStage?: "parse" | "policy" | "transaction" | "response" | null;
+  failureStage?: "parse" | "policy" | "transaction" | "response" | "interval" | null;
+  intervalRejected?: number;
+  intervalRejectionCodes?: Array<{
+    code: string;
+    count: number;
+    terminal: boolean;
+  }>;
   outcome: "CONFIRMED" | "CONFIRMED_WITH_WARNING" | "FAILED";
 };
 
@@ -263,6 +269,20 @@ export type DesktopClockEpochV2 = {
   clockEpochStartedMonotonicMs: number;
 };
 
+export type DesktopOpenRuntimeAppStateV2 = {
+  activitySessionId: string;
+  subject: DesktopFocusSubjectV2;
+  openedAtMonotonicMs: number;
+  confirmedThroughMonotonicMs: number;
+};
+
+export type DesktopOpenRuntimeCheckpointV2 = {
+  version: 1;
+  nextIntervalSequence: number;
+  lastObservedAtMonotonicMs: number;
+  current: DesktopOpenRuntimeAppStateV2[];
+};
+
 export type DesktopTrackingRuntimeStateV2 = {
   version: 1;
   migrationState: TrackingMigrationStateV2;
@@ -274,6 +294,8 @@ export type DesktopTrackingRuntimeStateV2 = {
   clientInstanceId: string;
   clock: DesktopClockEpochV2 | null;
   engineCheckpoint: DesktopFocusCheckpointV2 | null;
+  openRuntimeClock: DesktopClockEpochV2 | null;
+  openRuntimeCheckpoint: DesktopOpenRuntimeCheckpointV2 | null;
   latestSnapshot: LiveFocusSnapshotV2 | null;
   lastSuccessfulSyncAt: string | null;
   lastSuccessfulHeartbeatAt: string | null;

@@ -64,6 +64,7 @@ type StoredPolicyLease = {
   allowedUtcWindows: unknown;
   monitoringPolicy: {
     collectAppUsage: boolean;
+    collectOpenRuntime: boolean;
     collectWebsiteDomain: boolean;
   };
 };
@@ -183,6 +184,7 @@ export class TrackingV2SyncService {
           monitoringPolicy: {
             select: {
               collectAppUsage: true,
+              collectOpenRuntime: true,
               collectWebsiteDomain: true,
             },
           },
@@ -313,6 +315,7 @@ export class TrackingV2SyncService {
                   deviceId: context.deviceId,
                   source: item.interval.source as TrackingActivitySource,
                   stream: item.interval.stream as TrackingActivityStream,
+                  subjectKey: item.interval.subjectKey,
                   startedAt: new Date(item.interval.startedAt),
                   endedAt: new Date(item.interval.endedAt),
                 })),
@@ -447,6 +450,21 @@ export class TrackingV2SyncService {
           }),
         );
       }
+      const intervalRejections = summarizeIntervalRejections(
+        transactionResult.results,
+      );
+      if (intervalRejections.length > 0) {
+        this.logger.warn(
+          JSON.stringify({
+            event: "tracking_v2_intervals",
+            outcome: "rejected",
+            requestId,
+            intervalCount,
+            rejections: intervalRejections,
+            durationMs: Date.now() - startedAtMs,
+          }),
+        );
+      }
       // Reconciliation is performed by the background worker. A slow or failed
       // aggregate refresh must not delay an accepted client upload or heartbeat.
       stage = "response";
@@ -494,6 +512,20 @@ export class TrackingV2SyncService {
       throw withTrackingSyncRequestId(error, requestId, status, failure, stage);
     }
   }
+}
+
+function summarizeIntervalRejections(
+  results: TrackingSyncItemResultV2[],
+) {
+  const counts = new Map<string, number>();
+  for (const result of results) {
+    if (result.status !== "REJECTED") continue;
+    const code = result.rejectionCode ?? "REJECTED";
+    counts.set(code, (counts.get(code) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([code, count]) => ({ code, count }))
+    .sort((left, right) => right.count - left.count || left.code.localeCompare(right.code));
 }
 
 type TrackingV2SyncStage = "parse" | "policy" | "transaction" | "response";
@@ -821,9 +853,17 @@ function validateCandidatePolicyAndIdentity(input: {
   ) {
     return "INVALID_SUBJECT";
   }
+  const focusInterval =
+    interval.stream === "FOCUS" &&
+    (interval.metric === "FOCUS_ACTIVE" || interval.metric === "FOCUS_IDLE");
+  const openRuntimeInterval =
+    interval.stream === "OPEN_RUNTIME" && interval.metric === "OPEN_RUNTIME";
+  if (!focusInterval && !openRuntimeInterval) {
+    return "INVALID_STREAM_METRIC";
+  }
   if (
-    interval.stream !== "FOCUS" ||
-    (interval.metric !== "FOCUS_ACTIVE" && interval.metric !== "FOCUS_IDLE")
+    openRuntimeInterval &&
+    input.expectedSource !== TrackingActivitySource.DESKTOP_APP
   ) {
     return "OPEN_RUNTIME_NOT_ENABLED";
   }
@@ -860,9 +900,13 @@ function validateCandidatePolicyAndIdentity(input: {
   ) {
     return "POLICY_REJECTED";
   }
+  if (openRuntimeInterval && !lease.monitoringPolicy.collectOpenRuntime) {
+    return "OPEN_RUNTIME_NOT_ENABLED";
+  }
   const sourceAllowed =
     input.expectedSource === TrackingActivitySource.DESKTOP_APP
-      ? lease.monitoringPolicy.collectAppUsage
+      ? lease.monitoringPolicy.collectAppUsage &&
+        (focusInterval || lease.monitoringPolicy.collectOpenRuntime)
       : lease.monitoringPolicy.collectWebsiteDomain;
   if (
     !sourceAllowed ||
@@ -1111,6 +1155,7 @@ async function loadPotentialOverlaps(
       deviceId: true,
       source: true,
       stream: true,
+      subjectKey: true,
       startedAt: true,
       endedAt: true,
     },
@@ -1123,6 +1168,7 @@ function overlapsAny(
     deviceId: string;
     source: TrackingActivitySource;
     stream: TrackingActivityStream;
+    subjectKey: string;
     startedAt: Date;
     endedAt: Date;
   }>,
@@ -1130,6 +1176,7 @@ function overlapsAny(
     deviceId: string;
     source: TrackingActivitySource;
     stream: TrackingActivityStream;
+    subjectKey: string;
     startedAt: Date;
     endedAt: Date;
   }>,
@@ -1140,6 +1187,8 @@ function overlapsAny(
     (row) =>
       row.source === interval.source &&
       row.stream === interval.stream &&
+      (interval.stream !== "OPEN_RUNTIME" ||
+        row.subjectKey === interval.subjectKey) &&
       row.startedAt.getTime() < endedAt &&
       row.endedAt.getTime() > startedAt,
   );

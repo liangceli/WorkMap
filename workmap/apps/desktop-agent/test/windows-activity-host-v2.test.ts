@@ -27,6 +27,20 @@ test("rejects native payloads containing an invalid app identity", () => {
   })), null);
 });
 
+test("accepts a de-duplicated privacy-minimized visible App set", () => {
+  const event = parseWindowsActivityHostLine(JSON.stringify({
+    protocolVersion: 1,
+    eventType: "visible_apps_changed",
+    monotonicMs: 2_000,
+    apps: [
+      { subjectKey: "app:codex", displayName: "Codex" },
+      { subjectKey: "app:teams", displayName: "Microsoft Teams" },
+    ],
+  }));
+  assert.equal(event?.eventType, "visible_apps_changed");
+  assert.equal(event?.eventType === "visible_apps_changed" ? event.apps.length : 0, 2);
+});
+
 test("compiled helper source never reads titles, keys, clipboard or screen content", async () => {
   const source = await readFile(
     new URL("../native/windows-activity-host/Program.cs", import.meta.url),
@@ -39,4 +53,9 @@ test("compiled helper source never reads titles, keys, clipboard or screen conte
   assert.match(source, /InteractionPulseMinIntervalMs = 1_000/);
   assert.match(source, /pendingInputPulseMonotonicMs/);
   assert.match(source, /monotonicMs = observedInputMonotonicMs/);
+  assert.match(source, /EnumWindows/);
+  assert.match(source, /IsWindowVisible/);
+  assert.match(source, /IsIconic/);
+  assert.match(source, /visible_apps_changed/);
+  assert.doesNotMatch(source, /MainWindowTitle/);
 });

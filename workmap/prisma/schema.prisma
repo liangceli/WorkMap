@@ -1078,6 +1078,7 @@ model MonitoringPolicy {
   companyId              String                  @db.Uuid
   name                   String
   collectAppUsage        Boolean                 @default(true)
+  collectOpenRuntime     Boolean                 @default(false)
   collectWebsiteDomain   Boolean                 @default(true)
   collectFullUrl         Boolean                 @default(false)
   collectScreenshots     Boolean                 @default(false)

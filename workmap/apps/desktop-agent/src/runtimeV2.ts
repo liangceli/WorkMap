@@ -13,6 +13,10 @@ import {
 } from "./apiClient.js";
 import { DesktopFocusEngineV2, type DesktopFocusEngineUpdateV2 } from "./desktopFocusEngineV2.js";
 import {
+  DesktopOpenRuntimeEngineV2,
+  type DesktopOpenRuntimeEngineUpdateV2,
+} from "./desktopOpenRuntimeEngineV2.js";
+import {
   FileEventQueue,
   FileStatusEventQueue,
   readTrackingCheckpoint,
@@ -43,6 +47,7 @@ import {
   type TrackingHealthErrorCodeV2,
   type TrackingPolicyStateV2,
   type TrackingSyncDiagnosticV2,
+  type TrackingSyncItemResultV2,
   type TrackingSyncRequestV2,
 } from "./trackingV2Types.js";
 import type {
@@ -85,7 +90,9 @@ export class DesktopAgentRuntimeV2 {
   private readonly diagnosticLog: AgentDiagnosticLog;
   private state: DesktopTrackingRuntimeStateV2;
   private engine: DesktopFocusEngineV2 | null = null;
+  private openRuntimeEngine: DesktopOpenRuntimeEngineV2 | null = null;
   private currentHostApp: WindowsActivityAppIdentityV2 | null = null;
+  private currentVisibleApps: WindowsActivityAppIdentityV2[] = [];
   private latestHostMonotonicMs: number | null = null;
   private helperToNodeMonotonicOffsetMs: number | null = null;
   private eventChain = Promise.resolve();
@@ -95,6 +102,7 @@ export class DesktopAgentRuntimeV2 {
   private syncInFlight: Promise<void> | null = null;
   private syncAgain = false;
   private lastSettlementAtMs = 0;
+  private lastOpenRuntimeSettlementAtMs = 0;
   private lastHealthSyncAtMs = 0;
   private lastPolicyRefreshAtMs = 0;
   private connectionState: TrackingConnectionStateV2 = "OFFLINE";
@@ -168,6 +176,7 @@ export class DesktopAgentRuntimeV2 {
         workdayStart: this.state.policy?.workdayStart ?? null,
         workdayEnd: this.state.policy?.workdayEnd ?? null,
         collectAppFocus: this.state.policy?.collectAppFocus ?? null,
+        collectOpenRuntime: this.state.policy?.collectOpenRuntime ?? null,
         allowedUtcWindows:
           this.state.policy?.allowedUtcWindows.map((window) => ({
             startsAt: window.startsAt,
@@ -416,24 +425,46 @@ export class DesktopAgentRuntimeV2 {
   }
 
   private async closeRecoveredV2Tail() {
-    if (!this.state.clock || !this.state.engineCheckpoint || !this.state.policy) return;
-    const recoveredEngine = new DesktopFocusEngineV2(
-      this.state.clock,
-      this.state.policy,
-      this.state.engineCheckpoint,
-    );
-    const boundary = this.state.engineCheckpoint.lastObservedAtMonotonicMs;
-    const update = recoveredEngine.clearFocus(boundary);
-    this.state = {
-      ...this.state,
-      engineCheckpoint: recoveredEngine.checkpoint(),
-      latestSnapshot: update.snapshot,
-    };
-    this.store.persistEngineUpdate(update.intervals, this.state, update.snapshot);
+    const policy = this.state.policy;
+    if (policy && this.state.clock && this.state.engineCheckpoint) {
+      const recoveredEngine = new DesktopFocusEngineV2(
+        this.state.clock,
+        policy,
+        this.state.engineCheckpoint,
+      );
+      const boundary = this.state.engineCheckpoint.lastObservedAtMonotonicMs;
+      const update = recoveredEngine.clearFocus(boundary);
+      this.state = {
+        ...this.state,
+        engineCheckpoint: recoveredEngine.checkpoint(),
+        latestSnapshot: update.snapshot,
+      };
+      this.store.persistEngineUpdate(update.intervals, this.state, update.snapshot);
+    }
+    if (
+      policy?.collectOpenRuntime &&
+      this.state.openRuntimeClock &&
+      this.state.openRuntimeCheckpoint
+    ) {
+      const recoveredRuntime = new DesktopOpenRuntimeEngineV2(
+        this.state.openRuntimeClock,
+        policy,
+        this.state.openRuntimeCheckpoint,
+      );
+      const boundary = this.state.openRuntimeCheckpoint.lastObservedAtMonotonicMs;
+      const update = recoveredRuntime.clear(boundary);
+      this.state = {
+        ...this.state,
+        openRuntimeCheckpoint: recoveredRuntime.checkpoint(),
+      };
+      this.store.persistRuntimeUpdate(update.intervals, this.state);
+    }
     this.state = {
       ...this.state,
       clock: null,
       engineCheckpoint: null,
+      openRuntimeClock: null,
+      openRuntimeCheckpoint: null,
       latestSnapshot: null,
     };
     this.store.writeRuntimeState(this.state);
@@ -441,6 +472,16 @@ export class DesktopAgentRuntimeV2 {
 
   private startHost() {
     this.host.start((event) => {
+      // Anchor the helper clock when stdout delivers the event, before any
+      // earlier HTTP-bound event finishes on the serialized processing lane.
+      // Updating this offset only when processing begins makes an old queued
+      // event look current and recreates overlapping UTC projections.
+      this.latestHostMonotonicMs = Math.max(
+        this.latestHostMonotonicMs ?? 0,
+        event.monotonicMs,
+      );
+      this.helperToNodeMonotonicOffsetMs =
+        event.monotonicMs - performance.now();
       this.eventChain = this.eventChain
         .then(() => this.processHostEvent(event))
         .catch((error) => this.applyFailure(error));
@@ -448,13 +489,11 @@ export class DesktopAgentRuntimeV2 {
   }
 
   private async processHostEvent(event: WindowsActivityHostEventV2) {
-    this.latestHostMonotonicMs = event.monotonicMs;
-    this.helperToNodeMonotonicOffsetMs = event.monotonicMs - performance.now();
     if (event.eventType === "foreground_changed") {
       this.currentHostApp = event.app;
       if (!event.app) {
-        await this.enqueueHostBoundary(event.monotonicMs, true);
-      } else if (this.captureAllowedAt(event.monotonicMs)) {
+        await this.clearForegroundFocus(event.monotonicMs, true);
+      } else if (this.focusCaptureAllowedAt(event.monotonicMs)) {
         this.ensureEngine(event.monotonicMs);
         await this.persistUpdate(
           this.engine!.acquireFocus(event.app, event.monotonicMs),
@@ -463,8 +502,23 @@ export class DesktopAgentRuntimeV2 {
       }
       return;
     }
+    if (event.eventType === "visible_apps_changed") {
+      this.currentVisibleApps = event.apps;
+      if (this.openRuntimeCaptureAllowedAt(event.monotonicMs)) {
+        if (event.apps.length === 0 && !this.openRuntimeEngine) return;
+        this.ensureOpenRuntimeEngine(event.monotonicMs);
+        await this.persistOpenRuntimeUpdate(
+          this.openRuntimeEngine!.observeVisibleApps(
+            event.apps,
+            event.monotonicMs,
+          ),
+          true,
+        );
+      }
+      return;
+    }
     if (event.eventType === "interaction_pulse") {
-      if (this.engine && this.currentHostApp && this.captureAllowedAt(event.monotonicMs)) {
+      if (this.engine && this.currentHostApp && this.focusCaptureAllowedAt(event.monotonicMs)) {
         // Input can arrive up to ten times per second. It must advance the
         // durable local clock precisely, but waiting for one HTTP round trip
         // per pulse makes the serialized host-event lane fall progressively
@@ -484,6 +538,7 @@ export class DesktopAgentRuntimeV2 {
       (event.eventType === "desktop_switched" && !event.inputDesktopAvailable)
     ) {
       await this.enqueueHostBoundary(event.monotonicMs, true);
+      this.currentVisibleApps = [];
       this.collectorState = "PAUSED";
       return;
     }
@@ -530,21 +585,56 @@ export class DesktopAgentRuntimeV2 {
     if (nowMs - this.lastPolicyRefreshAtMs >= DESKTOP_V2_POLICY_REFRESH_MS) {
       await this.refreshPolicy(monotonicMs);
     }
-    if (!this.captureAllowedAt(monotonicMs)) {
+    if (!this.policyWindowAllowsAt(monotonicMs)) {
       await this.enqueueHostBoundary(monotonicMs, false);
-    } else if (this.currentHostApp && !this.engine && this.collectorState === "HEALTHY") {
-      this.ensureEngine(monotonicMs);
-      await this.persistUpdate(
-        this.engine!.acquireFocus(this.currentHostApp, monotonicMs),
-        true,
-      );
-    } else if (this.engine) {
-      const shouldSettle = nowMs - this.lastSettlementAtMs >= DESKTOP_V2_SETTLEMENT_MS;
-      await this.persistUpdate(
-        shouldSettle ? this.engine.settle(monotonicMs) : this.engine.observe(monotonicMs),
-        shouldSettle,
-      );
-      if (shouldSettle) this.lastSettlementAtMs = nowMs;
+    } else {
+      if (
+        this.focusCaptureAllowedAt(monotonicMs) &&
+        this.currentHostApp &&
+        !this.engine
+      ) {
+        this.ensureEngine(monotonicMs);
+        await this.persistUpdate(
+          this.engine!.acquireFocus(this.currentHostApp, monotonicMs),
+          true,
+        );
+      } else if (this.engine) {
+        const shouldSettle =
+          nowMs - this.lastSettlementAtMs >= DESKTOP_V2_SETTLEMENT_MS;
+        await this.persistUpdate(
+          shouldSettle
+            ? this.engine.settle(monotonicMs)
+            : this.engine.observe(monotonicMs),
+          shouldSettle,
+        );
+        if (shouldSettle) this.lastSettlementAtMs = nowMs;
+      }
+
+      if (
+        this.openRuntimeCaptureAllowedAt(monotonicMs) &&
+        this.currentVisibleApps.length > 0 &&
+        !this.openRuntimeEngine
+      ) {
+        this.ensureOpenRuntimeEngine(monotonicMs);
+        await this.persistOpenRuntimeUpdate(
+          this.openRuntimeEngine!.observeVisibleApps(
+            this.currentVisibleApps,
+            monotonicMs,
+          ),
+          false,
+        );
+      } else if (this.openRuntimeEngine) {
+        const shouldSettle =
+          nowMs - this.lastOpenRuntimeSettlementAtMs >=
+          DESKTOP_V2_SETTLEMENT_MS;
+        if (shouldSettle) {
+          await this.persistOpenRuntimeUpdate(
+            this.openRuntimeEngine.settle(monotonicMs),
+            true,
+          );
+          this.lastOpenRuntimeSettlementAtMs = nowMs;
+        }
+      }
     }
     if (nowMs - this.lastHealthSyncAtMs >= DESKTOP_V2_HEALTH_SYNC_MS) {
       await this.requestSync();
@@ -556,21 +646,44 @@ export class DesktopAgentRuntimeV2 {
     if (this.engine) return;
     const policy = this.state.policy;
     if (!policy?.policyLeaseId) throw new Error("A valid policy lease is required.");
-    const anchorUtcMs = Math.max(
-      serverNow(this.state),
-      Date.parse(this.state.protocolActivatedAt ?? ""),
+    this.state.clock = this.createClockEpoch(atMonotonicMs);
+    this.engine = new DesktopFocusEngineV2(this.state.clock, policy);
+  }
+
+  private ensureOpenRuntimeEngine(atMonotonicMs: number) {
+    if (this.openRuntimeEngine) return;
+    const policy = this.state.policy;
+    if (!policy?.policyLeaseId || !policy.collectOpenRuntime) {
+      throw new Error("An authorised App open/runtime policy lease is required.");
+    }
+    this.state.openRuntimeClock = this.createClockEpoch(atMonotonicMs);
+    this.openRuntimeEngine = new DesktopOpenRuntimeEngineV2(
+      this.state.openRuntimeClock,
+      policy,
     );
-    this.state.clock = {
+  }
+
+  private createClockEpoch(atMonotonicMs: number) {
+    const current = currentMonotonic(this) ?? atMonotonicMs;
+    const activationMs = Date.parse(this.state.protocolActivatedAt ?? "");
+    const anchorUtcMs = eventClockAnchorUtcMsV2({
+      serverNowMs: serverNow(this.state),
+      currentMonotonicMs: current,
+      eventMonotonicMs: atMonotonicMs,
+      protocolActivatedAtMs:
+        Number.isFinite(activationMs) ? activationMs : 0,
+    });
+    return {
       clockEpochId: randomUUID(),
       clockEpochStartedAt: new Date(anchorUtcMs).toISOString(),
       clockEpochStartedMonotonicMs: atMonotonicMs,
     };
-    this.engine = new DesktopFocusEngineV2(this.state.clock, policy);
   }
 
   private async persistUpdate(
     update: DesktopFocusEngineUpdateV2,
     immediateSync: boolean,
+    syncWhenIntervals = true,
   ) {
     if (!this.engine) return false;
     const durableState = this.state;
@@ -585,42 +698,120 @@ export class DesktopAgentRuntimeV2 {
       this.state = nextState;
     } catch (error) {
       if (error instanceof V2QueuePressureError) {
-        this.collectorState = "PAUSED";
-        this.lastErrorCode = "QUEUE_PRESSURE";
-        this.engine = null;
-        this.state = {
-          ...durableState,
-          clock: null,
-          engineCheckpoint: null,
-          latestSnapshot: null,
-          lastErrorCode: "QUEUE_PRESSURE",
-        };
-        this.store.writeRuntimeState(this.state);
-        await this.updateUiStatus(error.message);
-        await this.requestSync();
+        await this.pauseForQueuePressure(durableState, error);
         return false;
       } else {
         throw error;
       }
     }
     await this.updateUiStatus();
-    if (immediateSync || update.intervals.length > 0) await this.requestSync();
+    if (immediateSync || (syncWhenIntervals && update.intervals.length > 0)) {
+      await this.requestSync();
+    }
     return true;
   }
 
-  private async enqueueHostBoundary(monotonicMs: number | null, immediateSync: boolean) {
-    if (!this.engine || monotonicMs === null) return;
-    const update = this.engine.clearFocus(monotonicMs);
-    const persisted = await this.persistUpdate(update, immediateSync);
-    if (!persisted) return;
+  private async persistOpenRuntimeUpdate(
+    update: DesktopOpenRuntimeEngineUpdateV2,
+    immediateSync: boolean,
+    syncWhenIntervals = true,
+  ) {
+    if (!this.openRuntimeEngine) return false;
+    const durableState = this.state;
+    const nextState: DesktopTrackingRuntimeStateV2 = {
+      ...durableState,
+      openRuntimeCheckpoint: this.openRuntimeEngine.checkpoint(),
+      lastErrorCode: this.lastErrorCode,
+    };
+    try {
+      this.store.persistRuntimeUpdate(update.intervals, nextState);
+      this.state = nextState;
+    } catch (error) {
+      if (error instanceof V2QueuePressureError) {
+        await this.pauseForQueuePressure(durableState, error);
+        return false;
+      }
+      throw error;
+    }
+    await this.updateUiStatus();
+    if (immediateSync || (syncWhenIntervals && update.intervals.length > 0)) {
+      await this.requestSync();
+    }
+    return true;
+  }
+
+  private async pauseForQueuePressure(
+    durableState: DesktopTrackingRuntimeStateV2,
+    error: V2QueuePressureError,
+  ) {
+    this.collectorState = "PAUSED";
+    this.lastErrorCode = "QUEUE_PRESSURE";
     this.engine = null;
+    this.openRuntimeEngine = null;
+    this.state = {
+      ...durableState,
+      clock: null,
+      engineCheckpoint: null,
+      openRuntimeClock: null,
+      openRuntimeCheckpoint: null,
+      latestSnapshot: null,
+      lastErrorCode: "QUEUE_PRESSURE",
+    };
+    this.store.writeRuntimeState(this.state);
+    await this.updateUiStatus(error.message);
+    await this.requestSync();
+  }
+
+  private async clearForegroundFocus(
+    monotonicMs: number,
+    immediateSync: boolean,
+  ) {
+    if (!this.engine) return;
+    // A transient null foreground identity ends the current Focus segment but
+    // does not create a new clock epoch. Keeping the same monotonic projection
+    // prevents network-delayed foreground events from overlapping prior time.
+    await this.persistUpdate(
+      this.engine.clearFocus(monotonicMs),
+      immediateSync,
+    );
+  }
+
+  private async enqueueHostBoundary(
+    monotonicMs: number | null,
+    immediateSync: boolean,
+    syncWhenIntervals = true,
+  ) {
+    if (monotonicMs === null) return;
+    let createdIntervals = false;
+    if (this.engine) {
+      const update = this.engine.clearFocus(monotonicMs);
+      const persisted = await this.persistUpdate(update, false, false);
+      if (!persisted) return;
+      createdIntervals ||= update.intervals.length > 0;
+    }
+    if (this.openRuntimeEngine) {
+      const update = this.openRuntimeEngine.clear(monotonicMs);
+      const persisted = await this.persistOpenRuntimeUpdate(
+        update,
+        false,
+        false,
+      );
+      if (!persisted) return;
+      createdIntervals ||= update.intervals.length > 0;
+    }
+    this.engine = null;
+    this.openRuntimeEngine = null;
     this.state = {
       ...this.state,
       clock: null,
       engineCheckpoint: null,
-      latestSnapshot: update.snapshot,
+      openRuntimeClock: null,
+      openRuntimeCheckpoint: null,
     };
     this.store.writeRuntimeState(this.state);
+    if (immediateSync || (syncWhenIntervals && createdIntervals)) {
+      await this.requestSync();
+    }
   }
 
   private async requestSync() {
@@ -673,6 +864,17 @@ export class DesktopAgentRuntimeV2 {
       const response = await syncTrackingV2(this.config, request, requestId);
       this.applyServerClock(response.serverTime);
       const snapshotResult = response.focusSnapshotResult ?? null;
+      const intervalRejectionCodes = summarizeIntervalRejections(
+        response.results,
+      );
+      const intervalRejected = intervalRejectionCodes.reduce(
+        (total, item) => total + item.count,
+        0,
+      );
+      const syncHasWarning = shouldRecordConfirmedSyncWarningV2(
+        snapshotResult,
+        intervalRejected,
+      );
       const acknowledged = response.results
         .filter((result) => result.status === "ACCEPTED" || result.status === "DUPLICATE")
         .map((result) => result.clientEventId);
@@ -745,25 +947,41 @@ export class DesktopAgentRuntimeV2 {
         intervalCount: intervals.length,
         httpStatus: 200,
         errorCode:
-          snapshotResult?.status === "REJECTED"
-            ? snapshotResult.rejectionCode
-            : null,
+          intervalRejected > 0
+            ? intervalRejectionCodes.length === 1
+              ? intervalRejectionCodes[0]!.code
+              : "INTERVAL_REJECTED"
+            : snapshotResult?.status === "REJECTED"
+              ? snapshotResult.rejectionCode
+              : null,
         errorMessage:
-          snapshotResult?.status === "REJECTED"
-            ? snapshotResult.message
-            : null,
+          intervalRejected > 0
+            ? intervalRejectionMessage(intervalRejectionCodes)
+            : snapshotResult?.status === "REJECTED"
+              ? snapshotResult.message
+              : null,
         remediation:
-          snapshotResult?.status === "REJECTED"
-            ? snapshotRejectionRemediation(snapshotResult.rejectionCode)
-            : null,
+          intervalRejected > 0
+            ? intervalRejectionRemediation(intervalRejectionCodes)
+            : snapshotResult?.status === "REJECTED"
+              ? snapshotRejectionRemediation(snapshotResult.rejectionCode)
+              : null,
         retryable:
-          snapshotResult?.status === "REJECTED"
-            ? snapshotRejectionRetryable(snapshotResult.rejectionCode)
-            : null,
+          intervalRejected > 0
+            ? intervalRejectionCodes.some((item) => !item.terminal)
+            : snapshotResult?.status === "REJECTED"
+              ? snapshotRejectionRetryable(snapshotResult.rejectionCode)
+              : null,
         failureStage:
-          snapshotResult?.status === "REJECTED" ? "policy" : null,
+          intervalRejected > 0
+            ? "interval"
+            : snapshotResult?.status === "REJECTED"
+              ? "policy"
+              : null,
+        intervalRejected,
+        intervalRejectionCodes,
         outcome:
-          snapshotResult?.status === "REJECTED"
+          syncHasWarning
             ? "CONFIRMED_WITH_WARNING"
             : "CONFIRMED",
       };
@@ -774,7 +992,7 @@ export class DesktopAgentRuntimeV2 {
         lastErrorCode: "NONE",
         lastSyncDiagnostic: syncDiagnostic,
         recentSyncFailures:
-          snapshotResult?.status === "REJECTED"
+          syncHasWarning
             ? prependDiagnostic(this.state.recentSyncFailures, syncDiagnostic)
             : this.state.recentSyncFailures,
         lastSnapshotSyncStatus: snapshotSyncStatus,
@@ -784,7 +1002,7 @@ export class DesktopAgentRuntimeV2 {
       await this.diagnosticLog.write({
         operation: "sync-v2",
         outcome:
-          snapshotResult?.status === "REJECTED"
+          syncHasWarning
             ? "confirmed-with-warning"
             : "confirmed",
         requestId: response.requestId ?? requestId,
@@ -794,21 +1012,15 @@ export class DesktopAgentRuntimeV2 {
         queueDeadLetter: this.store.stats().deadLetter,
         httpStatus: 200,
         reasonCode:
-          snapshotResult?.status === "REJECTED"
-            ? snapshotResult.rejectionCode
-            : null,
+          syncDiagnostic.errorCode,
         reasonMessage:
-          snapshotResult?.status === "REJECTED"
-            ? snapshotResult.message
-            : null,
+          syncDiagnostic.errorMessage,
         remediation:
-          snapshotResult?.status === "REJECTED"
-            ? snapshotRejectionRemediation(snapshotResult.rejectionCode)
-            : null,
+          syncDiagnostic.remediation,
         retryable:
-          snapshotResult?.status === "REJECTED"
-            ? snapshotRejectionRetryable(snapshotResult.rejectionCode)
-            : null,
+          syncDiagnostic.retryable,
+        intervalRejected,
+        intervalRejectionCodes,
         durationMs: Date.now() - startedAtMs,
       });
       if (snapshotResult?.status === "REJECTED") {
@@ -926,7 +1138,7 @@ export class DesktopAgentRuntimeV2 {
     }
   }
 
-  private async refreshPolicy(monotonicMs: number) {
+  private async refreshPolicy(monotonicMs: number, deferSync = false) {
     this.lastPolicyRefreshAtMs = Date.now();
     try {
       const next = await getTrackingPolicyV2(this.config);
@@ -935,12 +1147,18 @@ export class DesktopAgentRuntimeV2 {
         next.policyVersion !== this.state.policy?.policyVersion ||
         next.policyLeaseId !== this.state.policy?.policyLeaseId;
       if (changed) {
-        await this.enqueueHostBoundary(monotonicMs, true);
+        await this.enqueueHostBoundary(
+          monotonicMs,
+          !deferSync,
+          !deferSync,
+        );
         this.state = {
           ...this.state,
           policy: next,
           clock: null,
           engineCheckpoint: null,
+          openRuntimeClock: null,
+          openRuntimeCheckpoint: null,
           latestSnapshot: null,
         };
       } else {
@@ -959,13 +1177,17 @@ export class DesktopAgentRuntimeV2 {
       if (!this.state.policy || !policyLeaseValid(this.state.policy, serverNow(this.state))) {
         this.collectorState = "PAUSED";
         this.lastErrorCode = "POLICY_UNAVAILABLE";
-        await this.enqueueHostBoundary(monotonicMs, true);
+        await this.enqueueHostBoundary(
+          monotonicMs,
+          !deferSync,
+          !deferSync,
+        );
       }
       await this.applyFailure(error, false);
     }
   }
 
-  private captureAllowedAt(monotonicMs: number) {
+  private focusCaptureAllowedAt(monotonicMs: number) {
     const policy = this.state.policy;
     if (
       !policy ||
@@ -975,6 +1197,25 @@ export class DesktopAgentRuntimeV2 {
     ) {
       return false;
     }
+    return this.policyWindowAllowsAt(monotonicMs);
+  }
+
+  private openRuntimeCaptureAllowedAt(monotonicMs: number) {
+    const policy = this.state.policy;
+    if (
+      !policy ||
+      this.collectorState !== "HEALTHY" ||
+      !policy.collectOpenRuntime ||
+      !policy.policyLeaseId
+    ) {
+      return false;
+    }
+    return this.policyWindowAllowsAt(monotonicMs);
+  }
+
+  private policyWindowAllowsAt(monotonicMs: number) {
+    const policy = this.state.policy;
+    if (!policy || this.collectorState !== "HEALTHY") return false;
     const instant = this.monotonicToUtcMs(monotonicMs);
     return (
       policyLeaseValid(policy, instant) &&
@@ -987,10 +1228,11 @@ export class DesktopAgentRuntimeV2 {
   }
 
   private monotonicToUtcMs(monotonicMs: number) {
-    if (this.state.clock) {
+    const clock = this.state.clock ?? this.state.openRuntimeClock;
+    if (clock) {
       return (
-        Date.parse(this.state.clock.clockEpochStartedAt) +
-        (monotonicMs - this.state.clock.clockEpochStartedMonotonicMs)
+        Date.parse(clock.clockEpochStartedAt) +
+        (monotonicMs - clock.clockEpochStartedMonotonicMs)
       );
     }
     return serverNow(this.state);
@@ -1078,7 +1320,11 @@ export class DesktopAgentRuntimeV2 {
   ) {
     const monotonicMs = currentMonotonic(this);
     if (this.engine && monotonicMs !== null) {
-      await this.enqueueHostBoundary(monotonicMs, false);
+      await this.persistUpdate(
+        this.engine.clearFocus(monotonicMs),
+        false,
+        false,
+      );
     }
     this.engine = null;
     this.state = {
@@ -1096,7 +1342,10 @@ export class DesktopAgentRuntimeV2 {
       policyVersion: this.state.policy?.policyVersion ?? null,
       policyLeaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
     });
-    if (monotonicMs !== null) await this.refreshPolicy(monotonicMs);
+    if (monotonicMs !== null) {
+      await this.refreshPolicy(monotonicMs, true);
+      this.syncAgain = true;
+    }
   }
 
   private async updateUiStatus(error?: string) {
@@ -1123,9 +1372,8 @@ export class DesktopAgentRuntimeV2 {
     this.host.stop();
     await this.eventChain;
     const monotonicMs = currentMonotonic(this);
-    if (this.engine && monotonicMs !== null) {
-      await this.persistUpdate(this.engine.clearFocus(monotonicMs), true);
-      this.engine = null;
+    if ((this.engine || this.openRuntimeEngine) && monotonicMs !== null) {
+      await this.enqueueHostBoundary(monotonicMs, true);
     }
     if (this.state.protocolActivatedAt) {
       const lifecycle = shutdownLifecycle(this.shutdownReason);
@@ -1217,6 +1465,22 @@ export function shouldImmediatelySyncHostEventV2(
   eventType: WindowsActivityHostEventV2["eventType"],
 ) {
   return eventType !== "interaction_pulse";
+}
+
+export function eventClockAnchorUtcMsV2(input: {
+  serverNowMs: number;
+  currentMonotonicMs: number;
+  eventMonotonicMs: number;
+  protocolActivatedAtMs: number;
+}) {
+  const eventLagMs = Math.max(
+    0,
+    input.currentMonotonicMs - input.eventMonotonicMs,
+  );
+  return Math.max(
+    input.serverNowMs - eventLagMs,
+    input.protocolActivatedAtMs,
+  );
 }
 
 function describeDesktopPolicyRequirement(policy: DeviceTrackingPolicyV2) {
@@ -1329,6 +1593,65 @@ function snapshotRejectionRemediation(code: string) {
 
 function snapshotRejectionRetryable(code: string) {
   return code !== "SNAPSHOT_OUTSIDE_POLICY_WINDOW";
+}
+
+export function summarizeIntervalRejections(
+  results: TrackingSyncItemResultV2[],
+) {
+  const counts = new Map<string, {
+    code: string;
+    count: number;
+    terminal: boolean;
+  }>();
+  for (const result of results) {
+    if (result.status !== "REJECTED") continue;
+    const code = (result.rejectionCode ?? "REJECTED")
+      .replace(/[^A-Z0-9_-]/gi, "_")
+      .slice(0, 80) || "REJECTED";
+    const terminal = result.terminal !== false;
+    const key = `${code}:${terminal ? "terminal" : "retry"}`;
+    const current = counts.get(key) ?? { code, count: 0, terminal };
+    current.count += 1;
+    counts.set(key, current);
+  }
+  return [...counts.values()].sort(
+    (left, right) =>
+      right.count - left.count || left.code.localeCompare(right.code),
+  );
+}
+
+export function shouldRecordConfirmedSyncWarningV2(
+  snapshotResult: { status: string } | null | undefined,
+  intervalRejected: number,
+) {
+  return snapshotResult?.status === "REJECTED" || intervalRejected > 0;
+}
+
+function intervalRejectionMessage(
+  items: ReturnType<typeof summarizeIntervalRejections>,
+) {
+  const count = items.reduce((total, item) => total + item.count, 0);
+  const codes = items.map((item) => `${item.code} (${item.count})`).join(", ");
+  return `${count} completed interval${count === 1 ? " was" : "s were"} rejected: ${codes}.`;
+}
+
+function intervalRejectionRemediation(
+  items: ReturnType<typeof summarizeIntervalRejections>,
+) {
+  const codes = new Set(items.map((item) => item.code));
+  if (codes.has("FOCUS_OVERLAP")) {
+    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.7 keeps transient foreground gaps on one monotonic timeline; export diagnostics with this request ID if new overlaps continue.";
+  }
+  if (codes.has("RUNTIME_OVERLAP")) {
+    return "The overlapping runtime interval was not counted. The Agent will continue from the current visible-window observation.";
+  }
+  if (codes.has("OPEN_RUNTIME_NOT_ENABLED")) {
+    return "Open/runtime remains paused until the current policy version enables it and the employee acknowledges that version.";
+  }
+  if (codes.has("POLICY_REJECTED")) {
+    return "The Agent will refresh its policy lease; data outside the authorised window is not counted.";
+  }
+  return "Use the request ID and exported redacted diagnostics to inspect this interval rejection.";
 }
 
 function snapshotDiagnosticStatus(
