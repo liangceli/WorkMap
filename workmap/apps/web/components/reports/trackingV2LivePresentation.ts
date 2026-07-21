@@ -31,14 +31,29 @@ export function trackingV2ConnectionPresentation(
 export function trackingV2SnapshotPresentation(
   device: TrackingV2LiveDevice,
 ) {
+  const subject = device.source === "BROWSER_DOMAIN" ? "Domain" : "App";
+  if (
+    device.health &&
+    device.health.policyState !== "ACTIVE" &&
+    device.snapshotStatus !== "CURRENT"
+  ) {
+    return {
+      available: false,
+      label: `${subject} collection policy paused`,
+      detail: device.connectionFresh
+        ? `The connection is online, but ${subject} collection is paused by acknowledgement, timezone, schedule, or lease state.`
+        : `${subject} collection is policy-paused and the connection is not currently confirmed.`,
+      pill: "Policy paused",
+    };
+  }
   if (device.snapshotStatus === "REJECTED") {
     if (device.health?.serverDiagnosticCode === "SNAPSHOT_OUTSIDE_POLICY_WINDOW") {
       return {
         available: false,
         label: "Current activity not confirmed",
         detail: device.connectionFresh
-          ? "The connection is online, but the latest App snapshot was outside the approved collection window."
-          : "The latest App snapshot was outside the approved collection window.",
+          ? `The connection is online, but the latest ${subject} snapshot was outside the approved collection window.`
+          : `The latest ${subject} snapshot was outside the approved collection window.`,
         pill: "Outside collection window",
       };
     }
@@ -47,8 +62,8 @@ export function trackingV2SnapshotPresentation(
         available: false,
         label: "Current activity not confirmed",
         detail: device.connectionFresh
-          ? "The connection is online, but the latest App snapshot needs a refreshed policy lease."
-          : "The latest App snapshot needs a refreshed policy lease.",
+          ? `The connection is online, but the latest ${subject} snapshot needs a refreshed policy lease.`
+          : `The latest ${subject} snapshot needs a refreshed policy lease.`,
         pill: "Policy refresh",
       };
     }
@@ -56,8 +71,8 @@ export function trackingV2SnapshotPresentation(
       available: false,
       label: "Current activity not confirmed",
       detail: device.connectionFresh
-        ? "The connection is online, but the latest App snapshot time could not be verified."
-        : "The latest App snapshot time could not be verified.",
+        ? `The connection is online, but the latest ${subject} snapshot time could not be verified.`
+        : `The latest ${subject} snapshot time could not be verified.`,
       pill: "Snapshot warning",
     };
   }
@@ -79,9 +94,9 @@ export function trackingV2SnapshotPresentation(
       available: false,
       label: "No current focus",
       detail: device.connectionFresh
-        ? "The connection is online and the latest snapshot contains no current App."
-        : "The latest snapshot contains no current App, and the connection is not currently confirmed.",
-      pill: "No current App",
+        ? `The connection is online and the latest snapshot contains no current ${subject}.`
+        : `The latest snapshot contains no current ${subject}, and the connection is not currently confirmed.`,
+      pill: `No current ${subject}`,
     };
   }
 
@@ -90,18 +105,18 @@ export function trackingV2SnapshotPresentation(
       available: false,
       label: "Current activity not confirmed",
       detail: device.connectionFresh
-        ? "The connection is online, but the last App snapshot is stale."
-        : "The last App snapshot is stale and the connection signal is interrupted.",
+        ? `The connection is online, but the last ${subject} snapshot is stale.`
+        : `The last ${subject} snapshot is stale and the connection signal is interrupted.`,
       pill: "Snapshot stale",
     };
   }
 
   return {
     available: false,
-    label: "No current App snapshot",
+    label: `No current ${subject} snapshot`,
     detail: device.connectionFresh
-      ? "The connection is online; WorkMap has not confirmed a current App snapshot."
-      : "WorkMap has not received a current App snapshot.",
+      ? `The connection is online; WorkMap has not confirmed a current ${subject} snapshot.`
+      : `WorkMap has not received a current ${subject} snapshot.`,
     pill: "Not received",
   };
 }

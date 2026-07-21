@@ -133,6 +133,30 @@ test("late and duplicate observations never create negative or overlapping time"
   );
 });
 
+test("UTC midnight rollover preserves exact adjacent Domain intervals", () => {
+  const midnightClock: BrowserClockEpochV2 = {
+    clockEpochId: "epoch-midnight",
+    clockEpochStartedAt: "2026-07-21T23:59:50.000Z",
+    clockEpochStartedMonotonicMs: 0,
+  };
+  let nextId = 1;
+  const engine = new BrowserFocusEngineV2(
+    midnightClock,
+    policy(),
+    "CHROME",
+    null,
+    () => `midnight-${nextId++}`,
+  );
+  engine.acquireFocus(
+    { subjectKey: "rollover.example", displayName: "rollover.example" },
+    5_000,
+  );
+  const closed = engine.clearFocus(15_000);
+  assert.equal(closed.intervals[0]?.startedAt, "2026-07-21T23:59:55.000Z");
+  assert.equal(closed.intervals[0]?.endedAt, "2026-07-22T00:00:05.000Z");
+  assert.equal(closed.intervals[0]?.durationMs, 10_000);
+});
+
 function createEngine(
   checkpoint?: ConstructorParameters<typeof BrowserFocusEngineV2>[3],
 ) {

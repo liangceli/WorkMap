@@ -360,6 +360,8 @@ export type WorkMapApiUsageSummary = {
   trackingV2Coverage?: {
     activatedDeviceCount: number;
     openRuntimeEnabled: boolean;
+    appOpenRuntimeEnabled?: boolean;
+    domainOpenRuntimeEnabled?: boolean;
     reconciliationState: "RECONCILED" | "LEDGER_FALLBACK";
     dirtyDates: Array<{
       userId: string;
@@ -522,6 +524,25 @@ export type WorkMapApiTrackingV2LiveActivity = {
       clockDriftMs: number | null;
       updatedAt: string | null;
     };
+    intervalDiagnostics?: {
+      lastRejected: null | {
+        code: string;
+        requestId: string | null;
+        rejectedAt: string | null;
+        stream: "FOCUS" | "OPEN_RUNTIME";
+        clockEpochId: string;
+        sequenceNumber: number;
+      };
+      rejectionCodeCounts: Record<string, number>;
+      recent: Array<{
+        code: string;
+        requestId: string | null;
+        rejectedAt: string | null;
+        stream: "FOCUS" | "OPEN_RUNTIME";
+        clockEpochId: string;
+        sequenceNumber: number;
+      }>;
+    };
     correlation: null | {
       state: "RESOLVED" | "UNRESOLVED" | "NO_MATCH";
       desktopDeviceId?: string;
@@ -539,6 +560,7 @@ export type WorkMapApiTrackingV2LiveActivity = {
     rejectedSnapshots: number;
     withSequenceGaps: number;
     withDeadLetters: number;
+    withRejectedIntervals?: number;
   };
 };
 

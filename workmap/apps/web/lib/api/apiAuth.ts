@@ -14,7 +14,7 @@ export type WorkMapApiAuthResult =
       role: string;
       source: "cognito-session";
     }
-  | { available: false; reason: string };
+  | { available: false; reason: string; retryable?: boolean };
 
 // The mapped tenant context is stable for an authenticated browser session. Keeping
 // it briefly in memory prevents every route shell from re-requesting /auth/me.
@@ -64,7 +64,11 @@ export async function getWorkMapApiAuthOptions(): Promise<WorkMapApiAuthResult> 
 
   if (!cognitoSession.available) {
     authContextCache.clear();
-    return { available: false, reason: "No active Cognito session." };
+    return {
+      available: false,
+      reason: cognitoSession.reason,
+      retryable: cognitoSession.retryable,
+    };
   }
 
   return authContextCache.get(cognitoSession.cognitoSub, () => resolveAuthContext(cognitoSession));

@@ -1,5 +1,13 @@
 # Deployment Skill
 
+## Browser Extension 0.5.2 Release Notes
+
+- Apply Prisma migration `20260721153000_tracking_rejection_request_correlation` before deploying the API/Reports build that reads `ClientSequenceTombstone.requestId`.
+- Local unpacked release path: `workmap/apps/browser-extension/alpha-unpacked`.
+- Local ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.2.zip`; expected SHA-256 `232E9BD5D705B5EB7D1A98249C93F0BE1CE1AC8431354CE44493703CE3C22AA5` and size `39,989` bytes.
+- The ZIP is a local alpha artifact only. Do not publish to Chrome Web Store, Edge Add-ons, GitHub Releases, or production without explicit authorization and real Chrome/Edge acceptance.
+- Browser Domain open/runtime is not part of 0.5.2. No Browser runtime policy/schema should be inferred from the Desktop open/runtime flag.
+
 ## Runtime / Tooling
 
 Root project: `workmap/`.

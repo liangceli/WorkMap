@@ -21,6 +21,16 @@ export type StoredCognitoSession = {
   };
 };
 
+export class CognitoSessionRefreshError extends Error {
+  constructor(
+    message: string,
+    readonly terminal: boolean,
+  ) {
+    super(message);
+    this.name = "CognitoSessionRefreshError";
+  }
+}
+
 type CognitoConfig = {
   region: string;
   userPoolId: string;
@@ -162,7 +172,6 @@ export function getCognitoSession(): StoredCognitoSession | null {
     }
 
     if (isExpired(parsed.expiresAt)) {
-      if (!parsed.refreshToken) clearCognitoSession();
       return null;
     }
 
@@ -170,6 +179,10 @@ export function getCognitoSession(): StoredCognitoSession | null {
   } catch {
     return null;
   }
+}
+
+export function hasStoredCognitoSession() {
+  return Boolean(readStoredCognitoSession());
 }
 
 export function getCognitoApiAuthOptions():
@@ -336,7 +349,14 @@ export async function refreshHostedCognitoSession(forceRefresh = false) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!response.ok) throw new Error(`Cognito session refresh failed with ${response.status}.`);
+  if (!response.ok) {
+    const errorCode = await readCognitoRefreshErrorCode(response);
+    const terminal =
+      response.status === 401 ||
+      response.status === 403 ||
+      (response.status === 400 && ["invalid_grant", "invalid_client", "unauthorized_client"].includes(errorCode ?? ""));
+    throw new CognitoSessionRefreshError(`Cognito session refresh failed with ${response.status}.`, terminal);
+  }
 
   const tokenResponse = (await response.json()) as CognitoTokenResponse;
   if (!tokenResponse.access_token || !tokenResponse.id_token || tokenResponse.token_type !== "Bearer") {
@@ -385,6 +405,15 @@ function readStoredCognitoSession() {
     return isStoredCognitoSession(parsed) ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+async function readCognitoRefreshErrorCode(response: Response) {
+  try {
+    const body = (await response.json()) as unknown;
+    return isObject(body) && typeof body.error === "string" ? body.error : undefined;
+  } catch {
+    return undefined;
   }
 }
 

@@ -1,5 +1,12 @@
 # QA Skill
 
+## Browser Extension 0.5.2 QA Baseline
+
+- Automated Browser runtime coverage uses a controllable event/time harness for one/two windows, multi-display semantics, same/different-host tabs, Split View, trusted/untrusted/background/iframe evidence, minimization/`WINDOW_ID_NONE`, idle/lock, protected/incognito/excluded pages, SPA/navigation/reload/replace/remove, UTC rollover, restart recovery, lifecycle/clock gaps, permission registration recovery, queue/backoff/pressure, HTTP status classes, and HTTP 200 snapshot/interval rejections.
+- API behavior tests must prove Browser Focus active/idle enters the ledger and Domain Reports, rejected rows do not enter totals, tombstones retain safe code/request ID, browser identity is enforced, and Chrome/Edge same-subject overlaps are unioned.
+- Real Chrome and Edge load-unpacked QA remains mandatory after automated checks. Record manual work as not run unless the exact browser/version/permission/lifecycle scenario was observed.
+- Current known unrelated baselines: full API `48/49` due an aged fixed-date activity fixture; full Web `79/82` due three brittle Reports source/layout assertions. Re-run focused Tracking/Reports tests even while these are open.
+
 ## Verification Commands
 
 Run from `workmap/`:

@@ -13,6 +13,7 @@ import {
   signUp,
 } from "aws-amplify/auth";
 import {
+  CognitoSessionRefreshError,
   clearCognitoSession,
   getCognitoApiAuthOptions,
   getCognitoSession,
@@ -49,8 +50,13 @@ export type CognitoAuthOperation =
   | "confirm_sign_in"
   | "unknown";
 
+export type CognitoSessionRestoreResult =
+  | { available: true; session: StoredCognitoSession }
+  | { available: false; retryable: boolean; reason: string };
+
 let configuredSignature = "";
-let sessionRestorePromise: Promise<StoredCognitoSession | null> | null = null;
+let sessionRestorePromise: Promise<CognitoSessionRestoreResult> | null = null;
+const SESSION_RESTORE_RETRY_DELAY_MS = 500;
 
 export function configureCognitoUserPoolClient() {
   const status = getCognitoUserPoolConfigStatus();
@@ -167,8 +173,13 @@ export async function signOutCognitoAccount() {
 }
 
 export async function restoreCognitoAccountSession(forceRefresh = false) {
+  const result = await restoreCognitoAccountSessionResult(forceRefresh);
+  return result.available ? result.session : null;
+}
+
+export async function restoreCognitoAccountSessionResult(forceRefresh = false): Promise<CognitoSessionRestoreResult> {
   const current = getCognitoSession();
-  if (current && !forceRefresh) return current;
+  if (current && !forceRefresh) return { available: true, session: current };
   if (sessionRestorePromise) return sessionRestorePromise;
 
   sessionRestorePromise = restoreCognitoAccountSessionOnce(forceRefresh).finally(() => {
@@ -180,27 +191,58 @@ export async function restoreCognitoAccountSession(forceRefresh = false) {
 export async function getFreshCognitoApiAuthOptions(forceRefresh = false) {
   const current = getCognitoApiAuthOptions();
   if (current.available && !forceRefresh) return current;
-  const restored = await restoreCognitoAccountSession(forceRefresh);
-  if (!restored) return { available: false as const, reason: "Cognito session expired. Sign in again." };
-  return getCognitoApiAuthOptions();
+  let restored = await restoreCognitoAccountSessionResult(forceRefresh);
+  if (!restored.available && restored.retryable) {
+    await delay(SESSION_RESTORE_RETRY_DELAY_MS);
+    restored = await restoreCognitoAccountSessionResult(forceRefresh);
+  }
+  if (!restored.available) return restored;
+  const refreshed = getCognitoApiAuthOptions();
+  if (refreshed.available) return refreshed;
+  return { available: false as const, retryable: false, reason: "Cognito session expired. Sign in again." };
 }
 
-async function restoreCognitoAccountSessionOnce(forceRefresh: boolean) {
+function delay(durationMs: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, durationMs));
+}
+
+async function restoreCognitoAccountSessionOnce(forceRefresh: boolean): Promise<CognitoSessionRestoreResult> {
   try {
     const hostedSession = await refreshHostedCognitoSession(forceRefresh);
-    if (hostedSession) return hostedSession;
-  } catch {
-    clearCognitoSession();
-    return null;
+    if (hostedSession) return { available: true, session: hostedSession };
+  } catch (error) {
+    return sessionRestoreFailure(error);
   }
 
   try {
     configureCognitoUserPoolClient();
-    return await readAmplifySession(forceRefresh);
-  } catch {
-    clearCognitoSession();
-    return null;
+    return { available: true, session: await readAmplifySession(forceRefresh) };
+  } catch (error) {
+    return sessionRestoreFailure(error);
   }
+}
+
+function sessionRestoreFailure(error: unknown): Extract<CognitoSessionRestoreResult, { available: false }> {
+  const name = error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : "";
+  const terminal =
+    (error instanceof CognitoSessionRefreshError && error.terminal) ||
+    name === "UserUnAuthenticatedException" ||
+    name === "NotAuthorizedException" ||
+    /invalid[_ ]grant|refresh token.*(?:expired|invalid)|invalid refresh token|without usable tokens|no current user|not authenticated/i.test(
+      message,
+    );
+
+  if (terminal) {
+    clearCognitoSession();
+    return { available: false, retryable: false, reason: "Cognito session expired. Sign in again." };
+  }
+
+  return {
+    available: false,
+    retryable: true,
+    reason: "WorkMap could not refresh your Cognito session yet. Your session was kept; retry in a moment.",
+  };
 }
 
 async function resolveSignInResult(

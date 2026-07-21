@@ -1,24 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { redirectToRootForMissingCognitoSession } from "../lib/auth/cognitoRedirect";
+import { getRequestedPostLoginPath, redirectToLoginForMissingCognitoSession } from "../lib/auth/cognitoRedirect";
 
-test("a protected route with no Cognito session is replaced by the root route", () => {
+test("a protected route with no Cognito session is sent to login with a safe return path", () => {
   const redirects: string[] = [];
 
   withBrowserPath("/reports", (location) => {
     location.replace = (path: string) => redirects.push(path);
-    assert.equal(redirectToRootForMissingCognitoSession(), true);
+    assert.equal(redirectToLoginForMissingCognitoSession(), true);
   });
 
-  assert.deepEqual(redirects, ["/"]);
+  assert.deepEqual(redirects, ["/login?next=%2Freports"]);
 });
 
 test("public root, login and invitation routes do not redirect", () => {
   for (const pathname of ["/", "/login", "/login/callback", "/invite/example-token"]) {
     withBrowserPath(pathname, () => {
-      assert.equal(redirectToRootForMissingCognitoSession(), false);
+      assert.equal(redirectToLoginForMissingCognitoSession(), false);
     });
   }
+});
+
+test("post-login routing accepts only internal protected paths", () => {
+  assert.equal(getRequestedPostLoginPath("?next=%2Freports"), "/reports");
+  assert.equal(getRequestedPostLoginPath("?next=%2Fvirtual-office"), "/virtual-office");
+  assert.equal(getRequestedPostLoginPath("?next=https%3A%2F%2Fevil.example"), null);
+  assert.equal(getRequestedPostLoginPath("?next=%2F%2Fevil.example"), null);
+  assert.equal(getRequestedPostLoginPath("?next=%2Flogin"), null);
 });
 
 function withBrowserPath(pathname: string, run: (location: { pathname: string; replace(path: string): void }) => void) {

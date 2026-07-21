@@ -39,7 +39,7 @@ export default function CognitoCallbackPage() {
         return;
       }
 
-      const authOptions = { token: result.session.idToken };
+      const authOptions = { token: result.session.idToken, authSource: "cognito" as const };
       const contextResult = await getAuthContext(authOptions);
 
       if (cancelled) {

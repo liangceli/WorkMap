@@ -18,7 +18,7 @@ import { updateCurrentUserProfile } from "../../../lib/api/usersApi";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { decodeLayeredAvatarId, encodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { sanitizeDisplayName } from "../../../lib/auth/displayName";
-import { redirectToRootForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
+import { redirectToLoginForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
@@ -52,7 +52,7 @@ export default function AvatarOnboardingPage() {
       }
 
       if (!auth.available) {
-        if (redirectToRootForMissingCognitoSession()) return;
+        if (redirectToLoginForMissingCognitoSession()) return;
         setAuthResolved(true);
         setProfileStatus("Enter the name teammates should see in WorkMap.");
         return;

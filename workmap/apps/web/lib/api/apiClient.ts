@@ -1,5 +1,5 @@
 import type { ApiClientOptions, ApiResult } from "./apiTypes";
-import { redirectToRootForMissingCognitoSession } from "../auth/cognitoRedirect";
+import { redirectToLoginForMissingCognitoSession } from "../auth/cognitoRedirect";
 
 const DEFAULT_DEV_API_URL = "http://localhost:3001";
 
@@ -62,18 +62,32 @@ async function workMapApiRequest<T>(
   try {
     let requestToken = token;
     if (authSource === "cognito") {
-      requestToken = await resolveCognitoToken(false);
-      if (!requestToken) {
-        redirectToRootForMissingCognitoSession();
-        return { ok: false, error: "Cognito session expired. Sign in again.", status: 401, source: "fallback" };
+      const tokenResult = await resolveCognitoToken(false);
+      if (!tokenResult.available) {
+        if (!tokenResult.retryable) redirectToLoginForMissingCognitoSession();
+        return {
+          ok: false,
+          error: tokenResult.reason,
+          status: tokenResult.retryable ? undefined : 401,
+          source: "fallback",
+        };
       }
+      requestToken = tokenResult.token;
     }
 
     let response = await sendApiRequest(baseUrl, path, init, requestToken);
     if (response.status === 401 && authSource === "cognito") {
       const refreshedToken = await resolveCognitoToken(true);
-      if (refreshedToken) response = await sendApiRequest(baseUrl, path, init, refreshedToken);
-      else redirectToRootForMissingCognitoSession();
+      if (!refreshedToken.available) {
+        if (!refreshedToken.retryable) redirectToLoginForMissingCognitoSession();
+        return {
+          ok: false,
+          error: refreshedToken.reason,
+          status: refreshedToken.retryable ? undefined : 401,
+          source: "fallback",
+        };
+      }
+      response = await sendApiRequest(baseUrl, path, init, refreshedToken.token);
     }
 
     if (!response.ok) {
@@ -145,7 +159,8 @@ function sanitizeApiErrorMessage(value: string) {
 }
 
 async function resolveCognitoToken(forceRefresh: boolean) {
-  const { restoreCognitoAccountSession } = await import("../auth/cognitoUserPoolAuth");
-  const session = await restoreCognitoAccountSession(forceRefresh);
-  return session?.idToken || session?.accessToken;
+  const { getFreshCognitoApiAuthOptions } = await import("../auth/cognitoUserPoolAuth");
+  const auth = await getFreshCognitoApiAuthOptions(forceRefresh);
+  if (!auth.available) return auth;
+  return { available: true as const, token: auth.session.idToken || auth.session.accessToken };
 }

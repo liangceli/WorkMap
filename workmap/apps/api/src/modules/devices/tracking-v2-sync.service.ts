@@ -354,6 +354,7 @@ export class TrackingV2SyncService {
                 clockEpochId: candidate.interval.clockEpochId,
                 sequenceNumber: candidate.interval.sequenceNumber,
                 rejectionCode: code,
+                requestId,
                 payloadHash: candidate.payloadHash,
               })),
               skipDuplicates: true,

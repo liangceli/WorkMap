@@ -1,5 +1,155 @@
 # Latest Implementation Handoff
 
+## 2026-07-21 Browser Extension 0.5.2 Reliability, Diagnostics, And Reports
+
+### Original Task Brief
+
+- Take ownership of the existing Chrome/Edge Manifest V3 Browser Extension without touching Desktop Agent behavior or replacing the Tracking Protocol v2 architecture.
+- Make Domain Focus reliable across multiple windows/displays/tabs, Split View, minimization, lock/sleep, offline/MV3 restart, policy boundaries, and server rejection paths.
+- Separate server-confirmed connection health, current Domain snapshot confirmation, and accepted/duplicate/rejected historical intervals in Options and `/reports`; build a versioned unpacked artifact and ZIP.
+- Implement Browser Domain open/runtime only if a separate safe Browser policy/schema/Reports contract could be completed honestly.
+
+### Changed Files
+
+- Browser runtime/privacy/state: `workmap/apps/browser-extension/src/backgroundV2.ts`, `browserEligibilityV2.ts`, `browserFocusEngineV2.ts` tests, `contentScript.ts`, `contentRegistration.ts` tests, `extensionApi.ts`, `trackingV2Store.ts`, and `trackingV2Types.ts`.
+- Browser UI/release: `workmap/apps/browser-extension/options.html`, `options.css`, `src/options.ts`, `manifest.json`, `package.json`, generated `alpha-unpacked`, and `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.2.zip`.
+- Browser tests: `browser-runtime-harness.test.ts`, `content-registration.test.ts`, `sync-diagnostics.test.ts`, and the updated focus, queue/API, service-worker, and store tests.
+- API/database/Reports: Tracking v2 sync and Reports services/tests, `workmap/prisma/schema.prisma`, migration `20260721153000_tracking_rejection_request_correlation`, Web Reports types/presentation/cards/tests.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/api-contract-skill.md`, `qa-skill.md`, and `deployment-skill.md`.
+- Existing uncommitted Cognito/Web-auth work was preserved. No Desktop Agent file or behavior was modified.
+
+### Implementation Summary
+
+- Browser Extension version is `0.5.2`. The three state lanes are now explicit: only a successful server sync updates secure heartbeat/connection time; each current snapshot is `LOCAL_PENDING`, `CONFIRMED`, `REJECTED`, `STALE`, or `NONE`; interval results retain accepted/duplicate/rejected counts, request ID, confirmed-through cursor, and safe rejection-code groups.
+- Every `sync-v2` sends `X-WorkMap-Request-Id`. HTTP errors and HTTP 200 item/snapshot rejections are correlated separately. Terminal interval rejections move from the durable queue into a bounded IndexedDB dead-letter store (1,000 rows / 31 days); bounded recent diagnostics retain only safe code, stage, outcome, request ID, count, time, retryability, and remediation (100 groups / 14 days).
+- Focus eligibility requires an actual focused, non-minimized normal browser window plus an eligible HTTP/HTTPS top-level tab. A tab in a background window is rejected. One extension instance owns at most one hostname; same-host tab switches remain one Domain identity without overlap.
+- Content scripts remain all-frame and emit only `event.isTrusted` occurrence/time for keyboard, pointer/mouse press, wheel, touch, input, or change. Iframe activity is attributed through `sender.tab` to the top-level hostname. Pointer coordinates, key values, text, targets, scroll detail, full URLs, titles, and content are never sent.
+- Chrome 140+ Split View uses the official `splitViewId`: a trusted event from a peer sharing the focused window's active Split View can take the single Focus lane. Without this proof the runtime stays conservative and never marks two pages active.
+- Internal/protected pages, inaccessible PDF viewers, exclusions, incognito, hidden pages, background windows, minimization, `WINDOW_ID_NONE`, system idle/lock, tab/window removal, and real navigation seal Focus. Same-host SPA path/query changes do not create a new Domain. Reload and cross-host navigation require fresh content-script proof.
+- A 30-second alarm plus a 15-second tolerance detects unobserved lifecycle gaps. Sleep, worker suspension/restart, clock rollback/divergence, crash, or restart tails are sealed only at the last durable observation and are not backfilled. Policy `idleThresholdMs`, acknowledgement, timezone, lease, and server-issued UTC windows remain authoritative.
+- Options now shows version/device, Online/Offline/Auth/Upgrade connection, last secure heartbeat, snapshot state/observed/confirmed/rejection, interval result and request, confirmed-through time, queue/dead-letter code groups, policy/schedule/lease, permission/registration health, recent diagnostics, and explicit coverage limitations.
+- API tombstones now store the request ID for new terminal interval rejections. Live Reports returns safe recent rejection evidence and counts. `/reports` keeps connection, current snapshot, official history, and rejection attention separate; rejected intervals do not enter totals.
+- Confirmed Browser `FOCUS_ACTIVE` and `FOCUS_IDLE` intervals are proven to enter the official ledger and Domain Reports. Reconciliation unions overlapping same-user/same-hostname/same-metric ranges across Chrome/Edge devices instead of adding them unconditionally.
+- Browser Domain open/runtime was intentionally not implemented. The current Desktop `collectOpenRuntime` policy is not reused; Browser runtime remains disabled in Options, API acceptance, and Reports until a separate policy/version/acknowledgement/lease contract exists.
+
+### Role, Access, Privacy, And Security
+
+- Device credentials remain encrypted locally with non-extractable AES-GCM keys and bound to tenant, user, device, client type, workstation, and Chrome/Edge identity. Revocation, protocol activation, policy version/lease, acknowledgement, and allowed UTC windows remain enforced server-side.
+- No Owner/Employee/Platform Admin, tenant-isolation, RBAC, or Desktop Agent boundary changed. The additive tombstone request ID is privacy-safe correlation metadata; old tombstones legitimately show no request ID.
+- Manifest incognito mode is `not_allowed`. Only optional HTTP/HTTPS host access is requested; no history, download, clipboard, camera, microphone, or webRequest permission was added.
+
+### Verification
+
+- Browser Extension: typecheck pass; lint pass; test pass `46/46`; build pass; `release:zip` pass.
+- Focused API Tracking v2/Reports tests pass `15/15`; API typecheck, lint, and build pass. Prisma generate and schema validate pass.
+- Full API suite is `48/49`: one pre-existing time-dependent `tracking-reports-verification.test.ts` fixture is now older than the service's maximum event age and fails with `Activity event is too old`; focused tests for this change pass.
+- Focused Web Reports tests pass `7/7`; Web typecheck, lint, and production build pass. Full Web suite is `79/82`; the three remaining brittle `reports-information-order.test.ts` source/layout assertions predate and are unrelated to this Browser diff.
+- `git diff --check` passes. Final changed-file secret scan and ZIP inspection pass; the ZIP has 19 entries and no sources/tests/credentials.
+
+### Artifact
+
+- Unpacked: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.2.zip`.
+- Size: `39,989` bytes.
+- SHA-256: `232E9BD5D705B5EB7D1A98249C93F0BE1CE1AC8431354CE44493703CE3C22AA5`.
+
+### Manual QA And Remaining Risks
+
+- Real Chrome and Edge load-unpacked QA was not run. Installation/upgrade with pairing retention, permission revoke/regrant, single/dual-window and dual-display, same/different-host tabs, supported Split View, address bar/DevTools/internal pages, minimize/restore, lock/unlock, sleep/wake, offline/reconnect, browser restart, extension reload/disable/enable, and live/historical `/reports` remain manual acceptance gates.
+- Apply migration `20260721153000_tracking_rejection_request_correlation` before deploying the API that selects `ClientSequenceTombstone.requestId`.
+- Split View proof depends on Chrome/compatible Edge exposing `splitViewId`; unsupported versions deliberately provide limited coverage instead of dual counting. Chrome/Edge profiles remain separate device identities; server reconciliation mitigates same-user/same-domain overlap only after accepted ledger data exists.
+- Proceed to the next round for real Chrome/Edge load-unpacked and staging migration/API/Web smoke. Do not publish to Chrome Web Store, Edge Add-ons, GitHub Releases, or production yet.
+
+## 2026-07-21 Browser Extension Dedicated-Thread Handoff Prompt
+
+### Original Task Brief
+
+- Keep the current Codex conversation dedicated to Desktop Agent work.
+- Inspect the real Browser Extension framework and provide a copy-ready prompt for a separate Codex conversation to take ownership of Browser Extension implementation, including multi-window/display, multiple pages, minimization, lock, MV3 lifecycle, policy, diagnostics, upload, and Reports behavior.
+
+### Reviewed Current State
+
+- The Browser Extension is not an empty scaffold. Source identity is `browser-extension-mv3/0.5.1`; it is a Chrome/Edge Manifest V3 extension using `backgroundV2.ts`, a dynamically registered all-frame content script, Tracking Protocol v2, policy/lease/acknowledgement checks, an encrypted device credential, IndexedDB durable interval queue, stable event/sequence identity, retry/backoff, live hostname snapshots, and server-confirmed health sync.
+- Collection is hostname-only. Page signals contain only trusted interaction occurrence/timestamp; full URL, path/query/fragment, title, content, form/input values, key values, pointer coordinates, screenshots, clipboard, files, camera, microphone, email, and private messages remain prohibited.
+- The current v2 focus engine supports one focused Browser domain with Focus active/Focused idle and a 60-second evidence threshold. It clears on browser focus loss, system idle/lock, invalid/non-HTTP(S) tabs, exclusions, or policy ineligibility, and persists before sync so MV3 worker restarts do not rely on globals alone.
+- Current v2 Browser types lag the shared/server/Desktop response contract: they do not model `focusSnapshotResult` or request correlation, and terminal interval rejections increment only a count. The Options UI does not yet provide Desktop-style separation of connection, current Domain snapshot, confirmed interval upload, queue/rejection codes, policy schedule/lease, and bounded historical diagnostics.
+- Browser v2 currently receives `collectOpenRuntime: false`; the API deliberately enables the existing open/runtime policy only for Desktop Agent. Domain open/runtime must not be enabled by merely flipping that literal. It requires an explicit Browser policy/product contract, separate reporting semantics, acknowledgement/version behavior, and tests if included.
+
+### Changed Files And Scope
+
+- Documentation only: this handoff and `docs/ai-handoff/latest-qa.md` record the source review and dedicated-thread boundary.
+- No Browser Extension, Desktop Agent, API, Web, shared type, Prisma, deployment, artifact, or version file was changed.
+
+### Verification And Manual QA
+
+- Read-only source review covered Browser Extension manifest/package, v2 runtime/engine/store/types/API/content registration/content script/options, existing tests, API policy/sync/report Browser branches, shared Tracking v2 contract, and Reports Browser rendering.
+- No automated package command or real Chrome/Edge manual QA was run because this round produced a handoff prompt rather than runtime changes.
+- Existing uncommitted Web-auth changes were preserved and not reverted or overwritten.
+
+### Remaining Risks And Suggested Next Step
+
+- Multi-window/multi-display, split-view, minimized/background, lock/sleep, service-worker eviction, browser restart, permission revoke/regrant, Chrome/Edge concurrency, and real Reports behavior are not production-confirmed by this prompt-only review.
+- Give the copy-ready prompt from the accompanying response to a new Codex conversation. That conversation must independently inspect git/source and implement/test there; it must not treat this review or an old handoff as proof of completion.
+
+## 2026-07-21 Cognito Idle Session Recovery And Login Return Routing
+
+### Original Task Brief
+
+- Diagnose and fix the intermittent deployed Web behavior where a signed-in user left WorkMap idle, then a refresh or navigation returned to `/`, and repeated sign-in attempts could remain on the public page until a later retry.
+- Implement a real authentication recovery fix rather than hiding the redirect or weakening tenant/RBAC boundaries.
+
+### Confirmed Root Cause
+
+- An expired browser access/ID token is expected and should be recovered with the Cognito refresh token. The Web client instead treated every Hosted UI or Amplify refresh exception—including temporary network, Cognito, or API availability failures—as a permanent logout, immediately cleared `workmap.cognitoSession`, and redirected protected pages to `/`.
+- Protected API calls did not retry the original request after an API `401` with a forced Cognito refresh.
+- The first `/auth/me` request after interactive sign-in used a raw token without `authSource: "cognito"`, so it did not receive the refresh/retry behavior.
+- A genuinely missing/invalid session redirected to the public root and discarded the requested protected route, which made a successful later sign-in look like a login loop.
+
+### Changed Files
+
+- Session classification and recovery: `workmap/apps/web/lib/auth/cognitoSession.ts`, `cognitoUserPoolAuth.ts`, and `cognitoRedirect.ts`.
+- API authentication/retry: `workmap/apps/web/lib/api/apiClient.ts` and `apiAuth.ts`.
+- Login/callback/protected route integration: `workmap/apps/web/components/login/CognitoLoginPanel.tsx`, `components/layout/AppShell.tsx`, `app/login/callback/page.tsx`, `app/virtual-office/page.tsx`, and the affected onboarding pages.
+- Automated coverage: `workmap/apps/web/test/cognito-session-refresh.test.ts` and `cognito-protected-redirect.test.ts`.
+- Long-lived frontend contract and handoff: `docs/skills/frontend-skill.md`, this file, and `docs/ai-handoff/latest-qa.md`.
+- `workmap/apps/web/tsconfig.tsbuildinfo` was regenerated by the required Web checks and remains a tracked generated diff.
+
+### Implementation Summary
+
+- Refresh failures are now classified as terminal or retryable. Explicit Cognito invalid-session responses such as `invalid_grant`, `401/403`, `NotAuthorizedException`, or an invalid/expired refresh token clear the stored session. Network failures, rate limiting, unknown provider failures, and server errors preserve it.
+- A retryable refresh receives one bounded 500 ms automatic retry. If it still fails, the current API action returns a temporary error without destroying the browser session or forcing navigation; a subsequent page/API action can recover normally.
+- A Cognito-authenticated API `401` forces a token refresh and retries the original request once with the new token.
+- A permanently missing/invalid session now routes to `/login?next=<protected path>`. After successful tenant mapping, the login panel returns the user to that validated internal route. External, protocol-relative, backslash, and public-route values are rejected to prevent open redirects.
+- Login callback and the first post-login `/auth/me` mapping now identify the request as Cognito-authenticated and therefore use the same refresh/retry path.
+
+### Role, Privacy, And Security Behavior
+
+- No API, database schema, Desktop Agent, policy, RBAC, tenant isolation, Cognito group mapping, or Platform Admin boundary changed.
+- The fix does not extend token lifetime, bypass Cognito, or keep explicitly invalid refresh credentials. It only avoids destroying a recoverable session on temporary failure.
+- Tokens, refresh tokens, full authentication URLs, and provider response bodies are not logged or shown in diagnostics.
+
+### Verification
+
+- Focused Cognito refresh/redirect tests: pass, `7/7`, covering expired-session refresh, API `401` forced refresh plus original-request retry, two temporary refresh failures with stored-session preservation and later recovery, terminal `invalid_grant` clearing, safe return routing, and public-route behavior.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web build: pass in approximately 65 seconds. Existing non-blocking Next/Webpack warnings remain.
+- Full Web suite: `77/81` pass. All authentication tests pass. The four failures are the same pre-existing brittle Reports render/source assertions documented in the preceding handoff and are outside this auth diff.
+- `git diff --check`: pass after the final documentation update.
+- High-confidence secret scan across changed text files: zero matches.
+
+### Manual QA, Intentionally Unchanged, And Remaining Risks
+
+- No real Cognito account, deployed browser session, long-idle wait, or production sign-in loop was exercised in this round. Source and automated behavior are verified; production behavior must not be called verified until the Web deployment and real idle-session test succeed.
+- A persistent retryable outage deliberately keeps the user on the requested page and preserves credentials, but the affected data request may display its existing temporary error/blocked state until the next action succeeds.
+- This is Web-only. It requires a new Web deployment after commit/push; it does not require a database migration, API deployment, or Desktop Agent release.
+
+### Suggested Next Steps
+
+1. Review, commit, and push this Web diff, then deploy the Web application.
+2. In a real signed-in browser, open `/reports`, leave it idle beyond the access-token expiry or reproduce a refresh boundary, then refresh/navigate. Confirm it stays authenticated or recovers without visiting `/`.
+3. Temporarily interrupt network access during refresh and restore it; confirm the session remains and a later action succeeds. Sign out or invalidate the refresh token separately; confirm WorkMap goes to `/login?next=%2Freports` and returns to Reports after sign-in.
+
 ## 2026-07-21 Desktop Agent 0.6.7 Focus Integrity, Diagnostics, Focused Idle, And Policy-Gated Open/runtime
 
 ### Original Task Brief

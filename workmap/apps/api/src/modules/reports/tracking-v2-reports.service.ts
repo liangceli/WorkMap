@@ -143,6 +143,19 @@ export class TrackingV2ReportsService {
             updatedAt: true,
           },
         },
+        sequenceTombstones: {
+          orderBy: [{ rejectedAt: "desc" }, { sequenceNumber: "desc" }],
+          take: 100,
+          select: {
+            source: true,
+            stream: true,
+            clockEpochId: true,
+            sequenceNumber: true,
+            rejectionCode: true,
+            requestId: true,
+            rejectedAt: true,
+          },
+        },
       },
     });
 
@@ -154,6 +167,9 @@ export class TrackingV2ReportsService {
       const health = device.clientHealth.find(
         (item) => item.source === source,
       ) ?? null;
+      const intervalRejections = (device.sequenceTombstones ?? []).filter(
+        (item) => item.source === source,
+      );
       const cursor = snapshot
         ? device.syncCursors.find(
             (item) =>
@@ -307,6 +323,27 @@ export class TrackingV2ReportsService {
               updatedAt: iso(cursor.updatedAt),
             }
           : null,
+        intervalDiagnostics: {
+          lastRejected: intervalRejections[0]
+            ? {
+                code: intervalRejections[0].rejectionCode,
+                requestId: intervalRejections[0].requestId,
+                rejectedAt: iso(intervalRejections[0].rejectedAt),
+                stream: intervalRejections[0].stream,
+                clockEpochId: intervalRejections[0].clockEpochId,
+                sequenceNumber: intervalRejections[0].sequenceNumber,
+              }
+            : null,
+          rejectionCodeCounts: rejectionCodeCounts(intervalRejections),
+          recent: intervalRejections.slice(0, 12).map((item) => ({
+            code: item.rejectionCode,
+            requestId: item.requestId,
+            rejectedAt: iso(item.rejectedAt),
+            stream: item.stream,
+            clockEpochId: item.clockEpochId,
+            sequenceNumber: item.sequenceNumber,
+          })),
+        },
         correlation: null as null | {
           state: "RESOLVED" | "UNRESOLVED" | "NO_MATCH";
           desktopDeviceId?: string;
@@ -341,6 +378,9 @@ export class TrackingV2ReportsService {
         ).length,
         withDeadLetters: rows.filter(
           (row) => (row.health?.queue.deadLetter ?? 0) > 0,
+        ).length,
+        withRejectedIntervals: rows.filter(
+          (row) => row.intervalDiagnostics.lastRejected !== null,
         ).length,
       },
     };
@@ -584,6 +624,14 @@ function readJsonArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function rejectionCodeCounts(rows: Array<{ rejectionCode: string }>) {
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    counts[row.rejectionCode] = (counts[row.rejectionCode] ?? 0) + 1;
+  }
+  return counts;
+}
+
 function browserForDesktopApp(displayName: string | null | undefined) {
   const normalized = displayName?.trim().toLowerCase() ?? "";
   if (
@@ -776,6 +824,8 @@ function buildConfirmedUsageResponse(input: {
     coverage: {
       activatedDeviceCount: input.activatedDeviceCount,
       openRuntimeEnabled: input.openRuntimeEnabled,
+      appOpenRuntimeEnabled: input.openRuntimeEnabled,
+      domainOpenRuntimeEnabled: false,
       reconciliationState:
         input.dirtyTargets.length > 0 ? "LEDGER_FALLBACK" : "RECONCILED",
       dirtyDates: input.dirtyTargets.map((target) => ({

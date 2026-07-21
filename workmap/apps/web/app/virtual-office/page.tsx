@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { OfficeMap } from "../../components/office/OfficeMap";
 import { WorkMapLoader } from "../../components/ui/WorkMapLoader";
 import { getWorkMapApiAuthOptions } from "../../lib/api/apiAuth";
-import { redirectToRootForMissingCognitoSession } from "../../lib/auth/cognitoRedirect";
+import { redirectToLoginForMissingCognitoSession } from "../../lib/auth/cognitoRedirect";
 import { getCognitoSession } from "../../lib/auth/cognitoSession";
 import { toWorkflowRole } from "../../lib/navigation/workspaceNavigation";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
@@ -36,7 +36,7 @@ export default function VirtualOfficePage() {
       }
 
       if (!auth.available) {
-        if (!redirectToRootForMissingCognitoSession()) {
+        if (!redirectToLoginForMissingCognitoSession()) {
           setGate({ status: "blocked", reason: auth.reason });
         }
         return;

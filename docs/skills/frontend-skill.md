@@ -100,6 +100,14 @@ Local env behavior:
 - Existing platform/shell env wins; root `.env` only fills missing keys.
 - Restart the web dev server after changing root `.env`.
 
+Cognito browser session recovery:
+
+- An expired access/ID token is recoverable while a valid Cognito refresh token remains. Protected Cognito API requests refresh before sending and force-refresh plus replay the original request once after an API `401`.
+- Temporary network/provider/server refresh failures preserve `workmap.cognitoSession` and receive one bounded retry. They must not be converted into logout or a redirect to the public home page.
+- Explicit terminal failures such as `invalid_grant`, Cognito `401/403`, `NotAuthorizedException`, or an invalid/expired refresh token clear the stored session and route to `/login?next=<internal protected path>`.
+- Post-login return paths must pass `getRequestedPostLoginPath`; external, protocol-relative, backslash, and public-route values are rejected.
+- Login and callback `/auth/me` mapping calls must use `authSource: "cognito"` so they receive the same refresh/retry behavior.
+
 Pilot readiness API wrappers:
 
 - `lib/api/healthApi.ts` wraps `GET /health`.

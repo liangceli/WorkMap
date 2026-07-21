@@ -7,7 +7,7 @@ import { createOwnerWorkspace } from "../../../lib/api/tenantOnboardingApi";
 import { decodeLayeredAvatarId } from "../../../lib/avatar/avatarProfile";
 import { saveLayeredAvatarConfig } from "../../../lib/avatar/avatarStorage";
 import { deriveDisplayNameFromCognito, sanitizeDisplayName } from "../../../lib/auth/displayName";
-import { redirectToRootForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
+import { redirectToLoginForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
 import { getFreshCognitoApiAuthOptions } from "../../../lib/auth/cognitoUserPoolAuth";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getDefaultSetupState, saveUserSetupState, type WorkMapRole } from "../../../lib/workflow/workflowState";
@@ -26,7 +26,7 @@ export default function CompanyOnboardingPage() {
 
     void getFreshCognitoApiAuthOptions().then((cognitoAuth) => {
       if (!cognitoAuth.available && !cancelled) {
-        redirectToRootForMissingCognitoSession();
+        redirectToLoginForMissingCognitoSession();
         return;
       }
       if (!cancelled && cognitoAuth.available) {
@@ -45,7 +45,7 @@ export default function CompanyOnboardingPage() {
     const confirmedDisplayName = sanitizeDisplayName(displayName);
 
     if (!cognitoAuth.available) {
-      if (redirectToRootForMissingCognitoSession()) return;
+      if (redirectToLoginForMissingCognitoSession()) return;
       setStatus("Owner workspace creation requires Cognito sign-up. Return to /login and create an Owner account first.");
       return;
     }

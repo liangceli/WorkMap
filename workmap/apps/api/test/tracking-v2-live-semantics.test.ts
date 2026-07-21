@@ -97,6 +97,9 @@ test("fresh server-confirmed health stays connected when the App snapshot is rej
   assert.equal(response.coverage.connected, 1);
   assert.equal(response.coverage.disconnected, 0);
   assert.equal(response.coverage.rejectedSnapshots, 1);
+  assert.equal(row.intervalDiagnostics.lastRejected?.code, "POLICY_REJECTED");
+  assert.equal(row.intervalDiagnostics.lastRejected?.requestId, REQUEST_ID);
+  assert.equal(response.coverage.withRejectedIntervals, 1);
 });
 
 test("invalid snapshot state timing is not mislabeled as outside the policy window", async () => {
@@ -343,6 +346,118 @@ test("valid Focus active and focused-idle intervals enter the ledger and Reports
   assert.equal(usage.coverage.reconciliationState, "LEDGER_FALLBACK");
 });
 
+test("Browser Domain Focus active and focused-idle enter the official ledger and Domain Reports", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  const sync = new TrackingV2SyncService(
+    prisma as any,
+    browserPolicyService(now) as any,
+  );
+  const startedAt = new Date(now - 50_000);
+  const activeEndedAt = new Date(now - 35_000);
+  const idleEndedAt = new Date(now - 5_000);
+  const interval = (
+    clientEventId: string,
+    sequenceNumber: number,
+    metric: "FOCUS_ACTIVE" | "FOCUS_IDLE",
+    from: Date,
+    to: Date,
+    monotonicStart: number,
+    monotonicEnd: number,
+  ) => ({
+    clientEventId,
+    activitySessionId: "85858585-8585-4585-8585-858585858585",
+    sequenceNumber,
+    source: "BROWSER_DOMAIN",
+    stream: "FOCUS",
+    metric,
+    subjectKey: "docs.example",
+    displayName: "docs.example",
+    browserName: "CHROME",
+    startedAt: from.toISOString(),
+    endedAt: to.toISOString(),
+    clockEpochId: CLOCK_ID,
+    startedMonotonicMs: monotonicStart,
+    endedMonotonicMs: monotonicEnd,
+    durationMs: monotonicEnd - monotonicStart,
+    policyVersion: "v1",
+    policyLeaseId: LEASE_ID,
+  });
+
+  const response = await sync.sync(
+    browserContext(now),
+    browserSyncRequest(now, {
+      intervals: [
+        interval(
+          "81818181-8181-4181-8181-818181818181",
+          1,
+          "FOCUS_ACTIVE",
+          startedAt,
+          activeEndedAt,
+          1_000,
+          16_000,
+        ),
+        interval(
+          "82828282-8282-4282-8282-828282828282",
+          2,
+          "FOCUS_IDLE",
+          activeEndedAt,
+          idleEndedAt,
+          16_000,
+          46_000,
+        ),
+      ],
+    }),
+    REQUEST_ID,
+  );
+
+  assert.deepEqual(response.results.map((result) => result.status), ["ACCEPTED", "ACCEPTED"]);
+  assert.equal(prisma.intervals.length, 2);
+  assert(prisma.intervals.every((row) => row.source === TrackingActivitySource.BROWSER_DOMAIN));
+
+  const reports = new TrackingV2ReportsService(
+    prisma as any,
+    { reconcileTargets: async () => { throw new Error("Use ledger fallback."); } } as any,
+  );
+  const usage = await reports.getConfirmedUsage({
+    companyId: COMPANY_ID,
+    userId: USER_ID,
+    range: {
+      from: new Date(`${startedAt.toISOString().slice(0, 10)}T00:00:00.000Z`),
+      to: new Date(`${startedAt.toISOString().slice(0, 10)}T23:59:59.999Z`),
+    },
+  });
+
+  assert.equal(usage.websites[0]?.domain, "docs.example");
+  assert.equal(usage.websites[0]?.focusActiveMs, 15_000);
+  assert.equal(usage.websites[0]?.focusedIdleMs, 30_000);
+  assert.equal(usage.websites[0]?.openRuntimeMs, 0);
+  assert.equal(usage.coverage.domainOpenRuntimeEnabled, false);
+
+  const mismatch = await sync.sync(
+    browserContext(now),
+    browserSyncRequest(now, {
+      intervals: [{
+        ...interval(
+          "83838383-8383-4383-8383-838383838383",
+          3,
+          "FOCUS_ACTIVE",
+          startedAt,
+          activeEndedAt,
+          1_000,
+          16_000,
+        ),
+        browserName: "EDGE",
+      }],
+    }),
+    REQUEST_ID,
+  );
+  assert.equal(mismatch.results[0]?.status, "REJECTED");
+  assert.equal(mismatch.results[0]?.rejectionCode, "BROWSER_IDENTITY_MISMATCH");
+  assert.equal(prisma.intervals.length, 2, "identity-mismatched Browser time is not ledgered");
+  assert.equal(prisma.tombstones.at(-1)?.requestId, REQUEST_ID);
+});
+
 test("overlapping open/runtime for different Apps is accepted and displayed without becoming Focus time", async () => {
   const now = Date.now();
   const prisma = new SyncPrisma(now);
@@ -518,6 +633,8 @@ test("open/runtime is rejected until the active policy explicitly enables it", a
   assert.equal(response.results[0]?.status, "REJECTED");
   assert.equal(response.results[0]?.rejectionCode, "OPEN_RUNTIME_NOT_ENABLED");
   assert.equal(prisma.intervals.length, 0);
+  assert.equal(prisma.tombstones[0]?.requestId, REQUEST_ID);
+  assert.equal(prisma.tombstones[0]?.rejectionCode, "OPEN_RUNTIME_NOT_ENABLED");
 });
 
 function liveDevice(input: {
@@ -587,6 +704,17 @@ function liveDevice(input: {
       },
     ],
     syncCursors: [],
+    sequenceTombstones: [
+      {
+        source: TrackingActivitySource.DESKTOP_APP,
+        stream: "FOCUS",
+        clockEpochId: CLOCK_ID,
+        sequenceNumber: 9,
+        rejectionCode: "POLICY_REJECTED",
+        requestId: REQUEST_ID,
+        rejectedAt: input.diagnosticAt,
+      },
+    ],
   };
 }
 
@@ -610,6 +738,26 @@ function policyService(now: number) {
       id: DEVICE_ID,
       clientType: DeviceClientType.DESKTOP_AGENT,
       browserName: null,
+      workstationId: WORKSTATION_ID,
+      protocolActivatedAt: new Date(now - 60 * 60_000),
+    }),
+  };
+}
+
+function browserContext(now: number) {
+  return {
+    ...context(now),
+    clientType: DeviceClientType.BROWSER_EXTENSION,
+    browserName: "CHROME" as const,
+  };
+}
+
+function browserPolicyService(now: number) {
+  return {
+    requireV2DeviceIdentity: async () => ({
+      id: DEVICE_ID,
+      clientType: DeviceClientType.BROWSER_EXTENSION,
+      browserName: "CHROME" as const,
       workstationId: WORKSTATION_ID,
       protocolActivatedAt: new Date(now - 60 * 60_000),
     }),
@@ -651,6 +799,22 @@ function syncRequest(
   };
 }
 
+function browserSyncRequest(
+  now: number,
+  overrides: { intervals?: unknown[]; focusSnapshot?: unknown } = {},
+) {
+  const request = syncRequest(now, overrides);
+  return {
+    ...request,
+    health: {
+      ...request.health,
+      clientType: "BROWSER_EXTENSION",
+      clientVersion: "browser-extension-mv3/0.5.2",
+      platform: "CHROME",
+    },
+  };
+}
+
 function noneSnapshot(
   now: number,
   snapshotSequence: number,
@@ -686,6 +850,7 @@ class SyncPrisma {
   readonly lease: any;
   intervals: any[] = [];
   fragments: any[] = [];
+  tombstones: any[] = [];
   subjects: any[] = [];
   targets: any[] = [];
   liveSnapshotSequence: number | null = null;
@@ -741,9 +906,12 @@ class SyncPrisma {
     },
   };
   clientSequenceTombstone = {
-    findMany: async () => [],
-    createMany: async () => ({ count: 0 }),
-    count: async () => 0,
+    findMany: async () => this.tombstones,
+    createMany: async ({ data }: any) => {
+      this.tombstones.push(...data);
+      return { count: data.length };
+    },
+    count: async () => this.tombstones.length,
   };
   activitySubject = {
     createMany: async ({ data }: any) => {

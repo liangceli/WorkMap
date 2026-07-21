@@ -279,8 +279,12 @@ export function ReportSummaryPanel() {
   const liveUser = liveStatus?.scope === "user" ? liveStatus : null;
   const hasRows = Boolean(summary && (summary.apps.length > 0 || summary.websites.length > 0));
   const scopeLabel = getScopeLabel(summary, selectedUser, departments);
-  const openRuntimeEnabled =
-    summary?.trackingV2Coverage?.openRuntimeEnabled === true;
+  const appOpenRuntimeEnabled =
+    summary?.trackingV2Coverage?.appOpenRuntimeEnabled
+    ?? summary?.trackingV2Coverage?.openRuntimeEnabled
+    ?? false;
+  const domainOpenRuntimeEnabled =
+    summary?.trackingV2Coverage?.domainOpenRuntimeEnabled === true;
 
   return (
     <div className="wm-report-summary" style={styles.stack}>
@@ -407,15 +411,16 @@ export function ReportSummaryPanel() {
               <p style={styles.panelText}>
                 App and domain totals remain separate because domain time is a browser breakdown, not extra work time.
                 Every card highlights confirmed focus active; current provisional activity is shown only in Live signals.
-                {openRuntimeEnabled ? " Expand a card for measured focused idle and open/runtime context." : " Open/runtime collection is not enabled for v2 tracking."}
+                {appOpenRuntimeEnabled ? " Expand an App card for measured focused idle and App open/runtime context." : " App open/runtime collection is not enabled for v2 tracking."}
+                {" Browser Domain open/runtime remains disabled until its separate policy contract exists."}
               </p>
             </div>
             <span style={styles.scopePill}>{summary.scope === "company" ? "Company scope" : "User scope"}</span>
           </div>
           {hasRows ? (
             <div style={styles.summaryGrid}>
-              <SummaryUsageList title="Apps" kind="app" rows={summary.apps.map((row) => ({ name: row.appName, ...row }))} openRuntimeEnabled={openRuntimeEnabled} />
-              <SummaryUsageList title="Domains" kind="domain" rows={summary.websites.map((row) => ({ name: row.domain, ...row }))} openRuntimeEnabled={openRuntimeEnabled} />
+              <SummaryUsageList title="Apps" kind="app" rows={summary.apps.map((row) => ({ name: row.appName, ...row }))} openRuntimeEnabled={appOpenRuntimeEnabled} />
+              <SummaryUsageList title="Domains" kind="domain" rows={summary.websites.map((row) => ({ name: row.domain, ...row }))} openRuntimeEnabled={domainOpenRuntimeEnabled} />
             </div>
           ) : (
             <p style={styles.emptyText}>No usage rows exist for this scope and date range.</p>
@@ -488,6 +493,7 @@ function TrackingV2DeviceCard({
   nowMs: number;
 }) {
   const serverDiagnostic = describeTrackingV2ServerDiagnostic(device);
+  const intervalDiagnostic = device.intervalDiagnostics?.lastRejected ?? null;
   const connection = trackingV2ConnectionPresentation(device);
   const snapshot = trackingV2SnapshotPresentation(device);
   const attention = !connection.connected;
@@ -571,6 +577,23 @@ function TrackingV2DeviceCard({
               Code {device.health?.serverDiagnosticCode}
               {device.health?.serverDiagnosticAt ? ` - ${formatDateTime(device.health.serverDiagnosticAt)}` : ""}
               {device.health?.serverDiagnosticRequestId ? ` - Request ${device.health.serverDiagnosticRequestId}` : ""}
+            </small>
+          </div>
+        </div>
+      ) : null}
+
+      {intervalDiagnostic ? (
+        <div role="status" style={styles.serverDiagnostic}>
+          <AlertTriangle size={17} aria-hidden />
+          <div style={styles.serverDiagnosticBody}>
+            <strong>Confirmed interval rejected</strong>
+            <span>
+              Code {intervalDiagnostic.code}. This row is a server tombstone and is not included in historical Domain/App totals.
+            </span>
+            <small style={styles.serverDiagnosticMeta}>
+              {intervalDiagnostic.rejectedAt ? formatDateTime(intervalDiagnostic.rejectedAt) : "Time unavailable"}
+              {intervalDiagnostic.requestId ? ` - Request ${intervalDiagnostic.requestId}` : " - Legacy request ID unavailable"}
+              {` - ${intervalDiagnostic.stream} sequence ${intervalDiagnostic.sequenceNumber}`}
             </small>
           </div>
         </div>
@@ -1066,7 +1089,7 @@ export function AppUsageMetricCard({
 export function DomainUsageMetricCard({
   row,
   initiallyExpanded = false,
-  openRuntimeEnabled = true,
+  openRuntimeEnabled = false,
 }: {
   row: UsageListRow;
   initiallyExpanded?: boolean;
@@ -1310,6 +1333,11 @@ function getScopeLabel(summary: WorkMapApiUsageSummary | null, selectedUser: Wor
 }
 
 function exportSummaryCsv(summary: WorkMapApiUsageSummary, scopeLabel: string) {
+  const appRuntimeEnabled = summary.trackingV2Coverage?.appOpenRuntimeEnabled
+    ?? summary.trackingV2Coverage?.openRuntimeEnabled
+    ?? false;
+  const domainRuntimeEnabled =
+    summary.trackingV2Coverage?.domainOpenRuntimeEnabled === true;
   const rows: Array<Array<string | number>> = [
     ["scope", "source", "item", "category", "productivity", "focus_active_seconds", "focused_idle_seconds", "open_runtime_seconds", "from", "to"],
     ...summary.apps.map((row) => [
@@ -1320,7 +1348,7 @@ function exportSummaryCsv(summary: WorkMapApiUsageSummary, scopeLabel: string) {
       row.productivityLabel ?? "",
       row.focusActiveSeconds ?? row.activeSeconds,
       row.focusedIdleSeconds ?? row.idleSeconds,
-      openRuntime(row),
+      appRuntimeEnabled ? openRuntime(row) : "",
       summary.range.from,
       summary.range.to,
     ]),
@@ -1332,7 +1360,7 @@ function exportSummaryCsv(summary: WorkMapApiUsageSummary, scopeLabel: string) {
       row.productivityLabel ?? "",
       row.focusActiveSeconds ?? row.activeSeconds,
       row.focusedIdleSeconds ?? row.idleSeconds,
-      openRuntime(row),
+      domainRuntimeEnabled ? openRuntime(row) : "",
       summary.range.from,
       summary.range.to,
     ]),
@@ -1347,6 +1375,11 @@ function exportSummaryCsv(summary: WorkMapApiUsageSummary, scopeLabel: string) {
 }
 
 function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
+  const appRuntimeEnabled = summary.trackingV2Coverage?.appOpenRuntimeEnabled
+    ?? summary.trackingV2Coverage?.openRuntimeEnabled
+    ?? false;
+  const domainRuntimeEnabled =
+    summary.trackingV2Coverage?.domainOpenRuntimeEnabled === true;
   const lines = [
     "WORKMAP APP USAGE REPORT",
     `Scope: ${scopeLabel}`,
@@ -1356,10 +1389,10 @@ function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
     "SUMMARY",
     `App focus active: ${formatDuration(sum(summary.apps, "activeSeconds"))}`,
     `App focused idle: ${formatDuration(sum(summary.apps, "idleSeconds"))}`,
-    `App open/runtime: ${formatDuration(summary.apps.reduce((total, row) => total + openRuntime(row), 0))}`,
+    `App open/runtime: ${appRuntimeEnabled ? formatDuration(summary.apps.reduce((total, row) => total + openRuntime(row), 0)) : "Not enabled"}`,
     `Domain focus active: ${formatDuration(sum(summary.websites, "activeSeconds"))}`,
     `Domain focused idle: ${formatDuration(sum(summary.websites, "idleSeconds"))}`,
-    `Domain open/runtime: ${formatDuration(summary.websites.reduce((total, row) => total + openRuntime(row), 0))}`,
+    `Domain open/runtime: ${domainRuntimeEnabled ? formatDuration(summary.websites.reduce((total, row) => total + openRuntime(row), 0)) : "Not enabled"}`,
     "",
   ];
   if (summary.agentStatus) {
@@ -1378,12 +1411,12 @@ function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
   lines.push("APP TOTALS");
   if (summary.apps.length === 0) lines.push("No app activity recorded.");
   for (const row of summary.apps) {
-    lines.push(`${row.appName}: ${formatDuration(row.focusActiveSeconds ?? row.activeSeconds)} focus active; ${formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)} focused idle; ${formatDuration(openRuntime(row))} open/runtime`);
+    lines.push(`${row.appName}: ${formatDuration(row.focusActiveSeconds ?? row.activeSeconds)} focus active; ${formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)} focused idle; ${appRuntimeEnabled ? `${formatDuration(openRuntime(row))} open/runtime` : "open/runtime not enabled"}`);
   }
   lines.push("", "DOMAIN TOTALS");
   if (summary.websites.length === 0) lines.push("No domain activity recorded.");
   for (const row of summary.websites) {
-    lines.push(`${row.domain}: ${formatDuration(row.focusActiveSeconds ?? row.activeSeconds)} focus active; ${formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)} focused idle; ${formatDuration(openRuntime(row))} open/runtime`);
+    lines.push(`${row.domain}: ${formatDuration(row.focusActiveSeconds ?? row.activeSeconds)} focus active; ${formatDuration(row.focusedIdleSeconds ?? row.idleSeconds)} focused idle; ${domainRuntimeEnabled ? `${formatDuration(openRuntime(row))} open/runtime` : "open/runtime not enabled"}`);
   }
   lines.push("", "DAILY TOTALS");
   if (summary.daily.length === 0) lines.push("No daily activity recorded.");

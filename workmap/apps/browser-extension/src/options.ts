@@ -7,10 +7,20 @@ import {
   writeStoredState,
 } from "./extensionStorage.js";
 import { normalizeExcludedHostnames } from "./hostnameExclusions.js";
+import { BrowserTrackingV2Store } from "./trackingV2Store.js";
+import {
+  BROWSER_EXTENSION_VERSION,
+  type BrowserTrackingRuntimeStateV2,
+  type BrowserV2QueueStats,
+} from "./trackingV2Types.js";
 
 declare const chrome: {
   permissions: { request(permissions: { origins: string[] }, callback: (allowed: boolean) => void): void };
-  runtime: { sendMessage(message: Record<string, unknown>, callback?: () => void): void; lastError?: unknown };
+  runtime: {
+    sendMessage(message: Record<string, unknown>, callback?: () => void): void;
+    getManifest(): { version: string };
+    lastError?: unknown;
+  };
 };
 
 const form = document.querySelector<HTMLFormElement>("#pair-form")!;
@@ -24,12 +34,15 @@ const saveExclusionsButton =
 const pairButton = form.querySelector<HTMLButtonElement>("button[type='submit']")!;
 const message = document.querySelector<HTMLElement>("#message")!;
 const status = document.querySelector<HTMLElement>("#status")!;
+const diagnostics = document.querySelector<HTMLElement>("#diagnostics")!;
+const trackingStore = new BrowserTrackingV2Store();
 const FRESH_HEARTBEAT_MS = 30_000;
 const SIGNAL_LOST_MS = 90_000;
 const PERMISSION_TIMEOUT_MS = 15_000;
 const DEFAULT_BUTTON_TEXT = pairButton.textContent ?? "Pair extension";
 
 void refreshStatus();
+setInterval(() => void refreshStatus(), 5_000);
 form.addEventListener("submit", (event) => { event.preventDefault(); void pair(); });
 saveExclusionsButton.addEventListener("click", () => {
   void saveExclusions();
@@ -92,11 +105,155 @@ async function refreshStatus() {
   saveExclusionsButton.disabled = !stored.workmapConfig;
   const current = stored.workmapStatus;
   const health = deriveStatusHealth(current);
+  const runtime = stored.workmapConfig
+    ? await trackingStore.readRuntimeState().catch(() => null)
+    : null;
+  const queue = runtime
+    ? await trackingStore.stats().catch(() => null)
+    : null;
   status.textContent = stored.workmapConfig
-    ? `Paired | ${health.label} | activity queued ${current?.queuedEvents ?? 0} | status queued ${current?.queuedStatusEvents ?? 0} | heartbeat ${formatTime(current?.lastHeartbeatAt)} | upload ${formatTime(current?.lastUploadAt)}${health.detail ? ` | ${health.detail}` : ""}${current?.error ? ` | ${current.error}` : ""}`
+    ? `Paired | ${health.label} | v2 pending ${queue?.pending ?? 0} | dead-letter ${queue?.deadLetter ?? 0} | heartbeat ${formatTime(current?.lastHeartbeatAt)} | sync ${formatTime(current?.lastUploadAt)}${health.detail ? ` | ${health.detail}` : ""}${current?.error ? ` | ${current.error}` : ""}`
     : current
       ? `${health.label}${current.error ? ` | ${current.error}` : ""}`
       : "Not paired";
+  renderDiagnostics(stored.workmapConfig, current, runtime, queue, health);
+}
+
+function renderDiagnostics(
+  config: Awaited<ReturnType<typeof readStoredState>>["workmapConfig"],
+  current: Awaited<ReturnType<typeof readStoredState>>["workmapStatus"],
+  runtime: BrowserTrackingRuntimeStateV2 | null,
+  queue: BrowserV2QueueStats | null,
+  connection: ReturnType<typeof deriveStatusHealth>,
+) {
+  const title = element("h2", "Tracking diagnostics");
+  if (!config || !runtime) {
+    diagnostics.replaceChildren(
+      title,
+      element(
+        "p",
+        "Pair the extension to view server-confirmed connection, Domain snapshot, interval ledger, queue, policy, and coverage status.",
+      ),
+    );
+    return;
+  }
+
+  const policy = runtime.policy;
+  const snapshot = runtime.snapshotConfirmation;
+  const snapshotAge = ageMs(snapshot.observedAt ?? undefined);
+  const snapshotState =
+    (snapshot.state === "LOCAL_PENDING" || snapshot.state === "CONFIRMED") &&
+    snapshotAge !== null &&
+    snapshotAge > SIGNAL_LOST_MS
+      ? "STALE"
+      : snapshot.state;
+  const currentDomain =
+    runtime.latestSnapshot?.state !== "NONE"
+      ? runtime.latestSnapshot?.displayName ?? runtime.latestSnapshot?.subjectKey
+      : null;
+  const interval = runtime.lastIntervalUpload;
+  const cards: Array<[string, string, string?]> = [
+    ["Extension / Browser", `${BROWSER_EXTENSION_VERSION} / ${config.browserName} (manifest ${chrome.runtime.getManifest().version})`],
+    ["Pairing / Device", `Paired / ${config.deviceId}`],
+    ["Connection", connection.label, connection.detail],
+    ["Last secure heartbeat", formatTime(runtime.lastSuccessfulHeartbeatAt ?? undefined)],
+    [
+      "Current Domain snapshot",
+      `${snapshotState}${currentDomain ? ` / ${currentDomain}` : ""}`,
+      snapshot.rejectionCode
+        ? `${snapshot.rejectionCode}${snapshot.requestId ? ` / request ${snapshot.requestId}` : ""}`
+        : undefined,
+    ],
+    ["Snapshot observed / confirmed", `${formatTime(snapshot.observedAt ?? undefined)} / ${formatTime(snapshot.confirmedAt ?? undefined)}`],
+    [
+      "Last interval upload",
+      interval
+        ? `${interval.status} (${interval.accepted} accepted, ${interval.duplicate} duplicate, ${interval.rejected} rejected)`
+        : "No interval result",
+      interval
+        ? `${formatTime(interval.occurredAt)} / request ${interval.requestId}`
+        : undefined,
+    ],
+    ["Confirmed interval through", formatTime(runtime.confirmedIntervalThrough ?? undefined)],
+    ["Queue pending / ready / dead-letter", `${queue?.pending ?? 0} / ${queue?.ready ?? 0} / ${queue?.deadLetter ?? 0}`],
+    ["Dead-letter codes", formatCodeCounts(queue?.deadLetterByCode ?? {})],
+    ["Last confirmed sync", formatTime(runtime.lastSuccessfulSyncAt ?? undefined)],
+    ["Last request ID", runtime.lastRequestId ?? "None"],
+    ["Policy version", policy?.policyVersion ?? "Unavailable"],
+    ["Domain Focus", policy?.collectDomainFocus ? "Enabled" : "Disabled"],
+    ["Domain open/runtime", "Disabled", "A Browser-specific policy/schema contract is not implemented; the Desktop flag is not reused."],
+    ["Acknowledgement", policy?.acknowledgementState ?? "Unavailable", formatTime(policy?.acknowledgedAt ?? undefined)],
+    ["Schedule", policy ? `${policy.scheduleTimeZone ?? "Timezone required"} / ${policy.workdayStart}-${policy.workdayEnd}` : "Unavailable"],
+    ["Allowed UTC windows", policy?.allowedUtcWindows.length ? policy.allowedUtcWindows.map((window) => `${window.startsAt} to ${window.endsAt}`).join("; ") : "None"],
+    ["Policy lease", policy?.policyLeaseId ?? "None", `${formatTime(policy?.policyLeaseIssuedAt ?? undefined)} to ${formatTime(policy?.policyLeaseExpiresAt ?? undefined)}`],
+    ["Host permission", runtime.trackingAccess.hostPermission],
+    ["Content-script registration", runtime.trackingAccess.contentRegistration, runtime.trackingAccess.error ?? undefined],
+    ["Collector", `${current?.state ?? "unknown"} / ${runtime.latestSnapshot?.collectorState ?? "PAUSED"}`],
+  ];
+  const grid = element("div");
+  grid.className = "diagnostic-grid";
+  for (const [label, value, detail] of cards) {
+    const item = element("div");
+    item.className = "diagnostic-item";
+    item.append(element("small", label), element("strong", value));
+    if (detail) item.append(element("span", detail));
+    grid.append(item);
+  }
+
+  const historyTitle = element("h3", "Historical rejected / network diagnostics");
+  const history = element("ul");
+  history.className = "diagnostic-list";
+  const recent = [...runtime.diagnostics].reverse().slice(0, 12);
+  if (recent.length === 0) {
+    history.append(element("li", "No retained diagnostics."));
+  } else {
+    for (const item of recent) {
+      const row = element(
+        "li",
+        `${item.stage} / ${item.outcome} / ${item.code} x${item.count}`,
+      );
+      row.append(
+        element(
+          "small",
+          `${formatTime(item.occurredAt)}${item.requestId ? ` / request ${item.requestId}` : ""} / ${item.remediation}`,
+        ),
+      );
+      history.append(row);
+    }
+  }
+
+  const limitationsTitle = element("h3", "Coverage limitations");
+  const limitations = element("ul");
+  limitations.className = "diagnostic-list";
+  for (const limitation of runtime.coverageLimitations) {
+    limitations.append(element("li", limitation));
+  }
+  diagnostics.replaceChildren(
+    title,
+    grid,
+    historyTitle,
+    history,
+    limitationsTitle,
+    limitations,
+  );
+}
+
+function element<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  text?: string,
+) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function formatCodeCounts(value: Record<string, number>) {
+  const entries = Object.entries(value).sort(
+    (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+  );
+  return entries.length
+    ? entries.map(([code, count]) => `${code} ${count}`).join(", ")
+    : "None";
 }
 
 async function saveExclusions() {
@@ -120,25 +277,22 @@ async function saveExclusions() {
 }
 
 function deriveStatusHealth(current: Awaited<ReturnType<typeof readStoredState>>["workmapStatus"]) {
-  if (!current) return { label: "Not connected", detail: "Waiting for the first server-confirmed heartbeat." };
-  if (current.state === "auth_required") return { label: "Pair again" };
-  if (current.state === "policy_required") return { label: "Waiting for policy setup", detail: current.error };
-  if (current.state === "error") return { label: "Needs attention" };
+  if (!current) return { label: "Offline", detail: "Waiting for the first server-confirmed heartbeat." };
+  if (current.state === "auth_required") return { label: "Auth required" };
+  if (current.state === "upgrade_required") return { label: "Upgrade required" };
   if (current.state === "pairing") return { label: "Pairing" };
   if (current.state === "unpaired") return { label: "Not paired" };
-  if (current.trackingState === "permission_required") {
-    return { label: "Website access required", detail: "Open edge://extensions, allow WorkMap website access, then reload this page." };
-  }
-  if (current.trackingState === "registration_failed") {
-    return { label: "Tracker needs attention", detail: current.trackingError ?? "WorkMap could not register its hostname-only tracker. Reload the extension and try again." };
-  }
-  if (current.state !== "connected") return { label: "Not connected" };
 
   const heartbeatAge = ageMs(current.lastHeartbeatAt);
-  if (heartbeatAge === null) return { label: "Not connected", detail: "Waiting for the first server-confirmed heartbeat." };
-  if (heartbeatAge <= FRESH_HEARTBEAT_MS) return { label: "Connected" };
+  if (heartbeatAge === null) return { label: "Offline", detail: "Waiting for the first server-confirmed heartbeat." };
+  if (heartbeatAge <= FRESH_HEARTBEAT_MS) return { label: "Online" };
   const detail = `Last server-confirmed heartbeat was ${formatTime(current.lastHeartbeatAt)}. The extension is retrying until WorkMap confirms a fresh heartbeat.`;
-  return { label: heartbeatAge <= SIGNAL_LOST_MS ? "Signal stale" : "Not connected", detail };
+  return {
+    label: "Offline",
+    detail: heartbeatAge <= SIGNAL_LOST_MS
+      ? `Signal stale. ${detail}`
+      : detail,
+  };
 }
 
 function ageMs(value: string | undefined) {

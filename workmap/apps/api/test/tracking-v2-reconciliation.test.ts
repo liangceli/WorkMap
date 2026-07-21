@@ -67,3 +67,13 @@ test("adjacent confirmed intervals remain lossless without double counting", () 
   assert.equal(result.user.focusActiveMs, 30_000n);
   assert.equal(result.subjects.get("app-code")?.focusActiveMs, 30_000n);
 });
+
+test("Chrome and Edge overlapping the same user, hostname and metric are unioned", () => {
+  const result = computeTarget([
+    fragment("chrome-device", "domain-docs", TrackingActivityMetric.FOCUS_ACTIVE, 0, 30_000),
+    fragment("edge-device", "domain-docs", TrackingActivityMetric.FOCUS_ACTIVE, 10_000, 40_000),
+  ]);
+
+  assert.equal(result.user.focusActiveMs, 40_000n);
+  assert.equal(result.subjects.get("domain-docs")?.focusActiveMs, 40_000n);
+});

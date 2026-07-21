@@ -629,6 +629,7 @@ model ClientSequenceTombstone {
   clockEpochId   String
   sequenceNumber Int
   rejectionCode  String
+  requestId      String?                @db.VarChar(80)
   payloadHash    String?
   rejectedAt     DateTime               @default(now()) @db.Timestamptz(3)
   company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -637,6 +638,7 @@ model ClientSequenceTombstone {
 
   @@unique([deviceId, source, stream, clockEpochId, sequenceNumber])
   @@index([deviceId, clientEventId])
+  @@index([deviceId, rejectedAt])
   @@index([companyId, userId, rejectedAt])
 }
 

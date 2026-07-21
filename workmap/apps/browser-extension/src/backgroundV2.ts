@@ -1,7 +1,15 @@
 import { BrowserFocusEngineV2 } from "./browserFocusEngineV2.js";
+import {
+  chooseSingleActiveTab,
+  eligibleDomainForTab,
+  isUsableFocusedWindow,
+  messageCanOwnFocus,
+  type BrowserTabObservationV2,
+  type BrowserWindowObservationV2,
+} from "./browserEligibilityV2.js";
 import { ensureDomainContentScriptRegistered } from "./contentRegistration.js";
 import { DomainTrackingState } from "./domainState.js";
-import { readDomainFromUrl, type DomainUsageEvent } from "./domainTracking.js";
+import { type DomainUsageEvent } from "./domainTracking.js";
 import {
   ExtensionApiError,
   confirmProtocolV2,
@@ -28,29 +36,26 @@ import {
 import { isExcludedHostname } from "./hostnameExclusions.js";
 import {
   BROWSER_EXTENSION_VERSION,
+  BROWSER_V2_DIAGNOSTIC_CAPACITY,
+  BROWSER_V2_DIAGNOSTIC_RETENTION_MS,
   BROWSER_V2_POLICY_REFRESH_MS,
   BROWSER_V2_SYNC_BATCH_SIZE,
   TRACKING_PROTOCOL_VERSION_V2,
   type BrowserClientHealthV2,
   type BrowserNameV2,
   type BrowserTrackingRuntimeStateV2,
+  type BrowserTrackingDiagnosticV2,
+  type BrowserTrackingSyncResponseV2,
   type DeviceTrackingPolicyV2,
+  type TrackingSyncItemResultV2,
   type TrackingCollectorStateV2,
   type TrackingConnectionStateV2,
   type TrackingHealthErrorCodeV2,
   type TrackingPolicyStateV2,
 } from "./trackingV2Types.js";
 
-type ChromeTab = {
-  id?: number;
-  url?: string;
-  active?: boolean;
-  windowId?: number;
-};
-type ChromeWindow = {
-  id?: number;
-  focused?: boolean;
-};
+type ChromeTab = BrowserTabObservationV2;
+type ChromeWindow = BrowserWindowObservationV2;
 type RuntimeMessage = {
   type?: string;
   activityAt?: number;
@@ -89,11 +94,24 @@ type ChromeApi = {
       query: Record<string, unknown>,
       callback: (tabs: ChromeTab[]) => void,
     ): void;
+    get(tabId: number, callback: (tab: ChromeTab) => void): void;
+    sendMessage(
+      tabId: number,
+      message: Record<string, unknown>,
+      callback: (response?: Record<string, unknown>) => void,
+    ): void;
   };
   windows: {
     WINDOW_ID_NONE: number;
     onFocusChanged: ChromeEvent<(windowId: number) => void>;
+    onBoundsChanged: ChromeEvent<(window: ChromeWindow) => void>;
+    onRemoved: ChromeEvent<(windowId: number) => void>;
     getLastFocused(
+      options: { populate: false },
+      callback: (window: ChromeWindow) => void,
+    ): void;
+    get(
+      windowId: number,
       options: { populate: false },
       callback: (window: ChromeWindow) => void,
     ): void;
@@ -123,6 +141,8 @@ declare const chrome: ChromeApi;
 const ALARM_NAME = "workmap-tracking-v2";
 const LEGACY_BATCH_SIZE = 50;
 const INTERACTION_SYNC_THROTTLE_MS = 1_000;
+const LIFECYCLE_MAX_UNOBSERVED_MS = 45_000;
+const CLOCK_DIVERGENCE_TOLERANCE_MS = 10_000;
 
 let operation = Promise.resolve();
 
@@ -206,25 +226,39 @@ export class BrowserExtensionRuntimeV2 {
     await this.ensureInitialized();
     if (!this.state || this.state.systemIdle) return;
     if (this.state.focusedWindowId !== windowId) return;
-    const [tab] = await queryTabs(this.chromeApi, {
+    const tabs = await queryTabs(this.chromeApi, {
       active: true,
       windowId,
     });
-    if (!tab || tab.id !== tabId) return;
-    await this.activateTab(tab, true);
+    const tab = tabs.find((candidate) => candidate.id === tabId);
+    if (!tab) return;
+    await this.prepareTab(tab, true);
   }
 
-  async handleTabUpdated(tabId: number, tab: ChromeTab) {
+  async handleTabUpdated(
+    tabId: number,
+    change: { url?: string; status?: string },
+    tab: ChromeTab,
+  ) {
     await this.ensureInitialized();
     if (!this.state || tabId !== this.state.activeTabId) return;
     if (tab.windowId !== this.state.focusedWindowId) return;
-    const domain = readDomainFromUrl(tab.url);
+    const domain = eligibleDomainForTab(
+      tab,
+      this.config?.excludedHostnames,
+    );
     if (!domain) {
       await this.clearFocus(true);
       return;
     }
-    if (domain !== this.state.activeDomain) {
-      await this.activateTab(tab, true);
+    const domainChanged = domain !== this.state.activeDomain;
+    if (domainChanged || tab.id !== this.state.activeTabId) {
+      await this.prepareTab(tab, true, true);
+    } else if (change.status === "loading") {
+      // A real document navigation needs fresh content-script proof even when
+      // the hostname is unchanged. SPA path/query changes do not have this
+      // loading boundary and therefore keep one Domain identity.
+      await this.prepareTab(tab, true, true);
     }
   }
 
@@ -240,16 +274,18 @@ export class BrowserExtensionRuntimeV2 {
     if (!this.state || removedTabId !== this.state.activeTabId) return;
     await this.clearFocus(true);
     if (this.state.focusedWindowId === null) return;
-    const [tab] = await queryTabs(this.chromeApi, {
+    const tabs = await queryTabs(this.chromeApi, {
       active: true,
       windowId: this.state.focusedWindowId,
     });
-    if (tab?.id === addedTabId) await this.activateTab(tab, true);
+    const tab = tabs.find((candidate) => candidate.id === addedTabId);
+    if (tab?.id === addedTabId) await this.prepareTab(tab, true);
   }
 
   async handleWindowFocus(windowId: number) {
     await this.ensureInitialized();
     if (!this.state) return;
+    await this.guardLifecycleContinuity();
     if (windowId === this.chromeApi.windows.WINDOW_ID_NONE) {
       this.state = {
         ...this.state,
@@ -260,20 +296,46 @@ export class BrowserExtensionRuntimeV2 {
       await this.clearFocus(true);
       return;
     }
+    const focusedWindow = await getWindow(this.chromeApi, windowId);
+    if (!isUsableFocusedWindow(focusedWindow)) {
+      this.state = { ...this.state, focusedWindowId: null };
+      await this.clearFocus(true);
+      return;
+    }
     this.state = { ...this.state, focusedWindowId: windowId };
     await this.store.writeRuntimeState(this.state);
     if (this.state.systemIdle) return;
-    const [tab] = await queryTabs(this.chromeApi, {
+    const activeTabs = await queryTabs(this.chromeApi, {
       active: true,
       windowId,
     });
-    if (tab) await this.activateTab(tab, true);
+    const tab = chooseSingleActiveTab(activeTabs, this.state.activeTabId);
+    if (tab) await this.prepareTab(tab, true);
     else await this.clearFocus(true);
+  }
+
+  async handleWindowBoundsChanged(window: ChromeWindow) {
+    await this.ensureInitialized();
+    if (!this.state || window.id !== this.state.focusedWindowId) return;
+    if (!isUsableFocusedWindow(window)) {
+      this.state = { ...this.state, focusedWindowId: null };
+      await this.clearFocus(true);
+      return;
+    }
+    await this.reconcileBrowserReality(true);
+  }
+
+  async handleWindowRemoved(windowId: number) {
+    await this.ensureInitialized();
+    if (!this.state || windowId !== this.state.focusedWindowId) return;
+    await this.clearFocus(true);
+    await this.reconcileBrowserReality(true);
   }
 
   async handleIdleState(state: "active" | "idle" | "locked") {
     await this.ensureInitialized();
     if (!this.state) return;
+    await this.guardLifecycleContinuity();
     const isIdle = state !== "active";
     this.state = { ...this.state, systemIdle: isIdle };
     if (isIdle) {
@@ -289,18 +351,31 @@ export class BrowserExtensionRuntimeV2 {
 
   async handleMessage(message: RuntimeMessage, sender: MessageSender) {
     await this.ensureInitialized();
-    if (!this.state || !this.engine || sender.tab?.id === undefined) return;
     if (
-      sender.tab.id !== this.state.activeTabId ||
-      sender.tab.windowId !== this.state.focusedWindowId
-    ) {
-      return;
-    }
-    const domain = readDomainFromUrl(sender.tab.url);
-    if (!domain || domain !== this.state.activeDomain) return;
+      !this.state ||
+      this.state.focusedWindowId === null ||
+      sender.tab?.id === undefined
+    ) return;
+    const discontinuity = await this.guardLifecycleContinuity();
+    const activeTabs = await queryTabs(this.chromeApi, {
+      active: true,
+      windowId: this.state.focusedWindowId,
+    });
+    const messageOwnsFocus = messageCanOwnFocus({
+      senderTab: sender.tab,
+      focusedWindowId: this.state.focusedWindowId,
+      activeTabs,
+    });
+    const domain = eligibleDomainForTab(
+      sender.tab,
+      this.config?.excludedHostnames,
+    );
+    if (!domain || !messageOwnsFocus || !this.captureAllowed()) return;
 
     if (message.type === "workmap:domain-activity") {
       const monotonicMs = this.mapPageTimeToMonotonic(message.activityAt);
+      await this.acquireMessageFocus(sender.tab, domain, monotonicMs);
+      if (!this.engine) return;
       await this.persistUpdate(
         this.engine.recordTrustedInteraction(monotonicMs),
         false,
@@ -308,21 +383,31 @@ export class BrowserExtensionRuntimeV2 {
       await this.requestSync(false);
       return;
     }
-    if (message.type === "workmap:domain-blur" && sender.frameId === 0) {
-      await this.clearFocus(true);
+    if (
+      message.type === "workmap:domain-blur" &&
+      sender.frameId === 0 &&
+      sender.tab.id === this.state.activeTabId
+    ) {
+      await this.clearFocus(
+        true,
+        this.mapPageTimeToMonotonic(message.observedAt),
+      );
       return;
     }
     if (
       message.type === "workmap:domain-checkpoint" &&
       sender.frameId === 0
     ) {
-      await this.reconcileBrowserReality(false);
+      const monotonicMs = this.mapPageTimeToMonotonic(message.observedAt);
+      await this.acquireMessageFocus(sender.tab, domain, monotonicMs);
+      if (discontinuity) await this.requestSync(true);
     }
   }
 
   async handleAlarm() {
     await this.ensureInitialized();
     if (!this.state) return;
+    const discontinuity = await this.guardLifecycleContinuity();
     if (!this.state.protocolActivatedAt) {
       const stored = await readStoredState([
         "workmapConfig",
@@ -336,7 +421,9 @@ export class BrowserExtensionRuntimeV2 {
       return;
     }
     await this.refreshPolicyIfDue();
-    if (this.engine) {
+    if (!this.captureAllowed()) {
+      await this.closeAtPolicyBoundary();
+    } else if (this.engine && !discontinuity) {
       await this.persistUpdate(this.engine.settle(performance.now()), true);
     }
     await this.reconcileBrowserReality(false);
@@ -572,6 +659,14 @@ export class BrowserExtensionRuntimeV2 {
       ...this.state,
       engineCheckpoint: recovered.checkpoint(),
       latestSnapshot: update.snapshot,
+      snapshotConfirmation: {
+        state: "LOCAL_PENDING" as const,
+        snapshotSequence: update.snapshot.snapshotSequence,
+        observedAt: update.snapshot.lastObservedAt,
+        confirmedAt: null,
+        rejectionCode: null,
+        requestId: null,
+      },
     };
     try {
       await this.store.persistEngineUpdate(
@@ -598,7 +693,11 @@ export class BrowserExtensionRuntimeV2 {
     await this.store.writeRuntimeState(this.state);
   }
 
-  private async activateTab(tab: ChromeTab, immediateSync: boolean) {
+  private async prepareTab(
+    tab: ChromeTab,
+    immediateSync: boolean,
+    forcePageProof = false,
+  ) {
     if (
       !this.state ||
       !this.browserName ||
@@ -607,16 +706,53 @@ export class BrowserExtensionRuntimeV2 {
     ) {
       return;
     }
-    const domain = readDomainFromUrl(tab.url);
-    if (
-      !domain ||
-      isExcludedHostname(domain, this.config?.excludedHostnames) ||
-      !this.captureAllowed()
-    ) {
+    const domain = eligibleDomainForTab(
+      tab,
+      this.config?.excludedHostnames,
+    );
+    if (!domain || !this.captureAllowed()) {
       await this.clearFocus(immediateSync);
       return;
     }
-    this.ensureEngine(performance.now());
+
+    const subjectChanged =
+      tab.id !== this.state.activeTabId || domain !== this.state.activeDomain;
+    if ((subjectChanged || forcePageProof) && this.engine) {
+      await this.clearFocus(immediateSync);
+    }
+    this.state = {
+      ...this.state,
+      activeTabId: tab.id,
+      activeDomain: domain,
+    };
+    await this.store.writeRuntimeState(this.state);
+
+    // An active tab alone does not prove that ordinary page content is
+    // accessible. The probe succeeds only when the hostname-only content
+    // script is running in the visible, focused top-level document. Protected
+    // pages and inaccessible browser PDF viewers therefore remain NONE.
+    const proof = await probeTab(this.chromeApi, tab.id);
+    if (proof?.visible && proof.focused) {
+      await this.acquireMessageFocus(tab, domain, performance.now());
+      if (immediateSync) await this.requestSync(true);
+    } else {
+      await this.updateVisibleStatus();
+    }
+  }
+
+  private async acquireMessageFocus(
+    tab: ChromeTab,
+    domain: string,
+    atMonotonicMs: number,
+  ) {
+    if (!this.state || tab.id === undefined || !this.captureAllowed()) return;
+    if (
+      this.engine &&
+      (tab.id !== this.state.activeTabId || domain !== this.state.activeDomain)
+    ) {
+      await this.clearFocus(false);
+    }
+    this.ensureEngine(atMonotonicMs);
     this.state = {
       ...this.state,
       activeTabId: tab.id,
@@ -625,18 +761,20 @@ export class BrowserExtensionRuntimeV2 {
     await this.persistUpdate(
       this.engine!.acquireFocus(
         { subjectKey: domain, displayName: domain },
-        performance.now(),
+        atMonotonicMs,
       ),
-      immediateSync,
+      false,
     );
-    if (immediateSync) await this.requestSync(true);
   }
 
-  private async clearFocus(immediateSync: boolean) {
+  private async clearFocus(
+    immediateSync: boolean,
+    atMonotonicMs = performance.now(),
+  ) {
     if (!this.state) return;
     if (this.engine) {
       await this.persistUpdate(
-        this.engine.clearFocus(performance.now()),
+        this.engine.clearFocus(atMonotonicMs),
         immediateSync,
       );
     }
@@ -678,6 +816,97 @@ export class BrowserExtensionRuntimeV2 {
     );
   }
 
+  private async guardLifecycleContinuity() {
+    if (!this.state) return false;
+    const current = {
+      wallClockMs: Date.now(),
+      monotonicMs: performance.now(),
+    };
+    const previous = this.state.lastLifecycleObservation;
+    if (!previous) {
+      this.state = { ...this.state, lastLifecycleObservation: current };
+      await this.store.writeRuntimeState(this.state);
+      return false;
+    }
+    const wallDelta = current.wallClockMs - previous.wallClockMs;
+    const discontinuity = hasLifecycleDiscontinuity(previous, current);
+    if (!discontinuity) {
+      this.state = { ...this.state, lastLifecycleObservation: current };
+      await this.store.writeRuntimeState(this.state);
+      return false;
+    }
+
+    if (this.engine && this.state.engineCheckpoint) {
+      await this.persistUpdate(
+        this.engine.clearFocus(
+          this.state.engineCheckpoint.lastObservedAtMonotonicMs,
+        ),
+        false,
+      );
+    }
+    this.engine = null;
+    this.state = {
+      ...this.state,
+      clock: null,
+      engineCheckpoint: null,
+      activeTabId: null,
+      activeDomain: null,
+      lastLifecycleObservation: current,
+      diagnostics: appendDiagnostic(this.state.diagnostics, {
+        stage: "LIFECYCLE",
+        outcome: "LIMITED",
+        code: wallDelta < 0 ? "CLOCK_JUMP" : "UNOBSERVED_GAP",
+        requestId: null,
+        retryable: false,
+        terminal: false,
+        count: 1,
+        remediation:
+          "Focus was sealed at the last durable observation. WorkMap did not backfill the unobserved sleep, restart, or clock-change gap.",
+      }),
+    };
+    await this.store.writeRuntimeState(this.state);
+    await this.updateVisibleStatus();
+    return true;
+  }
+
+  private async closeAtPolicyBoundary() {
+    if (!this.state) return;
+    this.collectorState = "PAUSED";
+    if (this.engine && this.state.clock && this.state.engineCheckpoint) {
+      const nowMonotonicMs = performance.now();
+      const nowServerMs = serverNow(this.state);
+      const latestWindowEnd = (this.state.policy?.allowedUtcWindows ?? [])
+        .map((window) => Date.parse(window.endsAt))
+        .filter((value) => Number.isFinite(value) && value <= nowServerMs)
+        .sort((left, right) => right - left)[0];
+      const projectedBoundary = latestWindowEnd === undefined
+        ? this.state.engineCheckpoint.lastObservedAtMonotonicMs
+        : this.state.clock.clockEpochStartedMonotonicMs +
+          (latestWindowEnd - Date.parse(this.state.clock.clockEpochStartedAt));
+      const boundary = Math.min(
+        nowMonotonicMs,
+        Math.max(
+          this.state.engineCheckpoint.lastObservedAtMonotonicMs,
+          projectedBoundary,
+        ),
+      );
+      await this.persistUpdate(
+        this.engine.setCollectorState("PAUSED", boundary),
+        false,
+      );
+    }
+    this.engine = null;
+    this.state = {
+      ...this.state,
+      clock: null,
+      engineCheckpoint: null,
+      activeTabId: null,
+      activeDomain: null,
+    };
+    await this.store.writeRuntimeState(this.state);
+    await this.updateVisibleStatus();
+  }
+
   private async persistUpdate(
     update: ReturnType<BrowserFocusEngineV2["observe"]>,
     immediateSync: boolean,
@@ -688,6 +917,18 @@ export class BrowserExtensionRuntimeV2 {
       ...durableState,
       engineCheckpoint: this.engine.checkpoint(),
       latestSnapshot: update.snapshot,
+      snapshotConfirmation: {
+        state: "LOCAL_PENDING",
+        snapshotSequence: update.snapshot.snapshotSequence,
+        observedAt: update.snapshot.lastObservedAt,
+        confirmedAt: null,
+        rejectionCode: null,
+        requestId: null,
+      },
+      lastLifecycleObservation: {
+        wallClockMs: Date.now(),
+        monotonicMs: performance.now(),
+      },
       lastErrorCode: this.errorCode,
     };
     try {
@@ -748,6 +989,8 @@ export class BrowserExtensionRuntimeV2 {
       BROWSER_V2_SYNC_BATCH_SIZE,
     );
     const health = await this.createHealth();
+    const requestId = crypto.randomUUID();
+    const sentSnapshot = this.state.latestSnapshot;
     try {
       const response = await syncTrackingV2(this.config, {
         protocolVersion: TRACKING_PROTOCOL_VERSION_V2,
@@ -759,27 +1002,88 @@ export class BrowserExtensionRuntimeV2 {
           ? { focusSnapshot: this.state.latestSnapshot }
           : {}),
         health,
-      });
-      await this.store.applySyncResults(response.results);
+      }, requestId);
+      const confirmedAt = response.serverTime;
+      const confirmedRequestId = safeRequestId(response.requestId)
+        ? response.requestId
+        : requestId;
+      await this.store.applySyncResults(
+        response.results,
+        confirmedRequestId,
+      );
+      this.state = await this.store.readRuntimeState();
       this.applyServerClock(response.serverTime);
-      const now = new Date().toISOString();
+      const intervalUpload = summarizeIntervalUpload(
+        response.results,
+        confirmedRequestId,
+        confirmedAt,
+      );
+      const snapshotConfirmation = snapshotConfirmationFromResponse(
+        sentSnapshot,
+        response.focusSnapshotResult,
+        confirmedRequestId,
+        confirmedAt,
+      );
+      const diagnostics = appendSyncDiagnostics(
+        this.state.diagnostics,
+        response.results,
+        response.focusSnapshotResult,
+        confirmedRequestId,
+        confirmedAt,
+      );
       this.state = {
         ...this.state,
-        lastSuccessfulSyncAt: now,
-        lastSuccessfulHeartbeatAt: now,
+        lastSuccessfulSyncAt: confirmedAt,
+        lastSuccessfulHeartbeatAt: confirmedAt,
+        snapshotConfirmation:
+          snapshotConfirmation ?? this.state.snapshotConfirmation,
+        lastIntervalUpload:
+          intervalUpload ?? this.state.lastIntervalUpload,
+        confirmedIntervalThrough: latestConfirmedThrough(
+          response.cursors,
+          this.state.confirmedIntervalThrough,
+        ),
+        lastRequestId: confirmedRequestId,
+        diagnostics,
         lastErrorCode: "NONE",
       };
       this.connectionState = "ONLINE";
       this.errorCode = "NONE";
       await this.store.writeRuntimeState(this.state);
       await this.updateVisibleStatus();
+
+      if (response.focusSnapshotResult?.status === "REJECTED") {
+        const rejectedConfirmation = this.state.snapshotConfirmation;
+        if (
+          response.focusSnapshotResult.rejectionCode ===
+          "SNAPSHOT_OUTSIDE_POLICY_WINDOW"
+        ) {
+          this.collectorState = "PAUSED";
+        }
+        if (
+          response.focusSnapshotResult.rejectionCode ===
+          "SNAPSHOT_POLICY_LEASE_INVALID"
+        ) {
+          this.lastPolicyRefreshAtMs = 0;
+          this.collectorState = "PAUSED";
+        }
+        await this.clearFocus(false);
+        if (this.state) {
+          this.state = {
+            ...this.state,
+            snapshotConfirmation: rejectedConfirmation,
+          };
+          await this.store.writeRuntimeState(this.state);
+          await this.updateVisibleStatus();
+        }
+      }
     } catch (error) {
       if (ready.length > 0 && isRetryableError(error)) {
         await this.store.retry(
           ready.map((row) => row.clientEventId),
         );
       }
-      await this.applyFailure(error);
+      await this.applyFailure(error, requestId);
     }
   }
 
@@ -858,32 +1162,59 @@ export class BrowserExtensionRuntimeV2 {
   private async reconcileBrowserReality(freshFocusProof: boolean) {
     if (!this.state) return;
     const window = await getLastFocusedWindow(this.chromeApi);
-    if (!window.focused || window.id === undefined) {
+    if (!isUsableFocusedWindow(window)) {
       if (this.state.focusedWindowId !== null || this.engine) {
         this.state = { ...this.state, focusedWindowId: null };
         await this.clearFocus(true);
       }
       return;
     }
+    const windowId = window.id!;
     const focusedWindowChanged =
-      this.state.focusedWindowId !== window.id;
-    this.state = { ...this.state, focusedWindowId: window.id };
-    await this.store.writeRuntimeState(this.state);
-    if (this.state.systemIdle) return;
-    const [tab] = await queryTabs(this.chromeApi, {
+      this.state.focusedWindowId !== windowId;
+    const state = { ...this.state, focusedWindowId: windowId };
+    this.state = state;
+    await this.store.writeRuntimeState(state);
+    if (state.systemIdle) return;
+    const activeTabs = await queryTabs(this.chromeApi, {
       active: true,
-      windowId: window.id,
+      windowId,
     });
-    const domain = readDomainFromUrl(tab?.url);
-    if (!tab || !domain) {
+    const selectedTab = chooseSingleActiveTab(
+      activeTabs,
+      state.activeTabId,
+    );
+    let currentSplitPeer: ChromeTab | null = null;
+    if (state.activeTabId !== null) {
+      currentSplitPeer = await getTab(
+        this.chromeApi,
+        state.activeTabId,
+      ).catch(() => null);
+      if (
+        currentSplitPeer &&
+        !messageCanOwnFocus({
+          senderTab: currentSplitPeer,
+          focusedWindowId: windowId,
+          activeTabs,
+        })
+      ) {
+        currentSplitPeer = null;
+      }
+    }
+    const candidate = currentSplitPeer ?? selectedTab;
+    const domain = eligibleDomainForTab(
+      candidate,
+      this.config?.excludedHostnames,
+    );
+    if (!candidate || !domain) {
       await this.clearFocus(true);
       return;
     }
     const subjectChanged =
-      tab.id !== this.state.activeTabId ||
-      domain !== this.state.activeDomain;
+      candidate.id !== state.activeTabId ||
+      domain !== state.activeDomain;
     if (freshFocusProof || focusedWindowChanged || subjectChanged) {
-      await this.activateTab(tab, true);
+      await this.prepareTab(candidate, true);
     } else if (this.engine) {
       await this.persistUpdate(
         this.engine.observe(performance.now()),
@@ -987,7 +1318,13 @@ export class BrowserExtensionRuntimeV2 {
         this.state ? serverNow(this.state) : Date.now(),
       ),
       migrationState: this.state?.migrationState ?? "V1",
-      queue: stats,
+      queue: {
+        pending: stats.pending,
+        ready: stats.ready,
+        deadLetter: stats.deadLetter,
+        oldestQueuedAt: stats.oldestQueuedAt,
+        nextRetryAt: stats.nextRetryAt,
+      },
       lastSuccessfulHeartbeatAt:
         this.state?.lastSuccessfulHeartbeatAt ?? null,
       lastSuccessfulSyncAt:
@@ -1024,9 +1361,13 @@ export class BrowserExtensionRuntimeV2 {
           stats.pending + (legacy.workmapQueue?.length ?? 0),
         queuedStatusEvents: 0,
         trackingState:
-          this.errorCode === "INTERACTION_PERMISSION_REQUIRED"
+          this.state.trackingAccess.contentRegistration === "FAILED"
+            ? "registration_failed"
+            : this.errorCode === "INTERACTION_PERMISSION_REQUIRED"
             ? "permission_required"
             : "ready",
+        trackingError:
+          this.state.trackingAccess.error ?? undefined,
         error: error ?? this.policySetupMessage ?? undefined,
       },
     });
@@ -1035,8 +1376,58 @@ export class BrowserExtensionRuntimeV2 {
   private async registerContentScript() {
     if (!this.config) return false;
     try {
-      return await ensureDomainContentScriptRegistered(true);
-    } catch {
+      const registered = await ensureDomainContentScriptRegistered(true);
+      if (this.state) {
+        this.state = {
+          ...this.state,
+          trackingAccess: {
+            hostPermission: registered ? "GRANTED" : "REQUIRED",
+            contentRegistration: registered ? "REGISTERED" : "UNKNOWN",
+            checkedAt: new Date().toISOString(),
+            error: null,
+          },
+          diagnostics: registered
+            ? this.state.diagnostics
+            : appendDiagnostic(this.state.diagnostics, {
+                stage: "PERMISSION",
+                outcome: "LIMITED",
+                code: "HOST_PERMISSION_REQUIRED",
+                requestId: null,
+                retryable: false,
+                terminal: false,
+                count: 1,
+                remediation:
+                  "Grant WorkMap access to HTTP/HTTPS websites, then reload the Options page.",
+              }),
+        };
+        await this.store.writeRuntimeState(this.state);
+      }
+      return registered;
+    } catch (error) {
+      if (this.state) {
+        const message = safeError(error);
+        this.state = {
+          ...this.state,
+          trackingAccess: {
+            hostPermission: "GRANTED",
+            contentRegistration: "FAILED",
+            checkedAt: new Date().toISOString(),
+            error: message,
+          },
+          diagnostics: appendDiagnostic(this.state.diagnostics, {
+            stage: "PERMISSION",
+            outcome: "LIMITED",
+            code: "CONTENT_REGISTRATION_FAILED",
+            requestId: null,
+            retryable: true,
+            terminal: false,
+            count: 1,
+            remediation:
+              "Reload the extension. WorkMap will retry content-script registration without collecting protected pages.",
+          }),
+        };
+        await this.store.writeRuntimeState(this.state);
+      }
       return false;
     }
   }
@@ -1064,7 +1455,10 @@ export class BrowserExtensionRuntimeV2 {
     );
   }
 
-  private async applyFailure(error: unknown) {
+  private async applyFailure(
+    error: unknown,
+    fallbackRequestId?: string,
+  ) {
     this.policySetupMessage = null;
     if (
       error instanceof ExtensionApiError &&
@@ -1096,12 +1490,222 @@ export class BrowserExtensionRuntimeV2 {
         this.errorCode = "POLICY_UNAVAILABLE";
       }
     }
+    if (this.state) {
+      const requestId =
+        error instanceof ExtensionApiError
+          ? error.detail.requestId ?? fallbackRequestId ?? null
+          : fallbackRequestId ?? null;
+      const retryable = isRetryableError(error);
+      const statusCode =
+        error instanceof ExtensionApiError && error.status
+          ? `HTTP_${error.status}`
+          : "NETWORK_ERROR";
+      this.state = {
+        ...this.state,
+        lastRequestId: requestId,
+        diagnostics: appendDiagnostic(this.state.diagnostics, {
+          stage: "REQUEST",
+          outcome: retryable ? "RETRYING" : "REJECTED",
+          code:
+            error instanceof ExtensionApiError
+              ? error.detail.reasonCode ?? statusCode
+              : statusCode,
+          requestId,
+          retryable,
+          terminal: !retryable,
+          count: 1,
+          remediation:
+            error instanceof ExtensionApiError && error.detail.remediation
+              ? error.detail.remediation
+              : retryable
+                ? "The extension will retry automatically with bounded backoff."
+                : "Review the safe reason code and request ID, then pair again or update the extension if requested.",
+        }),
+      };
+      await this.store.writeRuntimeState(this.state);
+    }
     await this.updateVisibleStatus(safeError(error));
   }
 
   private async ensureInitialized() {
     if (!this.initialized) await this.initialize();
   }
+}
+
+type DiagnosticInput = Omit<
+  BrowserTrackingDiagnosticV2,
+  "id" | "occurredAt"
+> & { occurredAt?: string };
+
+function appendDiagnostic(
+  existing: BrowserTrackingDiagnosticV2[],
+  input: DiagnosticInput,
+) {
+  const occurredAt = input.occurredAt ?? new Date().toISOString();
+  const cutoff = Date.parse(occurredAt) - BROWSER_V2_DIAGNOSTIC_RETENTION_MS;
+  const retained = existing.filter(
+    (item) => Date.parse(item.occurredAt) >= cutoff,
+  );
+  const latest = retained.at(-1);
+  if (
+    latest &&
+    latest.stage === input.stage &&
+    latest.code === safeDiagnosticCode(input.code) &&
+    latest.requestId === input.requestId &&
+    latest.outcome === input.outcome
+  ) {
+    latest.count += input.count;
+    latest.occurredAt = occurredAt;
+    return retained.slice(-BROWSER_V2_DIAGNOSTIC_CAPACITY);
+  }
+  retained.push({
+    ...input,
+    id: crypto.randomUUID(),
+    occurredAt,
+    code: safeDiagnosticCode(input.code),
+    remediation: input.remediation.replace(/\s+/g, " ").slice(0, 240),
+  });
+  return retained.slice(-BROWSER_V2_DIAGNOSTIC_CAPACITY);
+}
+
+export function appendSyncDiagnostics(
+  diagnostics: BrowserTrackingDiagnosticV2[],
+  results: TrackingSyncItemResultV2[],
+  snapshotResult: BrowserTrackingSyncResponseV2["focusSnapshotResult"],
+  requestId: string,
+  occurredAt: string,
+) {
+  let next = diagnostics;
+  if (snapshotResult?.status === "REJECTED") {
+    next = appendDiagnostic(next, {
+      occurredAt,
+      stage: "SNAPSHOT",
+      outcome: "REJECTED",
+      code: snapshotResult.rejectionCode,
+      requestId,
+      retryable: false,
+      terminal: true,
+      count: 1,
+      remediation: snapshotRemediation(snapshotResult.rejectionCode),
+    });
+  }
+  const groups = new Map<string, { count: number; terminal: boolean }>();
+  for (const result of results) {
+    if (result.status !== "REJECTED") continue;
+    const code = safeDiagnosticCode(result.rejectionCode ?? "REJECTED");
+    const group = groups.get(code) ?? { count: 0, terminal: true };
+    group.count += 1;
+    group.terminal = group.terminal && result.terminal === true;
+    groups.set(code, group);
+  }
+  for (const [code, group] of groups) {
+    next = appendDiagnostic(next, {
+      occurredAt,
+      stage: "INTERVAL",
+      outcome: group.terminal ? "REJECTED" : "RETRYING",
+      code,
+      requestId,
+      retryable: !group.terminal,
+      terminal: group.terminal,
+      count: group.count,
+      remediation: group.terminal
+        ? "This interval is retained as a safe dead-letter diagnostic and is not counted in Reports. Review the code and request ID."
+        : "The interval remains in the durable queue and will retry with bounded backoff.",
+    });
+  }
+  return next;
+}
+
+export function summarizeIntervalUpload(
+  results: TrackingSyncItemResultV2[],
+  requestId: string,
+  occurredAt: string,
+) {
+  if (results.length === 0) return null;
+  const accepted = results.filter((item) => item.status === "ACCEPTED").length;
+  const duplicate = results.filter((item) => item.status === "DUPLICATE").length;
+  const rejectedRows = results.filter((item) => item.status === "REJECTED");
+  const rejectionCodes: Record<string, number> = {};
+  for (const row of rejectedRows) {
+    const code = safeDiagnosticCode(row.rejectionCode ?? "REJECTED");
+    rejectionCodes[code] = (rejectionCodes[code] ?? 0) + 1;
+  }
+  return {
+    status: rejectedRows.length > 0
+      ? "REJECTED" as const
+      : accepted > 0
+        ? "ACCEPTED" as const
+        : "DUPLICATE" as const,
+    occurredAt,
+    requestId,
+    accepted,
+    duplicate,
+    rejected: rejectedRows.length,
+    rejectionCodes,
+  };
+}
+
+export function snapshotConfirmationFromResponse(
+  snapshot: BrowserTrackingRuntimeStateV2["latestSnapshot"],
+  result: BrowserTrackingSyncResponseV2["focusSnapshotResult"],
+  requestId: string,
+  confirmedAt: string,
+): BrowserTrackingRuntimeStateV2["snapshotConfirmation"] | null {
+  if (!snapshot || !result) return null;
+  if (result.status === "ACCEPTED") {
+    return {
+      state: "CONFIRMED",
+      snapshotSequence: result.acceptedSnapshotSequence,
+      observedAt: snapshot.lastObservedAt,
+      confirmedAt,
+      rejectionCode: null,
+      requestId,
+    };
+  }
+  return {
+    state: "REJECTED",
+    snapshotSequence: snapshot.snapshotSequence,
+    observedAt: snapshot.lastObservedAt,
+    confirmedAt,
+    rejectionCode: result.rejectionCode,
+    requestId,
+  };
+}
+
+function latestConfirmedThrough(
+  cursors: BrowserTrackingSyncResponseV2["cursors"],
+  previous: string | null,
+) {
+  return cursors.reduce<string | null>((latest, cursor) => {
+    const candidate = cursor.latestAcceptedEndedAt;
+    if (!candidate) return latest;
+    if (!latest || Date.parse(candidate) > Date.parse(latest)) return candidate;
+    return latest;
+  }, previous);
+}
+
+function snapshotRemediation(code: string) {
+  if (code === "SNAPSHOT_POLICY_LEASE_INVALID") {
+    return "Refresh the current policy lease before starting a new Domain snapshot.";
+  }
+  if (code === "SNAPSHOT_OUTSIDE_POLICY_WINDOW") {
+    return "Keep collection paused until the next server-issued allowed UTC window.";
+  }
+  return "Start a new clock epoch from the next durable browser observation; do not backfill the rejected time.";
+}
+
+function safeRequestId(value: string | null | undefined) {
+  return Boolean(
+    value &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
+  );
+}
+
+function safeDiagnosticCode(value: string) {
+  const normalized = value.trim().toUpperCase();
+  return /^[A-Z0-9_]{1,80}$/.test(normalized)
+    ? normalized
+    : "UNKNOWN";
 }
 
 function appendLegacyEvents(
@@ -1128,6 +1732,20 @@ function normalizeBrowserName(value: string): BrowserNameV2 {
   return value.toUpperCase().includes("EDGE") ? "EDGE" : "CHROME";
 }
 
+export function hasLifecycleDiscontinuity(
+  previous: { wallClockMs: number; monotonicMs: number },
+  current: { wallClockMs: number; monotonicMs: number },
+) {
+  const wallDelta = current.wallClockMs - previous.wallClockMs;
+  const monotonicDelta = current.monotonicMs - previous.monotonicMs;
+  return (
+    wallDelta < 0 ||
+    monotonicDelta < 0 ||
+    Math.max(wallDelta, monotonicDelta) > LIFECYCLE_MAX_UNOBSERVED_MS ||
+    Math.abs(wallDelta - monotonicDelta) > CLOCK_DIVERGENCE_TOLERANCE_MS
+  );
+}
+
 function describeBrowserPolicyRequirement(policy: DeviceTrackingPolicyV2) {
   if (policy.scheduleTimeZoneState !== "CONFIRMED") {
     return "Tracking is waiting for the workspace Owner or Manager to confirm the policy time zone in WorkMap Compliance.";
@@ -1144,7 +1762,7 @@ function describeBrowserPolicyRequirement(policy: DeviceTrackingPolicyV2) {
   return null;
 }
 
-function collectorStateForPolicy(
+export function collectorStateForPolicy(
   policy: DeviceTrackingPolicyV2,
   nowMs: number,
 ): TrackingCollectorStateV2 {
@@ -1249,6 +1867,53 @@ function getLastFocusedWindow(api: ChromeApi) {
   });
 }
 
+function getWindow(api: ChromeApi, windowId: number) {
+  return new Promise<ChromeWindow>((resolve, reject) => {
+    api.windows.get(windowId, { populate: false }, (window) => {
+      const error = api.runtime.lastError;
+      if (error) reject(new Error(error.message ?? "Window query failed."));
+      else resolve(window);
+    });
+  });
+}
+
+function getTab(api: ChromeApi, tabId: number) {
+  return new Promise<ChromeTab>((resolve, reject) => {
+    api.tabs.get(tabId, (tab) => {
+      const error = api.runtime.lastError;
+      if (error) reject(new Error(error.message ?? "Tab query failed."));
+      else resolve(tab);
+    });
+  });
+}
+
+function probeTab(api: ChromeApi, tabId: number) {
+  return new Promise<{ visible: boolean; focused: boolean } | null>(
+    (resolve) => {
+      api.tabs.sendMessage(
+        tabId,
+        { type: "workmap:domain-probe" },
+        (response) => {
+          if (api.runtime.lastError) {
+            resolve(null);
+            return;
+          }
+          resolve(
+            response?.type === "workmap:domain-probe-result" &&
+              typeof response.visible === "boolean" &&
+              typeof response.focused === "boolean"
+              ? {
+                  visible: response.visible,
+                  focused: response.focused,
+                }
+              : null,
+          );
+        },
+      );
+    },
+  );
+}
+
 function queryIdleState(api: ChromeApi, seconds: number) {
   return new Promise<"active" | "idle" | "locked">((resolve, reject) => {
     api.idle.queryState(seconds, (state) => {
@@ -1277,8 +1942,12 @@ function installRuntimeListeners(api: ChromeApi) {
     void schedule(() => runtime.handleTabActivated(tabId, windowId));
   });
   api.tabs.onUpdated.addListener((tabId, change, tab) => {
-    if (change.url || change.status === "complete") {
-      void schedule(() => runtime.handleTabUpdated(tabId, tab));
+    if (
+      change.url ||
+      change.status === "loading" ||
+      change.status === "complete"
+    ) {
+      void schedule(() => runtime.handleTabUpdated(tabId, change, tab));
     }
   });
   api.tabs.onRemoved.addListener((tabId) => {
@@ -1289,6 +1958,12 @@ function installRuntimeListeners(api: ChromeApi) {
   });
   api.windows.onFocusChanged.addListener((windowId) => {
     void schedule(() => runtime.handleWindowFocus(windowId));
+  });
+  api.windows.onBoundsChanged.addListener((window) => {
+    void schedule(() => runtime.handleWindowBoundsChanged(window));
+  });
+  api.windows.onRemoved.addListener((windowId) => {
+    void schedule(() => runtime.handleWindowRemoved(windowId));
   });
   api.idle.onStateChanged.addListener((state) => {
     void schedule(() => runtime.handleIdleState(state));
@@ -1312,4 +1987,4 @@ function installRuntimeListeners(api: ChromeApi) {
   void schedule(() => runtime.initialize());
 }
 
-installRuntimeListeners(chrome);
+if (typeof chrome !== "undefined") installRuntimeListeners(chrome);

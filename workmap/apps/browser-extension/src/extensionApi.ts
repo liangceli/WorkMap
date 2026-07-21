@@ -10,7 +10,20 @@ import {
 } from "./trackingV2Types.js";
 
 export class ExtensionApiError extends Error {
-  constructor(message: string, readonly status?: number) { super(message); }
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly detail: {
+      message?: string;
+      requestId?: string;
+      reasonCode?: string;
+      stage?: string;
+      retryable?: boolean;
+      remediation?: string;
+    } = {},
+  ) {
+    super(message);
+  }
 }
 
 export function exchangePairingCode(apiBaseUrl: string, code: string, browserName: string) {
@@ -80,12 +93,14 @@ export function confirmProtocolV2(
 export function syncTrackingV2(
   config: ExtensionConfig,
   body: BrowserTrackingSyncRequestV2,
+  requestId: string,
 ) {
   return requestJson<BrowserTrackingSyncResponseV2>(
     config.apiBaseUrl,
     "/device-client/sync-v2",
     config.credential,
     body,
+    { requestId },
   );
 }
 
@@ -101,6 +116,7 @@ async function requestJson<T>(
   path: string,
   credential: string | undefined,
   body?: unknown,
+  options: { requestId?: string } = {},
 ): Promise<T> {
   let response: Response;
   try {
@@ -110,6 +126,9 @@ async function requestJson<T>(
         Accept: "application/json",
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         ...(credential ? { Authorization: `Device ${credential}` } : {}),
+        ...(options.requestId
+          ? { "X-WorkMap-Request-Id": options.requestId }
+          : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(10_000),
@@ -118,24 +137,55 @@ async function requestJson<T>(
     throw new ExtensionApiError(error instanceof Error ? error.message : "Network request failed.");
   }
   if (!response.ok) {
-    const detail = await readSafeResponseMessage(response);
-    throw new ExtensionApiError(`WorkMap API ${path} returned ${response.status}${detail ? `: ${detail}` : ""}.`, response.status);
+    const detail = await readSafeResponseDetail(response);
+    throw new ExtensionApiError(
+      `WorkMap API ${path} returned ${response.status}${detail.message ? `: ${detail.message}` : ""}.`,
+      response.status,
+      detail,
+    );
   }
   return await response.json() as T;
 }
 
-async function readSafeResponseMessage(response: Response) {
+type SafeResponseDetail = ExtensionApiError["detail"];
+
+async function readSafeResponseDetail(
+  response: Response,
+): Promise<SafeResponseDetail> {
   const text = await response.text().catch(() => "");
-  if (!text) return "";
+  if (!text) return {};
   try {
-    const parsed = JSON.parse(text) as { message?: unknown; error?: unknown };
+    const parsed = JSON.parse(text) as Record<string, unknown>;
     const message = Array.isArray(parsed.message) ? parsed.message.join("; ") : parsed.message ?? parsed.error;
-    return sanitizeDetail(typeof message === "string" ? message : text);
+    return {
+      message: sanitizeDetail(typeof message === "string" ? message : text),
+      ...(safeCode(parsed.requestId) ? { requestId: String(parsed.requestId) } : {}),
+      ...(safeCode(parsed.reasonCode ?? parsed.code)
+        ? { reasonCode: String(parsed.reasonCode ?? parsed.code) }
+        : {}),
+      ...(safeCode(parsed.stage) ? { stage: String(parsed.stage) } : {}),
+      ...(typeof parsed.retryable === "boolean"
+        ? { retryable: parsed.retryable }
+        : {}),
+      ...(typeof parsed.remediation === "string"
+        ? { remediation: sanitizeDetail(parsed.remediation) }
+        : {}),
+    };
   } catch {
-    return sanitizeDetail(text);
+    return { message: sanitizeDetail(text) };
   }
 }
 
 function sanitizeDetail(value: string) {
-  return value.replace(/\s+/g, " ").slice(0, 240);
+  return value
+    .replace(/wmdev_[A-Za-z0-9_-]+/g, "[credential]")
+    .replace(/\s+/g, " ")
+    .slice(0, 240);
+}
+
+function safeCode(value: unknown) {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9_:-]{1,120}$/.test(value.trim())
+  );
 }

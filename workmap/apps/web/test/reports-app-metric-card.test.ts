@@ -32,13 +32,13 @@ test("domain card uses the same focus-first collapsed presentation", () => {
   assert.doesNotMatch(html, /Open\/runtime/);
 });
 
-test("expanded domain card reveals de-duplicated focused idle and runtime", () => {
+test("expanded domain card reveals focused idle and honestly disabled Browser runtime", () => {
   const html = renderToStaticMarkup(createElement(DomainUsageMetricCard, { row: domainRow, initiallyExpanded: true }));
   assert.match(html, /Focused idle/);
   assert.match(html, /45s/);
   assert.match(html, /Open\/runtime/);
-  assert.match(html, /10m 0s/);
-  assert.match(html, /duplicate tabs are counted once/);
+  assert.match(html, /Not enabled/);
+  assert.doesNotMatch(html, /10m 0s/);
 });
 
 const row = {

@@ -26,7 +26,7 @@ import {
   type WorkspaceNavigationItem,
 } from "../../lib/navigation/workspaceNavigation";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
-import { redirectToRootForMissingCognitoSession } from "../../lib/auth/cognitoRedirect";
+import { redirectToLoginForMissingCognitoSession } from "../../lib/auth/cognitoRedirect";
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { getUserSetupState, resetUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
@@ -146,7 +146,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
 
       if (!auth.available) {
         if (cancelled) return;
-        if (redirectToRootForMissingCognitoSession()) {
+        if (redirectToLoginForMissingCognitoSession()) {
           resetUserSetupState();
           clearAppShellCache();
           return;
@@ -228,7 +228,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     setCognitoSession(null);
     setApiSummary(null);
     setPlatformSummary(null);
-    redirectToRootForMissingCognitoSession();
+    redirectToLoginForMissingCognitoSession();
   };
 
   const toggleSidebar = () => {

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { WorkMapLoader } from "../../../components/ui/WorkMapLoader";
 import { createDevicePairingCode, getDevicePairingStatus, listDevices } from "../../../lib/api/devicesApi";
 import { getWorkMapApiAuthOptions } from "../../../lib/api/apiAuth";
-import { redirectToRootForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
+import { redirectToLoginForMissingCognitoSession } from "../../../lib/auth/cognitoRedirect";
 import type { WorkMapApiPairingCode, WorkMapApiPairingStatus } from "../../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
@@ -40,7 +40,7 @@ export default function DeviceSetupPage() {
     async function checkExistingDesktopAgent() {
       const auth = await getWorkMapApiAuthOptions();
       if (!auth.available) {
-        if (redirectToRootForMissingCognitoSession()) return;
+        if (redirectToLoginForMissingCognitoSession()) return;
         if (!cancelled) setCheckingDesktopAgent(false);
         return;
       }
@@ -75,7 +75,7 @@ export default function DeviceSetupPage() {
       }
       const auth = await getWorkMapApiAuthOptions();
       if (!auth.available) {
-        if (!cancelled) redirectToRootForMissingCognitoSession();
+        if (!cancelled) redirectToLoginForMissingCognitoSession();
         return;
       }
       if (cancelled) return;
@@ -105,7 +105,7 @@ export default function DeviceSetupPage() {
     setPairingMessage("");
     const auth = await getWorkMapApiAuthOptions();
     if (!auth.available) {
-      if (redirectToRootForMissingCognitoSession()) return;
+      if (redirectToLoginForMissingCognitoSession()) return;
       setPairingState("error");
       setPairingMessage(auth.reason);
       return;

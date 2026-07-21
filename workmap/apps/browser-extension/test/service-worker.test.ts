@@ -11,6 +11,8 @@ test("MV3 runtime listens to page activity and complete tab/window lifecycle", a
     "tabs.onRemoved",
     "tabs.onReplaced",
     "windows.onFocusChanged",
+    "windows.onBoundsChanged",
+    "windows.onRemoved",
     "idle.onStateChanged",
     "alarms.onAlarm",
     "runtime.onStartup",
@@ -29,10 +31,11 @@ test("local extension status does not preserve stale connected state", async () 
   const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
   const types = await readFile(new URL("../src/trackingV2Types.ts", import.meta.url), "utf8");
 
-  assert.equal(manifest.version, "0.5.1");
-  assert.equal(packageJson.version, "0.5.1");
+  assert.equal(manifest.version, "0.5.2");
+  assert.equal(packageJson.version, "0.5.2");
+  assert.equal(manifest.incognito, "not_allowed");
   assert.equal(manifest.background.service_worker, "dist/backgroundV2.js");
-  assert.match(types, /browser-extension-mv3\/0\.5\.1/);
+  assert.match(types, /browser-extension-mv3\/0\.5\.2/);
   assert.match(api, /BROWSER_EXTENSION_VERSION/);
   assert.match(background, /connectionState === "ONLINE"/);
   assert.match(background, /connectionState === "AUTH_REQUIRED"/);
@@ -42,7 +45,10 @@ test("local extension status does not preserve stale connected state", async () 
   assert.match(background, /createHealth/);
   assert.match(background, /latestSnapshot/);
   assert.match(options, /deriveStatusHealth/);
-  assert.match(options, /Signal stale/);
+  assert.match(options, /label: "Online"/);
+  assert.match(options, /label: "Offline"/);
+  assert.match(options, /Auth required/);
+  assert.match(options, /Upgrade required/);
   assert.match(options, /Last server-confirmed heartbeat/);
   assert.doesNotMatch(options, /current\?\.state \?\? "connected"/);
 });
@@ -78,11 +84,11 @@ test("content script emits only trusted transient pulses and never owns the idle
     "event.isTrusted",
     '"wheel"',
     '"keydown"',
-    '"pointermove"',
+    '"pointerdown"',
+    '"mousedown"',
     '"touchstart"',
     '"input"',
     '"change"',
-    "selectionchange",
     "activityAt",
   ]) {
     assert(source.includes(marker), `missing ${marker}`);
@@ -100,6 +106,9 @@ test("content script emits only trusted transient pulses and never owns the idle
     "MEDIA_START_FROM_INTERACTION_MS",
     "IDLE_THRESHOLD_MS",
     "workmap:domain-idle",
+    '"pointermove"',
+    '"touchmove"',
+    "selectionchange",
   ]) {
     assert(!source.includes(forbidden), `content script must not collect ${forbidden}`);
   }

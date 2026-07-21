@@ -15,6 +15,7 @@ import {
   type StoredCognitoSession,
 } from "../../lib/auth/cognitoSession";
 import { getPendingInviteToken } from "../../lib/auth/pendingInvite";
+import { getRequestedPostLoginPath } from "../../lib/auth/cognitoRedirect";
 import { isConfirmedWorkspaceMissing, workspaceAccessError } from "../../lib/auth/workspaceAccess";
 import {
   getDefaultSetupState,
@@ -52,8 +53,9 @@ export function CognitoLoginPanel() {
   const continueCognito = async (session: StoredCognitoSession) => {
     setContinuing(true);
     setStatus("Checking your WorkMap access...");
-    const options = { token: session.idToken || session.accessToken };
+    const options = { token: session.idToken || session.accessToken, authSource: "cognito" as const };
     const inviteToken = getPendingInviteToken();
+    const requestedPath = getRequestedPostLoginPath();
     const contextResult = await getAuthContext(options);
 
     if (contextResult.ok) {
@@ -72,7 +74,11 @@ export function CognitoLoginPanel() {
 
       const nextState = { ...defaultState, hasCompany: true, hasAvatar: Boolean(backendAvatar) || defaultState.hasAvatar };
       saveUserSetupState(nextState);
-      router.push(contextResult.data.role === "OWNER" && !backendAvatar ? "/onboarding/avatar" : getNextRouteForUser(nextState));
+      router.push(
+        contextResult.data.role === "OWNER" && !backendAvatar
+          ? "/onboarding/avatar"
+          : requestedPath ?? getNextRouteForUser(nextState),
+      );
       return;
     }
 

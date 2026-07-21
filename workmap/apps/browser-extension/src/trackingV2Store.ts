@@ -1,23 +1,31 @@
 import {
+  BROWSER_V2_DEAD_LETTER_CAPACITY,
+  BROWSER_V2_DEAD_LETTER_RETENTION_MS,
   BROWSER_V2_QUEUE_CAPACITY,
   createInitialBrowserTrackingV2State,
   type BrowserActivityIntervalV2,
   type BrowserLiveFocusSnapshotV2,
   type BrowserTrackingRuntimeStateV2,
+  type BrowserV2DeadLetterRecord,
   type BrowserV2QueueRecord,
   type BrowserV2QueueStats,
   type TrackingSyncItemResultV2,
 } from "./trackingV2Types.js";
 
 const DATABASE_NAME = "workmap-tracking-v2";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const INTERVAL_STORE = "intervals";
+const DEAD_LETTER_STORE = "deadLetters";
 const META_STORE = "meta";
 const RUNTIME_KEY = "runtime";
 
 type MetaRecord = {
   key: string;
   value: BrowserTrackingRuntimeStateV2;
+};
+
+type LegacyRuntimeStateV5 = Omit<BrowserTrackingRuntimeStateV2, "version"> & {
+  version: 5;
 };
 
 export class BrowserV2QueuePressureError extends Error {}
@@ -32,7 +40,26 @@ export class BrowserTrackingV2Store {
       transaction.objectStore(META_STORE).get(RUNTIME_KEY),
     );
     await transactionDone(transaction);
-    if (record?.value?.version === 5) return record.value;
+    if (record?.value?.version === 6) return record.value;
+    if ((record?.value as unknown as LegacyRuntimeStateV5 | undefined)?.version === 5) {
+      const initial = createInitialBrowserTrackingV2State();
+      const legacy = record!.value as unknown as LegacyRuntimeStateV5;
+      const migrated: BrowserTrackingRuntimeStateV2 = {
+        ...initial,
+        ...legacy,
+        version: 6,
+        snapshotConfirmation: initial.snapshotConfirmation,
+        lastIntervalUpload: null,
+        confirmedIntervalThrough: null,
+        lastRequestId: null,
+        diagnostics: [],
+        trackingAccess: initial.trackingAccess,
+        coverageLimitations: initial.coverageLimitations,
+        lastLifecycleObservation: null,
+      };
+      await this.writeRuntimeState(migrated);
+      return migrated;
+    }
     const initial = createInitialBrowserTrackingV2State();
     await this.writeRuntimeState(initial);
     return initial;
@@ -135,37 +162,63 @@ export class BrowserTrackingV2Store {
       .slice(0, limit);
   }
 
-  async applySyncResults(results: TrackingSyncItemResultV2[]) {
+  async applySyncResults(
+    results: TrackingSyncItemResultV2[],
+    requestId: string,
+    rejectedAtMs = Date.now(),
+  ) {
     if (results.length === 0) return;
     const database = await this.database();
     const transaction = database.transaction(
-      [INTERVAL_STORE, META_STORE],
+      [INTERVAL_STORE, DEAD_LETTER_STORE],
       "readwrite",
     );
     const intervalStore = transaction.objectStore(INTERVAL_STORE);
-    const metaStore = transaction.objectStore(META_STORE);
-    const runtime = await requestAsPromise<MetaRecord | undefined>(
-      metaStore.get(RUNTIME_KEY),
-    );
-    let terminalRejections = runtime?.value.terminalRejections ?? 0;
+    const deadLetterStore = transaction.objectStore(DEAD_LETTER_STORE);
 
     for (const result of results) {
+      const record = await requestAsPromise<BrowserV2QueueRecord | undefined>(
+        intervalStore.get(result.clientEventId),
+      );
       if (
         result.status === "ACCEPTED" ||
-        result.status === "DUPLICATE" ||
-        (result.status === "REJECTED" && result.terminal)
+        result.status === "DUPLICATE"
       ) {
         intervalStore.delete(result.clientEventId);
       }
       if (result.status === "REJECTED" && result.terminal) {
-        terminalRejections += 1;
+        if (record) {
+          deadLetterStore.put({
+            clientEventId: record.clientEventId,
+            clockEpochId: record.clockEpochId,
+            sequenceNumber: record.sequenceNumber,
+            metric: record.interval.metric,
+            rejectionCode: safeRejectionCode(result.rejectionCode),
+            requestId,
+            rejectedAtMs,
+          } satisfies BrowserV2DeadLetterRecord);
+        }
+        intervalStore.delete(result.clientEventId);
+      } else if (result.status === "REJECTED" && record) {
+        const attempts = record.attempts + 1;
+        intervalStore.put({
+          ...record,
+          attempts,
+          nextAttemptAtMs: calculateBrowserRetryAt(rejectedAtMs, attempts),
+        });
       }
     }
-    if (runtime) {
-      metaStore.put({
-        key: RUNTIME_KEY,
-        value: { ...runtime.value, terminalRejections },
-      } satisfies MetaRecord);
+
+    const deadLetters = await requestAsPromise<BrowserV2DeadLetterRecord[]>(
+      deadLetterStore.getAll(),
+    );
+    const retained = deadLetters
+      .filter((row) => row.rejectedAtMs >= rejectedAtMs - BROWSER_V2_DEAD_LETTER_RETENTION_MS)
+      .sort((left, right) => right.rejectedAtMs - left.rejectedAtMs)
+      .slice(0, BROWSER_V2_DEAD_LETTER_CAPACITY);
+    const retainedIds = new Set(retained.map((row) => row.clientEventId));
+    for (const row of deadLetters) {
+      if (!retainedIds.has(row.clientEventId)) deadLetterStore.delete(row.clientEventId);
     }
     await transactionDone(transaction);
   }
@@ -195,9 +248,19 @@ export class BrowserTrackingV2Store {
 
   async stats(nowMs = Date.now()): Promise<BrowserV2QueueStats> {
     const database = await this.database();
-    const transaction = database.transaction(INTERVAL_STORE, "readonly");
+    const transaction = database.transaction(
+      [INTERVAL_STORE, DEAD_LETTER_STORE],
+      "readonly",
+    );
     const records = await requestAsPromise<BrowserV2QueueRecord[]>(
       transaction.objectStore(INTERVAL_STORE).getAll(),
+    );
+    const deadLetters = (
+      await requestAsPromise<BrowserV2DeadLetterRecord[]>(
+        transaction.objectStore(DEAD_LETTER_STORE).getAll(),
+      )
+    ).filter(
+      (row) => row.rejectedAtMs >= nowMs - BROWSER_V2_DEAD_LETTER_RETENTION_MS,
     );
     await transactionDone(transaction);
     const oldest = records.reduce<number | null>(
@@ -212,14 +275,23 @@ export class BrowserTrackingV2Store {
           : Math.min(value, row.nextAttemptAtMs),
       null,
     );
+    const runtime = await this.readRuntimeState();
+    const deadLetterByCode: Record<string, number> = {};
+    for (const row of deadLetters) {
+      deadLetterByCode[row.rejectionCode] =
+        (deadLetterByCode[row.rejectionCode] ?? 0) + 1;
+    }
+    if (runtime.terminalRejections > 0) {
+      deadLetterByCode.LEGACY_UNATTRIBUTED = runtime.terminalRejections;
+    }
     return {
       pending: records.length,
       ready: records.filter((row) => row.nextAttemptAtMs <= nowMs).length,
-      deadLetter:
-        (await this.readRuntimeState()).terminalRejections,
+      deadLetter: deadLetters.length + runtime.terminalRejections,
       oldestQueuedAt: oldest === null ? null : new Date(oldest).toISOString(),
       nextRetryAt:
         nextRetry === null ? null : new Date(nextRetry).toISOString(),
+      deadLetterByCode,
     };
   }
 
@@ -297,6 +369,13 @@ function openDatabase() {
       if (!database.objectStoreNames.contains(META_STORE)) {
         database.createObjectStore(META_STORE, { keyPath: "key" });
       }
+      if (!database.objectStoreNames.contains(DEAD_LETTER_STORE)) {
+        const deadLetters = database.createObjectStore(DEAD_LETTER_STORE, {
+          keyPath: "clientEventId",
+        });
+        deadLetters.createIndex("rejectedAtMs", "rejectedAtMs");
+        deadLetters.createIndex("rejectionCode", "rejectionCode");
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
@@ -304,6 +383,13 @@ function openDatabase() {
     request.onblocked = () =>
       reject(new Error("IndexedDB upgrade is blocked by another extension worker."));
   });
+}
+
+function safeRejectionCode(value: string | undefined) {
+  const normalized = value?.trim().toUpperCase();
+  return normalized && /^[A-Z0-9_]{1,80}$/.test(normalized)
+    ? normalized
+    : "REJECTED";
 }
 
 function requestAsPromise<T>(request: IDBRequest<T>) {

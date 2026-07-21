@@ -38,6 +38,9 @@ test("IndexedDB queue uses atomic state/event writes and dual unique identity", 
   assert.match(source, /keyPath: "clientEventId"/);
   assert.match(source, /\["clockEpochId", "sequenceNumber"\]/);
   assert.match(source, /\{ unique: true \}/);
+  assert.match(source, /DEAD_LETTER_STORE/);
+  assert.match(source, /requestId/);
+  assert.match(source, /BROWSER_V2_DEAD_LETTER_RETENTION_MS/);
   assert.doesNotMatch(source, /\.slice\(-BROWSER_V2_QUEUE_CAPACITY\)/);
   assert.doesNotMatch(source, /delete\(.*oldest/i);
 });

@@ -1,10 +1,14 @@
-export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.1";
+export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.2";
 export const TRACKING_PROTOCOL_VERSION_V2 = 2 as const;
 export const BROWSER_V2_QUEUE_CAPACITY = 10_000;
 export const BROWSER_V2_SYNC_BATCH_SIZE = 50;
 export const BROWSER_V2_IDLE_THRESHOLD_MS = 60_000;
 export const BROWSER_V2_MAX_INTERVAL_MS = 30 * 60_000;
 export const BROWSER_V2_POLICY_REFRESH_MS = 5 * 60_000;
+export const BROWSER_V2_DIAGNOSTIC_CAPACITY = 100;
+export const BROWSER_V2_DIAGNOSTIC_RETENTION_MS = 14 * 24 * 60 * 60_000;
+export const BROWSER_V2_DEAD_LETTER_CAPACITY = 1_000;
+export const BROWSER_V2_DEAD_LETTER_RETENTION_MS = 31 * 24 * 60 * 60_000;
 
 export type BrowserNameV2 = "CHROME" | "EDGE";
 export type TrackingCollectorStateV2 =
@@ -37,6 +41,52 @@ export type TrackingHealthErrorCodeV2 =
   | "CLOCK_UNTRUSTED"
   | "UPGRADE_REQUIRED"
   | "UNKNOWN";
+
+export type BrowserTrackingDiagnosticStageV2 =
+  | "REQUEST"
+  | "SNAPSHOT"
+  | "INTERVAL"
+  | "PERMISSION"
+  | "LIFECYCLE";
+
+export type BrowserTrackingDiagnosticV2 = {
+  id: string;
+  occurredAt: string;
+  stage: BrowserTrackingDiagnosticStageV2;
+  outcome: "CONFIRMED" | "REJECTED" | "RETRYING" | "LIMITED";
+  code: string;
+  requestId: string | null;
+  retryable: boolean;
+  terminal: boolean;
+  count: number;
+  remediation: string;
+};
+
+export type BrowserSnapshotConfirmationV2 = {
+  state: "NONE" | "LOCAL_PENDING" | "CONFIRMED" | "REJECTED";
+  snapshotSequence: number | null;
+  observedAt: string | null;
+  confirmedAt: string | null;
+  rejectionCode: string | null;
+  requestId: string | null;
+};
+
+export type BrowserIntervalUploadV2 = {
+  status: "ACCEPTED" | "DUPLICATE" | "REJECTED";
+  occurredAt: string;
+  requestId: string;
+  accepted: number;
+  duplicate: number;
+  rejected: number;
+  rejectionCodes: Record<string, number>;
+};
+
+export type BrowserTrackingAccessV2 = {
+  hostPermission: "GRANTED" | "REQUIRED" | "UNKNOWN";
+  contentRegistration: "REGISTERED" | "FAILED" | "UNKNOWN";
+  checkedAt: string | null;
+  error: string | null;
+};
 
 export type TrackingPolicyUtcWindowV2 = {
   startsAt: string;
@@ -145,7 +195,7 @@ export type BrowserClockEpochV2 = {
 };
 
 export type BrowserTrackingRuntimeStateV2 = {
-  version: 5;
+  version: 6;
   migrationState: TrackingMigrationStateV2;
   activationId: string | null;
   proposedActivatedAt: string | null;
@@ -162,7 +212,19 @@ export type BrowserTrackingRuntimeStateV2 = {
   systemIdle: boolean;
   lastSuccessfulSyncAt: string | null;
   lastSuccessfulHeartbeatAt: string | null;
+  snapshotConfirmation: BrowserSnapshotConfirmationV2;
+  lastIntervalUpload: BrowserIntervalUploadV2 | null;
+  confirmedIntervalThrough: string | null;
+  lastRequestId: string | null;
+  diagnostics: BrowserTrackingDiagnosticV2[];
+  trackingAccess: BrowserTrackingAccessV2;
+  coverageLimitations: string[];
+  lastLifecycleObservation: {
+    wallClockMs: number;
+    monotonicMs: number;
+  } | null;
   lastErrorCode: TrackingHealthErrorCodeV2;
+  /** Retained v0.5.1 terminal count whose original safe code was not stored. */
   terminalRejections: number;
 };
 
@@ -215,9 +277,24 @@ export type BrowserTrackingSyncResponseV2 = {
     rejectedRanges: Array<{ from: number; to: number; code: string }>;
   }>;
   acceptedSnapshotSequence: number | null;
+  focusSnapshotResult:
+    | {
+        status: "ACCEPTED";
+        acceptedSnapshotSequence: number;
+      }
+    | {
+        status: "REJECTED";
+        rejectionCode:
+          | "SNAPSHOT_POLICY_LEASE_INVALID"
+          | "SNAPSHOT_OBSERVATION_TIME_INVALID"
+          | "SNAPSHOT_OUTSIDE_POLICY_WINDOW";
+        message: string;
+      }
+    | null;
   serverTime: string;
   activePolicyVersion: string;
   activePolicyLeaseId: string | null;
+  requestId: string;
 };
 
 export type ProtocolV2PrepareResponse = {
@@ -252,11 +329,22 @@ export type BrowserV2QueueStats = {
   deadLetter: number;
   oldestQueuedAt: string | null;
   nextRetryAt: string | null;
+  deadLetterByCode: Record<string, number>;
+};
+
+export type BrowserV2DeadLetterRecord = {
+  clientEventId: string;
+  clockEpochId: string;
+  sequenceNumber: number;
+  metric: BrowserActivityIntervalV2["metric"];
+  rejectionCode: string;
+  requestId: string;
+  rejectedAtMs: number;
 };
 
 export function createInitialBrowserTrackingV2State(): BrowserTrackingRuntimeStateV2 {
   return {
-    version: 5,
+    version: 6,
     migrationState: "V1",
     activationId: null,
     proposedActivatedAt: null,
@@ -273,6 +361,31 @@ export function createInitialBrowserTrackingV2State(): BrowserTrackingRuntimeSta
     systemIdle: false,
     lastSuccessfulSyncAt: null,
     lastSuccessfulHeartbeatAt: null,
+    snapshotConfirmation: {
+      state: "NONE",
+      snapshotSequence: null,
+      observedAt: null,
+      confirmedAt: null,
+      rejectionCode: null,
+      requestId: null,
+    },
+    lastIntervalUpload: null,
+    confirmedIntervalThrough: null,
+    lastRequestId: null,
+    diagnostics: [],
+    trackingAccess: {
+      hostPermission: "UNKNOWN",
+      contentRegistration: "UNKNOWN",
+      checkedAt: null,
+      error: null,
+    },
+    coverageLimitations: [
+      "Domain open/runtime is disabled until a Browser-specific policy contract exists.",
+      "Incognito collection is disabled by the extension manifest.",
+      "Split View focus switching requires Chrome 140+ splitViewId support; other versions keep one conservative active page.",
+      "Chrome and Edge profiles are separate devices; confirmed Reports de-duplicate overlapping same-user/same-domain metric ranges.",
+    ],
+    lastLifecycleObservation: null,
     lastErrorCode: "NONE",
     terminalRejections: 0,
   };

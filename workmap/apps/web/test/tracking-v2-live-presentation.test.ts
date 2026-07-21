@@ -48,6 +48,36 @@ test("a valid fresh snapshot presents the current App independently from connect
   assert.equal(trackingV2SnapshotPresentation(device).label, "Test App");
 });
 
+test("Browser connection stays confirmed while a Domain snapshot is policy rejected", () => {
+  const device = liveDevice({
+    connectionFresh: true,
+    snapshotFresh: false,
+    snapshotStatus: "REJECTED",
+    diagnosticCode: "SNAPSHOT_OUTSIDE_POLICY_WINDOW",
+  });
+  device.clientType = "BROWSER_EXTENSION";
+  device.source = "BROWSER_DOMAIN";
+  device.browserName = "CHROME";
+  device.hostname = null;
+  device.health!.platform = "CHROME";
+  device.intervalDiagnostics = {
+    lastRejected: {
+      code: "POLICY_REJECTED",
+      requestId: "request-interval",
+      rejectedAt: new Date().toISOString(),
+      stream: "FOCUS",
+      clockEpochId: "clock",
+      sequenceNumber: 4,
+    },
+    rejectionCodeCounts: { POLICY_REJECTED: 1 },
+    recent: [],
+  };
+
+  assert.equal(trackingV2ConnectionPresentation(device).label, "Connected");
+  assert.match(trackingV2SnapshotPresentation(device).detail, /Domain snapshot/);
+  assert.equal(device.intervalDiagnostics.lastRejected?.requestId, "request-interval");
+});
+
 function liveDevice(input: {
   connectionFresh: boolean;
   snapshotFresh: boolean;

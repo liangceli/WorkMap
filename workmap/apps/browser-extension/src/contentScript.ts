@@ -1,5 +1,17 @@
 declare const chrome: {
-  runtime: { sendMessage(message: Record<string, unknown>, callback?: () => void): void; lastError?: unknown };
+  runtime: {
+    sendMessage(message: Record<string, unknown>, callback?: () => void): void;
+    onMessage: {
+      addListener(
+        listener: (
+          message: Record<string, unknown>,
+          sender: unknown,
+          sendResponse: (response: Record<string, unknown>) => void,
+        ) => void,
+      ): void;
+    };
+    lastError?: unknown;
+  };
 };
 
 const workMapWindow = window as Window & { __workmapDomainActivityInstalled?: boolean };
@@ -29,7 +41,6 @@ if (!workMapWindow.__workmapDomainActivityInstalled) {
   const observeTrustedActivity = (event: Event) => {
     if (!event.isTrusted) return;
     if (document.visibilityState !== "visible") return;
-    if (event.type === "pointermove" && !document.hasFocus()) return;
     latestActivityAt = Date.now();
     if (latestActivityAt - lastSentAt >= throttleMs) sendLatestActivity();
     else {
@@ -41,32 +52,37 @@ if (!workMapWindow.__workmapDomainActivityInstalled) {
   for (const eventName of [
     "keydown",
     "pointerdown",
-    "pointermove",
+    "mousedown",
     "wheel",
     "touchstart",
-    "touchmove",
     "input",
     "change",
   ] as const) {
     window.addEventListener(eventName, observeTrustedActivity, { capture: true, passive: true });
   }
-  document.addEventListener("selectionchange", observeTrustedActivity, {
-    capture: true,
-    passive: true,
-  });
-
   if (isTopFrame) {
+    const sendPageCheckpoint = () => {
+      if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+      send({ type: "workmap:domain-checkpoint", observedAt: Date.now() });
+    };
     const stopPageFocus = () => {
       sendLatestActivity();
       send({ type: "workmap:domain-blur", observedAt: Date.now() });
     };
     window.addEventListener("blur", stopPageFocus, true);
-    window.addEventListener("focus", () => {
-      send({ type: "workmap:domain-checkpoint", observedAt: Date.now() });
-    }, true);
+    window.addEventListener("focus", sendPageCheckpoint, true);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") stopPageFocus();
-      else send({ type: "workmap:domain-checkpoint", observedAt: Date.now() });
+      else sendPageCheckpoint();
     }, true);
+    chrome.runtime.onMessage.addListener((message, _sender, respond) => {
+      if (message.type !== "workmap:domain-probe") return;
+      respond({
+        type: "workmap:domain-probe-result",
+        visible: document.visibilityState === "visible",
+        focused: document.hasFocus(),
+      });
+    });
+    queueMicrotask(sendPageCheckpoint);
   }
 }

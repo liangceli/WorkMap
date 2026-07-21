@@ -1,5 +1,13 @@
 # API Contract Skill
 
+## Tracking v2 Browser 0.5.2 Addendum
+
+- Browser `POST /device-client/sync-v2` uses `X-WorkMap-Request-Id`; the response `requestId`, `focusSnapshotResult`, and each interval result are separate confirmation evidence. HTTP 200 is not itself snapshot or interval acceptance.
+- New terminal interval tombstones persist nullable `requestId` (migration `20260721153000_tracking_rejection_request_correlation`). Live Tracking v2 Reports return `intervalDiagnostics.lastRejected`, bounded `recent`, safe `rejectionCodeCounts`, and `coverage.withRejectedIntervals`.
+- Confirmed usage coverage retains legacy `openRuntimeEnabled` for App compatibility and adds `appOpenRuntimeEnabled` plus `domainOpenRuntimeEnabled`. Browser Domain open/runtime is `false`; the Desktop `collectOpenRuntime` policy does not authorize Browser runtime.
+- Browser activity remains `source=BROWSER_DOMAIN`, `stream=FOCUS`, metric `FOCUS_ACTIVE` or `FOCUS_IDLE`, bound to the paired `browserName`. `OPEN_RUNTIME` from Browser is rejected as `OPEN_RUNTIME_NOT_ENABLED`; browser identity mismatch is terminal and never ledgered.
+- Reports reconcile accepted overlapping ranges by user/day/subject/metric across device IDs, so Chrome and Edge same-hostname overlaps are unioned rather than unconditionally summed.
+
 Base URL:
 
 - Development default for web client: `http://localhost:3001`.
