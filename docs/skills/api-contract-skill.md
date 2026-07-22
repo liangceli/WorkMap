@@ -1,5 +1,11 @@
 # API Contract Skill
 
+## Tracking v2 Browser 0.5.3 Standalone Identity Addendum
+
+- Browser pairing may intentionally use `workstationMode=STANDALONE`; `/device-client/status` then carries `workstationId=null`.
+- Null Browser workstation is valid. Identity remains bound by device credential, tenant/user/device, `clientType=BROWSER_EXTENSION`, and immutable `browserName=CHROME|EDGE`.
+- Desktop Agent still requires workstation binding. A true Browser device/browser mismatch is terminal `DEVICE_IDENTITY_MISMATCH`/`AUTH_REQUIRED`, not a network retry.
+
 ## Tracking v2 Browser 0.5.2 Addendum
 
 - Browser `POST /device-client/sync-v2` uses `X-WorkMap-Request-Id`; the response `requestId`, `focusSnapshotResult`, and each interval result are separate confirmation evidence. HTTP 200 is not itself snapshot or interval acceptance.

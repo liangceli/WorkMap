@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   appendSyncDiagnostics,
+  assertBrowserDeviceIdentity,
+  BrowserRuntimeDiagnosticError,
   collectorStateForPolicy,
   hasLifecycleDiscontinuity,
+  isRetryableError,
   snapshotConfirmationFromResponse,
   summarizeIntervalUpload,
 } from "../src/backgroundV2.js";
@@ -15,6 +18,41 @@ import type {
 
 const occurredAt = "2026-07-21T01:02:03.000Z";
 const requestId = "11111111-1111-4111-8111-111111111111";
+
+test("standalone Browser pairing remains a complete v2 identity", () => {
+  assert.doesNotThrow(() => assertBrowserDeviceIdentity({
+    paired: true,
+    clientType: "BROWSER_EXTENSION",
+    deviceId: "22222222-2222-4222-8222-222222222222",
+    workstationId: null,
+    browserName: "EDGE",
+    protocolActivatedAt: null,
+  }, {
+    deviceId: "22222222-2222-4222-8222-222222222222",
+    browserName: "EDGE",
+  }));
+});
+
+test("real Browser identity mismatch is terminal and not a network retry", () => {
+  assert.throws(() => assertBrowserDeviceIdentity({
+    paired: true,
+    clientType: "BROWSER_EXTENSION",
+    deviceId: "22222222-2222-4222-8222-222222222222",
+    workstationId: null,
+    browserName: "CHROME",
+    protocolActivatedAt: null,
+  }, {
+    deviceId: "22222222-2222-4222-8222-222222222222",
+    browserName: "EDGE",
+  }), (error: unknown) => {
+    assert(error instanceof BrowserRuntimeDiagnosticError);
+    assert.equal(error.code, "DEVICE_IDENTITY_MISMATCH");
+    assert.equal(error.retryable, false);
+    assert.equal(error.connectionState, "AUTH_REQUIRED");
+    assert.equal(isRetryableError(error), false);
+    return true;
+  });
+});
 
 test("HTTP 200 snapshot rejection remains distinct from connection health", () => {
   const result: BrowserTrackingSyncResponseV2["focusSnapshotResult"] = {

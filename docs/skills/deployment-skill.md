@@ -1,5 +1,13 @@
 # Deployment Skill
 
+## Browser Extension 0.5.3 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.3.zip`; SHA-256 `0B3171146F394A6AECFE94B4F477E868BC75A28601F8668061FA841F9FD729AE`; size 40,433 bytes.
+- This Browser-only patch accepts API-supported standalone pairing and reports true identity mismatch terminally instead of as `NETWORK_ERROR`.
+- Reload from the same unpacked path to preserve pairing; do not remove the extension or clear local storage during upgrade-retention QA.
+- Do not publish to browser stores, GitHub Releases, or production without explicit authorization and real Chrome/Edge acceptance.
+
 ## Browser Extension 0.5.2 Release Notes
 
 - Apply Prisma migration `20260721153000_tracking_rejection_request_correlation` before deploying the API/Reports build that reads `ClientSequenceTombstone.requestId`.

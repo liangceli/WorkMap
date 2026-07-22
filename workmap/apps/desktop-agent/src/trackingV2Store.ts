@@ -300,6 +300,8 @@ export function createInitialDesktopTrackingV2State(): DesktopTrackingRuntimeSta
     engineCheckpoint: null,
     openRuntimeClock: null,
     openRuntimeCheckpoint: null,
+    focusTimelineThroughAt: null,
+    openRuntimeTimelineThroughAt: null,
     latestSnapshot: null,
     lastSuccessfulSyncAt: null,
     lastSuccessfulHeartbeatAt: null,

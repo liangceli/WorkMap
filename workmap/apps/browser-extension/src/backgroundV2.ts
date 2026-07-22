@@ -144,6 +144,46 @@ const INTERACTION_SYNC_THROTTLE_MS = 1_000;
 const LIFECYCLE_MAX_UNOBSERVED_MS = 45_000;
 const CLOCK_DIVERGENCE_TOLERANCE_MS = 10_000;
 
+type BrowserDeviceIdentityV2 = Awaited<
+  ReturnType<typeof getDeviceClientStatus>
+>;
+
+export class BrowserRuntimeDiagnosticError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly remediation: string,
+    readonly retryable: boolean,
+    readonly connectionState: TrackingConnectionStateV2,
+  ) {
+    super(message);
+    this.name = "BrowserRuntimeDiagnosticError";
+  }
+}
+
+export function assertBrowserDeviceIdentity(
+  identity: BrowserDeviceIdentityV2,
+  expected: { deviceId: string; browserName: BrowserNameV2 },
+) {
+  // Browser Extensions may be paired in the API's explicit STANDALONE mode,
+  // where workstationId is intentionally null. The device-scoped credential,
+  // immutable device id, client type, and Chrome/Edge identity remain the
+  // security boundary; workstation binding is required only for Desktop Agent.
+  if (
+    identity.clientType !== "BROWSER_EXTENSION" ||
+    identity.deviceId !== expected.deviceId ||
+    identity.browserName !== expected.browserName
+  ) {
+    throw new BrowserRuntimeDiagnosticError(
+      "The paired Browser Extension identity does not match this browser.",
+      "DEVICE_IDENTITY_MISMATCH",
+      "Pair the extension again with the current Chrome or Edge browser selected.",
+      false,
+      "AUTH_REQUIRED",
+    );
+  }
+}
+
 let operation = Promise.resolve();
 
 function schedule(task: () => Promise<void>) {
@@ -478,16 +518,10 @@ export class BrowserExtensionRuntimeV2 {
     if (!this.config || !this.browserName || !this.state) return false;
     try {
       const identity = await getDeviceClientStatus(this.config);
-      if (
-        identity.clientType !== "BROWSER_EXTENSION" ||
-        identity.deviceId !== this.config.deviceId ||
-        !identity.workstationId ||
-        identity.browserName !== this.browserName
-      ) {
-        throw new Error(
-          "The paired Browser Extension identity is incomplete or does not match this browser.",
-        );
-      }
+      assertBrowserDeviceIdentity(identity, {
+        deviceId: this.config.deviceId,
+        browserName: this.browserName,
+      });
       const policy = await getTrackingPolicyV2(this.config);
       this.applyServerClock(policy.serverTime);
       this.state = { ...this.state, policy };
@@ -1460,7 +1494,11 @@ export class BrowserExtensionRuntimeV2 {
     fallbackRequestId?: string,
   ) {
     this.policySetupMessage = null;
-    if (
+    if (error instanceof BrowserRuntimeDiagnosticError) {
+      this.connectionState = error.connectionState;
+      this.collectorState = "PAUSED";
+      this.errorCode = "UNKNOWN";
+    } else if (
       error instanceof ExtensionApiError &&
       (error.status === 401 || error.status === 403)
     ) {
@@ -1497,7 +1535,9 @@ export class BrowserExtensionRuntimeV2 {
           : fallbackRequestId ?? null;
       const retryable = isRetryableError(error);
       const statusCode =
-        error instanceof ExtensionApiError && error.status
+        error instanceof BrowserRuntimeDiagnosticError
+          ? error.code
+          : error instanceof ExtensionApiError && error.status
           ? `HTTP_${error.status}`
           : "NETWORK_ERROR";
       this.state = {
@@ -1507,7 +1547,9 @@ export class BrowserExtensionRuntimeV2 {
           stage: "REQUEST",
           outcome: retryable ? "RETRYING" : "REJECTED",
           code:
-            error instanceof ExtensionApiError
+            error instanceof BrowserRuntimeDiagnosticError
+              ? error.code
+              : error instanceof ExtensionApiError
               ? error.detail.reasonCode ?? statusCode
               : statusCode,
           requestId,
@@ -1515,7 +1557,9 @@ export class BrowserExtensionRuntimeV2 {
           terminal: !retryable,
           count: 1,
           remediation:
-            error instanceof ExtensionApiError && error.detail.remediation
+            error instanceof BrowserRuntimeDiagnosticError
+              ? error.remediation
+              : error instanceof ExtensionApiError && error.detail.remediation
               ? error.detail.remediation
               : retryable
                 ? "The extension will retry automatically with bounded backoff."
@@ -1810,7 +1854,10 @@ function serverNow(state: BrowserTrackingRuntimeStateV2) {
   return Date.now() + state.serverOffsetMs;
 }
 
-function isRetryableError(error: unknown) {
+export function isRetryableError(error: unknown) {
+  if (error instanceof BrowserRuntimeDiagnosticError) {
+    return error.retryable;
+  }
   return (
     !(error instanceof ExtensionApiError) ||
     error.status === undefined ||

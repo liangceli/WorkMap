@@ -1,5 +1,12 @@
 # QA Skill
 
+## Browser Extension 0.5.3 QA Baseline
+
+- Execute identity regression: API-supported Browser `workstationId=null` passes; device or Chrome/Edge mismatch fails terminally as `DEVICE_IDENTITY_MISMATCH`.
+- Same-path unpacked upgrade should retain pairing. Verify the old false `NETWORK_ERROR` count stops growing, secure heartbeat and policy/lease appear, and `/reports` gains Browser state only after real activation/sync.
+- Historical pre-fix diagnostics are not auto-deleted. Judge recovery from new heartbeat, confirmed sync, request ID, and diagnostic timestamps.
+- Real Edge and Chrome load-unpacked QA remains mandatory.
+
 ## Browser Extension 0.5.2 QA Baseline
 
 - Automated Browser runtime coverage uses a controllable event/time harness for one/two windows, multi-display semantics, same/different-host tabs, Split View, trusted/untrusted/background/iframe evidence, minimization/`WINDOW_ID_NONE`, idle/lock, protected/incognito/excluded pages, SPA/navigation/reload/replace/remove, UTC rollover, restart recovery, lifecycle/clock gaps, permission registration recovery, queue/backoff/pressure, HTTP status classes, and HTTP 200 snapshot/interval rejections.

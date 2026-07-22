@@ -92,6 +92,8 @@ test("v2 runtime state starts with empty safe sync diagnostics", () => {
   const state = createInitialDesktopTrackingV2State();
   assert.equal(state.lastSyncDiagnostic, null);
   assert.deepEqual(state.recentSyncFailures, []);
+  assert.equal(state.focusTimelineThroughAt, null);
+  assert.equal(state.openRuntimeTimelineThroughAt, null);
 });
 
 function interval(clientEventId: string, sequenceNumber: number): ActivityIntervalV2 {

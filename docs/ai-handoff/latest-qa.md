@@ -1,5 +1,89 @@
 # Latest QA Handoff
 
+## 2026-07-22 Browser Extension 0.5.3 Standalone Pairing QA
+
+### Reviewed Implementation And Findings
+
+- Reviewed the 0.5.2 Edge Options and `/reports` screenshots, Web pairing request, API pairing mode/status/policy/sync identity rules, Browser activation/diagnostics path, Reports activation filter, tests, unpacked output, and ZIP.
+- Fixed - Critical: normal Browser pairing legitimately produces `workstationId=null`, but 0.5.2 rejected it locally before v2 activation, leaving the Extension permanently paired-but-offline and absent from Tracking v2 Reports.
+- Fixed - High: that local semantic failure was misclassified as retryable `NETWORK_ERROR`; the reproduction accumulated 123 false retries. True mismatch is now terminal `DEVICE_IDENTITY_MISMATCH`/`AUTH_REQUIRED`.
+- Preserved - Security: scoped credential, tenant/user/device, client type, browser identity, revocation, policy/lease, acknowledgement, UTC windows, source/stream validation, and hostname-only privacy remain enforced.
+- Preserved - Reporting: the patch only reaches the existing server path; it does not fabricate connection, snapshot, interval, audit, or Domain totals.
+
+### Test And Verification Status
+
+- Browser typecheck/lint/build/release ZIP: pass.
+- Browser tests: pass `48/48`.
+- Focused API pairing/policy tests: pass `8/8` from the API working directory. The first raw-root invocation lacked decorator tsconfig and failed before assertions.
+- ZIP inspection: pass; version `0.5.3`, 40,433 bytes, SHA-256 `0B3171146F394A6AECFE94B4F477E868BC75A28601F8668061FA841F9FD729AE`.
+
+### Manual QA And Recommendation
+
+- Post-fix Chrome/Edge QA was not run; screenshots prove only the original 0.5.2 failure.
+- Required acceptance: retained pairing after reload, first heartbeat, policy/lease activation, current Domain confirmation, accepted/duplicate/rejected interval evidence, `/reports` Browser card/audit/Domain totals, permission revoke/regrant, restart, and offline recovery.
+- Pass for root-cause isolation, source correction, tests, build, and local Alpha artifact. Proceed to Edge 0.5.3 real-device QA before any live-success or publication claim.
+
+## 2026-07-22 Desktop Agent 0.6.8 Boundary Precision QA
+
+### Reviewed Implementation And Diff Summary
+
+- Reviewed the complete Desktop-only diff for runtime mutation ordering, stream clock selection, persisted watermark compatibility, policy/lease cutoff behavior, snapshot half-open semantics, version metadata, tests, Alpha output, and NSIS output.
+- No API, Web, Prisma, server policy, tenant/RBAC, or privacy collection source changed. Unrelated Browser Extension modifications present in the shared worktree were not touched.
+
+### Findings Ordered By Severity
+
+- Pass: Electron power callbacks can no longer mutate Focus/runtime outside the native/tick mutation lane. A deterministic regression test proves the Electron boundary waits for an existing native mutation.
+- Pass: delayed pre-lease observations remain outside the lease; Focus and runtime use independent clocks; old events below the stream watermark are ignored; and watermarks do not regress across epochs.
+- Pass: Focus and runtime intervals seal exactly at the authorised cutoff. The legal cutoff interval is retained, while the cutoff live snapshot is not uploaded outside the half-open window.
+- Pass: 0.6.7 persisted runtime state upgrades without a database migration and initializes the two additive watermarks safely.
+- Pass: focused API tests confirm valid Focus Active/Idle enter the official ledger and Reports, different Apps may accrue open/runtime concurrently, and same-App runtime overlap remains rejected.
+- Medium residual risk: the real Windows native/Electron event ordering and installer upgrade have automated coverage but have not been reproduced manually on the user's device. Slow HTTP can still delay live presentation because sync I/O was intentionally not refactored in this precision round.
+- Existing/unrelated: the full API suite remains `48/49` because a fixed-date legacy fixture is now outside the service age limit. Focused current Tracking v2 tests pass `15/15`.
+
+### Test And Verification Status
+
+- Desktop Agent: test `67/67`, typecheck pass, lint pass, build pass.
+- Focused API Tracking v2/Reports: `15/15` pass.
+- NSIS installer generated successfully: `WorkMap-Desktop-Agent-Setup-0.6.8.exe`, SHA-256 `3FEA611B0ED0F2AE57AB7DBC0B4657570C3B0E4214E1446EAEB0F12337A379E2`.
+- `git diff --check` passed for the shared worktree. Scoped Desktop/docs secret scan returned no findings.
+
+### Manual QA And Recommendation
+
+- Real-device QA was not run. Required acceptance: in-place upgrade from 0.6.7, credential retention, normal App switching, lock/unlock, suspend/resume, offline recovery, policy lease refresh, and an actual configured schedule cutoff.
+- Pass for code integration and producing a controlled-test 0.6.8 installer. Proceed to real-device acceptance before publishing broadly; do not delete the existing 56 historical rejected rows, because stability rather than disappearance is the success signal.
+
+## 2026-07-22 Desktop Agent 0.6.7 Real-Device QA Diagnosis
+
+### Reviewed Implementation
+
+- Reviewed the July 22 Reports/Agent screenshots, current 0.6.7 runtime lifecycle and clock paths, local Agent status, safe NDJSON sync metadata, SQLite queue/dead-letter rows, Tracking v2 server overlap predicate, and existing Desktop tests.
+
+### Findings Ordered By Severity
+
+- High: 0.6.7 still creates Focus overlap at a real lock/suspend/resume boundary. Two new July 22 rows totaling 40.172 seconds were terminally rejected and are absent from Reports.
+- High: native boundary events are serialized through `eventChain`, but Electron power-status boundaries mutate the same engines outside that lane. Host-event processing also awaits HTTP sync, and the observed event lane accumulated over two minutes of delay. Existing tests cover a transient null foreground identity only, not concurrent native/Electron power boundaries.
+- Medium: the active policy shown by the Agent is 09:00–21:33, not the previously requested 09:00–23:00. It was valid during the noon defect, so it is not the cause of these overlap rows.
+- Verified: connection health, current snapshot, and recent accepted history are healthy. Reports confirmed through 13:46:41 and the latest upload reported 12 accepted / 0 rejected; the whole morning was not lost.
+- Verified: the later `13 pending` display was transient settlement batching rather than a stuck queue. Read-only samples observed fresh zero-attempt rows being replaced after acknowledgement and then zero pending; NDJSON recorded the 12-row batch as HTTP 200 confirmed while dead letters stayed at 56.
+- High: the 0.6.7 comparison window added 23 terminal rows: `FOCUS_OVERLAP +7`, `POLICY_REJECTED +11`, `RUNTIME_OVERLAP +5`, and `HTTP_400 +0`. SQLite and NDJSON group them into four incidents at lease activation, an event-backlog/epoch boundary, policy-window closure, and lock/suspend. This is not normal healthy-client behavior even though the server correctly rejected every invalid slice.
+- High: current-lease runtime rows began 1.155 seconds before that lease was issued, policy-end rows extended about ten seconds beyond the 21:33 cutoff, and Focus/runtime overlap occurred around 17:57 without a retained local lifecycle diagnostic. Because lifecycle events are not comprehensively diagnostic-logged, absence of that diagnostic does not prove ordinary foreground use. A robust fix must cover lease/window clamping, stream-specific clocks, monotonic UTC watermarks, and event-lane backlog in addition to power-boundary serialization.
+- Quantified: the inspected log window returned 8,444 interval results, of which 8,421 were accepted-or-duplicate and 23 rejected (0.272%). The main 0.6.7 pipeline is therefore materially healthy, but its boundary correctness is incomplete.
+- Verified: `2h48m` Focus Active is internally consistent with the per-App Focus cards and plausible for the reported awake/input periods. Open/runtime is concurrent per App and is not an additive work-hours total; lock/sleep time correctly does not become focused idle.
+- Low: brief 10:35 and 13:35 network errors recovered automatically and are not the cause of a continuing disconnect.
+
+### Test And Verification Status
+
+- Read-only local inspection completed. The two new dead letters were recovered as Weixin 6,516 ms and WeChatAppEx x64 33,656 ms, both at the 12:34 lifecycle boundary.
+- `pnpm --filter @workmap/desktop-agent test` passed 61/61 and `pnpm --filter @workmap/desktop-agent typecheck` passed as an unchanged-code baseline.
+- Lint/build were not run because no product code changed in this diagnosis-only round.
+- Temporary read-only inspection code was removed. No secrets or prohibited private content were added to the repository.
+
+### Manual QA Status And Recommendation
+
+- User-provided real Windows evidence demonstrates the remaining defect; no additional controlled lock/suspend test was run.
+- Fail for the claim that 0.6.7 fully eliminates Focus overlap. Pass for current connection/sync health and for the majority of July 22 history.
+- Proceed to a narrowly scoped Desktop Agent lifecycle serialization, per-stream clock/watermark, and exact policy-boundary fix with regression tests before issuing another Agent build. The API overlap/policy enforcement and Reports warning should remain unchanged; do not delete old dead letters or hide the warning as the fix.
+
 ## 2026-07-21 Browser Extension 0.5.2 Reliability QA
 
 ### Reviewed Implementation

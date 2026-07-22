@@ -1,5 +1,132 @@
 # Latest Implementation Handoff
 
+## 2026-07-22 Browser Extension 0.5.3 Standalone Pairing Activation Fix
+
+### Original Task Brief
+
+- Investigate real Edge 0.5.2 diagnostics showing a paired device but no server-confirmed heartbeat, policy, snapshot, interval, or Browser card/Domain rows in `/reports`.
+- Fix only after reaching at least 95% confidence; preserve MV3/Tracking v2 and do not modify Desktop Agent behavior.
+
+### Changed Files
+
+- Browser runtime/version: `workmap/apps/browser-extension/src/backgroundV2.ts`, `src/trackingV2Types.ts`, `package.json`, `manifest.json`, and generated `alpha-unpacked/manifest.json`.
+- Tests: `test/sync-diagnostics.test.ts`, `test/service-worker.test.ts`, and `test/queue-api.test.ts`.
+- Artifact: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.3.zip`.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/api-contract-skill.md`, `qa-skill.md`, and `deployment-skill.md`.
+- Concurrent uncommitted Desktop Agent 0.6.8 changes were preserved and not edited by this Browser round.
+
+### Implementation Summary
+
+- Root cause was confirmed above 99% confidence. Web creates the normal Browser pairing code without a workstation selection; API intentionally resolves it as `STANDALONE`, stores `workstationId=null`, and permits Browser v2 policy/activation/sync. Browser 0.5.2 alone contradicted that contract by requiring a workstation before policy retrieval.
+- This explains the complete reproduction: pairing and website access succeeded, but heartbeat/policy/snapshot/interval stayed pending, collector stayed paused, `/reports` had no activated Browser device, and each alarm retry added a misleading `NETWORK_ERROR`.
+- 0.5.3 accepts API-supported standalone Browser identity while retaining scoped credential, exact `clientType`, `deviceId`, and immutable `CHROME`/`EDGE` checks. Desktop workstation requirements are unchanged.
+- A real device/browser mismatch is now terminal `DEVICE_IDENTITY_MISMATCH`, presented as `AUTH_REQUIRED` with re-pair remediation; it is no longer a retryable network outage.
+- No API/schema/Reports/policy/RBAC/tenant/privacy/Focus semantics changed. Browser Domain open/runtime remains disabled. Existing 0.5.2 historical diagnostics are not silently deleted; after recovery their false network count should stop increasing.
+
+### Verification And Artifact
+
+- Browser typecheck, lint, build, and `release:zip`: pass.
+- Browser tests: pass `48/48`, including executable standalone-null and terminal-mismatch regressions.
+- Focused API pairing/policy tests: pass `8/8` with the API tsconfig. An earlier raw-root invocation omitted decorator configuration and failed before assertions; this was a tooling invocation failure, not a product failure.
+- ZIP version `0.5.3`, size 40,433 bytes, SHA-256 `0B3171146F394A6AECFE94B4F477E868BC75A28601F8668061FA841F9FD729AE`; ZIP root and manifest were inspected.
+
+### Manual QA, Intentional Non-Changes, And Next Step
+
+- The screenshots are valid pre-fix reproduction evidence. Post-fix Edge/Chrome load-unpacked QA has not run and is not reported as passed.
+- Reload 0.5.3 from the same `alpha-unpacked` path to retain pairing; confirm a concrete policy/lease and secure heartbeat appear, then interact with an eligible HTTP/HTTPS page and verify snapshot plus interval evidence.
+- Confirm `/reports` gains a separate Edge/Chrome Extension live card, connection audit, and confirmed Domain totals. If still pending, provide a new Options screenshot with the top error, policy, last request ID, and newest bounded diagnostic only; never provide credentials or full URLs.
+
+## 2026-07-22 Desktop Agent 0.6.8 Boundary Precision Fix
+
+### Original Task Brief
+
+- Proceed only with at least 95% confidence and preserve the otherwise healthy 0.6.7 behavior.
+- Apply a narrow fix for the four recovered lease/window/lifecycle overlap clusters without weakening policy, hiding diagnostics, or changing unrelated functionality.
+
+### Changed Files
+
+- Runtime/state: `workmap/apps/desktop-agent/src/runtimeV2.ts`, `trackingV2Types.ts`, and `trackingV2Store.ts`.
+- Version/release: Desktop package/version/native-host message/build-alpha metadata, generated Alpha metadata/native binary, and Windows installer artifact.
+- Tests: `runtime-v2-boundary-serialization.test.ts`, `runtime-v2-ui-status.test.ts`, `tracking-v2-store.test.ts`, and `gui-release.test.ts`.
+- Long-lived memory: this handoff and `docs/ai-handoff/latest-qa.md`.
+- Unrelated Browser Extension working-tree changes were preserved and not edited as part of this Desktop round.
+
+### Implementation Summary
+
+- Desktop Agent version is now `0.6.8` / `desktop-agent-windows/0.6.8`.
+- Native host events, Electron power events, and periodic ticks now mutate Focus/runtime through the same serialized runtime lane. Duplicate lock/suspend evidence is idempotent instead of allowing Electron and native callbacks to close/reset the engines concurrently.
+- Focus and open/runtime now project event time through their own clock epochs. A delayed event without an active stream clock is projected back by its measured monotonic lag instead of being treated as current server time.
+- Additive persisted `focusTimelineThroughAt` and `openRuntimeTimelineThroughAt` watermarks prevent a new epoch from recreating time already emitted by that stream. Existing 0.6.7 JSON state loads compatibly with empty watermarks; no SQLite or server migration is required.
+- Events projected before the current stream watermark or before the policy lease/window are ignored. They are not shifted into authorised time and do not overwrite the current App/visible-App observation.
+- Focus and runtime boundaries are independently clamped to the exact current allowed-window/lease end. The final interval may end exactly at the authorised cutoff, while the half-open cutoff snapshot is removed instead of generating a misleading snapshot policy rejection.
+- Server cursor responses also advance the matching per-stream watermark. Watermarks never regress and remain after engine resets, policy refresh, queue pressure, or process recovery.
+- Existing policy, acknowledgement, tenant/device credential, privacy, Focus/Idle semantics, concurrent per-App open/runtime semantics, diagnostics, queue/dead-letter evidence, and Reports enforcement remain unchanged.
+
+### Role, Access, Privacy, And Security
+
+- No API route, database schema, tenant/RBAC boundary, Owner/Employee/Platform Admin permission, pairing credential, or server overlap/policy rule changed.
+- No new title, URL, page content, input, token, screenshot, clipboard, camera, microphone, or message collection was added.
+
+### Verification
+
+- Desktop Agent test: passed `67/67`.
+- Desktop Agent typecheck: passed.
+- Desktop Agent lint: passed.
+- Desktop Agent build including native host and Alpha directory: passed.
+- Focused API Tracking v2 ledger/Reports tests: passed `15/15`, including valid Focus Active/Idle official history and open/runtime reconciliation.
+- Full API test baseline: `48/49`; the one failure is the documented pre-existing fixed-date `tracking-reports-verification` fixture rejected as too old on 2026-07-22. No API source changed in this round.
+- `git diff --check` passed for the shared worktree; scoped Desktop/docs secret scan found no credential, token, database URL, or private key.
+- Windows NSIS build: passed after allowing Electron resource download. Artifact: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.8.exe`, size `115431004` bytes, SHA-256 `3FEA611B0ED0F2AE57AB7DBC0B4657570C3B0E4214E1446EAEB0F12337A379E2`.
+
+### Manual QA, Intentional Non-Changes, And Next Step
+
+- No real-device installation, upgrade retention, App switching, lock/unlock, suspend/resume, offline/reconnect, policy refresh, or 21:33/23:00 cutoff smoke was run in this coding environment. Do not mark those passed.
+- Network requests remain on the existing awaited/coalesced sync path to avoid a broader response-ordering refactor. Slow network can still delay the live UI, but event timestamps, stream watermarks, and cutoff clamps now protect official interval ordering.
+- No backend/database/Web deployment is required for this client-only fix. Install 0.6.8 over 0.6.7, confirm pairing/state retention, then observe that pending drains and the existing rejected total remains stable through controlled App switch plus one lock/unlock and sleep/resume cycle.
+
+## 2026-07-22 Desktop Agent 0.6.7 Real-Device Overlap Diagnosis
+
+### Original Task Brief
+
+- Check whether the July 22 `/reports` totals and Desktop Agent diagnostics are correct for a device opened around 09:40, used from about 10:00 to 12:30, resumed around 13:25, and inspected around 13:50.
+- Diagnose from current source, local durable state, logs, and screenshots without treating the 0.6.7 handoff as proof that overlap was fully fixed.
+
+### Changed Files
+
+- Long-lived diagnosis only: this handoff and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, API, Web, schema, policy, build artifact, or production data was modified.
+
+### Implementation And Diagnostic Summary
+
+- Connection and the main interval path are working: the screenshots show server-confirmed Online health, a fresh heartbeat/sync, a fresh Reports snapshot, a confirmed-through cursor at 13:46:41, and a latest batch of 12 accepted / 0 duplicate / 0 rejected intervals.
+- The local SQLite queue drained back to one transient pending interval during inspection. The displayed pending count is a momentary settlement/upload backlog, not evidence that the morning was unsent.
+- A follow-up check of the later `13 pending / 56 rejected` screenshot confirmed normal batch cycling: one 12-interval batch was accepted with HTTP 200 and removed, a newly settled 12-interval batch replaced it, and a subsequent SQLite sample reached zero pending. Pending rows were only seconds old with zero retry attempts; the dead-letter total remained 56.
+- Comparing the first 0.6.7 screenshot at July 21 15:40 (`33 rejected`) with July 22 14:10 (`56 rejected`) recovered all 23 new rows. They form four boundary/backlog incidents rather than 23 independent failures: five current-lease `OPEN_RUNTIME` policy rejections at 15:49:34-15:50:02 (the new lease was issued at 15:49:35.952, so the Agent back-projected rows before lease validity); five Focus plus five runtime overlaps at 17:57:23-17:57:44 (no lifecycle diagnostic was retained locally, but lifecycle events are not comprehensively diagnostic-logged, so an unrecorded session boundary cannot be excluded); two Focus plus four runtime policy rejections crossing the 21:33 schedule end; and two Focus overlaps at the July 22 12:34 lock/suspend boundary.
+- The 23-row delta is therefore not a healthy expected value. Server rejection correctly protects policy and non-overlap constraints, but the client should clamp new epochs to lease validity, seal exactly at the policy-window end, and never create cross-epoch overlap. The delta excludes about 81.194 seconds of Focus Active across the three Focus-bearing clusters; runtime durations are concurrent per App and must not be summed as employee work time.
+- 0.6.7 nevertheless produced two new terminal `FOCUS_OVERLAP` rows on July 22. Local SQLite recovered exact intervals: Weixin for 6,516 ms and WeChatAppEx x64 for 33,656 ms, covering 12:33:52.830–12:34:33.002 Adelaide time. About 40.172 seconds were excluded from official Reports; the rest of the morning was not rejected.
+- Both new rejections align with the 12:34–12:35 lock/suspend/resume cluster. Logs show the events were uploaded more than two minutes later after a long serialized run of HTTP syncs, many taking 4–11 seconds.
+- Source review found an uncovered lifecycle race/backlog path: the native host closes Focus on session/power boundaries through `eventChain`, while Electron `powerMonitor` calls `reportDeviceStatus()` and closes the same boundary outside that chain. Foreground/visible-app host handlers also await network sync, allowing power-boundary events to queue for minutes. 0.6.7 covered transient unidentified foreground gaps but has no full-runtime test for concurrent Electron/native lock/suspend boundaries.
+- The same source review found two related precision gaps: policy eligibility projects both streams with `focusClock` whenever it exists instead of using each stream's own clock, and a delayed event with no clock is treated as happening at the current server time. New epochs are clamped to protocol activation only, not to the active lease/window or a persisted stream watermark. These gaps explain how a pre-lease runtime observation and a post-cutoff slice could be generated despite a valid server policy.
+- In the inspected July 21 15:40 to July 22 14:10 log window, 8,444 interval results were returned: 8,421 were accepted-or-duplicate and 23 were rejected, a 0.272% rejection rate. This supports a precision patch rather than a rewrite, but the rejected Focus time is still real missing Reports time and should not be dismissed as cosmetic diagnostics.
+- Exact identification of the already accepted server interval that collided with these two rows still requires the deployed database or server request logs. The local evidence and source path strongly isolate the remaining defect to clock-epoch/lifecycle-boundary handling, not policy or connection health.
+- The displayed `2h48m` Focus Active total is plausible for the reported usage: Focus is one foreground lane, while focused idle is separate and lock/sleep time is not counted. Open/runtime values are concurrent per App and must not be summed as employee work time.
+- Current policy is valid at noon and did not cause these two rejections. The Agent reports `Australia/Adelaide 09:00–21:33`, which does not match the previously requested 09:00–23:00 and should be corrected separately if 23:00 remains required. The shown UTC window is also clipped by the current lease expiry and should refresh before expiry.
+
+### Verification And Manual QA
+
+- Read-only inspected `status.json`, July 22 NDJSON, and `tracking-v2.sqlite`; no token, complete URL, title, input, or page content was printed or retained.
+- Confirmed dead letters increased from 54 to 56 at the two July 22 overlap responses and recovered their safe App names/timestamps/durations.
+- Desktop Agent baseline test: `pnpm --filter @workmap/desktop-agent test` passed 61/61.
+- Desktop Agent baseline typecheck: `pnpm --filter @workmap/desktop-agent typecheck` passed.
+- No lint/build was run because this was a diagnosis-only round with no product code change.
+- Real-device evidence was supplied by the user screenshots and local Agent state; no new scripted lock/sleep reproduction was performed.
+
+### Remaining Risks And Suggested Next Step
+
+- 0.6.7 is not fully overlap-safe across lease/window and real lock/suspend/resume boundaries. A follow-up 0.6.8 precision round should keep the server policy unchanged; serialize native events, Electron power events, ticks, and recovery mutations; project Focus and runtime using separate clocks; persist non-regressing UTC watermarks for both streams; and close at the exact lease/window boundary. Network upload should be coalesced away from the local event-mutation lane only with request/response ordering tests, because observed sync latency (median about 5.3 seconds, P95 about 9.0 seconds) can otherwise backlog foreground events for minutes.
+- The intended code scope is Desktop Agent runtime/state/tests and version/build metadata only. No API schema migration, Reports redesign, tenant/RBAC weakening, always-on policy, or deletion of historical dead-letter evidence is required.
+- Current sync after the 13:25 resume is healthy, so this is a narrow but real missing-time defect rather than a disconnected Agent or total upload failure.
+
 ## 2026-07-21 Browser Extension 0.5.2 Reliability, Diagnostics, And Reports
 
 ### Original Task Brief

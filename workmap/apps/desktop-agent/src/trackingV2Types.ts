@@ -296,6 +296,8 @@ export type DesktopTrackingRuntimeStateV2 = {
   engineCheckpoint: DesktopFocusCheckpointV2 | null;
   openRuntimeClock: DesktopClockEpochV2 | null;
   openRuntimeCheckpoint: DesktopOpenRuntimeCheckpointV2 | null;
+  focusTimelineThroughAt: string | null;
+  openRuntimeTimelineThroughAt: string | null;
   latestSnapshot: LiveFocusSnapshotV2 | null;
   lastSuccessfulSyncAt: string | null;
   lastSuccessfulHeartbeatAt: string | null;

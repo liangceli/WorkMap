@@ -169,7 +169,7 @@ function syncBody(): BrowserTrackingSyncRequestV2 {
     intervals: [],
     health: {
       clientType: "BROWSER_EXTENSION",
-      clientVersion: "browser-extension-mv3/0.5.2",
+      clientVersion: "browser-extension-mv3/0.5.3",
       platform: "CHROME",
       connectionState: "ONLINE",
       collectorState: "HEALTHY",

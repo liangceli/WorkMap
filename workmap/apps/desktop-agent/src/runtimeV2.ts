@@ -39,7 +39,9 @@ import {
   DESKTOP_V2_SETTLEMENT_MS,
   DESKTOP_V2_SYNC_BATCH_SIZE,
   TRACKING_PROTOCOL_VERSION_V2,
+  type ActivityIntervalV2,
   type ClientHealthV2,
+  type DesktopClockEpochV2,
   type DesktopTrackingRuntimeStateV2,
   type DeviceTrackingPolicyV2,
   type TrackingCollectorStateV2,
@@ -71,6 +73,8 @@ type ShutdownReason =
   | "AGENT_TERMINATED"
   | "UNKNOWN_INTERRUPTED"
   | undefined;
+
+export type DesktopTimelineStreamV2 = "FOCUS" | "OPEN_RUNTIME";
 
 type RuntimeV2Options = {
   host?: WindowsActivityHostAdapterV2;
@@ -238,10 +242,13 @@ export class DesktopAgentRuntimeV2 {
     reason: DeviceStatusReason,
     metadata?: { operation?: string; networkState?: string; agentVersion?: string },
   ) {
-    if (status === "SLEEPING" || status === "LOCKED" || status === "DEVICE_SHUTDOWN") {
-      await this.enqueueHostBoundary(currentMonotonic(this), true);
-    }
-    await this.enqueueLifecycle(status, reason, metadata);
+    const observedAtMonotonicMs = currentMonotonic(this);
+    await this.enqueueRuntimeMutation(async () => {
+      if (status === "SLEEPING" || status === "LOCKED" || status === "DEVICE_SHUTDOWN") {
+        await this.enqueueHostBoundary(observedAtMonotonicMs, true);
+      }
+      await this.enqueueLifecycle(status, reason, metadata);
+    });
     await this.flushStatusQueue();
   }
 
@@ -276,10 +283,9 @@ export class DesktopAgentRuntimeV2 {
 
       while (!this.stopped) {
         await delay(1_000);
-        await this.eventChain;
         const monotonicMs = currentMonotonic(this);
         if (monotonicMs !== null) {
-          await this.tick(monotonicMs);
+          await this.enqueueRuntimeMutation(() => this.tick(monotonicMs));
         }
         await this.flushLegacyQueue();
         await this.flushStatusQueue();
@@ -437,6 +443,11 @@ export class DesktopAgentRuntimeV2 {
       this.state = {
         ...this.state,
         engineCheckpoint: recoveredEngine.checkpoint(),
+        focusTimelineThroughAt: latestTimelineThroughAtV2(
+          this.state.focusTimelineThroughAt,
+          update.intervals,
+          "FOCUS",
+        ),
         latestSnapshot: update.snapshot,
       };
       this.store.persistEngineUpdate(update.intervals, this.state, update.snapshot);
@@ -456,6 +467,11 @@ export class DesktopAgentRuntimeV2 {
       this.state = {
         ...this.state,
         openRuntimeCheckpoint: recoveredRuntime.checkpoint(),
+        openRuntimeTimelineThroughAt: latestTimelineThroughAtV2(
+          this.state.openRuntimeTimelineThroughAt,
+          update.intervals,
+          "OPEN_RUNTIME",
+        ),
       };
       this.store.persistRuntimeUpdate(update.intervals, this.state);
     }
@@ -482,14 +498,20 @@ export class DesktopAgentRuntimeV2 {
       );
       this.helperToNodeMonotonicOffsetMs =
         event.monotonicMs - performance.now();
-      this.eventChain = this.eventChain
-        .then(() => this.processHostEvent(event))
-        .catch((error) => this.applyFailure(error));
+      void this.enqueueRuntimeMutation(() => this.processHostEvent(event));
     });
+  }
+
+  private enqueueRuntimeMutation(operation: () => Promise<void>) {
+    this.eventChain = this.eventChain
+      .then(operation)
+      .catch((error) => this.applyFailure(error));
+    return this.eventChain;
   }
 
   private async processHostEvent(event: WindowsActivityHostEventV2) {
     if (event.eventType === "foreground_changed") {
+      if (this.eventPredatesTimeline(event.monotonicMs, "FOCUS")) return;
       this.currentHostApp = event.app;
       if (!event.app) {
         await this.clearForegroundFocus(event.monotonicMs, true);
@@ -503,6 +525,7 @@ export class DesktopAgentRuntimeV2 {
       return;
     }
     if (event.eventType === "visible_apps_changed") {
+      if (this.eventPredatesTimeline(event.monotonicMs, "OPEN_RUNTIME")) return;
       this.currentVisibleApps = event.apps;
       if (this.openRuntimeCaptureAllowedAt(event.monotonicMs)) {
         if (event.apps.length === 0 && !this.openRuntimeEngine) return;
@@ -518,6 +541,7 @@ export class DesktopAgentRuntimeV2 {
       return;
     }
     if (event.eventType === "interaction_pulse") {
+      if (this.eventPredatesTimeline(event.monotonicMs, "FOCUS")) return;
       if (this.engine && this.currentHostApp && this.focusCaptureAllowedAt(event.monotonicMs)) {
         // Input can arrive up to ten times per second. It must advance the
         // durable local clock precisely, but waiting for one HTTP round trip
@@ -585,11 +609,13 @@ export class DesktopAgentRuntimeV2 {
     if (nowMs - this.lastPolicyRefreshAtMs >= DESKTOP_V2_POLICY_REFRESH_MS) {
       await this.refreshPolicy(monotonicMs);
     }
-    if (!this.policyWindowAllowsAt(monotonicMs)) {
+    const focusAllowed = this.focusCaptureAllowedAt(monotonicMs);
+    const openRuntimeAllowed = this.openRuntimeCaptureAllowedAt(monotonicMs);
+    if (!focusAllowed && !openRuntimeAllowed) {
       await this.enqueueHostBoundary(monotonicMs, false);
     } else {
       if (
-        this.focusCaptureAllowedAt(monotonicMs) &&
+        focusAllowed &&
         this.currentHostApp &&
         !this.engine
       ) {
@@ -598,7 +624,7 @@ export class DesktopAgentRuntimeV2 {
           this.engine!.acquireFocus(this.currentHostApp, monotonicMs),
           true,
         );
-      } else if (this.engine) {
+      } else if (this.engine && focusAllowed) {
         const shouldSettle =
           nowMs - this.lastSettlementAtMs >= DESKTOP_V2_SETTLEMENT_MS;
         await this.persistUpdate(
@@ -608,10 +634,12 @@ export class DesktopAgentRuntimeV2 {
           shouldSettle,
         );
         if (shouldSettle) this.lastSettlementAtMs = nowMs;
+      } else if (this.engine) {
+        await this.closeFocusTimeline(monotonicMs);
       }
 
       if (
-        this.openRuntimeCaptureAllowedAt(monotonicMs) &&
+        openRuntimeAllowed &&
         this.currentVisibleApps.length > 0 &&
         !this.openRuntimeEngine
       ) {
@@ -623,7 +651,7 @@ export class DesktopAgentRuntimeV2 {
           ),
           false,
         );
-      } else if (this.openRuntimeEngine) {
+      } else if (this.openRuntimeEngine && openRuntimeAllowed) {
         const shouldSettle =
           nowMs - this.lastOpenRuntimeSettlementAtMs >=
           DESKTOP_V2_SETTLEMENT_MS;
@@ -634,6 +662,8 @@ export class DesktopAgentRuntimeV2 {
           );
           this.lastOpenRuntimeSettlementAtMs = nowMs;
         }
+      } else if (this.openRuntimeEngine) {
+        await this.closeOpenRuntimeTimeline(monotonicMs);
       }
     }
     if (nowMs - this.lastHealthSyncAtMs >= DESKTOP_V2_HEALTH_SYNC_MS) {
@@ -646,7 +676,7 @@ export class DesktopAgentRuntimeV2 {
     if (this.engine) return;
     const policy = this.state.policy;
     if (!policy?.policyLeaseId) throw new Error("A valid policy lease is required.");
-    this.state.clock = this.createClockEpoch(atMonotonicMs);
+    this.state.clock = this.createClockEpoch(atMonotonicMs, "FOCUS");
     this.engine = new DesktopFocusEngineV2(this.state.clock, policy);
   }
 
@@ -656,23 +686,44 @@ export class DesktopAgentRuntimeV2 {
     if (!policy?.policyLeaseId || !policy.collectOpenRuntime) {
       throw new Error("An authorised App open/runtime policy lease is required.");
     }
-    this.state.openRuntimeClock = this.createClockEpoch(atMonotonicMs);
+    this.state.openRuntimeClock = this.createClockEpoch(
+      atMonotonicMs,
+      "OPEN_RUNTIME",
+    );
     this.openRuntimeEngine = new DesktopOpenRuntimeEngineV2(
       this.state.openRuntimeClock,
       policy,
     );
   }
 
-  private createClockEpoch(atMonotonicMs: number) {
+  private createClockEpoch(
+    atMonotonicMs: number,
+    stream: DesktopTimelineStreamV2,
+  ) {
     const current = currentMonotonic(this) ?? atMonotonicMs;
     const activationMs = Date.parse(this.state.protocolActivatedAt ?? "");
-    const anchorUtcMs = eventClockAnchorUtcMsV2({
+    const projectedEventUtcMs = eventClockAnchorUtcMsV2({
       serverNowMs: serverNow(this.state),
       currentMonotonicMs: current,
       eventMonotonicMs: atMonotonicMs,
       protocolActivatedAtMs:
         Number.isFinite(activationMs) ? activationMs : 0,
     });
+    const watermarkMs = this.timelineWatermarkMs(stream);
+    const leaseIssuedAtMs = Date.parse(
+      this.state.policy?.policyLeaseIssuedAt ?? "",
+    );
+    const activeWindow = this.state.policy?.allowedUtcWindows.find(
+      (window) =>
+        Date.parse(window.startsAt) <= projectedEventUtcMs &&
+        projectedEventUtcMs < Date.parse(window.endsAt),
+    );
+    const anchorUtcMs = Math.max(
+      projectedEventUtcMs,
+      watermarkMs ?? 0,
+      Number.isFinite(leaseIssuedAtMs) ? leaseIssuedAtMs : 0,
+      activeWindow ? Date.parse(activeWindow.startsAt) : 0,
+    );
     return {
       clockEpochId: randomUUID(),
       clockEpochStartedAt: new Date(anchorUtcMs).toISOString(),
@@ -690,6 +741,11 @@ export class DesktopAgentRuntimeV2 {
     const nextState: DesktopTrackingRuntimeStateV2 = {
       ...durableState,
       engineCheckpoint: this.engine.checkpoint(),
+      focusTimelineThroughAt: latestTimelineThroughAtV2(
+        durableState.focusTimelineThroughAt,
+        update.intervals,
+        "FOCUS",
+      ),
       latestSnapshot: update.snapshot,
       lastErrorCode: this.lastErrorCode,
     };
@@ -721,6 +777,11 @@ export class DesktopAgentRuntimeV2 {
     const nextState: DesktopTrackingRuntimeStateV2 = {
       ...durableState,
       openRuntimeCheckpoint: this.openRuntimeEngine.checkpoint(),
+      openRuntimeTimelineThroughAt: latestTimelineThroughAtV2(
+        durableState.openRuntimeTimelineThroughAt,
+        update.intervals,
+        "OPEN_RUNTIME",
+      ),
       lastErrorCode: this.lastErrorCode,
     };
     try {
@@ -767,13 +828,20 @@ export class DesktopAgentRuntimeV2 {
     immediateSync: boolean,
   ) {
     if (!this.engine) return;
+    const boundary = this.boundaryMonotonicMs(monotonicMs, "FOCUS");
+    if (boundary === null) return;
     // A transient null foreground identity ends the current Focus segment but
     // does not create a new clock epoch. Keeping the same monotonic projection
     // prevents network-delayed foreground events from overlapping prior time.
-    await this.persistUpdate(
-      this.engine.clearFocus(monotonicMs),
-      immediateSync,
-    );
+    const update = this.engine.clearFocus(boundary);
+    const snapshotAllowed = this.focusSnapshotAllowedAtBoundary(boundary);
+    const persisted = await this.persistUpdate(update, false, false);
+    if (!persisted) return;
+    if (!snapshotAllowed) {
+      this.state = { ...this.state, latestSnapshot: null };
+      this.store.writeRuntimeState(this.state);
+    }
+    if (immediateSync || update.intervals.length > 0) await this.requestSync();
   }
 
   private async enqueueHostBoundary(
@@ -783,35 +851,95 @@ export class DesktopAgentRuntimeV2 {
   ) {
     if (monotonicMs === null) return;
     let createdIntervals = false;
+    let closedFocus = false;
+    let closedOpenRuntime = false;
+    let retainFocusSnapshot = true;
     if (this.engine) {
-      const update = this.engine.clearFocus(monotonicMs);
-      const persisted = await this.persistUpdate(update, false, false);
-      if (!persisted) return;
-      createdIntervals ||= update.intervals.length > 0;
+      const boundary = this.boundaryMonotonicMs(monotonicMs, "FOCUS");
+      if (boundary !== null) {
+        const update = this.engine.clearFocus(boundary);
+        const persisted = await this.persistUpdate(update, false, false);
+        if (!persisted) return;
+        createdIntervals ||= update.intervals.length > 0;
+        closedFocus = true;
+        retainFocusSnapshot = this.focusSnapshotAllowedAtBoundary(boundary);
+      }
     }
     if (this.openRuntimeEngine) {
-      const update = this.openRuntimeEngine.clear(monotonicMs);
-      const persisted = await this.persistOpenRuntimeUpdate(
-        update,
-        false,
-        false,
+      const boundary = this.boundaryMonotonicMs(
+        monotonicMs,
+        "OPEN_RUNTIME",
       );
-      if (!persisted) return;
-      createdIntervals ||= update.intervals.length > 0;
+      if (boundary !== null) {
+        const update = this.openRuntimeEngine.clear(boundary);
+        const persisted = await this.persistOpenRuntimeUpdate(
+          update,
+          false,
+          false,
+        );
+        if (!persisted) return;
+        createdIntervals ||= update.intervals.length > 0;
+        closedOpenRuntime = true;
+      }
     }
-    this.engine = null;
-    this.openRuntimeEngine = null;
+    if (!closedFocus && !closedOpenRuntime) return;
+    if (closedFocus) this.engine = null;
+    if (closedOpenRuntime) this.openRuntimeEngine = null;
     this.state = {
       ...this.state,
-      clock: null,
-      engineCheckpoint: null,
-      openRuntimeClock: null,
-      openRuntimeCheckpoint: null,
+      ...(closedFocus ? { clock: null, engineCheckpoint: null } : {}),
+      ...(closedFocus && !retainFocusSnapshot ? { latestSnapshot: null } : {}),
+      ...(closedOpenRuntime
+        ? { openRuntimeClock: null, openRuntimeCheckpoint: null }
+        : {}),
     };
     this.store.writeRuntimeState(this.state);
     if (immediateSync || (syncWhenIntervals && createdIntervals)) {
       await this.requestSync();
     }
+  }
+
+  private async closeFocusTimeline(monotonicMs: number) {
+    if (!this.engine) return;
+    const boundary = this.boundaryMonotonicMs(monotonicMs, "FOCUS");
+    if (boundary === null) return;
+    const update = this.engine.clearFocus(boundary);
+    const retainSnapshot = this.focusSnapshotAllowedAtBoundary(boundary);
+    const persisted = await this.persistUpdate(update, false, false);
+    if (!persisted) return;
+    this.engine = null;
+    this.state = {
+      ...this.state,
+      clock: null,
+      engineCheckpoint: null,
+      latestSnapshot: retainSnapshot ? update.snapshot : null,
+    };
+    this.store.writeRuntimeState(this.state);
+    if (update.intervals.length > 0) await this.requestSync();
+  }
+
+  private async closeOpenRuntimeTimeline(monotonicMs: number) {
+    if (!this.openRuntimeEngine) return;
+    const boundary = this.boundaryMonotonicMs(
+      monotonicMs,
+      "OPEN_RUNTIME",
+    );
+    if (boundary === null) return;
+    const update = this.openRuntimeEngine.clear(boundary);
+    const persisted = await this.persistOpenRuntimeUpdate(
+      update,
+      false,
+      false,
+    );
+    if (!persisted) return;
+    this.openRuntimeEngine = null;
+    this.state = {
+      ...this.state,
+      openRuntimeClock: null,
+      openRuntimeCheckpoint: null,
+    };
+    this.store.writeRuntimeState(this.state);
+    if (update.intervals.length > 0) await this.requestSync();
   }
 
   private async requestSync() {
@@ -987,6 +1115,20 @@ export class DesktopAgentRuntimeV2 {
       };
       this.state = {
         ...this.state,
+        focusTimelineThroughAt: latestIsoTimestampV2(
+          this.state.focusTimelineThroughAt,
+          latestCursorAcceptedAt(
+            response.cursors.filter((cursor) => cursor.stream === "FOCUS"),
+          ),
+        ),
+        openRuntimeTimelineThroughAt: latestIsoTimestampV2(
+          this.state.openRuntimeTimelineThroughAt,
+          latestCursorAcceptedAt(
+            response.cursors.filter(
+              (cursor) => cursor.stream === "OPEN_RUNTIME",
+            ),
+          ),
+        ),
         lastSuccessfulSyncAt: syncedAt,
         lastSuccessfulHeartbeatAt: syncedAt,
         lastErrorCode: "NONE",
@@ -1197,7 +1339,7 @@ export class DesktopAgentRuntimeV2 {
     ) {
       return false;
     }
-    return this.policyWindowAllowsAt(monotonicMs);
+    return this.policyWindowAllowsAt(monotonicMs, "FOCUS");
   }
 
   private openRuntimeCaptureAllowedAt(monotonicMs: number) {
@@ -1210,32 +1352,91 @@ export class DesktopAgentRuntimeV2 {
     ) {
       return false;
     }
-    return this.policyWindowAllowsAt(monotonicMs);
+    return this.policyWindowAllowsAt(monotonicMs, "OPEN_RUNTIME");
   }
 
-  private policyWindowAllowsAt(monotonicMs: number) {
+  private policyWindowAllowsAt(
+    monotonicMs: number,
+    stream: DesktopTimelineStreamV2,
+  ) {
     const policy = this.state.policy;
     if (!policy || this.collectorState !== "HEALTHY") return false;
-    const instant = this.monotonicToUtcMs(monotonicMs);
-    return (
-      policyLeaseValid(policy, instant) &&
-      policy.allowedUtcWindows.some(
-        (window) =>
-          Date.parse(window.startsAt) <= instant &&
-          instant < Date.parse(window.endsAt),
-      )
-    );
+    const instant = this.streamMonotonicToUtcMs(monotonicMs, stream);
+    const watermark = this.timelineWatermarkMs(stream);
+    return timelineCaptureAllowedAtV2(policy, instant, watermark);
   }
 
-  private monotonicToUtcMs(monotonicMs: number) {
-    const clock = this.state.clock ?? this.state.openRuntimeClock;
+  private streamMonotonicToUtcMs(
+    monotonicMs: number,
+    stream: DesktopTimelineStreamV2,
+  ) {
+    const clock = stream === "FOCUS"
+      ? this.state.clock
+      : this.state.openRuntimeClock;
     if (clock) {
-      return (
-        Date.parse(clock.clockEpochStartedAt) +
-        (monotonicMs - clock.clockEpochStartedMonotonicMs)
-      );
+      return projectMonotonicUtcMsV2(clock, monotonicMs);
     }
-    return serverNow(this.state);
+    const current = currentMonotonic(this) ?? monotonicMs;
+    return eventObservedUtcMsV2({
+      serverNowMs: serverNow(this.state),
+      currentMonotonicMs: current,
+      eventMonotonicMs: monotonicMs,
+    });
+  }
+
+  private timelineWatermarkMs(stream: DesktopTimelineStreamV2) {
+    const value = stream === "FOCUS"
+      ? this.state.focusTimelineThroughAt
+      : this.state.openRuntimeTimelineThroughAt;
+    const parsed = Date.parse(value ?? "");
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private eventPredatesTimeline(
+    monotonicMs: number,
+    stream: DesktopTimelineStreamV2,
+  ) {
+    const watermark = this.timelineWatermarkMs(stream);
+    return watermark !== null &&
+      this.streamMonotonicToUtcMs(monotonicMs, stream) < watermark;
+  }
+
+  private boundaryMonotonicMs(
+    requestedMonotonicMs: number,
+    stream: DesktopTimelineStreamV2,
+  ) {
+    const clock = stream === "FOCUS"
+      ? this.state.clock
+      : this.state.openRuntimeClock;
+    const checkpointObservedAt = stream === "FOCUS"
+      ? this.state.engineCheckpoint?.lastObservedAtMonotonicMs
+      : this.state.openRuntimeCheckpoint?.lastObservedAtMonotonicMs;
+    if (!clock) return requestedMonotonicMs;
+    if (
+      requestedMonotonicMs < clock.clockEpochStartedMonotonicMs ||
+      (checkpointObservedAt !== undefined &&
+        requestedMonotonicMs < checkpointObservedAt)
+    ) {
+      return null;
+    }
+    const policy = this.state.policy;
+    if (!policy) return requestedMonotonicMs;
+    return clampMonotonicToPolicyEndV2({
+      clock,
+      requestedMonotonicMs,
+      policy,
+    });
+  }
+
+  private focusSnapshotAllowedAtBoundary(monotonicMs: number) {
+    const policy = this.state.policy;
+    const clock = this.state.clock;
+    if (!policy || !clock) return false;
+    return timelineCaptureAllowedAtV2(
+      policy,
+      projectMonotonicUtcMsV2(clock, monotonicMs),
+      null,
+    );
   }
 
   private buildHealth(): ClientHealthV2 {
@@ -1320,11 +1521,14 @@ export class DesktopAgentRuntimeV2 {
   ) {
     const monotonicMs = currentMonotonic(this);
     if (this.engine && monotonicMs !== null) {
-      await this.persistUpdate(
-        this.engine.clearFocus(monotonicMs),
-        false,
-        false,
-      );
+      const boundary = this.boundaryMonotonicMs(monotonicMs, "FOCUS");
+      if (boundary !== null) {
+        await this.persistUpdate(
+          this.engine.clearFocus(boundary),
+          false,
+          false,
+        );
+      }
     }
     this.engine = null;
     this.state = {
@@ -1473,14 +1677,85 @@ export function eventClockAnchorUtcMsV2(input: {
   eventMonotonicMs: number;
   protocolActivatedAtMs: number;
 }) {
+  return Math.max(
+    eventObservedUtcMsV2(input),
+    input.protocolActivatedAtMs,
+  );
+}
+
+export function eventObservedUtcMsV2(input: {
+  serverNowMs: number;
+  currentMonotonicMs: number;
+  eventMonotonicMs: number;
+}) {
   const eventLagMs = Math.max(
     0,
     input.currentMonotonicMs - input.eventMonotonicMs,
   );
-  return Math.max(
-    input.serverNowMs - eventLagMs,
-    input.protocolActivatedAtMs,
+  return input.serverNowMs - eventLagMs;
+}
+
+export function projectMonotonicUtcMsV2(
+  clock: DesktopClockEpochV2,
+  monotonicMs: number,
+) {
+  return Date.parse(clock.clockEpochStartedAt) +
+    (monotonicMs - clock.clockEpochStartedMonotonicMs);
+}
+
+export function clampMonotonicToPolicyEndV2(input: {
+  clock: DesktopClockEpochV2;
+  requestedMonotonicMs: number;
+  policy: DeviceTrackingPolicyV2;
+}) {
+  const epochStartedAtMs = Date.parse(input.clock.clockEpochStartedAt);
+  const requestedAtMs = projectMonotonicUtcMsV2(
+    input.clock,
+    input.requestedMonotonicMs,
   );
+  const activeWindow = input.policy.allowedUtcWindows.find((window) => {
+    const startsAtMs = Date.parse(window.startsAt);
+    const endsAtMs = Date.parse(window.endsAt);
+    return startsAtMs <= epochStartedAtMs && epochStartedAtMs < endsAtMs;
+  });
+  if (!activeWindow) return input.requestedMonotonicMs;
+  const leaseExpiresAtMs = Date.parse(input.policy.policyLeaseExpiresAt ?? "");
+  const windowEndsAtMs = Date.parse(activeWindow.endsAt);
+  const captureEndsAtMs = Number.isFinite(leaseExpiresAtMs)
+    ? Math.min(windowEndsAtMs, leaseExpiresAtMs)
+    : windowEndsAtMs;
+  if (requestedAtMs <= captureEndsAtMs) return input.requestedMonotonicMs;
+  return input.clock.clockEpochStartedMonotonicMs +
+    Math.max(0, captureEndsAtMs - epochStartedAtMs);
+}
+
+export function timelineCaptureAllowedAtV2(
+  policy: DeviceTrackingPolicyV2,
+  instantMs: number,
+  timelineThroughMs: number | null,
+) {
+  if (timelineThroughMs !== null && instantMs < timelineThroughMs) return false;
+  return policyLeaseValid(policy, instantMs) &&
+    policy.allowedUtcWindows.some((window) =>
+      Date.parse(window.startsAt) <= instantMs &&
+      instantMs < Date.parse(window.endsAt));
+}
+
+export function latestTimelineThroughAtV2(
+  current: string | null,
+  intervals: ActivityIntervalV2[],
+  stream: DesktopTimelineStreamV2,
+) {
+  let latestMs = Date.parse(current ?? "");
+  for (const interval of intervals) {
+    if (interval.stream !== stream) continue;
+    const endedAtMs = Date.parse(interval.endedAt);
+    if (Number.isFinite(endedAtMs) &&
+      (!Number.isFinite(latestMs) || endedAtMs > latestMs)) {
+      latestMs = endedAtMs;
+    }
+  }
+  return Number.isFinite(latestMs) ? new Date(latestMs).toISOString() : null;
 }
 
 function describeDesktopPolicyRequirement(policy: DeviceTrackingPolicyV2) {
@@ -1640,7 +1915,7 @@ function intervalRejectionRemediation(
 ) {
   const codes = new Set(items.map((item) => item.code));
   if (codes.has("FOCUS_OVERLAP")) {
-    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.7 keeps transient foreground gaps on one monotonic timeline; export diagnostics with this request ID if new overlaps continue.";
+    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.8 serializes lifecycle boundaries and keeps each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
   }
   if (codes.has("RUNTIME_OVERLAP")) {
     return "The overlapping runtime interval was not counted. The Agent will continue from the current visible-window observation.";
@@ -1684,6 +1959,19 @@ function latestCursorAcceptedAt(
       ? cursor.latestAcceptedEndedAt
       : latest;
   }, null);
+}
+
+function latestIsoTimestampV2(
+  current: string | null,
+  candidate: string | null,
+) {
+  const currentMs = Date.parse(current ?? "");
+  const candidateMs = Date.parse(candidate ?? "");
+  if (!Number.isFinite(candidateMs)) return current;
+  if (!Number.isFinite(currentMs) || candidateMs > currentMs) {
+    return new Date(candidateMs).toISOString();
+  }
+  return current;
 }
 
 function prependDiagnostic(
