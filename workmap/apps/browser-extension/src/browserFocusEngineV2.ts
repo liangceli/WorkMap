@@ -19,6 +19,7 @@ export type BrowserFocusEngineUpdateV2 = {
 };
 
 export class BrowserFocusEngineV2 {
+  private readonly clock: BrowserClockEpochV2;
   private current: BrowserFocusStateV2 | null;
   private snapshotSequence: number;
   private nextIntervalSequence: number;
@@ -26,7 +27,7 @@ export class BrowserFocusEngineV2 {
   private collectorState: TrackingCollectorStateV2;
 
   constructor(
-    private readonly clock: BrowserClockEpochV2,
+    clock: BrowserClockEpochV2,
     private readonly policy: DeviceTrackingPolicyV2,
     private readonly browserName: BrowserNameV2,
     checkpoint?: BrowserFocusCheckpointV2 | null,
@@ -35,13 +36,23 @@ export class BrowserFocusEngineV2 {
     if (!policy.policyLeaseId) {
       throw new Error("Browser tracking requires an active policy lease.");
     }
+    // performance.now() is a floating-point value in real browsers, while the
+    // tracking-v2 ledger contract stores whole milliseconds. Quantize the
+    // durable epoch and all restored boundaries once so emitted intervals are
+    // stable across service-worker restarts and valid for the server ledger.
+    this.clock = {
+      ...clock,
+      clockEpochStartedMonotonicMs: wholeMillisecond(
+        clock.clockEpochStartedMonotonicMs,
+      ),
+    };
     const restored = checkpoint?.version === 1 && validCheckpoint(checkpoint);
-    this.current = restored ? copyCurrent(checkpoint.current) : null;
+    this.current = restored ? normalizeCurrent(checkpoint.current) : null;
     this.snapshotSequence = restored ? checkpoint.snapshotSequence : 0;
     this.nextIntervalSequence = restored ? checkpoint.nextIntervalSequence : 1;
     this.lastObservedAtMonotonicMs = restored
-      ? checkpoint.lastObservedAtMonotonicMs
-      : clock.clockEpochStartedMonotonicMs;
+      ? wholeMillisecond(checkpoint.lastObservedAtMonotonicMs)
+      : this.clock.clockEpochStartedMonotonicMs;
     this.collectorState = restored ? checkpoint.collectorState : "HEALTHY";
   }
 
@@ -49,6 +60,7 @@ export class BrowserFocusEngineV2 {
     subject: FocusSubject,
     atMonotonicMs: number,
   ): BrowserFocusEngineUpdateV2 {
+    atMonotonicMs = wholeMillisecond(atMonotonicMs);
     validateSubject(subject);
     const intervals = this.advance(atMonotonicMs);
     if (atMonotonicMs < this.lastObservedAtMonotonicMs) {
@@ -82,6 +94,7 @@ export class BrowserFocusEngineV2 {
   recordTrustedInteraction(
     atMonotonicMs: number,
   ): BrowserFocusEngineUpdateV2 {
+    atMonotonicMs = wholeMillisecond(atMonotonicMs);
     const intervals = this.advance(atMonotonicMs);
     if (!this.current || atMonotonicMs < this.lastObservedAtMonotonicMs) {
       return this.update(intervals);
@@ -101,10 +114,11 @@ export class BrowserFocusEngineV2 {
   }
 
   observe(atMonotonicMs: number): BrowserFocusEngineUpdateV2 {
-    return this.update(this.advance(atMonotonicMs));
+    return this.update(this.advance(wholeMillisecond(atMonotonicMs)));
   }
 
   settle(atMonotonicMs: number): BrowserFocusEngineUpdateV2 {
+    atMonotonicMs = wholeMillisecond(atMonotonicMs);
     const intervals = this.advance(atMonotonicMs);
     if (
       this.current &&
@@ -116,6 +130,7 @@ export class BrowserFocusEngineV2 {
   }
 
   clearFocus(atMonotonicMs: number): BrowserFocusEngineUpdateV2 {
+    atMonotonicMs = wholeMillisecond(atMonotonicMs);
     const intervals = this.advance(atMonotonicMs);
     if (
       this.current &&
@@ -135,6 +150,7 @@ export class BrowserFocusEngineV2 {
     state: TrackingCollectorStateV2,
     atMonotonicMs: number,
   ): BrowserFocusEngineUpdateV2 {
+    atMonotonicMs = wholeMillisecond(atMonotonicMs);
     const intervals = this.advance(atMonotonicMs);
     if (state !== "HEALTHY" && this.current) {
       intervals.push(...this.emitThrough(atMonotonicMs));
@@ -338,4 +354,30 @@ function copyCurrent(
   current: BrowserFocusStateV2 | null | undefined,
 ): BrowserFocusStateV2 | null {
   return current ? { ...current, subject: { ...current.subject } } : null;
+}
+
+function normalizeCurrent(
+  current: BrowserFocusStateV2 | null | undefined,
+): BrowserFocusStateV2 | null {
+  const copied = copyCurrent(current);
+  if (!copied) return null;
+  return {
+    ...copied,
+    sessionStartedAtMonotonicMs: wholeMillisecond(
+      copied.sessionStartedAtMonotonicMs,
+    ),
+    stateStartedAtMonotonicMs: wholeMillisecond(
+      copied.stateStartedAtMonotonicMs,
+    ),
+    activeEvidenceAtMonotonicMs: wholeMillisecond(
+      copied.activeEvidenceAtMonotonicMs,
+    ),
+    confirmedThroughMonotonicMs: wholeMillisecond(
+      copied.confirmedThroughMonotonicMs,
+    ),
+  };
+}
+
+function wholeMillisecond(value: number) {
+  return Number.isFinite(value) ? Math.round(value) : value;
 }

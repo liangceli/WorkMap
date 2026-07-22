@@ -1,5 +1,49 @@
 # Latest Implementation Handoff
 
+## 2026-07-22 Browser Extension 0.5.4 Monotonic Millisecond Reliability Fix
+
+### Original Task Brief
+
+- Review real Chrome 0.5.3 Options and `/reports` evidence after standalone pairing, decide whether the data path was healthy, and fix only after reaching at least 95% root-cause confidence.
+- Preserve MV3/Tracking v2, hostname-only privacy, server-confirmed health/snapshot/history separation, existing pairing, and all Desktop Agent behavior.
+
+### Changed Files
+
+- Browser runtime/version: `workmap/apps/browser-extension/src/browserFocusEngineV2.ts`, `src/trackingV2Types.ts`, `package.json`, `manifest.json`, and generated `alpha-unpacked/manifest.json`.
+- Shared validation: `workmap/packages/shared-types/src/tracking-v2.ts`.
+- Tests: Browser `browser-focus-v2.test.ts`, `service-worker.test.ts`, `queue-api.test.ts`; shared `tracking-v2.test.ts`; API `tracking-v2-live-semantics.test.ts`.
+- Artifact: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.4.zip`.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/api-contract-skill.md`, `qa-skill.md`, and `deployment-skill.md`.
+
+### Implementation Summary
+
+- The screenshots prove the 0.5.3 standalone-identity fix worked: the device paired, policy v2/lease/acknowledgement/UTC windows loaded, host access and content registration were healthy, and the server confirmed at least one heartbeat and snapshot.
+- The data path was not fully healthy. Options showed six terminal `INVALID_DURATION` rows plus repeated `TRACKING_SYNC_INTERNAL`; Reports correctly kept connection health separate, marked current Domain unconfirmed/stale, displayed the rejected tombstone/request ID, and left Domains empty because no interval had been accepted or duplicated.
+- Root cause confidence is above 99%. Real `performance.now()` values are fractional. Arbitrary boundaries produced fractional `durationMs` and `INVALID_DURATION`; exact idle boundaries could produce an integer duration with fractional monotonic bounds, pass the old validator, and then throw when API persistence converted those bounds to database `BigInt`, yielding the observed 500.
+- Browser 0.5.4 quantizes the clock epoch, every observation, and recovered 0.5.3 checkpoint boundary to the nearest whole millisecond before interval construction. Emitted wall-clock and monotonic durations remain equal, positive, adjacent, and non-overlapping; sub-millisecond transitions cannot emit zero/negative ledger rows.
+- Shared Tracking v2 now requires provided monotonic bounds to be safe integers. Legacy fractional rows therefore become terminal `MONOTONIC_MISMATCH` tombstones with request correlation instead of retrying as server 500. They remain excluded from Reports.
+- Existing dead-letter history is intentionally retained. After the API validation update is deployed, any old 0.5.3 pending fractional rows may add a bounded `MONOTONIC_MISMATCH` dead letter while draining; new 0.5.4 rows should then show accepted/duplicate evidence.
+
+### Role, Privacy, And Intentional Non-Changes
+
+- No Desktop Agent file or behavior, policy/RBAC/tenant boundary, pairing credential, hostname privacy rule, Focus/Idle rule, Domain open/runtime flag, Reports aggregation, or database schema changed.
+- Browser Domain open/runtime remains disabled. No URL path/query/fragment, title, page content, user input, pointer coordinate, credential, or reusable secret is collected.
+
+### Verification And Artifact
+
+- Browser: typecheck pass, lint pass, tests `51/51`, build pass, `release:zip` pass.
+- Shared types: typecheck pass, lint pass, tests `23/23`, build pass.
+- API: typecheck pass, lint pass, build pass; focused Tracking v2 live semantics `12/12` pass, including fractional Browser bounds becoming a correlated terminal tombstone rather than 500.
+- Full API suite: `49/50`; the sole failure is the pre-existing fixed `2026-06-17` legacy fixture in `tracking-reports-verification.test.ts`, now rejected as too old on `2026-07-22`. The failing file was not changed.
+- ZIP manifest version `0.5.4`, 18 root entries, size `40,742` bytes, SHA-256 `BE555797A4B7DF66925299D004B7BE45BF0619756E8C16168A0E57C1456C9EAC`.
+
+### Manual QA And Next Step
+
+- The supplied screenshots are real 0.5.3 reproduction evidence, not post-fix acceptance. Chrome/Edge 0.5.4 load-unpacked QA has not run and is explicitly **未手测**.
+- Deploy the API/shared validation build first, then reload 0.5.4 from the same `alpha-unpacked` path so pairing is retained. Do not delete the six historical tombstones merely to make the counter look clean.
+- Acceptance requires a fresh server-confirmed heartbeat and snapshot, old pending queue drain, no new `INVALID_DURATION`/`TRACKING_SYNC_INTERNAL`, at least one accepted or duplicate interval, advancing `Confirmed interval through`, and a non-empty confirmed Domain row in `/reports` after a real interval closes.
+- A zero Browser connection-audit count for the selected range is not inconsistent with a fresh heartbeat when no interruption/recovery transition has been recorded; validate the audit separately with offline/reconnect QA.
+
 ## 2026-07-22 Browser Extension 0.5.3 Standalone Pairing Activation Fix
 
 ### Original Task Brief

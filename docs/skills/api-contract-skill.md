@@ -1,5 +1,12 @@
 # API Contract Skill
 
+## Tracking v2 Browser 0.5.4 Integer-Millisecond Addendum
+
+- Tracking v2 `durationMs` and any supplied `startedMonotonicMs` / `endedMonotonicMs` are whole, safe integer milliseconds. Browser `performance.now()` must be quantized before creating a durable interval.
+- Fractional duration remains terminal `INVALID_DURATION`. Fractional monotonic bounds are terminal `MONOTONIC_MISMATCH`; the API must tombstone them with the safe request ID and must not pass them to database `BigInt` conversion.
+- This validation is required to drain legacy Browser 0.5.3 fractional rows without a retrying 500. Rejected rows never enter `ActivityInterval`, day fragments, reconciliation, or Reports totals.
+- Stable queued event identity remains immutable. Clients must not rewrite an already queued event merely to repair its payload after a lost response.
+
 ## Tracking v2 Browser 0.5.3 Standalone Identity Addendum
 
 - Browser pairing may intentionally use `workstationMode=STANDALONE`; `/device-client/status` then carries `workstationId=null`.

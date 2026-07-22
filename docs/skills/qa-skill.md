@@ -1,5 +1,13 @@
 # QA Skill
 
+## Browser Extension 0.5.4 QA Baseline
+
+- Exercise real fractional `performance.now()` values, exact idle-boundary duration, a restored fractional 0.5.3 checkpoint, and rapid sub-millisecond switches. Every emitted interval must have safe integer monotonic bounds/duration, positive duration, matching wall-clock duration, and no overlap.
+- API regression must prove integer-duration plus fractional monotonic bounds returns HTTP-successful terminal `MONOTONIC_MISMATCH` with request-correlated tombstone, not `TRACKING_SYNC_INTERNAL` 500 and not a ledger row.
+- During upgrade-retention QA, preserve pairing and old dead letters. After API update plus 0.5.4 reload, verify retrying 500 stops, old pending rows drain, new intervals show accepted/duplicate, `Confirmed interval through` advances, and confirmed Domain totals appear.
+- Current unrelated baseline: full API `49/50` because `tracking-reports-verification.test.ts` uses fixed 2026-06-17 legacy events that exceed the age limit on 2026-07-22.
+- Real Chrome and Edge load-unpacked QA remains mandatory and must be recorded as **未手测** until actually run.
+
 ## Browser Extension 0.5.3 QA Baseline
 
 - Execute identity regression: API-supported Browser `workstationId=null` passes; device or Chrome/Edge mismatch fails terminally as `DEVICE_IDENTITY_MISMATCH`.

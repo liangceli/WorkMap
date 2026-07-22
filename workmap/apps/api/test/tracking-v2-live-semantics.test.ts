@@ -458,6 +458,52 @@ test("Browser Domain Focus active and focused-idle enter the official ledger and
   assert.equal(prisma.tombstones.at(-1)?.requestId, REQUEST_ID);
 });
 
+test("fractional Browser monotonic bounds become a terminal tombstone instead of a 500", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  const sync = new TrackingV2SyncService(
+    prisma as any,
+    browserPolicyService(now) as any,
+  );
+  const startedAt = new Date(now - 70_000);
+  const endedAt = new Date(now - 10_000);
+
+  const response = await sync.sync(
+    browserContext(now),
+    browserSyncRequest(now, {
+      intervals: [
+        {
+          clientEventId: "84848484-8484-4484-8484-848484848484",
+          activitySessionId: "85858585-8585-4585-8585-858585858585",
+          sequenceNumber: 1,
+          source: "BROWSER_DOMAIN",
+          stream: "FOCUS",
+          metric: "FOCUS_ACTIVE",
+          subjectKey: "docs.example",
+          displayName: "docs.example",
+          browserName: "CHROME",
+          startedAt: startedAt.toISOString(),
+          endedAt: endedAt.toISOString(),
+          clockEpochId: CLOCK_ID,
+          startedMonotonicMs: 1_000.25,
+          endedMonotonicMs: 61_000.25,
+          durationMs: 60_000,
+          policyVersion: "v1",
+          policyLeaseId: LEASE_ID,
+        },
+      ],
+    }),
+    REQUEST_ID,
+  );
+
+  assert.equal(response.results[0]?.status, "REJECTED");
+  assert.equal(response.results[0]?.rejectionCode, "MONOTONIC_MISMATCH");
+  assert.equal(response.results[0]?.terminal, true);
+  assert.equal(prisma.intervals.length, 0);
+  assert.equal(prisma.tombstones[0]?.rejectionCode, "MONOTONIC_MISMATCH");
+  assert.equal(prisma.tombstones[0]?.requestId, REQUEST_ID);
+});
+
 test("overlapping open/runtime for different Apps is accepted and displayed without becoming Focus time", async () => {
   const now = Date.now();
   const prisma = new SyncPrisma(now);

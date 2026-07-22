@@ -411,9 +411,12 @@ export function validateActivityIntervalV2(value: unknown): TrackingValidationIs
   if (hasOnlyOneMonotonicBound) {
     issues.push({ code: "MONOTONIC_MISMATCH", field: "startedMonotonicMs" });
   } else if (startedMonotonicMs !== undefined && endedMonotonicMs !== undefined) {
-    const monotonicDuration = Number(endedMonotonicMs) - Number(startedMonotonicMs);
+    const startedMonotonicNumber = Number(startedMonotonicMs);
+    const endedMonotonicNumber = Number(endedMonotonicMs);
+    const monotonicDuration = endedMonotonicNumber - startedMonotonicNumber;
     if (
-      !Number.isFinite(monotonicDuration) ||
+      !Number.isSafeInteger(startedMonotonicNumber) ||
+      !Number.isSafeInteger(endedMonotonicNumber) ||
       monotonicDuration <= 0 ||
       Math.abs(monotonicDuration - durationMs) > 1_000
     ) {

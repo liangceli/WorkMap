@@ -1,5 +1,31 @@
 # Latest QA Handoff
 
+## 2026-07-22 Browser Extension 0.5.4 Monotonic Millisecond QA
+
+### Reviewed Implementation And Findings
+
+- Reviewed the 0.5.3 Chrome Options diagnostics, the separate Browser live card/audit/Domain Reports screenshots, Browser Focus engine, durable queue/recovery path, shared validator, API ledger conversion, tombstone/report semantics, tests, unpacked output, and ZIP.
+- Fixed - Critical: fractional real-browser monotonic boundaries could either produce terminal `INVALID_DURATION` or pass validation with an integer duration and crash API `BigInt` conversion as retryable `TRACKING_SYNC_INTERNAL`.
+- Fixed - High: 0.5.4 emits whole-millisecond bounds/durations, including after restoring a fractional 0.5.3 checkpoint; rapid sub-millisecond events produce no zero/negative/overlapping row.
+- Fixed - High, server defense: old fractional bounds are rejected as terminal `MONOTONIC_MISMATCH`, retain request ID in a tombstone, and never enter the official ledger/Reports.
+- Verified presentation: connection health, current snapshot confirmation, and historical interval disposition are separate. `2/2 connected` plus `Current activity not confirmed` and an `INVALID_DURATION` warning is consistent with a fresh heartbeat and an unconfirmed/rejected activity lane; empty Domains is correct with zero accepted/duplicate Browser intervals.
+- Preserved: pairing/identity, policy/lease/acknowledgement/schedule, hostname-only privacy, Focus/Idle semantics, queue identity, tenant/RBAC, and disabled Browser open/runtime.
+
+### Test And Verification Status
+
+- Browser: typecheck/lint/build/release ZIP pass; tests `51/51` pass.
+- Shared types: typecheck/lint/build pass; tests `23/23` pass.
+- API: typecheck/lint/build pass; focused Tracking v2 live semantics `12/12` pass.
+- Full API: `49/50`; only the unchanged fixed-date `tracking-reports-verification.test.ts` fails because its 2026-06-17 legacy event is too old on 2026-07-22.
+- ZIP inspection: version `0.5.4`, 18 entries, `40,742` bytes, SHA-256 `BE555797A4B7DF66925299D004B7BE45BF0619756E8C16168A0E57C1456C9EAC`.
+
+### Manual QA, Risks, And Recommendation
+
+- Chrome/Edge 0.5.4 real-device QA was not run: **未手测**.
+- API/shared validation must be deployed before judging old queued 0.5.3 records; Extension-only reload prevents new fractional records but cannot safely rewrite stable queued event identities.
+- The six existing `INVALID_DURATION` dead letters will remain. One or more old pending rows may become new `MONOTONIC_MISMATCH` dead letters during safe drain; success is that retrying 500 stops and later 0.5.4 intervals are accepted/duplicated.
+- Pass for root-cause isolation, implementation, automated checks, and local artifact. Proceed to controlled API deployment plus same-path Chrome/Edge 0.5.4 load-unpacked acceptance; do not publish externally yet.
+
 ## 2026-07-22 Browser Extension 0.5.3 Standalone Pairing QA
 
 ### Reviewed Implementation And Findings

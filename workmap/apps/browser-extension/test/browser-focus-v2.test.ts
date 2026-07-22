@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { validateActivityIntervalV2 } from "../../../packages/shared-types/src/tracking-v2.js";
 import { BrowserFocusEngineV2 } from "../src/browserFocusEngineV2.js";
 import type {
   BrowserClockEpochV2,
@@ -129,6 +130,129 @@ test("late and duplicate observations never create negative or overlapping time"
       (interval) =>
         interval.durationMs > 0 &&
         interval.endedMonotonicMs > interval.startedMonotonicMs,
+    ),
+  );
+});
+
+test("real-browser fractional monotonic timestamps emit whole-millisecond ledger intervals", () => {
+  const fractionalClock: BrowserClockEpochV2 = {
+    clockEpochId: "epoch-fractional",
+    clockEpochStartedAt: "2026-07-17T00:00:00.000Z",
+    clockEpochStartedMonotonicMs: 1_234.567,
+  };
+  const engine = new BrowserFocusEngineV2(
+    fractionalClock,
+    policy(),
+    "CHROME",
+    null,
+    () => "fractional-id",
+  );
+
+  engine.acquireFocus(
+    { subjectKey: "fractional.example", displayName: "fractional.example" },
+    1_240.891,
+  );
+  const closed = engine.clearFocus(2_742.234);
+
+  assert.equal(closed.intervals.length, 1);
+  const interval = closed.intervals[0]!;
+  assert.deepEqual(
+    [interval.startedMonotonicMs, interval.endedMonotonicMs, interval.durationMs],
+    [1_241, 2_742, 1_501],
+  );
+  assert.equal(Date.parse(interval.endedAt) - Date.parse(interval.startedAt), 1_501);
+  assert(
+    [
+      interval.startedMonotonicMs,
+      interval.endedMonotonicMs,
+      interval.durationMs,
+    ].every(Number.isInteger),
+  );
+  assert.deepEqual(validateActivityIntervalV2(interval), []);
+});
+
+test("upgrade recovery quantizes a fractional 0.5.3 checkpoint before sealing it", () => {
+  const fractionalClock: BrowserClockEpochV2 = {
+    clockEpochId: "epoch-upgrade",
+    clockEpochStartedAt: "2026-07-17T00:00:00.000Z",
+    clockEpochStartedMonotonicMs: 100.25,
+  };
+  const checkpoint: NonNullable<
+    ConstructorParameters<typeof BrowserFocusEngineV2>[3]
+  > = {
+    version: 1,
+    snapshotSequence: 4,
+    nextIntervalSequence: 2,
+    lastObservedAtMonotonicMs: 2_742.234,
+    collectorState: "HEALTHY",
+    current: {
+      activitySessionId: "upgrade-session",
+      currentStateId: "upgrade-state",
+      subject: {
+        subjectKey: "upgrade.example",
+        displayName: "upgrade.example",
+      },
+      state: "ACTIVE",
+      sessionStartedAtMonotonicMs: 1_240.891,
+      stateStartedAtMonotonicMs: 1_240.891,
+      activeEvidenceAtMonotonicMs: 1_240.891,
+      lastActivityEvidenceKind: "TRUSTED_PAGE_INTERACTION",
+      confirmedThroughMonotonicMs: 1_240.891,
+      latestEmittedIntervalSequence: null,
+      latestEmittedClientEventId: null,
+    },
+  };
+  const engine = new BrowserFocusEngineV2(
+    fractionalClock,
+    policy(),
+    "CHROME",
+    checkpoint,
+    () => "upgrade-id",
+  );
+
+  const closed = engine.clearFocus(checkpoint.lastObservedAtMonotonicMs);
+  assert.equal(closed.intervals.length, 1);
+  assert.deepEqual(
+    [
+      closed.intervals[0]!.startedMonotonicMs,
+      closed.intervals[0]!.endedMonotonicMs,
+      closed.intervals[0]!.durationMs,
+    ],
+    [1_241, 2_742, 1_501],
+  );
+  assert.deepEqual(validateActivityIntervalV2(closed.intervals[0]), []);
+});
+
+test("sub-millisecond focus switches never emit zero, negative, or overlapping intervals", () => {
+  const engine = createEngine();
+  engine.acquireFocus(
+    { subjectKey: "a.example", displayName: "a.example" },
+    10.2,
+  );
+  const switched = engine.acquireFocus(
+    { subjectKey: "b.example", displayName: "b.example" },
+    10.4,
+  );
+  const closed = engine.clearFocus(10.6);
+  const intervals = [...switched.intervals, ...closed.intervals];
+
+  assert.deepEqual(
+    intervals.map((interval) => [
+      interval.subjectKey,
+      interval.startedMonotonicMs,
+      interval.endedMonotonicMs,
+      interval.durationMs,
+    ]),
+    [["b.example", 10, 11, 1]],
+  );
+  assert(
+    intervals.every(
+      (interval, index) =>
+        Number.isInteger(interval.durationMs) &&
+        interval.durationMs > 0 &&
+        interval.endedMonotonicMs > interval.startedMonotonicMs &&
+        (index === 0 ||
+          interval.startedMonotonicMs >= intervals[index - 1]!.endedMonotonicMs),
     ),
   );
 });

@@ -76,6 +76,23 @@ test("positive millisecond intervals survive validation without five-second filt
   assert.ok(validateActivityIntervalV2(interval({ durationMs: 0 })).some((issue) => issue.code === "INVALID_DURATION"));
 });
 
+test("fractional monotonic bounds are rejected before database integer conversion", () => {
+  const issues = validateActivityIntervalV2(
+    interval({
+      durationMs: 60_000,
+      endedAt: "2026-07-17T00:01:00.000Z",
+      startedMonotonicMs: 10_000.25,
+      endedMonotonicMs: 70_000.25,
+    }),
+  );
+  assert.ok(
+    issues.some(
+      (issue) =>
+        issue.code === "MONOTONIC_MISMATCH" && issue.field === "durationMs",
+    ),
+  );
+});
+
 test("source and stream identity are independent from event identity", () => {
   const value = interval();
   assert.equal(trackingEventIdentityV2("device-1", value), "device-1:event-1");

@@ -1,5 +1,13 @@
 # Deployment Skill
 
+## Browser Extension 0.5.4 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.4.zip`; SHA-256 `BE555797A4B7DF66925299D004B7BE45BF0619756E8C16168A0E57C1456C9EAC`; size `40,742` bytes.
+- Deploy the API/shared integer-monotonic validation before reloading 0.5.4. This lets retained 0.5.3 fractional rows drain as correlated terminal `MONOTONIC_MISMATCH` instead of retrying 500.
+- Reload the same unpacked extension path to retain pairing. Do not clear IndexedDB/local storage or remove historical dead letters during upgrade QA.
+- No Prisma migration is required. Do not publish to Chrome Web Store, Edge Add-ons, GitHub Releases, or production without explicit authorization and real Chrome/Edge acceptance.
+
 ## Browser Extension 0.5.3 Release Notes
 
 - Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
