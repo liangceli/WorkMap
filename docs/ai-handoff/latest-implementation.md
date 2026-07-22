@@ -1,5 +1,47 @@
 # Latest Implementation Handoff
 
+## 2026-07-22 Browser Extension 0.5.5 Pairing Initialization Recovery
+
+### Original Task Brief
+
+- Review the real 0.5.4 Options and `/reports` screenshots and decide whether the Browser Extension was healthy.
+- Fix only after reaching at least 95% root-cause confidence, preserve the existing MV3/Tracking v2 architecture, and do not change Desktop Agent behavior.
+
+### Changed Files
+
+- Browser pairing/runtime/store: `workmap/apps/browser-extension/src/options.ts`, `src/backgroundV2.ts`, and `src/trackingV2Store.ts`.
+- Browser version/release: `src/trackingV2Types.ts`, `package.json`, `manifest.json`, and generated `alpha-unpacked/manifest.json`.
+- Tests: `test/tracking-v2-store.test.ts`, `test/service-worker.test.ts`, and the version fixture in `test/queue-api.test.ts`.
+- Artifact: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.5.zip`.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/qa-skill.md`, and `deployment-skill.md`.
+
+### Implementation Summary
+
+- The screenshots are not a healthy 0.5.4 data path. The Options page belongs to a newly paired 0.5.4 device and shows no first heartbeat, policy, lease, host-permission check, content registration, snapshot, interval, or request ID. The `/reports` Browser card explicitly remains the different stale 0.5.3 client, so it does not prove that 0.5.4 interval generation failed again; 0.5.4 never initialized far enough to exercise it.
+- Root-cause confidence is above 99%. After saving pairing, Options immediately reopened the Tracking v2 IndexedDB for status while the background worker tried to reset it with `indexedDB.deleteDatabase()`. Because Options and the MV3 worker are separate contexts, the open connection could block deletion. Reset then rejected before initialization, the one-shot message error was discarded, and later alarms returned against the already-initialized empty in-memory state forever.
+- 0.5.5 clears `intervals`, `deadLetters`, and `meta` atomically in one read/write transaction instead of deleting the multi-context database. Options closes its own store before notifying the worker and waits for a positive initialization acknowledgement. A post-pair initialization error now remains honestly paired/offline instead of being mislabeled unpaired.
+- Alarms and later runtime events now compare durable `workmapConfig` with in-memory pairing state and self-heal an interrupted or lost pairing message by resetting and initializing from the saved config.
+- Existing 0.5.3 server-side device/history is not deleted. After a same-path 0.5.5 reload, the newly paired device should produce its own fresh 0.5.5 heartbeat/snapshot/interval evidence; stale device cleanup or revocation remains an explicit admin action.
+
+### Role, Privacy, And Intentional Non-Changes
+
+- No Desktop Agent, API, shared Tracking v2 contract, Web Reports code, database schema, policy/RBAC/tenant boundary, or credential format changed in this round.
+- Domain open/runtime remains disabled. Hostname-only collection and all existing prohibitions on full URLs, page content, titles, input values, pointer details, credentials, and reusable secrets remain unchanged.
+
+### Verification And Artifact
+
+- Browser typecheck pass, lint pass, tests `52/52`, build pass, and `release:zip` pass.
+- The new executable store regression simulates an already-open multi-context database and proves reset clears all three stores in one transaction without `deleteDatabase()`.
+- ZIP root/manifest/compiled reset and pairing acknowledgement were inspected. Manifest version `0.5.5`, 18 root entries, size `41,473` bytes, SHA-256 `0A025846BE2A59A7C6C2111FC3A29A69EFA230B045D5F338844480F48282CC2B`.
+- Final diff/secret checks are recorded in `latest-qa.md`.
+
+### Manual QA And Next Step
+
+- The supplied screenshots are real pre-fix 0.5.4 failure evidence. No real Chrome or Edge 0.5.5 load-unpacked session was run here; manual QA is **NOT RUN**.
+- Reload the same `alpha-unpacked` path so the new 0.5.4 pairing is retained. Re-pairing should not be necessary unless the saved credential was revoked or the extension identity/storage was removed.
+- Within one alarm cycle (normally 30 seconds), expect policy/lease, permission/registration, request ID, last confirmed sync, and a fresh server-confirmed heartbeat. Interact with an eligible HTTP/HTTPS page, wait long enough to close an interval, then require accepted/duplicate evidence, an advancing confirmed-through cursor, a fresh 0.5.5 Browser card, and a confirmed Domain row in `/reports`.
+- The Browser connection-audit panel can still legitimately show zero events until an actual offline/reconnect or lifecycle transition occurs; it is not the heartbeat ledger.
+
 ## 2026-07-22 Browser Extension 0.5.4 Monotonic Millisecond Reliability Fix
 
 ### Original Task Brief

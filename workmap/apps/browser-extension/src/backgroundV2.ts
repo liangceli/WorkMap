@@ -64,6 +64,7 @@ type RuntimeMessage = {
   observedAt?: number;
 };
 type MessageSender = { tab?: ChromeTab; frameId?: number };
+type RuntimeResponse = { ok: boolean; error?: string };
 type ChromeEvent<T> = { addListener(listener: T): void };
 
 type ChromeApi = {
@@ -71,7 +72,11 @@ type ChromeApi = {
     onInstalled: ChromeEvent<() => void>;
     onStartup: ChromeEvent<() => void>;
     onMessage: ChromeEvent<
-      (message: RuntimeMessage, sender: MessageSender) => void
+      (
+        message: RuntimeMessage,
+        sender: MessageSender,
+        sendResponse: (response: RuntimeResponse) => void,
+      ) => boolean | void
     >;
     lastError?: { message?: string };
   };
@@ -228,6 +233,12 @@ export class BrowserExtensionRuntimeV2 {
     this.browserName = null;
     this.state = null;
     this.engine = null;
+    this.connectionState = "OFFLINE";
+    this.collectorState = "PAUSED";
+    this.errorCode = "NONE";
+    this.policySetupMessage = null;
+    this.lastPolicyRefreshAtMs = 0;
+    this.lastSyncAttemptAtMs = 0;
     this.initialized = false;
     await this.initialize();
   }
@@ -1573,6 +1584,21 @@ export class BrowserExtensionRuntimeV2 {
 
   private async ensureInitialized() {
     if (!this.initialized) await this.initialize();
+    if (this.config && this.state) return;
+
+    // The worker can initialize as unpaired just before Options persists a
+    // new config, or the one-shot pairing message can be interrupted. Events
+    // and the 30-second alarm must recover that durable pairing instead of
+    // returning forever with an empty runtime state.
+    const stored = await readStoredState(["workmapConfig"]);
+    if (!stored.workmapConfig) return;
+    const pairingChanged =
+      !this.config ||
+      this.config.deviceId !== stored.workmapConfig.deviceId ||
+      this.config.browserName !== stored.workmapConfig.browserName ||
+      this.config.apiBaseUrl !== stored.workmapConfig.apiBaseUrl;
+    if (!pairingChanged && this.state) return;
+    await this.resetAfterPairing();
   }
 }
 
@@ -2020,10 +2046,14 @@ function installRuntimeListeners(api: ChromeApi) {
       void schedule(() => runtime.handleAlarm());
     }
   });
-  api.runtime.onMessage.addListener((message, sender) => {
+  api.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "workmap:extension-paired") {
-      void schedule(() => runtime.resetAfterPairing());
-      return;
+      void schedule(() => runtime.resetAfterPairing()).then(
+        () => sendResponse({ ok: true }),
+        (error: unknown) =>
+          sendResponse({ ok: false, error: safeError(error) }),
+      );
+      return true;
     }
     if (message?.type === "workmap:exclusions-updated") {
       void schedule(() => runtime.handleExclusionsUpdated());

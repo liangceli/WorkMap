@@ -1,5 +1,14 @@
 # QA Skill
 
+## Browser Extension 0.5.5 QA Baseline
+
+- Pairing is not complete merely because encrypted config/credential exists. Require the Options-to-worker acknowledgement and then a fresh server-confirmed heartbeat, policy/lease, permission/registration health, and request ID.
+- Regression must keep the Options IndexedDB connection logically concurrent with worker reset: reset clears `intervals`, `deadLetters`, and `meta` in one transaction and must never call `deleteDatabase()`.
+- Interrupt or omit the one-shot pairing message, then trigger the 30-second alarm/event path. Durable `workmapConfig` must cause worker self-recovery and initialization instead of remaining in paired/offline/pending forever.
+- Same-path 0.5.4 to 0.5.5 reload must retain the new pairing. A stale 0.5.3 Reports card is a different client/device and must not be mistaken for 0.5.5 acceptance.
+- Require accepted or duplicate interval evidence and a confirmed Domain row before calling the data path healthy. Zero Browser connection-audit events alone is not a heartbeat failure when no lifecycle transition occurred.
+- Real Chrome and Edge 0.5.5 load-unpacked QA remains mandatory and must be recorded as **NOT RUN** until actually observed.
+
 ## Browser Extension 0.5.4 QA Baseline
 
 - Exercise real fractional `performance.now()` values, exact idle-boundary duration, a restored fractional 0.5.3 checkpoint, and rapid sub-millisecond switches. Every emitted interval must have safe integer monotonic bounds/duration, positive duration, matching wall-clock duration, and no overlap.

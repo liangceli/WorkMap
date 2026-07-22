@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   assertBrowserQueueCapacity,
+  BrowserTrackingV2Store,
   BrowserV2QueuePressureError,
   calculateBrowserRetryAt,
 } from "../src/trackingV2Store.js";
@@ -26,6 +27,41 @@ test("retry backoff is bounded and does not spin", () => {
   assert.equal(calculateBrowserRetryAt(now, 99), now + 5 * 60_000);
 });
 
+test("pairing reset clears every store without deleting an open multi-context database", async () => {
+  const cleared: string[] = [];
+  const transaction = {
+    error: null,
+    oncomplete: null as ((event: Event) => void) | null,
+    onerror: null as ((event: Event) => void) | null,
+    onabort: null as ((event: Event) => void) | null,
+    objectStore(name: string) {
+      return {
+        clear() {
+          cleared.push(name);
+        },
+      };
+    },
+  };
+  const database = {
+    transaction(storeNames: string[], mode: IDBTransactionMode) {
+      assert.deepEqual(storeNames, ["intervals", "deadLetters", "meta"]);
+      assert.equal(mode, "readwrite");
+      queueMicrotask(() => transaction.oncomplete?.(new Event("complete")));
+      return transaction;
+    },
+  } as unknown as IDBDatabase;
+  const store = new BrowserTrackingV2Store();
+  (
+    store as unknown as {
+      databasePromise: Promise<IDBDatabase>;
+    }
+  ).databasePromise = Promise.resolve(database);
+
+  await store.reset();
+
+  assert.deepEqual(cleared, ["intervals", "deadLetters", "meta"]);
+});
+
 test("IndexedDB queue uses atomic state/event writes and dual unique identity", async () => {
   const source = await readFile(
     new URL("../src/trackingV2Store.ts", import.meta.url),
@@ -41,6 +77,7 @@ test("IndexedDB queue uses atomic state/event writes and dual unique identity", 
   assert.match(source, /DEAD_LETTER_STORE/);
   assert.match(source, /requestId/);
   assert.match(source, /BROWSER_V2_DEAD_LETTER_RETENTION_MS/);
+  assert.doesNotMatch(source, /deleteDatabase/);
   assert.doesNotMatch(source, /\.slice\(-BROWSER_V2_QUEUE_CAPACITY\)/);
   assert.doesNotMatch(source, /delete\(.*oldest/i);
 });

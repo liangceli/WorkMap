@@ -1,5 +1,14 @@
 # Deployment Skill
 
+## Browser Extension 0.5.5 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.5.zip`; SHA-256 `0A025846BE2A59A7C6C2111FC3A29A69EFA230B045D5F338844480F48282CC2B`; size `41,473` bytes.
+- This Browser-only patch removes the multi-context IndexedDB delete race during pairing, waits for worker initialization acknowledgement, and adds durable pairing self-recovery on later alarms/events.
+- Reload the same unpacked path to retain the paired 0.5.4 device. Do not remove the extension or clear extension storage unless intentionally re-pairing after revocation/identity loss.
+- No API/shared/Web/Prisma deployment is introduced by 0.5.5. The separate 0.5.4 API/shared integer-monotonic validation release requirement still applies to draining legacy fractional 0.5.3 queue rows.
+- Do not publish to Chrome Web Store, Edge Add-ons, GitHub Releases, or production without explicit authorization and real Chrome/Edge acceptance.
+
 ## Browser Extension 0.5.4 Release Notes
 
 - Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.

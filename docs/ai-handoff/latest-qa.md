@@ -1,5 +1,41 @@
 # Latest QA Handoff
 
+## 2026-07-22 Browser Extension 0.5.5 Pairing Initialization QA
+
+### Reviewed Implementation
+
+- Reviewed the supplied 0.5.4 Options and `/reports` evidence against current pairing, IndexedDB reset, background initialization, alarm recovery, diagnostics, versioned build output, and tests.
+- Reviewed only Browser Extension and handoff changes. Desktop Agent, API, shared contracts, Web Reports, schema, deployment, and production data were not changed.
+
+### Findings Ordered By Severity
+
+- Fixed - Critical: pairing could permanently stop before the first heartbeat because background `deleteDatabase()` was blocked by the Options page's open Tracking v2 IndexedDB connection.
+- Fixed - High: Options treated the pairing message as fire-and-forget and immediately rendered an empty durable status, so it could not distinguish completed initialization from a lost/failed worker reset.
+- Fixed - High: the 30-second alarm did not recover when the worker had first initialized before durable pairing existed. It now detects saved pairing/config drift and initializes from the durable credential/config.
+- Verified - Medium: the screenshot's stale Reports card is client version 0.5.3 and the 0.5.4 Options device has a different device ID. Empty Domains and zero Browser audit events are downstream symptoms of no accepted 0.5.4 sync, not evidence that Reports counted rejected data.
+- Remaining - High: real Chrome/Edge 0.5.5 end-to-end acceptance has not run, so server heartbeat, snapshot acceptance, interval acceptance, Domain totals, lifecycle behavior, and upgrade retention are not yet manually proven.
+
+### Test And Verification Status
+
+- Browser Extension typecheck: pass.
+- Browser Extension lint: pass.
+- Browser Extension automated tests: pass `52/52`.
+- Browser Extension build and `release:zip`: pass.
+- Artifact manifest/version, 18 ZIP entries, compiled transactional reset, compiled pairing acknowledgement, size, and SHA-256: pass.
+- No API/shared/Web package checks were required because this round changes no API contract, persistence rule, Reports rendering, or shared type.
+
+### Manual QA Status
+
+- **NOT RUN** for Chrome and Edge 0.5.5 load-unpacked/reload, pairing retention, permission grant/revoke/regrant, multi-window/display, Split View, minimize, lock/sleep, offline/reconnect, browser restart, extension reload/disable/enable, or `/reports` live/history acceptance.
+- The user screenshots are valid 0.5.4 pre-fix reproduction evidence only.
+
+### Risks And Pass/Fail Recommendation
+
+- Pass for the source-level pairing deadlock fix, automated regression, and local 0.5.5 artifact.
+- Do not call the release operationally accepted until a same-path Chrome reload shows a fresh 0.5.5 server-confirmed heartbeat and an accepted/duplicate Domain interval in `/reports`.
+- Old 0.5.3 stale devices and tombstones are intentionally preserved and may remain visible until an authorized admin revokes or otherwise manages that device.
+- No browser-store publication, GitHub Release, API deployment, or production deployment was performed.
+
 ## 2026-07-22 Browser Extension 0.5.4 Monotonic Millisecond QA
 
 ### Reviewed Implementation And Findings

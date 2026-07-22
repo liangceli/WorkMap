@@ -17,7 +17,10 @@ import {
 declare const chrome: {
   permissions: { request(permissions: { origins: string[] }, callback: (allowed: boolean) => void): void };
   runtime: {
-    sendMessage(message: Record<string, unknown>, callback?: () => void): void;
+    sendMessage(
+      message: Record<string, unknown>,
+      callback?: (response?: { ok?: boolean; error?: string }) => void,
+    ): void;
     getManifest(): { version: string };
     lastError?: unknown;
   };
@@ -39,6 +42,7 @@ const trackingStore = new BrowserTrackingV2Store();
 const FRESH_HEARTBEAT_MS = 30_000;
 const SIGNAL_LOST_MS = 90_000;
 const PERMISSION_TIMEOUT_MS = 15_000;
+const PAIRING_INITIALIZATION_TIMEOUT_MS = 60_000;
 const DEFAULT_BUTTON_TEXT = pairButton.textContent ?? "Pair extension";
 
 void refreshStatus();
@@ -53,6 +57,7 @@ async function pair() {
   const code = codeInput.value.trim();
   if (!isAllowedApiUrl(apiBaseUrl)) return show("Use HTTPS, or localhost for development.", true);
   if (!code) return show("Enter the short-lived pairing code from WorkMap.", true);
+  let paired = false;
   setBusy(true, "Requesting permission...");
   try {
     showProgress("Requesting Edge website tracking permission...");
@@ -76,23 +81,68 @@ async function pair() {
         exclusionsInput.value,
       ),
     });
+    paired = true;
     await writeStoredState({
       workmapStatus: { state: "offline", queuedEvents: 0, queuedStatusEvents: 0 },
       workmapTracker: { version: 4, activeByTab: {}, openTabs: {}, runtimeByDomain: {}, focusedWindowId: null, systemIdle: false },
       workmapQueue: [],
       workmapStatusQueue: [],
     });
-    chrome.runtime.sendMessage({ type: "workmap:extension-paired" }, () => void chrome.runtime.lastError);
+    await trackingStore.close();
+    setBusy(true, "Starting tracker...");
+    showProgress("Starting WorkMap Tracking v2...");
+    await notifyBackgroundPaired();
     codeInput.value = "";
-    show("Paired. Domain tracking will start while the browser is active.", false);
+    show("Paired and initialized. Domain tracking will run while the browser is active.", false);
     await refreshStatus();
   } catch (error) {
     const messageText = error instanceof Error ? error.message : "Pairing failed.";
-    await writeStoredState({ workmapStatus: { state: "unpaired", queuedEvents: 0, queuedStatusEvents: 0, error: messageText } });
+    await writeStoredState({
+      workmapStatus: {
+        state: paired ? "offline" : "unpaired",
+        queuedEvents: 0,
+        queuedStatusEvents: 0,
+        error: messageText,
+      },
+    });
     await refreshStatus();
     show(messageText, true);
   }
   finally { setBusy(false); }
+}
+
+function notifyBackgroundPaired() {
+  return withTimeout(
+    new Promise<void>((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { type: "workmap:extension-paired" },
+        (response) => {
+          const runtimeError = chrome.runtime.lastError as
+            | { message?: string }
+            | undefined;
+          if (runtimeError) {
+            reject(
+              new Error(
+                runtimeError.message ??
+                  "The WorkMap background worker did not receive the pairing update.",
+              ),
+            );
+          } else if (!response?.ok) {
+            reject(
+              new Error(
+                response?.error ??
+                  "The WorkMap background worker could not initialize tracking.",
+              ),
+            );
+          } else {
+            resolve();
+          }
+        },
+      );
+    }),
+    "The device paired, but Tracking v2 initialization is still pending. Keep the extension enabled; it will retry automatically.",
+    PAIRING_INITIALIZATION_TIMEOUT_MS,
+  );
 }
 
 async function refreshStatus() {

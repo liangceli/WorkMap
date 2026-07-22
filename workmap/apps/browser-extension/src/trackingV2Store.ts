@@ -313,15 +313,19 @@ export class BrowserTrackingV2Store {
   }
 
   async reset() {
-    await this.close();
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.deleteDatabase(DATABASE_NAME);
-      request.onsuccess = () => resolve();
-      request.onerror = () =>
-        reject(request.error ?? new Error("IndexedDB reset failed."));
-      request.onblocked = () =>
-        reject(new Error("IndexedDB reset is blocked by another extension worker."));
-    });
+    // Options and the MV3 worker are separate extension contexts and may both
+    // have this database open during pairing. Deleting the database can then
+    // remain blocked before the worker re-initializes. Clearing all stores in
+    // one transaction preserves the schema and serializes safely with readers.
+    const database = await this.database();
+    const transaction = database.transaction(
+      [INTERVAL_STORE, DEAD_LETTER_STORE, META_STORE],
+      "readwrite",
+    );
+    transaction.objectStore(INTERVAL_STORE).clear();
+    transaction.objectStore(DEAD_LETTER_STORE).clear();
+    transaction.objectStore(META_STORE).clear();
+    await transactionDone(transaction);
   }
 
   private database() {
