@@ -18,6 +18,7 @@ import { WorkMapButton } from "../ui/WorkMapButton";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
 import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
 import {
+  selectTrackingV2LiveDevices,
   trackingV2ConnectionPresentation,
   trackingV2SnapshotPresentation,
   type TrackingV2LiveDevice,
@@ -438,6 +439,7 @@ export function ReportSummaryPanel() {
 
 function TrackingV2LiveOverview({ live }: { live: WorkMapApiTrackingV2LiveActivity }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const visible = useMemo(() => selectTrackingV2LiveDevices(live.devices), [live.devices]);
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
     return () => window.clearInterval(timer);
@@ -455,12 +457,12 @@ function TrackingV2LiveOverview({ live }: { live: WorkMapApiTrackingV2LiveActivi
         </div>
         <div style={styles.liveCoverage}>
           <Activity size={20} aria-hidden />
-          <strong>{live.coverage.connected}/{live.coverage.total} connected</strong>
-          <span>{live.coverage.freshSnapshots} confirmed snapshot(s)</span>
+          <strong>{visible.coverage.connected}/{visible.coverage.total} connected</strong>
+          <span>{visible.coverage.freshSnapshots} confirmed snapshot(s)</span>
         </div>
       </div>
       <div style={styles.twoColumnGrid}>
-        {live.devices.map((device) => (
+        {visible.devices.map((device) => (
           <TrackingV2DeviceCard
             key={device.deviceId}
             device={device}
@@ -469,12 +471,17 @@ function TrackingV2LiveOverview({ live }: { live: WorkMapApiTrackingV2LiveActivi
           />
         ))}
       </div>
-      {live.coverage.withSequenceGaps > 0 || live.coverage.withDeadLetters > 0 ? (
+      {visible.hiddenInactiveBrowserCount > 0 ? (
+        <p style={styles.emptyText}>
+          {visible.hiddenInactiveBrowserCount} older inactive Browser connection(s) hidden from Live signals; current connections take priority.
+        </p>
+      ) : null}
+      {visible.coverage.withSequenceGaps > 0 || visible.coverage.withDeadLetters > 0 ? (
         <div role="status" style={styles.liveWarning}>
           <AlertTriangle size={17} aria-hidden />
           <span>
-            {live.coverage.withSequenceGaps > 0 ? `${live.coverage.withSequenceGaps} client(s) have sequence gaps. ` : ""}
-            {live.coverage.withDeadLetters > 0 ? `${live.coverage.withDeadLetters} client(s) have rejected events requiring attention.` : ""}
+            {visible.coverage.withSequenceGaps > 0 ? `${visible.coverage.withSequenceGaps} client(s) have sequence gaps. ` : ""}
+            {visible.coverage.withDeadLetters > 0 ? `${visible.coverage.withDeadLetters} client(s) have rejected events requiring attention.` : ""}
             Confirmed totals exclude unresolved data.
           </span>
         </div>

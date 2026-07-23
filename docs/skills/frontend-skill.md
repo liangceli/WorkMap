@@ -1,5 +1,12 @@
 # Frontend Skill
 
+## Reports Live Browser Device Presentation
+
+- `/reports` Live signals is a current-status surface, not a complete device registry. For each employee/browser identity, fresh Browser Extension devices take priority and older inactive cards are hidden from the live grid and its visible coverage/attention counts.
+- If a browser has no fresh device, retain the newest interrupted card. Never implement an unconditional connected-only filter that would hide a real outage.
+- This presentation rule must not revoke devices, delete rejections, change ledger totals, or merge Browser Domain time into Desktop App work time.
+- Keep executable selection tests in `apps/web/test/tracking-v2-live-presentation.test.ts`; cover both fresh replacement and all-stale fallback.
+
 ## Structure
 
 Frontend app: `workmap/apps/web`.

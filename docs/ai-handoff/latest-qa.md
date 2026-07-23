@@ -1,5 +1,35 @@
 # Latest QA Handoff
 
+## 2026-07-23 Reports Current Browser Connection Selection QA
+
+### Reviewed Implementation
+
+- Compared the supplied Chrome 0.5.6 Options diagnostics with `/reports` live cards and confirmed Domain summary.
+- Reviewed the current Web live presentation, API live-device fields/coverage semantics, Browser 30-second alarm and 10-second request timeout, and existing Reports tests.
+
+### Findings Ordered By Severity
+
+- Verified - High: the 0.5.6 core Domain pipeline is operational in the supplied run. Heartbeat/sync is server-confirmed, snapshot confirmation exists, one Focus interval is accepted, confirmed-through advances, queue/dead-letter is clear, and the confirmed Domain ledger is visible in `/reports`.
+- Remaining - Medium: one screenshot shows a heartbeat older than 90 seconds before a later successful sync/healthy collector. It recovered and did not lose the accepted interval, but a longer Chrome/Edge lifecycle run is still needed before treating heartbeat continuity as fully accepted.
+- Fixed - Medium: inactive historical Chrome pairing identities crowded Live signals and made an active 0.5.6 connection look broken. Fresh same-browser devices now take presentation priority and old inactive cards no longer affect visible coverage or live dead-letter attention.
+- Preserved - High: if no fresh instance exists for a browser, the newest interrupted card remains visible. The UI does not claim success or hide a real all-offline condition.
+- Verified - Low: old device/history rows are presentation-filtered only; no API/database records or rejection evidence were deleted.
+
+### Test And Verification Status
+
+- Web typecheck: pass.
+- Web lint: pass.
+- Web automated tests: pass `84/84`, including two behavioral Browser-device-selection regressions.
+- Web production build: pass. Non-blocking existing warnings remain for webpack cache snapshotting and Next.js ESLint-plugin detection.
+- Final diff/secret checks recorded after documentation update.
+
+### Manual QA Status And Recommendation
+
+- User-supplied Chrome 0.5.6 screenshots prove the pre-Web-change data path. Post-change `/reports` rendering and all Edge checks are **NOT RUN**.
+- Pass for merge/deploy consideration after final static checks. After deployment, verify obsolete Browser cards are hidden while 0.5.6 is fresh and the newest interrupted card returns after every Chrome instance is stale.
+- Do not automatically revoke/delete historical devices in this UI change. Device cleanup remains a separate authorized administration action.
+- No Desktop Agent change, Browser artifact rebuild, browser-store publication, GitHub Release, API deployment, or production deployment occurred.
+
 ## 2026-07-22 Browser Extension 0.5.6 Health/Collector Separation QA
 
 ### Reviewed Implementation

@@ -1,5 +1,12 @@
 # QA Skill
 
+## Reports Current Browser Connection QA
+
+- With one fresh Chrome device and multiple older stale Chrome pairings, Live signals must render the fresh Chrome card only, recalculate connected/total and current attention from visible cards, and disclose the hidden inactive count.
+- With no fresh Chrome device, the newest interrupted Chrome card must remain visible. A connected-only filter that produces an empty/success-only view during a real outage fails QA.
+- Hidden old Browser cards must not delete device, tombstone, rejection, ledger, or confirmed Domain summary data.
+- Chrome and Edge are separate groups; fresh devices from both browsers may appear concurrently.
+
 ## Browser Extension 0.5.6 QA Baseline
 
 - Browser connection freshness is 90 seconds in Options and Reports. Chrome alarms may be delayed beyond their 30-second period, so a 30–90 second server-confirmed heartbeat must remain Online.

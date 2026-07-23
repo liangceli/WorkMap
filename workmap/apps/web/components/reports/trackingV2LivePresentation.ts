@@ -3,6 +3,77 @@ import type { WorkMapApiTrackingV2LiveActivity } from "../../lib/api/apiTypes.js
 export type TrackingV2LiveDevice =
   WorkMapApiTrackingV2LiveActivity["devices"][number];
 
+export function selectTrackingV2LiveDevices(
+  devices: TrackingV2LiveDevice[],
+) {
+  const selectedBrowserDeviceIds = new Set<string>();
+  const browserGroups = new Map<string, TrackingV2LiveDevice[]>();
+
+  for (const device of devices) {
+    if (device.clientType !== "BROWSER_EXTENSION") continue;
+    const groupKey = `${device.userId}:${device.browserName ?? "UNKNOWN"}`;
+    const group = browserGroups.get(groupKey) ?? [];
+    group.push(device);
+    browserGroups.set(groupKey, group);
+  }
+
+  for (const group of browserGroups.values()) {
+    const connected = group.filter((device) => device.connectionFresh);
+    if (connected.length > 0) {
+      for (const device of connected) selectedBrowserDeviceIds.add(device.deviceId);
+      continue;
+    }
+
+    const latestInterrupted = group.reduce<TrackingV2LiveDevice | null>(
+      (latest, device) =>
+        !latest || liveDeviceObservedAtMs(device) > liveDeviceObservedAtMs(latest)
+          ? device
+          : latest,
+      null,
+    );
+    if (latestInterrupted) selectedBrowserDeviceIds.add(latestInterrupted.deviceId);
+  }
+
+  const visibleDevices = devices.filter(
+    (device) =>
+      device.clientType !== "BROWSER_EXTENSION" ||
+      selectedBrowserDeviceIds.has(device.deviceId),
+  );
+
+  return {
+    devices: visibleDevices,
+    hiddenInactiveBrowserCount: devices.length - visibleDevices.length,
+    coverage: {
+      total: visibleDevices.length,
+      connected: visibleDevices.filter((device) => device.connectionFresh).length,
+      freshSnapshots: visibleDevices.filter(
+        (device) =>
+          device.snapshotStatus === "CURRENT" ||
+          device.snapshotStatus === "NO_CURRENT_FOCUS",
+      ).length,
+      withSequenceGaps: visibleDevices.filter(
+        (device) => (device.cursor?.missingRanges.length ?? 0) > 0,
+      ).length,
+      withDeadLetters: visibleDevices.filter(
+        (device) => (device.health?.queue.deadLetter ?? 0) > 0,
+      ).length,
+    },
+  };
+}
+
+function liveDeviceObservedAtMs(device: TrackingV2LiveDevice) {
+  const candidates = [
+    device.connectionConfirmedAt,
+    device.health?.receivedAt,
+    device.protocolActivatedAt,
+  ];
+  for (const value of candidates) {
+    const parsed = value ? Date.parse(value) : Number.NaN;
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
 export function trackingV2ConnectionPresentation(
   device: TrackingV2LiveDevice,
 ) {

@@ -31,8 +31,8 @@ test("live and audit sections use the responsive two-column grid and real curren
 
 test("a failed summary revision is not retried on every live poll", () => {
   assert.match(reportSource, /failedSummaryRevisionRef/);
-  assert.match(reportSource, /result\.data\.activityRevision !== failedSummaryRevisionRef\.current/);
-  assert.match(reportSource, /failedSummaryRevisionRef\.current = result\.data\.activityRevision/);
+  assert.match(reportSource, /result\.data\.revision !== failedSummaryRevisionRef\.current/);
+  assert.match(reportSource, /failedSummaryRevisionRef\.current = result\.data\.revision/);
 });
 
 test("filter refresh replaces previous report content with the WorkMap pixel loader", () => {
@@ -45,9 +45,9 @@ test("filter refresh replaces previous report content with the WorkMap pixel loa
 });
 
 test("the initial report loads current status first, then summary and non-blocking audit", () => {
-  assert.match(reportSource, /const initialLiveResult = await requestLiveStatus\(context, initialFilters, false\);/);
+  assert.match(reportSource, /const initialLiveResult = await requestCurrentLive\(context, initialFilters, summaryRevisionDue\);/);
   assert.match(reportSource, /const result = await requestSummary\(context, initialFilters\);/);
-  assert.match(reportSource, /applyResult\(result, setReportState\);\s*\n\s*nextRevisionCheckAtRef\.current/);
+  assert.match(reportSource, /applyResult\(result, setReportState\);\s*\n\s*loadedSummary = result\.data/);
   assert.match(reportSource, /void loadAudit\(context, initialFilters/);
   assert.match(reportSource, /void loadDirectory\(context\.options/);
   assert.match(reportSource, /if \(!auth \|\| !livePollingReady\) return;/);
@@ -65,7 +65,7 @@ test("report filter loader leaves the pixel avatar unframed", () => {
 });
 
 test("live signals and connection audit retain comfortable responsive section padding", () => {
-  assert.equal((reportSource.match(/className="wm-report-detail-section"/g) ?? []).length, 2);
+  assert.equal((reportSource.match(/className="wm-report-detail-section"/g) ?? []).length, 3);
   assert.match(redesignStyles, /\.wm-report-summary > section\.wm-report-detail-section \{\s*padding: 24px !important;/);
   assert.match(redesignStyles, /@media \(max-width: 640px\) \{\s*\.wm-report-summary > section\.wm-report-detail-section \{\s*padding: 16px !important;/);
 });

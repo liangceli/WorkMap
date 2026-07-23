@@ -1,5 +1,40 @@
 # Latest Implementation Handoff
 
+## 2026-07-23 Reports Current Browser Connection Selection
+
+### Original Task Brief
+
+- Review real Chrome Browser Extension 0.5.6 Options and `/reports` screenshots from July 23 around 10 AM, decide whether the data path is healthy, and remove obsolete Browser connection-failure blocks from the live section without hiding a genuine current outage.
+- Do not modify Desktop Agent or delete historical device/ledger evidence.
+
+### Changed Files
+
+- Reports presentation and selection: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx` and `trackingV2LivePresentation.ts`.
+- Executable Web regressions: `workmap/apps/web/test/tracking-v2-live-presentation.test.ts`.
+- Synced existing Reports source-contract assertions with the current revision/live-section architecture: `workmap/apps/web/test/reports-information-order.test.ts`.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/frontend-skill.md`, and `qa-skill.md`.
+
+### Implementation Summary
+
+- The supplied 0.5.6 evidence proves the core Browser Domain path is working: a server-confirmed heartbeat/sync and request ID exist; policy v2, acknowledgement, lease, schedule, host permission and content registration are valid; the queue/dead-letter counts are zero; one interval is `ACCEPTED` with zero duplicate/rejected; confirmed-through advanced; and `/reports` contains a confirmed `work-map-teal.vercel.app` Domain Focus Active row for 20 seconds.
+- The local screenshot also captured one heartbeat older than the shared 90-second freshness boundary, followed by a later successful sync and `HEALTHY` collector state. This is a recovered transient interruption, so 0.5.6 is materially healthy but should still be observed over a longer Chrome/Edge lifecycle run before calling it issue-free.
+- `/reports` previously rendered every non-revoked Browser pairing, so obsolete 0.5.3/0.5.4/0.5.5 device identities appeared as red live cards beside the active 0.5.6 device. Live presentation now groups Browser devices by employee and browser identity. When that browser has one or more fresh connections, only those fresh Browser cards appear. When none is fresh, the newest interrupted card remains visible so a real outage cannot be hidden.
+- The live connected/total, confirmed-snapshot count, sequence-gap warning and dead-letter warning are recalculated from visible current cards. A neutral count says how many older inactive Browser cards were hidden.
+- Historical device, rejection, ledger and confirmed report data are not deleted or rewritten. Old Browser pairings remain available to backend/device management and historical diagnostics; this is a Live signals presentation rule only.
+
+### Role, Privacy, And Intentional Non-Changes
+
+- Owner/HR-visible Reports behavior changes only; backend tenant isolation and report authorization remain unchanged.
+- No Browser Extension binary/version, Desktop Agent, API, shared contract, database/schema, policy, credential, Domain collection rule, store publication, or deployment changed.
+- Browser Extension stays at `0.5.6`; its existing ZIP and SHA-256 are unchanged. Domain open/runtime remains disabled.
+
+### Verification And Manual QA
+
+- Web typecheck, lint, full automated tests `84/84`, and production build pass. The new executable tests cover fresh Browser replacement, removal of hidden old dead-letter attention, and preservation of the newest interrupted card when a browser has no current connection.
+- `git diff --check` and scoped secret scan are recorded in `latest-qa.md`.
+- Supplied screenshots are genuine pre-Web-change Chrome 0.5.6 evidence. The changed `/reports` UI was **NOT RUN** in a deployed/signed-in browser, and Edge 0.5.6 remains **NOT RUN**.
+- After deploying the Web change, verify the screenshot scenario shows Desktop Agent plus the current Chrome 0.5.6 card, a visible hidden-card count, and no obsolete 0.5.3/0.5.4/0.5.5 live warning. Stop the current 0.5.6 connection for more than 90 seconds and verify the newest Chrome interruption card reappears.
+
 ## 2026-07-22 Browser Extension 0.5.6 Health/Collector Separation
 
 ### Original Task Brief

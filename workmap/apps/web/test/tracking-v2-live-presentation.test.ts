@@ -2,9 +2,49 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { WorkMapApiTrackingV2LiveActivity } from "../lib/api/apiTypes.js";
 import {
+  selectTrackingV2LiveDevices,
   trackingV2ConnectionPresentation,
   trackingV2SnapshotPresentation,
 } from "../components/reports/trackingV2LivePresentation.js";
+
+test("connected Browser instances replace older interrupted cards for the same browser", () => {
+  const desktop = liveDevice({
+    connectionFresh: true,
+    snapshotFresh: true,
+    snapshotStatus: "NO_CURRENT_FOCUS",
+    diagnosticCode: null,
+  });
+  desktop.health!.queue.deadLetter = 0;
+  const staleChrome = browserDevice("chrome-old", false, "2026-07-22T23:00:00.000Z");
+  staleChrome.health!.queue.deadLetter = 4;
+  const currentChrome = browserDevice("chrome-current", true, "2026-07-23T00:40:00.000Z");
+  currentChrome.health!.queue.deadLetter = 0;
+
+  const selected = selectTrackingV2LiveDevices([desktop, staleChrome, currentChrome]);
+
+  assert.deepEqual(selected.devices.map((device) => device.deviceId), ["device", "chrome-current"]);
+  assert.equal(selected.hiddenInactiveBrowserCount, 1);
+  assert.deepEqual(selected.coverage, {
+    total: 2,
+    connected: 2,
+    freshSnapshots: 2,
+    withSequenceGaps: 0,
+    withDeadLetters: 0,
+  });
+});
+
+test("latest interrupted Browser card remains visible when that browser has no connection", () => {
+  const olderChrome = browserDevice("chrome-older", false, "2026-07-22T23:00:00.000Z");
+  const latestChrome = browserDevice("chrome-latest", false, "2026-07-23T00:40:00.000Z");
+  const currentEdge = browserDevice("edge-current", true, "2026-07-23T00:41:00.000Z");
+  currentEdge.browserName = "EDGE";
+
+  const selected = selectTrackingV2LiveDevices([olderChrome, latestChrome, currentEdge]);
+
+  assert.deepEqual(selected.devices.map((device) => device.deviceId), ["chrome-latest", "edge-current"]);
+  assert.equal(selected.coverage.connected, 1);
+  assert.equal(selected.hiddenInactiveBrowserCount, 1);
+});
 
 test("snapshot policy rejection does not turn a fresh heartbeat into Signal interrupted", () => {
   const device = liveDevice({
@@ -136,4 +176,25 @@ function liveDevice(input: {
     cursor: null,
     correlation: null,
   };
+}
+
+function browserDevice(
+  deviceId: string,
+  connectionFresh: boolean,
+  connectionConfirmedAt: string,
+) {
+  const device = liveDevice({
+    connectionFresh,
+    snapshotFresh: connectionFresh,
+    snapshotStatus: connectionFresh ? "NO_CURRENT_FOCUS" : "STALE",
+    diagnosticCode: null,
+  });
+  device.deviceId = deviceId;
+  device.clientType = "BROWSER_EXTENSION";
+  device.source = "BROWSER_DOMAIN";
+  device.browserName = "CHROME";
+  device.connectionConfirmedAt = connectionConfirmedAt;
+  device.health!.platform = "CHROME";
+  device.health!.receivedAt = connectionConfirmedAt;
+  return device;
 }
