@@ -196,6 +196,24 @@ function schedule(task: () => Promise<void>) {
   return operation;
 }
 
+export async function runCollectorMaintenanceWithHeartbeat(
+  maintenance: () => Promise<void>,
+  recordMaintenanceFailure: (error: unknown) => Promise<void>,
+  heartbeat: () => Promise<void>,
+) {
+  try {
+    await maintenance();
+  } catch (error) {
+    try {
+      await recordMaintenanceFailure(error);
+    } catch {
+      // A local diagnostic write must never suppress the independent health
+      // request. The heartbeat path retains its own request diagnostics.
+    }
+  }
+  await heartbeat();
+}
+
 export class BrowserExtensionRuntimeV2 {
   private readonly store = new BrowserTrackingV2Store();
   private config: ExtensionConfig | null = null;
@@ -458,7 +476,6 @@ export class BrowserExtensionRuntimeV2 {
   async handleAlarm() {
     await this.ensureInitialized();
     if (!this.state) return;
-    const discontinuity = await this.guardLifecycleContinuity();
     if (!this.state.protocolActivatedAt) {
       const stored = await readStoredState([
         "workmapConfig",
@@ -471,16 +488,26 @@ export class BrowserExtensionRuntimeV2 {
       await this.startTrackingAfterActivation();
       return;
     }
-    await this.refreshPolicyIfDue();
-    if (!this.captureAllowed()) {
-      await this.closeAtPolicyBoundary();
-    } else if (this.engine && !discontinuity) {
-      await this.persistUpdate(this.engine.settle(performance.now()), true);
-    }
-    await this.reconcileBrowserReality(false);
-    await this.flushLegacyQueue();
-    await this.requestSync(true);
-    await this.restoreAfterQueuePressure();
+    await runCollectorMaintenanceWithHeartbeat(
+      async () => {
+        const discontinuity = await this.guardLifecycleContinuity();
+        await this.refreshPolicyIfDue();
+        await this.restoreCollectorIfAllowed();
+        if (!this.captureAllowed()) {
+          await this.closeAtPolicyBoundary();
+        } else if (this.engine && !discontinuity) {
+          await this.persistUpdate(
+            this.engine.settle(performance.now()),
+            true,
+          );
+        }
+        await this.reconcileBrowserReality(false);
+        await this.flushLegacyQueue();
+        await this.restoreAfterQueuePressure();
+      },
+      (error) => this.recordCollectorMaintenanceFailure(error),
+      () => this.requestSync(true),
+    );
   }
 
   private async initializeInternal() {
@@ -633,15 +660,23 @@ export class BrowserExtensionRuntimeV2 {
 
   private async startTrackingAfterActivation() {
     if (!this.state?.protocolActivatedAt) return;
-    await this.flushLegacyQueue();
-    await this.closeRecoveredV2Tail();
-    const idleState = await queryIdleState(this.chromeApi, 60);
-    if (!this.state) return;
-    this.state = { ...this.state, systemIdle: idleState !== "active" };
-    if (this.state.systemIdle) this.collectorState = "PAUSED";
-    await this.store.writeRuntimeState(this.state);
-    await this.reconcileBrowserReality(true);
-    await this.requestSync(true);
+    await runCollectorMaintenanceWithHeartbeat(
+      async () => {
+        await this.flushLegacyQueue();
+        await this.closeRecoveredV2Tail();
+        const idleState = await queryIdleState(this.chromeApi, 60);
+        if (!this.state) return;
+        this.state = {
+          ...this.state,
+          systemIdle: idleState !== "active",
+        };
+        if (this.state.systemIdle) this.collectorState = "PAUSED";
+        await this.store.writeRuntimeState(this.state);
+        await this.reconcileBrowserReality(true);
+      },
+      (error) => this.recordCollectorMaintenanceFailure(error),
+      () => this.requestSync(true),
+    );
   }
 
   private async closeLegacyTrackerAt(
@@ -1324,6 +1359,33 @@ export class BrowserExtensionRuntimeV2 {
     await this.reconcileBrowserReality(true);
   }
 
+  private async recordCollectorMaintenanceFailure(_error: unknown) {
+    void _error;
+    this.collectorState = "LIMITED";
+    this.errorCode = "UNKNOWN";
+    if (this.state) {
+      this.state = {
+        ...this.state,
+        lastErrorCode: this.errorCode,
+        diagnostics: appendDiagnostic(this.state.diagnostics, {
+          stage: "LIFECYCLE",
+          outcome: "RETRYING",
+          code: "FOCUS_RECONCILE_RETRY",
+          requestId: null,
+          retryable: true,
+          terminal: false,
+          count: 1,
+          remediation:
+            "The health heartbeat continues independently. WorkMap will retry focused-window and eligible-page reconciliation on the next browser event or alarm.",
+        }),
+      };
+      await this.store.writeRuntimeState(this.state);
+    }
+    await this.updateVisibleStatus(
+      "Browser focus evidence could not be refreshed. Heartbeats continue while WorkMap retries page reconciliation.",
+    );
+  }
+
   private async pauseCollector(
     errorCode: TrackingHealthErrorCodeV2,
     message: string,
@@ -1399,6 +1461,8 @@ export class BrowserExtensionRuntimeV2 {
     await writeStoredState({
       workmapStatus: {
         state: statusState,
+        connectionState: this.connectionState,
+        collectorState: this.collectorState,
         lastHeartbeatAt:
           this.state.lastSuccessfulHeartbeatAt ?? undefined,
         lastUploadAt: this.state.lastSuccessfulSyncAt ?? undefined,

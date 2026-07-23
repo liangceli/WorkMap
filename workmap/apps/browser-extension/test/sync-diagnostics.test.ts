@@ -7,6 +7,7 @@ import {
   collectorStateForPolicy,
   hasLifecycleDiscontinuity,
   isRetryableError,
+  runCollectorMaintenanceWithHeartbeat,
   snapshotConfirmationFromResponse,
   summarizeIntervalUpload,
 } from "../src/backgroundV2.js";
@@ -18,6 +19,24 @@ import type {
 
 const occurredAt = "2026-07-21T01:02:03.000Z";
 const requestId = "11111111-1111-4111-8111-111111111111";
+
+test("focus reconciliation failure never suppresses the health heartbeat", async () => {
+  const calls: string[] = [];
+  await runCollectorMaintenanceWithHeartbeat(
+    async () => {
+      calls.push("maintenance");
+      throw new Error("focused window query failed");
+    },
+    async () => {
+      calls.push("diagnostic");
+      throw new Error("diagnostic persistence failed");
+    },
+    async () => {
+      calls.push("heartbeat");
+    },
+  );
+  assert.deepEqual(calls, ["maintenance", "diagnostic", "heartbeat"]);
+});
 
 test("standalone Browser pairing remains a complete v2 identity", () => {
   assert.doesNotThrow(() => assertBrowserDeviceIdentity({

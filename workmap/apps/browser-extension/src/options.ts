@@ -7,6 +7,11 @@ import {
   writeStoredState,
 } from "./extensionStorage.js";
 import { normalizeExcludedHostnames } from "./hostnameExclusions.js";
+import {
+  collectorStatusLabel,
+  deriveStatusHealth,
+  type BrowserConnectionPresentation,
+} from "./optionsDiagnostics.js";
 import { BrowserTrackingV2Store } from "./trackingV2Store.js";
 import {
   BROWSER_EXTENSION_VERSION,
@@ -39,14 +44,13 @@ const message = document.querySelector<HTMLElement>("#message")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const diagnostics = document.querySelector<HTMLElement>("#diagnostics")!;
 const trackingStore = new BrowserTrackingV2Store();
-const FRESH_HEARTBEAT_MS = 30_000;
 const SIGNAL_LOST_MS = 90_000;
 const PERMISSION_TIMEOUT_MS = 15_000;
 const PAIRING_INITIALIZATION_TIMEOUT_MS = 60_000;
 const DEFAULT_BUTTON_TEXT = pairButton.textContent ?? "Pair extension";
 
 void refreshStatus();
-setInterval(() => void refreshStatus(), 5_000);
+setInterval(() => void refreshDiagnostics(), 5_000);
 form.addEventListener("submit", (event) => { event.preventDefault(); void pair(); });
 saveExclusionsButton.addEventListener("click", () => {
   void saveExclusions();
@@ -153,6 +157,17 @@ async function refreshStatus() {
     stored.workmapConfig?.excludedHostnames ?? []
   ).join("\n");
   saveExclusionsButton.disabled = !stored.workmapConfig;
+  await renderStoredDiagnostics(stored);
+}
+
+async function refreshDiagnostics() {
+  const stored = await readStoredState(["workmapConfig", "workmapStatus"]);
+  await renderStoredDiagnostics(stored);
+}
+
+async function renderStoredDiagnostics(
+  stored: Awaited<ReturnType<typeof readStoredState>>,
+) {
   const current = stored.workmapStatus;
   const health = deriveStatusHealth(current);
   const runtime = stored.workmapConfig
@@ -174,7 +189,7 @@ function renderDiagnostics(
   current: Awaited<ReturnType<typeof readStoredState>>["workmapStatus"],
   runtime: BrowserTrackingRuntimeStateV2 | null,
   queue: BrowserV2QueueStats | null,
-  connection: ReturnType<typeof deriveStatusHealth>,
+  connection: BrowserConnectionPresentation,
 ) {
   const title = element("h2", "Tracking diagnostics");
   if (!config || !runtime) {
@@ -212,7 +227,9 @@ function renderDiagnostics(
       `${snapshotState}${currentDomain ? ` / ${currentDomain}` : ""}`,
       snapshot.rejectionCode
         ? `${snapshot.rejectionCode}${snapshot.requestId ? ` / request ${snapshot.requestId}` : ""}`
-        : undefined,
+        : snapshot.state === "NONE"
+          ? "Open and interact with a focused HTTP/HTTPS page. Extension pages and protected browser pages are intentionally not tracked."
+          : undefined,
     ],
     ["Snapshot observed / confirmed", `${formatTime(snapshot.observedAt ?? undefined)} / ${formatTime(snapshot.confirmedAt ?? undefined)}`],
     [
@@ -238,7 +255,7 @@ function renderDiagnostics(
     ["Policy lease", policy?.policyLeaseId ?? "None", `${formatTime(policy?.policyLeaseIssuedAt ?? undefined)} to ${formatTime(policy?.policyLeaseExpiresAt ?? undefined)}`],
     ["Host permission", runtime.trackingAccess.hostPermission],
     ["Content-script registration", runtime.trackingAccess.contentRegistration, runtime.trackingAccess.error ?? undefined],
-    ["Collector", `${current?.state ?? "unknown"} / ${runtime.latestSnapshot?.collectorState ?? "PAUSED"}`],
+    ["Collector", collectorStatusLabel(current)],
   ];
   const grid = element("div");
   grid.className = "diagnostic-grid";
@@ -324,25 +341,6 @@ async function saveExclusions() {
     () => void chrome.runtime.lastError,
   );
   show("Sensitive hostname exclusions saved on this device.", false);
-}
-
-function deriveStatusHealth(current: Awaited<ReturnType<typeof readStoredState>>["workmapStatus"]) {
-  if (!current) return { label: "Offline", detail: "Waiting for the first server-confirmed heartbeat." };
-  if (current.state === "auth_required") return { label: "Auth required" };
-  if (current.state === "upgrade_required") return { label: "Upgrade required" };
-  if (current.state === "pairing") return { label: "Pairing" };
-  if (current.state === "unpaired") return { label: "Not paired" };
-
-  const heartbeatAge = ageMs(current.lastHeartbeatAt);
-  if (heartbeatAge === null) return { label: "Offline", detail: "Waiting for the first server-confirmed heartbeat." };
-  if (heartbeatAge <= FRESH_HEARTBEAT_MS) return { label: "Online" };
-  const detail = `Last server-confirmed heartbeat was ${formatTime(current.lastHeartbeatAt)}. The extension is retrying until WorkMap confirms a fresh heartbeat.`;
-  return {
-    label: "Offline",
-    detail: heartbeatAge <= SIGNAL_LOST_MS
-      ? `Signal stale. ${detail}`
-      : detail,
-  };
 }
 
 function ageMs(value: string | undefined) {

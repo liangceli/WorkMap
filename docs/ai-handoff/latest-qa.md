@@ -1,5 +1,41 @@
 # Latest QA Handoff
 
+## 2026-07-22 Browser Extension 0.5.6 Health/Collector Separation QA
+
+### Reviewed Implementation
+
+- Compared the real 0.5.5 Options and `/reports` screenshots with Browser alarm, service-worker, sync, local diagnostic, API Reports freshness, and content-script paths.
+- Checked current official Chrome alarm/service-worker/scripting documentation. Chrome allows arbitrary alarm delay beyond the requested period and recommends recreating important alarms at worker startup; current WorkMap registers listeners synchronously and recreates its named alarm during each worker initialization.
+
+### Findings Ordered By Severity
+
+- Fixed - High: Options used 30 seconds while Reports used 90 seconds, creating false local Offline state during allowed Chrome alarm jitter.
+- Fixed - High: collector presentation defaulted missing snapshot state to `PAUSED`; it now uses separately persisted current collector state.
+- Fixed - High: Focus/window/tab reconciliation failure could prevent the same alarm cycle from sending health. Health now runs independently and the collector failure becomes bounded `FOCUS_RECONCILE_RETRY` evidence.
+- Fixed - Medium: periodic Options refresh overwrote editable pairing/exclusion inputs; only diagnostics now refresh periodically.
+- Verified - Medium: 0.5.5 completed activation and at least one real heartbeat. Multiple live cards are distinct paired device IDs/versions; stale historical devices were not merged into the new client.
+- Remaining - High: no screenshot proves a normal eligible page snapshot or accepted/duplicate Domain interval. `NONE` while Options is focused is expected, but Chrome/Edge end-to-end Focus acceptance remains open.
+
+### Test And Verification Status
+
+- Typecheck pass; lint pass; automated tests `56/56` pass.
+- Build and `release:zip` pass.
+- ZIP manifest/version, entry count, compiled 90-second boundary, compiled heartbeat isolation, diagnostic code, size, and SHA-256 inspected successfully.
+- Final diff and scoped secret checks are recorded after documentation update.
+- No API/shared/Web package checks were required because their code/contracts were not changed.
+
+### Manual QA Status
+
+- **NOT RUN** for Chrome/Edge 0.5.6 reload, three-minute heartbeat continuity, normal-page snapshot, Focus Active/Idle ledger acceptance, multi-window/display, protected pages, minimize/lock/sleep, offline/reconnect, restart, disable/enable, or `/reports` Domain totals.
+- Direct Codex Chrome inspection was unavailable because the separate ChatGPT Chrome-control extension/native-host integration is not installed in the selected profile. This is unrelated to the WorkMap extension; supplied screenshots were still reviewed as real evidence.
+
+### Risks And Pass/Fail Recommendation
+
+- Pass for source, automated diagnostics, heartbeat/collector separation, and local artifact generation.
+- Do not call Domain tracking operationally accepted until real 0.5.6 manual QA shows repeated heartbeat plus confirmed snapshot and accepted/duplicate interval evidence.
+- Old paired Browser devices remain visible until an authorized device-management action revokes them; no automatic deletion was introduced.
+- No store publication, GitHub Release, API/Web deployment, or production deployment was performed.
+
 ## 2026-07-22 Browser Extension 0.5.5 Pairing Initialization QA
 
 ### Reviewed Implementation

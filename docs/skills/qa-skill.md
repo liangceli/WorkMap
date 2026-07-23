@@ -1,5 +1,15 @@
 # QA Skill
 
+## Browser Extension 0.5.6 QA Baseline
+
+- Browser connection freshness is 90 seconds in Options and Reports. Chrome alarms may be delayed beyond their 30-second period, so a 30–90 second server-confirmed heartbeat must remain Online.
+- Persist connection and collector as separate status lanes. Missing Domain snapshot must never be rendered as an invented `PAUSED` collector state.
+- Simulate Focus/window/tab maintenance failure and diagnostic persistence failure; the independent health heartbeat must still execute and a successful local diagnostic must use bounded `FOCUS_RECONCILE_RETRY` without URL/activity payload.
+- While Options or an internal page is focused, Domain NONE is expected. On a normal focused HTTP/HTTPS page, trusted interaction must lead to a confirmed snapshot; staying NONE is a failure requiring the newest safe diagnostic and worker-console error.
+- Test heartbeat advancement for at least three minutes, then Focus Active to Focused Idle past policy `idleThresholdMs`, cross-host switch, accepted/duplicate interval, confirmed-through advancement, and `/reports` Domain row.
+- Multiple old pairing cards are separate device identities. Do not judge 0.5.6 from an older card and do not delete old devices merely to clean up the UI.
+- Real Chrome and Edge 0.5.6 QA remains mandatory and is **NOT RUN** until observed.
+
 ## Browser Extension 0.5.5 QA Baseline
 
 - Pairing is not complete merely because encrypted config/credential exists. Require the Options-to-worker acknowledgement and then a fresh server-confirmed heartbeat, policy/lease, permission/registration health, and request ID.

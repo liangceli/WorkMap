@@ -1,6 +1,6 @@
 {
   "name": "@workmap/browser-extension",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "private": true,
   "scripts": {
     "dev": "tsc --watch --noEmit",

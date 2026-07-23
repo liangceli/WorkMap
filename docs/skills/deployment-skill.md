@@ -1,5 +1,14 @@
 # Deployment Skill
 
+## Browser Extension 0.5.6 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.6.zip`; SHA-256 `5A25594155D81920598EA852299EDD1C66BE59EAC254D89DBEBC9E9D873797AB`; size `42,366` bytes.
+- This Browser-only patch aligns Options with the server's 90-second Browser heartbeat freshness, persists the true collector lane, and ensures Focus-maintenance failures cannot suppress health heartbeat.
+- Reload the same unpacked entry to retain the current pairing. Do not remove/re-pair merely because old device cards remain in Reports; each pairing creates a distinct server device.
+- No API/shared/Web/Prisma deployment is introduced by 0.5.6. The separate 0.5.4 API/shared legacy fractional-row validation requirement remains unchanged.
+- Do not publish to Chrome Web Store, Edge Add-ons, GitHub Releases, or production without explicit authorization and real Chrome/Edge acceptance.
+
 ## Browser Extension 0.5.5 Release Notes
 
 - Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.

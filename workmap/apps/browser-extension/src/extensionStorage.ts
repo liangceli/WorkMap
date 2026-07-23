@@ -1,5 +1,9 @@
 import type { DomainUsageEvent } from "./domainTracking.js";
 import type { DomainTrackerSnapshot } from "./domainState.js";
+import type {
+  TrackingCollectorStateV2,
+  TrackingConnectionStateV2,
+} from "./trackingV2Types.js";
 import { protectCredential, unprotectCredential, type ProtectedCredential } from "./credentialVault.js";
 import { normalizeExcludedHostnames } from "./hostnameExclusions.js";
 
@@ -33,6 +37,8 @@ export type ExtensionStatus = {
   trackingState?: "ready" | "permission_required" | "registration_failed";
   trackingError?: string;
   error?: string;
+  connectionState?: TrackingConnectionStateV2;
+  collectorState?: TrackingCollectorStateV2;
 };
 
 export type QueuedDomainEvent = { event: DomainUsageEvent; attempts: number; nextAttemptAtMs: number; createdAtMs: number };

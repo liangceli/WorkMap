@@ -1,5 +1,49 @@
 # Latest Implementation Handoff
 
+## 2026-07-22 Browser Extension 0.5.6 Health/Collector Separation
+
+### Original Task Brief
+
+- Review real 0.5.5 Options and `/reports` screenshots because the client still appeared wrong, and modify only after reaching at least 95% root-cause confidence.
+- Preserve the current MV3/Tracking v2 architecture, privacy boundaries, and all Desktop Agent behavior.
+
+### Changed Files
+
+- Runtime and local status: `workmap/apps/browser-extension/src/backgroundV2.ts` and `src/extensionStorage.ts`.
+- Options diagnostics: `src/options.ts` and new pure module `src/optionsDiagnostics.ts`.
+- Version/release: `src/trackingV2Types.ts`, `package.json`, `manifest.json`, and generated `alpha-unpacked/manifest.json`.
+- Tests: new `test/options-diagnostics.test.ts`, `test/sync-diagnostics.test.ts`, `test/service-worker.test.ts`, and the version fixture in `test/queue-api.test.ts`.
+- Artifact: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.6.zip`.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/qa-skill.md`, and `deployment-skill.md`.
+
+### Implementation Summary
+
+- The screenshots prove that 0.5.5 pairing initialization was fixed: the new device had policy v2, acknowledgement, lease/windows, granted host permission, registered content script, request ID, and a real server-confirmed heartbeat/sync at 20:29:12. This is different from the 0.5.4 all-pending failure.
+- Options nevertheless called the client Offline after 30 seconds while API/Reports use a 90-second Browser freshness window. Chrome officially guarantees only that a 30-second alarm will not fire sooner and explicitly permits arbitrary additional delay. Root-cause confidence for the contradictory `Options Offline` / `Reports Connected` presentation is above 99%.
+- Options also rendered collector state from `latestSnapshot.collectorState` and hard-coded `PAUSED` when no snapshot existed. The screenshot's `connected / PAUSED` therefore was not the current collector state. Current connection and collector enums are now persisted separately; Options displays the exact collector lane and uses the same 90-second connection boundary as Reports.
+- The existing five-second Options refresh previously reloaded API/browser/exclusion form values. It now refreshes diagnostics only, leaving user input untouched.
+- Tracking maintenance previously ran window/tab/Focus reconciliation before the alarm heartbeat. A Chrome API or local Focus-maintenance exception could therefore skip health sync and leave no safe diagnostic. Startup and recurring alarm cycles now isolate collector maintenance from heartbeat: maintenance failure records bounded `FOCUS_RECONCILE_RETRY`, sets collector `LIMITED`, and still runs health sync even if diagnostic persistence also fails. A later event/alarm retries and restores collector health when policy allows.
+- `Current Domain NONE` while Options itself is focused is correct because extension/internal pages are intentionally ineligible. Options now states that a focused, interacted-with HTTP/HTTPS page is required. The screenshots still do not prove a normal-page snapshot or formal interval was accepted, so that remains manual acceptance work.
+- `/reports` shows multiple 0.5.3/0.5.4/0.5.5 Browser devices because repeated pairing created separate device identities. This patch does not silently revoke or delete old devices.
+
+### Role, Privacy, And Intentional Non-Changes
+
+- No Desktop Agent, API, shared Tracking v2 contract, Web Reports code, database schema, policy/RBAC/tenant boundary, device credential, or production deployment changed.
+- Domain open/runtime remains disabled. No URL path/query/fragment, title, page content, input value, pointer detail, credential, or reusable secret is recorded.
+
+### Verification And Artifact
+
+- Browser typecheck pass, lint pass, automated tests `56/56`, build pass, and `release:zip` pass.
+- Executable regressions prove 30–90 second Browser heartbeats remain Online and that Focus maintenance plus diagnostic-write failure cannot suppress the independent heartbeat callback.
+- ZIP manifest version `0.5.6`, 20 entries, size `42,366` bytes, SHA-256 `5A25594155D81920598EA852299EDD1C66BE59EAC254D89DBEBC9E9D873797AB`.
+
+### Manual QA And Next Step
+
+- Supplied screenshots are real 0.5.5 evidence, not post-fix 0.5.6 acceptance. Chrome/Edge 0.5.6 load-unpacked QA is **NOT RUN**.
+- Reload the same `alpha-unpacked` entry without removing/re-pairing. On Options, require a heartbeat/sync that advances repeatedly for at least three minutes and an exact `HEALTHY`, `LIMITED`, or `PAUSED` collector value rather than an inferred fallback.
+- Focus and interact on a normal HTTP/HTTPS page for at least 70 seconds, switch to a second hostname, then require a confirmed current snapshot, an accepted/duplicate Focus Active plus Focused Idle interval, advancing confirmed-through, and a Domain row in `/reports`.
+- If snapshot remains NONE, retain the newest `FOCUS_RECONCILE_RETRY`/request ID screenshot and the extension service-worker console error. Do not share credentials or full URLs.
+
 ## 2026-07-22 Browser Extension 0.5.5 Pairing Initialization Recovery
 
 ### Original Task Brief
