@@ -1,5 +1,79 @@
 # Latest Implementation Handoff
 
+## 2026-07-23 Browser Extension 0.5.7 Cross-Epoch Focus Reliability
+
+### Original Task Brief
+
+- Implement the previously diagnosed Browser-only repair after a real Edge 0.5.6 `FOCUS_OVERLAP` tombstone proved that independently valid Focus epochs could regress in UTC and overlap.
+- Preserve MV3/Tracking v2, hostname-only privacy, policy/lease/acknowledgement rules, pairing, old rejection evidence, and all Desktop Agent behavior.
+
+### Changed Files
+
+- Runtime/timeline/store: `workmap/apps/browser-extension/src/backgroundV2.ts`, new `browserFocusTimelineV2.ts`, `trackingV2Store.ts`, and `trackingV2Types.ts`.
+- Tests: new `test/browser-focus-timeline-v2.test.ts`, plus `service-worker.test.ts`, `sync-diagnostics.test.ts`, `tracking-v2-store.test.ts`, and the queue/version fixture.
+- Release metadata/output: Browser `package.json`, `manifest.json`, generated `alpha-unpacked`, and `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.7.zip`.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/qa-skill.md`, and `deployment-skill.md`.
+
+### Implementation Summary
+
+- Runtime state advances from version 6 to 7 with `focusTimelineThroughAt`, the latest end of every locally emitted Focus interval across all clock epochs. The watermark and new interval rows are written in the same IndexedDB transaction. A 0.5.6 upgrade derives the watermark from the server-confirmed-through value and every retained queued interval; pairing and rejection history are not reset.
+- A new Focus epoch is anchored to the trusted page observation's occurrence-time projection, not the later message-processing time. Activation time, the active server-issued UTC window, and the durable Focus watermark are hard lower bounds. If a legacy watermark is temporarily ahead of current server time, collection waits instead of fabricating future or overlapping Focus.
+- Server clock offset now uses the client request-start boundary rather than response-arrival time. A slow API response therefore cannot shift the next epoch backward by the response latency.
+- Network fetch is outside the serialized browser-state mutation lane. Request preparation and response application remain serialized around durable state, while tab/window/blur/trusted-input events arriving during HTTP wait are persisted first. Sync requests are coalesced, obsolete pairing-generation responses are ignored, and an old snapshot response cannot confirm/reject a newer local snapshot.
+- Duplicate boundary uploads were removed: clear/page replacement paths persist the old interval, prove the replacement page, and schedule one combined sync where possible. Durable-before-sync ordering remains unchanged.
+
+### Privacy, Policy, And Intentional Non-Changes
+
+- Collection remains hostname plus Focus Active/Focused Idle timing and safe operational diagnostics. No path/query/fragment, title, page content, input text/key value, pointer detail, credential, or reusable secret is added.
+- Domain open/runtime remains disabled; no Desktop policy flag is reused.
+- No Desktop Agent, shared contract, API, Web, Prisma/schema, tenant/RBAC, credential, or production deployment change is included. Browser connection audit remains a separately identified API/status-history gap.
+- The old Edge 0.5.6 `FOCUS_OVERLAP` tombstone remains visible and excluded from totals; 0.5.7 prevents new client-generated overlap rather than deleting evidence.
+
+### Verification, Artifact, And Manual QA
+
+- Browser typecheck, lint, tests `61/61`, build, and `release:zip` pass. Executable regressions cover delayed evidence, regressed clock estimates, cross-epoch adjacency, future legacy watermark recovery, monotonic watermark advancement, request-start clock calibration, and stale snapshot-response isolation.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.7.zip`; 21 entries; manifest `0.5.7`; size `44,623` bytes; SHA-256 `FF09C62FCC37233DB297D8639C1A4E7876595C3DC7A05D8A6BB71DF0FD06AEED`.
+- Real Chrome/Edge 0.5.7 load-unpacked QA is **NOT RUN**. Reload the same unpacked extension entry so pairing/IndexedDB survive, then test slow/offline sync plus rapid tab/window changes and require no new `FOCUS_OVERLAP`, accepted/duplicate interval evidence, advancing confirmed-through, and correct Domain totals.
+- Source/artifact can proceed to this manual QA round. Do not publish or deploy automatically.
+
+## 2026-07-23 Browser Extension 0.5.6 Focus-Overlap Diagnosis
+
+### Original Task Brief
+
+- Review the supplied `/reports`, Edge 0.5.6 Options, and Chrome 0.5.6 Options screenshots; determine whether the Edge `FOCUS_OVERLAP` is a real problem; and inspect the complete Browser Extension-to-ledger-to-Reports flow against current source and executable tests.
+- Do not modify Desktop Agent behavior, delete historical evidence, or hide a current failure.
+
+### Changed Files
+
+- Diagnostic handoff only: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`.
+- No Browser Extension, Desktop Agent, API, shared-contract, Web, schema, release, artifact, or production file was changed in this review round.
+
+### Evidence-Based Findings
+
+- The normal Browser v2 pipeline is operational. Chrome and Edge have fresh server-confirmed heartbeats, valid policy v2/acknowledgement/lease/windows, granted host access, registered content scripts, healthy collectors, accepted interval results, advancing confirmed-through values, and confirmed Domain rows in `/reports` (`work-map-teal.vercel.app` Focus Active 5m7s / Focused Idle 14s and `github.com` Focus Active 17s in the supplied capture).
+- The Edge `FOCUS_OVERLAP` is a real Extension-side correctness defect, not a Chrome-versus-Edge conflict. API overlap lookup is scoped by `deviceId`, `source`, and `stream`, so a Chrome device cannot cause the Edge tombstone. The server correctly kept the rejected Edge interval out of the official ledger and Reports; the consequence is an undercount for that rejected slice, not double-counted report time.
+- Root cause confidence exceeds 95%. Browser event handlers and sync calls share one serialized operation lane, and `clearFocus(true)` can request sync both inside `persistUpdate` and again after clearing state. Page-boundary flows can add another immediate request. A delayed sync therefore delays later browser evidence and changes `serverOffsetMs` while an existing epoch retains its old wall-clock anchor.
+- A newly created engine is anchored from processing-time `serverNow(state)` even when the content message's trusted occurrence time has been mapped to an earlier monotonic timestamp. The durable state has an engine-local checkpoint and a server-confirmed-through diagnostic, but no durable local Focus timeline high-water mark shared across engine epochs. A later epoch can consequently start before the prior emitted epoch ended even though every interval is individually positive and valid. A direct two-epoch engine reproduction produced `[00:00:00, 00:00:10]` followed by `[00:00:09, 00:00:11]`.
+- The existing 56 Browser tests cover non-overlap inside one engine/epoch, but do not simulate a slow sync, a queued trusted event, a server-offset update, engine teardown, and a new epoch together. This explains why the suite passes while the real Edge tombstone exists.
+- Reports reconciliation unions overlapping accepted Chrome/Edge intervals for the same user, hostname, day, and metric. It does not unconditionally add them. The focused API test for that exact case passes.
+- Chrome's online-but-stale snapshot is semantically correct: connection health is based on the fresh confirmed heartbeat, while no newer eligible-page observation exists. Edge later recovered, drained its ordinary queue, accepted more intervals, and advanced confirmed-through; the retained dead-letter remains visible by design.
+- Browser connection audit remains incomplete. MV3 `backgroundV2.ts` does not send the legacy extension-status event stream, and the API `getDeviceStatusHistory` query currently filters to Desktop Agent. Live Browser connection state is valid, but `Browser Extension: 0 events` cannot prove that there were no interruptions.
+
+### Recommended 0.5.7 Repair Scope
+
+- Add a migrated, durable local Focus timeline high-water mark and clamp every new Browser Focus epoch after all previously emitted local Focus intervals, including queued/unconfirmed intervals.
+- Anchor a delayed trusted observation to its occurrence-time wall-clock projection rather than processing-time `serverNow`, while preserving activation, policy-window, lease, clock-jump, restart, and no-backfill boundaries.
+- Remove duplicate immediate sync calls and move/coalesce network work outside the browser-event mutation lane without weakening durable-before-sync ordering.
+- Add a controlled regression that combines delayed sync, queued activity/blur/tab transitions, server-offset changes, worker restart, and cross-epoch validation; assert no local or server `FOCUS_OVERLAP` and no negative/overlong interval.
+- Treat Browser connection-audit production as a separate API/status-history contract change. Do not fabricate audit rows from current heartbeat state.
+
+### Verification And Recommendation
+
+- Browser Extension typecheck: passed; lint: passed; tests: passed `56/56`.
+- Focused API live-semantics and reconciliation tests: passed `16/16`, including official Browser Domain ledger entry, terminal rejection exclusion, adjacent interval preservation, and Chrome/Edge union reconciliation.
+- User-supplied screenshots are real manual evidence for Chrome and Edge 0.5.6 connection, accepted interval, and Reports visibility. Multi-window/display, minimize, lock, sleep, restart, offline, and Split View acceptance were not exercised in this review.
+- 0.5.6 is not clean enough to call final Browser reliability acceptance because `FOCUS_OVERLAP` can recur and lose a slice. Proceed to a narrow Browser-only 0.5.7 reliability fix; do not modify Desktop Agent.
+
 ## 2026-07-23 Reports Current Browser Connection Selection
 
 ### Original Task Brief

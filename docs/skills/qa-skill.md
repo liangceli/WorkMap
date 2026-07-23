@@ -1,5 +1,14 @@
 # QA Skill
 
+## Browser Extension 0.5.7 QA Baseline
+
+- Upgrade the same unpacked 0.5.6 entry without clearing extension storage. Pairing, queued intervals, terminal diagnostics, acknowledgement, and policy lease must remain visible after state version 6 migrates to 7.
+- While API sync is deliberately slow/offline, generate trusted activity, blur, rapid same/different-host tab changes, two-window focus changes, and recovery. Browser events must persist during HTTP wait; a late response must not overwrite a newer snapshot.
+- Require every newly emitted Focus interval on one Browser device to start at or after the durable prior interval end across epoch, worker-restart, policy-refresh, and server-offset boundaries. Exact adjacency is valid; `FOCUS_OVERLAP`, negative duration, future fabrication, and unknown-gap backfill fail QA.
+- Verify accepted/duplicate results advance confirmed-through and Domain Reports; rejected history remains excluded and retains its safe code/request ID. The old 0.5.6 tombstone is expected to remain visible.
+- Run Chrome and Edge for at least one complete idle transition plus rapid switching and reconnect. Automated `61/61` is a source baseline, not real MV3 acceptance.
+- Browser connection audit remains separate and incomplete; do not infer zero interruptions from `0 events`.
+
 ## Reports Current Browser Connection QA
 
 - With one fresh Chrome device and multiple older stale Chrome pairings, Live signals must render the fresh Chrome card only, recalculate connected/total and current attention from visible cards, and disclose the hidden inactive count.

@@ -1,5 +1,68 @@
 # Latest QA Handoff
 
+## 2026-07-23 Browser Extension 0.5.7 Cross-Epoch Focus Reliability QA
+
+### Reviewed Implementation
+
+- Reviewed the state-v7 migration, atomic queue/watermark write, occurrence-time epoch construction, policy-window/activation clamps, request-start clock calibration, network/mutation-lane separation, sync coalescing, pairing-generation guard, stale snapshot-response guard, compiled unpacked output, and ZIP.
+- Diff review found no Desktop Agent, API/shared, Web, schema, credential, RBAC, or privacy-boundary change.
+
+### Findings Ordered By Severity
+
+- Fixed - High: a new Browser Focus epoch could start before a prior emitted epoch ended after slow sync or a changed server offset. The durable cross-epoch watermark now enforces half-open adjacency or a conservative gap.
+- Fixed - High: HTTP wait blocked later Chrome events in the global mutation lane. Network wait is outside that lane; only durable request preparation and response merge remain serialized.
+- Fixed - High: an in-flight response could become stale once events are processed concurrently. Pairing-generation/device/client identity guards discard obsolete responses, and snapshot acceptance/rejection applies only to the exact sent epoch/sequence still current.
+- Fixed - Medium: clear/page replacement paths could issue duplicate immediate requests. Requests are coalesced and replacement state can share one upload.
+- Preserved - High: intervals remain durable before sync; a future legacy watermark pauses rather than overlaps; old terminal tombstones remain excluded from Reports.
+- Remaining - Medium: real Chrome/Edge MV3 scheduling, service-worker recycling, and deployed API latency have not been exercised with 0.5.7. Automated tests are not production acceptance.
+- Remaining - Separate scope: Browser connection audit still lacks a full Browser status-history producer/API query and is not fabricated in this patch.
+
+### Test And Verification Status
+
+- `pnpm.cmd --filter @workmap/browser-extension typecheck`: pass.
+- `pnpm.cmd --filter @workmap/browser-extension lint`: pass.
+- `pnpm.cmd --filter @workmap/browser-extension test`: pass `61/61`.
+- `pnpm.cmd --filter @workmap/browser-extension build`: pass.
+- `pnpm.cmd --filter @workmap/browser-extension release:zip`: pass.
+- ZIP root/content, compiled reliability markers, manifest version, size, and SHA-256: pass.
+
+### Manual QA Status, Risk, And Recommendation
+
+- Chrome and Edge 0.5.7 reload/upgrade retention, permission cycles, multi-window/display, Split View, minimize/lock/sleep, offline/reconnect, restart/reload/disable-enable, and live `/reports` checks are **NOT RUN**.
+- Pass for source-level correction and local alpha artifact. Proceed to real Chrome and Edge load-unpacked QA; do not publish or call the defect closed in production until a latency/tab-switch run produces accepted/duplicate intervals with no new `FOCUS_OVERLAP`.
+- Desktop Agent was not changed. The next round can proceed with manual Browser QA and then a screenshot/log review.
+
+## 2026-07-23 Browser Extension 0.5.6 Focus-Overlap Diagnosis QA
+
+### Reviewed Implementation
+
+- Reviewed the supplied `/reports`, Edge Options, Chrome Options, and Edge `FOCUS_OVERLAP` evidence against Browser MV3 event serialization, content-message occurrence mapping, epoch construction, durable state, sync correlation, API overlap/tombstone rules, reconciliation, live presentation, and connection-audit sources.
+- No runtime fix was made in this round; this is a source-backed defect diagnosis and repair recommendation.
+
+### Findings Ordered By Severity
+
+- Confirmed - High: Edge emitted a Focus interval whose wall-clock range overlapped an earlier accepted Focus interval from the same Edge device/stream. The API correctly rejected it as terminal `FOCUS_OVERLAP`; Reports excludes it, so totals are safe but that slice is undercounted.
+- Confirmed - High: the Browser runtime has no cross-epoch local Focus high-water mark. Processing-time epoch anchoring, delayed occurrence timestamps, a mutable server offset, and network work on the serialized event lane can produce a cross-epoch regression that engine-local tests cannot detect.
+- Confirmed - Medium: `clearFocus(true)` can schedule the same immediate sync twice, and a page transition can add a third sync. This increases event latency and the overlap risk; it does not by itself invalidate the durable queue.
+- Confirmed - Medium: Browser connection audit is not implemented end to end. Current live heartbeat coverage works, but API device-status history is Desktop-only and Browser v2 emits no corresponding historical transition stream.
+- Verified - High: accepted Browser Focus Active/Idle rows enter the official ledger and Domain Reports. Rejected tombstones do not enter totals. Chrome/Edge accepted overlap is unioned for the same user/domain/metric.
+- Verified - Medium: Edge recovered after the rejection and accepted later intervals; Chrome's stale snapshot is independent from its online connection. Neither screenshot indicates a stuck credential, policy, permission, registration, or health lane.
+
+### Test And Verification Status
+
+- `pnpm.cmd --filter @workmap/browser-extension typecheck`: pass.
+- `pnpm.cmd --filter @workmap/browser-extension lint`: pass.
+- `pnpm.cmd --filter @workmap/browser-extension test`: pass `56/56`; current suite lacks the cross-epoch slow-sync scenario.
+- `tsx --test test/tracking-v2-reconciliation.test.ts test/tracking-v2-live-semantics.test.ts`: pass `16/16`.
+- Direct two-epoch reproduction: each interval individually valid, but `[00:00:00, 00:00:10]` and `[00:00:09, 00:00:11]` overlap, confirming the missing cross-epoch invariant.
+
+### Manual QA Status, Risk, And Recommendation
+
+- The screenshots are valid manual evidence of Chrome/Edge 0.5.6 heartbeats, accepted Browser intervals, Edge recovery, and confirmed Domain totals. They are not a full lifecycle matrix.
+- Fail final 0.5.6 reliability acceptance because one real terminal Focus rejection proves possible data loss. Pass the backend safety behavior because the rejected interval is clearly diagnosed and excluded.
+- Proceed to a Browser-only 0.5.7 source/test/artifact round. Keep the old tombstone as historical evidence; fixing the generator must not delete or relabel it. Browser connection audit should be scoped explicitly as a separate API/Web-capable addition.
+- Desktop Agent was not changed and must remain out of the repair unless the user separately authorizes behavior changes.
+
 ## 2026-07-23 Reports Current Browser Connection Selection QA
 
 ### Reviewed Implementation

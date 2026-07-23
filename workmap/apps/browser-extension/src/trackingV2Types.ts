@@ -1,4 +1,4 @@
-export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.6";
+export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.7";
 export const TRACKING_PROTOCOL_VERSION_V2 = 2 as const;
 export const BROWSER_V2_QUEUE_CAPACITY = 10_000;
 export const BROWSER_V2_SYNC_BATCH_SIZE = 50;
@@ -195,7 +195,7 @@ export type BrowserClockEpochV2 = {
 };
 
 export type BrowserTrackingRuntimeStateV2 = {
-  version: 6;
+  version: 7;
   migrationState: TrackingMigrationStateV2;
   activationId: string | null;
   proposedActivatedAt: string | null;
@@ -215,6 +215,8 @@ export type BrowserTrackingRuntimeStateV2 = {
   snapshotConfirmation: BrowserSnapshotConfirmationV2;
   lastIntervalUpload: BrowserIntervalUploadV2 | null;
   confirmedIntervalThrough: string | null;
+  /** Latest end of every locally emitted Focus interval across all epochs. */
+  focusTimelineThroughAt: string | null;
   lastRequestId: string | null;
   diagnostics: BrowserTrackingDiagnosticV2[];
   trackingAccess: BrowserTrackingAccessV2;
@@ -344,7 +346,7 @@ export type BrowserV2DeadLetterRecord = {
 
 export function createInitialBrowserTrackingV2State(): BrowserTrackingRuntimeStateV2 {
   return {
-    version: 6,
+    version: 7,
     migrationState: "V1",
     activationId: null,
     proposedActivatedAt: null,
@@ -371,6 +373,7 @@ export function createInitialBrowserTrackingV2State(): BrowserTrackingRuntimeSta
     },
     lastIntervalUpload: null,
     confirmedIntervalThrough: null,
+    focusTimelineThroughAt: null,
     lastRequestId: null,
     diagnostics: [],
     trackingAccess: {

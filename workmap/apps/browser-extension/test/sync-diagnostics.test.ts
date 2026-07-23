@@ -8,6 +8,7 @@ import {
   hasLifecycleDiscontinuity,
   isRetryableError,
   runCollectorMaintenanceWithHeartbeat,
+  sameBrowserSnapshot,
   snapshotConfirmationFromResponse,
   summarizeIntervalUpload,
 } from "../src/backgroundV2.js";
@@ -98,6 +99,22 @@ test("HTTP 200 snapshot rejection remains distinct from connection health", () =
   assert.equal(diagnostics[0]?.requestId, requestId);
   assert.equal(diagnostics[0]?.code, "SNAPSHOT_OUTSIDE_POLICY_WINDOW");
   assert.equal(diagnostics[0]?.terminal, true);
+});
+
+test("a delayed sync response cannot confirm or reject a newer local snapshot", () => {
+  const sent = snapshot();
+  assert.equal(sameBrowserSnapshot(sent, { ...sent }), true);
+  assert.equal(
+    sameBrowserSnapshot(sent, { ...sent, snapshotSequence: 8 }),
+    false,
+  );
+  assert.equal(
+    sameBrowserSnapshot(sent, {
+      ...sent,
+      clockEpochId: "44444444-4444-4444-8444-444444444444",
+    }),
+    false,
+  );
 });
 
 test("accepted, duplicate and rejected interval results retain exact bounded evidence", () => {

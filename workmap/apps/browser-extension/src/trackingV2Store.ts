@@ -11,6 +11,7 @@ import {
   type BrowserV2QueueStats,
   type TrackingSyncItemResultV2,
 } from "./trackingV2Types.js";
+import { advanceBrowserFocusTimelineThroughAt } from "./browserFocusTimelineV2.js";
 
 const DATABASE_NAME = "workmap-tracking-v2";
 const DATABASE_VERSION = 2;
@@ -24,7 +25,14 @@ type MetaRecord = {
   value: BrowserTrackingRuntimeStateV2;
 };
 
-type LegacyRuntimeStateV5 = Omit<BrowserTrackingRuntimeStateV2, "version"> & {
+type LegacyRuntimeStateV6 = Omit<
+  BrowserTrackingRuntimeStateV2,
+  "version" | "focusTimelineThroughAt"
+> & {
+  version: 6;
+};
+
+type LegacyRuntimeStateV5 = Omit<LegacyRuntimeStateV6, "version"> & {
   version: 5;
 };
 
@@ -40,17 +48,38 @@ export class BrowserTrackingV2Store {
       transaction.objectStore(META_STORE).get(RUNTIME_KEY),
     );
     await transactionDone(transaction);
-    if (record?.value?.version === 6) return record.value;
-    if ((record?.value as unknown as LegacyRuntimeStateV5 | undefined)?.version === 5) {
+    if (record?.value?.version === 7) return record.value;
+    if ((record?.value as unknown as LegacyRuntimeStateV6 | undefined)?.version === 6) {
       const initial = createInitialBrowserTrackingV2State();
-      const legacy = record!.value as unknown as LegacyRuntimeStateV5;
+      const legacy = record!.value as unknown as LegacyRuntimeStateV6;
+      const queued = await this.readQueuedIntervals();
       const migrated: BrowserTrackingRuntimeStateV2 = {
         ...initial,
         ...legacy,
-        version: 6,
+        version: 7,
+        focusTimelineThroughAt: advanceBrowserFocusTimelineThroughAt(
+          legacy.confirmedIntervalThrough,
+          queued.map((row) => row.interval),
+        ),
+      };
+      await this.writeRuntimeState(migrated);
+      return migrated;
+    }
+    if ((record?.value as unknown as LegacyRuntimeStateV5 | undefined)?.version === 5) {
+      const initial = createInitialBrowserTrackingV2State();
+      const legacy = record!.value as unknown as LegacyRuntimeStateV5;
+      const queued = await this.readQueuedIntervals();
+      const migrated: BrowserTrackingRuntimeStateV2 = {
+        ...initial,
+        ...legacy,
+        version: 7,
         snapshotConfirmation: initial.snapshotConfirmation,
         lastIntervalUpload: null,
         confirmedIntervalThrough: null,
+        focusTimelineThroughAt: advanceBrowserFocusTimelineThroughAt(
+          null,
+          queued.map((row) => row.interval),
+        ),
         lastRequestId: null,
         diagnostics: [],
         trackingAccess: initial.trackingAccess,
@@ -79,7 +108,7 @@ export class BrowserTrackingV2Store {
     intervals: BrowserActivityIntervalV2[],
     state: BrowserTrackingRuntimeStateV2,
     snapshot: BrowserLiveFocusSnapshotV2,
-  ) {
+  ): Promise<BrowserTrackingRuntimeStateV2> {
     const database = await this.database();
     const transaction = database.transaction(
       [INTERVAL_STORE, META_STORE],
@@ -132,11 +161,30 @@ export class BrowserTrackingV2Store {
         createdAtMs: nowMs,
       } satisfies BrowserV2QueueRecord);
     }
+    const persistedState: BrowserTrackingRuntimeStateV2 = {
+      ...state,
+      latestSnapshot: snapshot,
+      focusTimelineThroughAt: advanceBrowserFocusTimelineThroughAt(
+        state.focusTimelineThroughAt,
+        newIntervals,
+      ),
+    };
     transaction.objectStore(META_STORE).put({
       key: RUNTIME_KEY,
-      value: { ...state, latestSnapshot: snapshot },
+      value: persistedState,
     } satisfies MetaRecord);
     await transactionDone(transaction);
+    return persistedState;
+  }
+
+  private async readQueuedIntervals() {
+    const database = await this.database();
+    const transaction = database.transaction(INTERVAL_STORE, "readonly");
+    const records = await requestAsPromise<BrowserV2QueueRecord[]>(
+      transaction.objectStore(INTERVAL_STORE).getAll(),
+    );
+    await transactionDone(transaction);
+    return records;
   }
 
   async readReadyIntervals(

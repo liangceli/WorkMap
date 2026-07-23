@@ -1,5 +1,10 @@
 import { BrowserFocusEngineV2 } from "./browserFocusEngineV2.js";
 import {
+  advanceBrowserFocusTimelineThroughAt,
+  calculateBrowserServerOffsetMs,
+  createBrowserFocusClockV2,
+} from "./browserFocusTimelineV2.js";
+import {
   chooseSingleActiveTab,
   eligibleDomainForTab,
   isUsableFocusedWindow,
@@ -45,7 +50,9 @@ import {
   type BrowserNameV2,
   type BrowserTrackingRuntimeStateV2,
   type BrowserTrackingDiagnosticV2,
+  type BrowserTrackingSyncRequestV2,
   type BrowserTrackingSyncResponseV2,
+  type BrowserV2QueueRecord,
   type DeviceTrackingPolicyV2,
   type TrackingSyncItemResultV2,
   type TrackingCollectorStateV2,
@@ -65,6 +72,16 @@ type RuntimeMessage = {
 };
 type MessageSender = { tab?: ChromeTab; frameId?: number };
 type RuntimeResponse = { ok: boolean; error?: string };
+type PreparedBrowserSyncV2 = {
+  generation: number;
+  deviceId: string;
+  clientInstanceId: string;
+  config: ExtensionConfig;
+  ready: BrowserV2QueueRecord[];
+  requestId: string;
+  sentSnapshot: BrowserTrackingRuntimeStateV2["latestSnapshot"];
+  request: BrowserTrackingSyncRequestV2;
+};
 type ChromeEvent<T> = { addListener(listener: T): void };
 
 type ChromeApi = {
@@ -191,9 +208,13 @@ export function assertBrowserDeviceIdentity(
 
 let operation = Promise.resolve();
 
-function schedule(task: () => Promise<void>) {
-  operation = operation.then(task, task);
-  return operation;
+function schedule<T>(task: () => Promise<T>) {
+  const result = operation.then(task, task);
+  operation = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
 }
 
 export async function runCollectorMaintenanceWithHeartbeat(
@@ -229,6 +250,10 @@ export class BrowserExtensionRuntimeV2 {
   private lastPolicyRefreshAtMs = 0;
   private lastSyncAttemptAtMs = 0;
   private syncTimer: number | null = null;
+  private syncRequested = false;
+  private syncImmediate = false;
+  private syncInFlight: Promise<void> | null = null;
+  private runtimeGeneration = 0;
 
   constructor(private readonly chromeApi: ChromeApi) {}
 
@@ -242,6 +267,9 @@ export class BrowserExtensionRuntimeV2 {
   }
 
   async resetAfterPairing() {
+    this.runtimeGeneration += 1;
+    this.syncRequested = false;
+    this.syncImmediate = false;
     if (this.syncTimer !== null) {
       clearTimeout(this.syncTimer);
       this.syncTimer = null;
@@ -286,7 +314,7 @@ export class BrowserExtensionRuntimeV2 {
         this.config?.excludedHostnames,
       )
     ) {
-      await this.clearFocus(true);
+      await this.clearFocus(false, performance.now(), true);
     }
     await this.reconcileBrowserReality(true);
   }
@@ -334,21 +362,25 @@ export class BrowserExtensionRuntimeV2 {
   async handleTabRemoved(tabId: number) {
     await this.ensureInitialized();
     if (!this.state || tabId !== this.state.activeTabId) return;
-    await this.clearFocus(true);
+    await this.clearFocus(false, performance.now(), true);
     await this.reconcileBrowserReality(true);
   }
 
   async handleTabReplaced(addedTabId: number, removedTabId: number) {
     await this.ensureInitialized();
     if (!this.state || removedTabId !== this.state.activeTabId) return;
-    await this.clearFocus(true);
-    if (this.state.focusedWindowId === null) return;
+    await this.clearFocus(false, performance.now(), true);
+    if (this.state.focusedWindowId === null) {
+      await this.requestSync(true);
+      return;
+    }
     const tabs = await queryTabs(this.chromeApi, {
       active: true,
       windowId: this.state.focusedWindowId,
     });
     const tab = tabs.find((candidate) => candidate.id === addedTabId);
     if (tab?.id === addedTabId) await this.prepareTab(tab, true);
+    else await this.requestSync(true);
   }
 
   async handleWindowFocus(windowId: number) {
@@ -397,7 +429,7 @@ export class BrowserExtensionRuntimeV2 {
   async handleWindowRemoved(windowId: number) {
     await this.ensureInitialized();
     if (!this.state || windowId !== this.state.focusedWindowId) return;
-    await this.clearFocus(true);
+    await this.clearFocus(false, performance.now(), true);
     await this.reconcileBrowserReality(true);
   }
 
@@ -411,7 +443,6 @@ export class BrowserExtensionRuntimeV2 {
       this.collectorState = "PAUSED";
       await this.clearFocus(true);
       await this.store.writeRuntimeState(this.state);
-      await this.requestSync(true);
       return;
     }
     await this.restoreCollectorIfAllowed();
@@ -560,8 +591,9 @@ export class BrowserExtensionRuntimeV2 {
         deviceId: this.config.deviceId,
         browserName: this.browserName,
       });
+      const policyRequestStartedAtMs = Date.now();
       const policy = await getTrackingPolicyV2(this.config);
-      this.applyServerClock(policy.serverTime);
+      this.applyServerClock(policy.serverTime, policyRequestStartedAtMs);
       this.state = { ...this.state, policy };
       await this.store.writeRuntimeState(this.state);
       const policyRequirement = describeBrowserPolicyRequirement(policy);
@@ -575,8 +607,9 @@ export class BrowserExtensionRuntimeV2 {
         await this.updateVisibleStatus(policyRequirement);
         return false;
       }
+      const prepareRequestStartedAtMs = Date.now();
       const prepared = await prepareProtocolV2(this.config);
-      this.applyServerClock(prepared.serverTime);
+      this.applyServerClock(prepared.serverTime, prepareRequestStartedAtMs);
       let activatedAt = prepared.protocolActivatedAt;
       const boundary =
         prepared.proposedActivatedAt ?? prepared.protocolActivatedAt;
@@ -607,12 +640,16 @@ export class BrowserExtensionRuntimeV2 {
           policy: prepared.policy,
         };
         await this.store.writeRuntimeState(this.state);
+        const confirmRequestStartedAtMs = Date.now();
         const confirmed = await confirmProtocolV2(
           this.config,
           prepared.activationId,
           prepared.proposedActivatedAt,
         );
-        this.applyServerClock(confirmed.serverTime);
+        this.applyServerClock(
+          confirmed.serverTime,
+          confirmRequestStartedAtMs,
+        );
         activatedAt = confirmed.protocolActivatedAt;
       }
       if (!activatedAt) {
@@ -747,13 +784,18 @@ export class BrowserExtensionRuntimeV2 {
         rejectionCode: null,
         requestId: null,
       },
+      focusTimelineThroughAt: advanceBrowserFocusTimelineThroughAt(
+        this.state.focusTimelineThroughAt,
+        update.intervals,
+      ),
     };
     try {
-      await this.store.persistEngineUpdate(
+      const persistedState = await this.store.persistEngineUpdate(
         update.intervals,
         recoveredState,
         update.snapshot,
       );
+      this.state = persistedState;
     } catch (error) {
       if (error instanceof BrowserV2QueuePressureError) {
         await this.pauseCollector("QUEUE_PRESSURE", error.message);
@@ -763,7 +805,7 @@ export class BrowserExtensionRuntimeV2 {
       throw error;
     }
     this.state = {
-      ...recoveredState,
+      ...this.state,
       clock: null,
       engineCheckpoint: null,
       activeTabId: null,
@@ -798,7 +840,9 @@ export class BrowserExtensionRuntimeV2 {
     const subjectChanged =
       tab.id !== this.state.activeTabId || domain !== this.state.activeDomain;
     if ((subjectChanged || forcePageProof) && this.engine) {
-      await this.clearFocus(immediateSync);
+      // The replacement page snapshot and the completed prior interval can be
+      // sent in one request after the new page is proven.
+      await this.clearFocus(false, performance.now(), true);
     }
     this.state = {
       ...this.state,
@@ -817,6 +861,7 @@ export class BrowserExtensionRuntimeV2 {
       if (immediateSync) await this.requestSync(true);
     } else {
       await this.updateVisibleStatus();
+      if (immediateSync) await this.requestSync(true);
     }
   }
 
@@ -830,9 +875,9 @@ export class BrowserExtensionRuntimeV2 {
       this.engine &&
       (tab.id !== this.state.activeTabId || domain !== this.state.activeDomain)
     ) {
-      await this.clearFocus(false);
+      await this.clearFocus(false, atMonotonicMs, true);
     }
-    this.ensureEngine(atMonotonicMs);
+    if (!this.ensureEngine(atMonotonicMs)) return;
     this.state = {
       ...this.state,
       activeTabId: tab.id,
@@ -850,12 +895,15 @@ export class BrowserExtensionRuntimeV2 {
   private async clearFocus(
     immediateSync: boolean,
     atMonotonicMs = performance.now(),
+    deferSync = false,
   ) {
     if (!this.state) return;
+    const hadEngine = this.engine !== null;
     if (this.engine) {
       await this.persistUpdate(
         this.engine.clearFocus(atMonotonicMs),
         immediateSync,
+        deferSync,
       );
     }
     this.engine = null;
@@ -867,24 +915,25 @@ export class BrowserExtensionRuntimeV2 {
       activeDomain: null,
     };
     await this.store.writeRuntimeState(this.state);
-    if (immediateSync) await this.requestSync(true);
+    if (immediateSync && !hadEngine) await this.requestSync(true);
   }
 
   private ensureEngine(atMonotonicMs: number) {
-    if (this.engine || !this.state || !this.browserName) return;
+    if (this.engine) return true;
+    if (!this.state || !this.browserName) return false;
     const policy = this.state.policy;
     if (!policy?.policyLeaseId) {
       throw new Error("A valid browser tracking policy lease is required.");
     }
-    const anchorUtcMs = Math.max(
-      serverNow(this.state),
-      Date.parse(this.state.protocolActivatedAt ?? ""),
-    );
-    const clock = {
-      clockEpochId: crypto.randomUUID(),
-      clockEpochStartedAt: new Date(anchorUtcMs).toISOString(),
-      clockEpochStartedMonotonicMs: atMonotonicMs,
-    };
+    const clock = createBrowserFocusClockV2({
+      serverNowMs: serverNow(this.state),
+      processingMonotonicMs: performance.now(),
+      observationMonotonicMs: atMonotonicMs,
+      protocolActivatedAt: this.state.protocolActivatedAt,
+      focusTimelineThroughAt: this.state.focusTimelineThroughAt,
+      policy,
+    });
+    if (!clock) return false;
     this.state = {
       ...this.state,
       clock,
@@ -894,6 +943,7 @@ export class BrowserExtensionRuntimeV2 {
       policy,
       this.browserName,
     );
+    return true;
   }
 
   private async guardLifecycleContinuity() {
@@ -990,6 +1040,7 @@ export class BrowserExtensionRuntimeV2 {
   private async persistUpdate(
     update: ReturnType<BrowserFocusEngineV2["observe"]>,
     immediateSync: boolean,
+    deferSync = false,
   ) {
     if (!this.engine || !this.state) return false;
     const durableState = this.state;
@@ -1012,12 +1063,11 @@ export class BrowserExtensionRuntimeV2 {
       lastErrorCode: this.errorCode,
     };
     try {
-      await this.store.persistEngineUpdate(
+      this.state = await this.store.persistEngineUpdate(
         update.intervals,
         nextState,
         update.snapshot,
       );
-      this.state = nextState;
     } catch (error) {
       if (error instanceof BrowserV2QueuePressureError) {
         this.engine = null;
@@ -1033,7 +1083,7 @@ export class BrowserExtensionRuntimeV2 {
       throw error;
     }
     await this.updateVisibleStatus();
-    if (immediateSync || update.intervals.length > 0) {
+    if (!deferSync && (immediateSync || update.intervals.length > 0)) {
       await this.requestSync(immediateSync);
     }
     return true;
@@ -1052,119 +1102,212 @@ export class BrowserExtensionRuntimeV2 {
       if (this.syncTimer === null) {
         this.syncTimer = setTimeout(() => {
           this.syncTimer = null;
-          void schedule(() => this.performSync());
+          void this.requestSync(false);
         }, INTERACTION_SYNC_THROTTLE_MS - sinceLastAttempt) as unknown as number;
       }
       return;
     }
-    await this.performSync();
+    if (immediate && this.syncTimer !== null) {
+      clearTimeout(this.syncTimer);
+      this.syncTimer = null;
+    }
+    this.syncRequested = true;
+    this.syncImmediate ||= immediate;
+    this.startSyncDrain();
   }
 
-  private async performSync() {
-    if (!this.config || !this.state?.protocolActivatedAt || !this.browserName) {
-      return;
-    }
-    this.lastSyncAttemptAtMs = Date.now();
-    const ready = await this.store.readReadyIntervals(
-      BROWSER_V2_SYNC_BATCH_SIZE,
-    );
-    const health = await this.createHealth();
-    const requestId = crypto.randomUUID();
-    const sentSnapshot = this.state.latestSnapshot;
-    try {
-      const response = await syncTrackingV2(this.config, {
-        protocolVersion: TRACKING_PROTOCOL_VERSION_V2,
-        protocolActivatedAt: this.state.protocolActivatedAt,
-        clientInstanceId: this.state.clientInstanceId,
-        sentAt: new Date(serverNow(this.state)).toISOString(),
-        intervals: ready.map((row) => row.interval),
-        ...(this.state.latestSnapshot
-          ? { focusSnapshot: this.state.latestSnapshot }
-          : {}),
-        health,
-      }, requestId);
-      const confirmedAt = response.serverTime;
-      const confirmedRequestId = safeRequestId(response.requestId)
-        ? response.requestId
-        : requestId;
-      await this.store.applySyncResults(
-        response.results,
-        confirmedRequestId,
-      );
-      this.state = await this.store.readRuntimeState();
-      this.applyServerClock(response.serverTime);
-      const intervalUpload = summarizeIntervalUpload(
-        response.results,
-        confirmedRequestId,
-        confirmedAt,
-      );
-      const snapshotConfirmation = snapshotConfirmationFromResponse(
-        sentSnapshot,
-        response.focusSnapshotResult,
-        confirmedRequestId,
-        confirmedAt,
-      );
-      const diagnostics = appendSyncDiagnostics(
-        this.state.diagnostics,
-        response.results,
-        response.focusSnapshotResult,
-        confirmedRequestId,
-        confirmedAt,
-      );
-      this.state = {
-        ...this.state,
-        lastSuccessfulSyncAt: confirmedAt,
-        lastSuccessfulHeartbeatAt: confirmedAt,
-        snapshotConfirmation:
-          snapshotConfirmation ?? this.state.snapshotConfirmation,
-        lastIntervalUpload:
-          intervalUpload ?? this.state.lastIntervalUpload,
-        confirmedIntervalThrough: latestConfirmedThrough(
-          response.cursors,
-          this.state.confirmedIntervalThrough,
-        ),
-        lastRequestId: confirmedRequestId,
-        diagnostics,
-        lastErrorCode: "NONE",
-      };
-      this.connectionState = "ONLINE";
-      this.errorCode = "NONE";
-      await this.store.writeRuntimeState(this.state);
-      await this.updateVisibleStatus();
+  private startSyncDrain() {
+    if (this.syncInFlight) return;
+    queueMicrotask(() => {
+      if (this.syncInFlight || !this.syncRequested) return;
+      this.syncInFlight = this.drainSyncRequests()
+        .catch(async (error) => {
+          await schedule(() => this.applyFailure(error)).catch(() => undefined);
+        })
+        .finally(() => {
+          this.syncInFlight = null;
+          if (this.syncRequested) this.startSyncDrain();
+        });
+    });
+  }
 
-      if (response.focusSnapshotResult?.status === "REJECTED") {
-        const rejectedConfirmation = this.state.snapshotConfirmation;
-        if (
-          response.focusSnapshotResult.rejectionCode ===
-          "SNAPSHOT_OUTSIDE_POLICY_WINDOW"
-        ) {
-          this.collectorState = "PAUSED";
-        }
-        if (
-          response.focusSnapshotResult.rejectionCode ===
-          "SNAPSHOT_POLICY_LEASE_INVALID"
-        ) {
-          this.lastPolicyRefreshAtMs = 0;
-          this.collectorState = "PAUSED";
-        }
-        await this.clearFocus(false);
-        if (this.state) {
-          this.state = {
-            ...this.state,
-            snapshotConfirmation: rejectedConfirmation,
-          };
-          await this.store.writeRuntimeState(this.state);
-          await this.updateVisibleStatus();
-        }
+  private async drainSyncRequests() {
+    while (this.syncRequested) {
+      const immediate = this.syncImmediate;
+      this.syncRequested = false;
+      this.syncImmediate = false;
+      const sinceLastAttempt = Date.now() - this.lastSyncAttemptAtMs;
+      if (!immediate && sinceLastAttempt < INTERACTION_SYNC_THROTTLE_MS) {
+        await this.requestSync(false);
+        return;
       }
-    } catch (error) {
-      if (ready.length > 0 && isRetryableError(error)) {
-        await this.store.retry(
-          ready.map((row) => row.clientEventId),
-        );
-      }
-      await this.applyFailure(error, requestId);
+      await this.performSyncOutsideOperation();
     }
+  }
+
+  private async performSyncOutsideOperation() {
+    const prepared = await schedule(async () => {
+      if (
+        !this.config ||
+        !this.state?.protocolActivatedAt ||
+        !this.browserName
+      ) {
+        return null;
+      }
+      this.lastSyncAttemptAtMs = Date.now();
+      const ready = await this.store.readReadyIntervals(
+        BROWSER_V2_SYNC_BATCH_SIZE,
+      );
+      const health = await this.createHealth();
+      if (!this.config || !this.state?.protocolActivatedAt) return null;
+      const requestId = crypto.randomUUID();
+      const sentSnapshot = this.state.latestSnapshot;
+      return {
+        generation: this.runtimeGeneration,
+        deviceId: this.config.deviceId,
+        clientInstanceId: this.state.clientInstanceId,
+        config: this.config,
+        ready,
+        requestId,
+        sentSnapshot,
+        request: {
+          protocolVersion: TRACKING_PROTOCOL_VERSION_V2,
+          protocolActivatedAt: this.state.protocolActivatedAt,
+          clientInstanceId: this.state.clientInstanceId,
+          sentAt: new Date(serverNow(this.state)).toISOString(),
+          intervals: ready.map((row) => row.interval),
+          ...(sentSnapshot ? { focusSnapshot: sentSnapshot } : {}),
+          health,
+        },
+      };
+    });
+    if (!prepared) return;
+
+    const requestStartedAtMs = Date.now();
+    try {
+      const response = await syncTrackingV2(
+        prepared.config,
+        prepared.request,
+        prepared.requestId,
+      );
+      await schedule(() =>
+        this.applySyncSuccess(prepared, response, requestStartedAtMs),
+      );
+    } catch (error) {
+      await schedule(async () => {
+        if (!this.syncPreparationIsCurrent(prepared)) return;
+        if (prepared.ready.length > 0 && isRetryableError(error)) {
+          await this.store.retry(
+            prepared.ready.map((row) => row.clientEventId),
+          );
+        }
+        await this.applyFailure(error, prepared.requestId);
+      });
+    }
+  }
+
+  private async applySyncSuccess(
+    prepared: PreparedBrowserSyncV2,
+    response: BrowserTrackingSyncResponseV2,
+    requestStartedAtMs: number,
+  ) {
+    if (!this.syncPreparationIsCurrent(prepared)) return;
+    const confirmedAt = response.serverTime;
+    const confirmedRequestId = safeRequestId(response.requestId)
+      ? response.requestId
+      : prepared.requestId;
+    await this.store.applySyncResults(
+      response.results,
+      confirmedRequestId,
+    );
+    this.state = await this.store.readRuntimeState();
+    if (!this.syncPreparationIsCurrent(prepared)) return;
+    this.applyServerClock(response.serverTime, requestStartedAtMs);
+    const intervalUpload = summarizeIntervalUpload(
+      response.results,
+      confirmedRequestId,
+      confirmedAt,
+    );
+    const snapshotConfirmation = snapshotConfirmationFromResponse(
+      prepared.sentSnapshot,
+      response.focusSnapshotResult,
+      confirmedRequestId,
+      confirmedAt,
+    );
+    const sentSnapshotIsCurrent = sameBrowserSnapshot(
+      prepared.sentSnapshot,
+      this.state.latestSnapshot,
+    );
+    const diagnostics = appendSyncDiagnostics(
+      this.state.diagnostics,
+      response.results,
+      response.focusSnapshotResult,
+      confirmedRequestId,
+      confirmedAt,
+    );
+    this.state = {
+      ...this.state,
+      lastSuccessfulSyncAt: confirmedAt,
+      lastSuccessfulHeartbeatAt: confirmedAt,
+      snapshotConfirmation:
+        sentSnapshotIsCurrent && snapshotConfirmation
+          ? snapshotConfirmation
+          : this.state.snapshotConfirmation,
+      lastIntervalUpload:
+        intervalUpload ?? this.state.lastIntervalUpload,
+      confirmedIntervalThrough: latestConfirmedThrough(
+        response.cursors,
+        this.state.confirmedIntervalThrough,
+      ),
+      lastRequestId: confirmedRequestId,
+      diagnostics,
+      lastErrorCode: "NONE",
+    };
+    this.connectionState = "ONLINE";
+    this.errorCode = "NONE";
+    await this.store.writeRuntimeState(this.state);
+    await this.updateVisibleStatus();
+
+    if (
+      sentSnapshotIsCurrent &&
+      response.focusSnapshotResult?.status === "REJECTED"
+    ) {
+      const rejectedConfirmation = this.state.snapshotConfirmation;
+      if (
+        response.focusSnapshotResult.rejectionCode ===
+        "SNAPSHOT_OUTSIDE_POLICY_WINDOW"
+      ) {
+        this.collectorState = "PAUSED";
+      }
+      if (
+        response.focusSnapshotResult.rejectionCode ===
+        "SNAPSHOT_POLICY_LEASE_INVALID"
+      ) {
+        this.lastPolicyRefreshAtMs = 0;
+        this.collectorState = "PAUSED";
+      }
+      await this.clearFocus(false);
+      if (this.state) {
+        this.state = {
+          ...this.state,
+          snapshotConfirmation: rejectedConfirmation,
+        };
+        await this.store.writeRuntimeState(this.state);
+        await this.updateVisibleStatus();
+      }
+    }
+  }
+
+  private syncPreparationIsCurrent(prepared: {
+    generation: number;
+    deviceId: string;
+    clientInstanceId: string;
+  }) {
+    return (
+      prepared.generation === this.runtimeGeneration &&
+      prepared.deviceId === this.config?.deviceId &&
+      prepared.clientInstanceId === this.state?.clientInstanceId
+    );
   }
 
   private async flushLegacyQueue() {
@@ -1313,8 +1456,9 @@ export class BrowserExtensionRuntimeV2 {
       return;
     }
     try {
+      const requestStartedAtMs = Date.now();
       const policy = await getTrackingPolicyV2(this.config);
-      this.applyServerClock(policy.serverTime);
+      this.applyServerClock(policy.serverTime, requestStartedAtMs);
       const changed =
         this.state.policy?.policyLeaseId !== policy.policyLeaseId ||
         this.state.policy?.policyVersion !== policy.policyVersion;
@@ -1541,13 +1685,19 @@ export class BrowserExtensionRuntimeV2 {
     }
   }
 
-  private applyServerClock(serverTime: string) {
+  private applyServerClock(
+    serverTime: string,
+    clientRequestStartedAtMs: number,
+  ) {
     if (!this.state) return;
-    const serverMs = Date.parse(serverTime);
-    if (!Number.isFinite(serverMs)) return;
+    const serverOffsetMs = calculateBrowserServerOffsetMs(
+      serverTime,
+      clientRequestStartedAtMs,
+    );
+    if (serverOffsetMs === null) return;
     this.state = {
       ...this.state,
-      serverOffsetMs: serverMs - Date.now(),
+      serverOffsetMs,
     };
   }
 
@@ -1804,6 +1954,17 @@ export function snapshotConfirmationFromResponse(
     rejectionCode: result.rejectionCode,
     requestId,
   };
+}
+
+export function sameBrowserSnapshot(
+  sent: BrowserTrackingRuntimeStateV2["latestSnapshot"],
+  current: BrowserTrackingRuntimeStateV2["latestSnapshot"],
+) {
+  if (!sent || !current) return sent === current;
+  return (
+    sent.clockEpochId === current.clockEpochId &&
+    sent.snapshotSequence === current.snapshotSequence
+  );
 }
 
 function latestConfirmedThrough(

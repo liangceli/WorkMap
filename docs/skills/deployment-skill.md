@@ -1,5 +1,14 @@
 # Deployment Skill
 
+## Browser Extension 0.5.7 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.7.zip`; SHA-256 `FF09C62FCC37233DB297D8639C1A4E7876595C3DC7A05D8A6BB71DF0FD06AEED`; size `44,623` bytes; 21 root entries.
+- This Browser-only patch adds a migrated durable cross-epoch Focus watermark, occurrence-time epoch anchoring, request-start server-clock calibration, out-of-lane/coalesced HTTP sync, and stale-response isolation.
+- Reload the same unpacked entry to preserve pairing, queue, policy acknowledgement, and old dead-letter evidence. Do not remove/re-pair just to hide the 0.5.6 `FOCUS_OVERLAP` tombstone.
+- No API/shared/Web/Prisma/Desktop deployment is introduced. Browser Domain open/runtime remains disabled and Browser connection audit remains separate work.
+- Do not publish to Chrome Web Store, Edge Add-ons, GitHub Releases, or production without explicit authorization and real Chrome/Edge 0.5.7 acceptance.
+
 ## Browser Extension 0.5.6 Release Notes
 
 - Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
