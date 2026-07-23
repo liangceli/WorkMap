@@ -1,5 +1,38 @@
 # Latest Implementation Handoff
 
+## 2026-07-23 Browser Extension 0.5.9 Repeated Content-Script Injection Fix
+
+### Original Task Brief
+
+- Investigate real Chrome and Edge `0.5.8` error-page evidence showing `Uncaught SyntaxError: Identifier 'workMapWindow' has already been declared` from `dist/contentScript.js` after pairing both browsers.
+- Determine whether the observed `/reports` Domain open/runtime `Not enabled` state is a Browser script defect or a Web/API/policy state problem, and fix the confirmed Browser defect once confidence exceeds 95%.
+
+### Changed Files
+
+- Browser Extension: `workmap/apps/browser-extension/src/contentScript.ts`, package/manifest/version constant, version assertions, and new executable regression `test/content-script-idempotency.test.ts`.
+- Generated release outputs: `workmap/apps/browser-extension/alpha-unpacked` and `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.9.zip`.
+- Long-lived memory: this handoff and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, API, Web, shared contract, Prisma schema/migration, policy, RBAC, deployment, or production data was modified.
+
+### Root Cause And Fix
+
+- The registered all-frame content script and the recovery/manual injection can legitimately execute `dist/contentScript.js` in the same document. In `0.5.8`, the intended `window.__workmapDomainActivityInstalled` guard was preceded by a top-level lexical `const workMapWindow` declaration. A second classic-script execution failed during parsing before the guard could run, exactly matching the supplied Chrome/Edge stack trace.
+- The content-script runtime is now enclosed in a fresh IIFE scope. Re-execution can parse safely, then returns through the existing per-frame `window` marker. This preserves dynamic registration and recovery injection while preventing duplicate listeners/messages and retaining all hostname-only privacy rules.
+- The patch is versioned `0.5.9`; reusing `0.5.8` would leave two behaviorally different packages with the same diagnosable version.
+
+### Domain Open/Runtime Diagnosis
+
+- `/reports` renders `Not enabled` only when `trackingV2Coverage.domainOpenRuntimeEnabled` is not exactly `true`. The API derives that field from the current active Monitoring Policy's independent `collectDomainOpenRuntime` flag, whose migration default is deliberately `false`.
+- Installing `0.5.8` or `0.5.9` never enables the privacy-sensitive policy automatically. An authorised Owner/policy administrator must use `/compliance` -> `Browser Domain open/runtime` -> `Enable and create new policy version`; employees must acknowledge the new version before Extensions receive a lease with `collectDomainOpenRuntime: true`.
+- If `/compliance` has no Browser Domain runtime control, Web production is stale. If enabling it fails, check that migration `20260723120000_browser_domain_runtime_policy` and the matching API are deployed. If Compliance says enabled but Reports still says `Not enabled`, inspect the usage-summary response for a stale/missing `trackingV2Coverage.domainOpenRuntimeEnabled`. If Reports says enabled but an Extension remains disabled, inspect its Options policy version, acknowledgement, and lease fields.
+- The repeated content-script SyntaxError blocks page activity/checkpoint instrumentation but does not alter the server policy flag. It is therefore a real Browser bug, but not the reason the Reports policy label says `Not enabled`.
+
+### Verification, Artifact, And Manual QA
+
+- Browser typecheck, lint, test (`66/66`), build, and `release:zip` pass. The new test transpiles and executes the actual content-script source twice in one VM document, verifies no exception, and verifies that window/document/runtime listeners and startup messages are not duplicated.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.9.zip`; manifest `0.5.9`; 22 entries; 49,024 bytes; SHA-256 `C37621B92B543772F414B0868B0D2145478179A9C4BED89345220DEB8BE5879D`.
+- Post-fix real Chrome/Edge load-unpacked QA is **NOT RUN**. The supplied screenshots are valid pre-fix `0.5.8` evidence only. No store upload, GitHub release, API/Web deployment, database migration, or production policy change was performed.
+
 ## 2026-07-23 Browser Extension 0.5.8 Connection Audit And Domain Runtime
 
 ### Original Task Brief

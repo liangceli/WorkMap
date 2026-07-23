@@ -1,5 +1,31 @@
 # Latest QA Handoff
 
+## 2026-07-23 Browser Extension 0.5.9 Repeated Injection QA
+
+### Reviewed Implementation And Findings
+
+- Reviewed the supplied Chrome and Edge error pages, the compiled line mapping, dynamic content-script registration, existing-tab recovery injection, Options pairing registration, and the page-level installation guard.
+- Confirmed high-severity `0.5.8` defect: repeat injection redeclared top-level `const workMapWindow`; JavaScript failed before the idempotency marker could be checked. This independently explains the identical failures in both browsers.
+- Fixed by adding a per-execution function scope and retaining the per-frame marker. No broad registration/focus/runtime architecture change was required.
+- Separately verified the Reports policy semantics: `Not enabled` means the active Browser Domain runtime policy flag is false or absent. It is not evidence that the fixed content script failed to produce intervals; installing an Extension does not auto-enable a privacy policy.
+
+### Automated Verification
+
+- `pnpm --filter @workmap/browser-extension typecheck` - pass.
+- `pnpm --filter @workmap/browser-extension lint` - pass.
+- `pnpm --filter @workmap/browser-extension test` - pass, `66/66`, including real repeat execution of the transpiled content script in one VM context with no duplicate listeners/messages.
+- `pnpm --filter @workmap/browser-extension build` - pass.
+- `pnpm --filter @workmap/browser-extension release:zip` - pass.
+- ZIP inspection - manifest `0.5.9`, 22 entries, 49,024 bytes, SHA-256 `C37621B92B543772F414B0868B0D2145478179A9C4BED89345220DEB8BE5879D`.
+- `git diff --check` - pass. Scoped secret scan excluding environment, dependency, build, unpacked, artifact, generated, cache, and reference directories - no finding. Desktop Agent diff - none.
+
+### Manual QA, Risks, And Recommendation
+
+- Post-fix real Chrome load-unpacked: **NOT RUN**. Post-fix real Edge load-unpacked: **NOT RUN**.
+- Required focused QA: upgrade the existing unpacked entry to `alpha-unpacked` 0.5.9 without removing it, reload affected tabs, clear the old extension error list, trigger Options registration/reload twice, and confirm no new `workMapWindow` SyntaxError and only one activity listener set per frame.
+- Runtime policy QA remains separate: verify `/compliance` says enabled on a newly created acknowledged policy version, then verify each Extension Options page says Domain open/runtime enabled and has a fresh granting lease before expecting `/reports` duration.
+- Automated QA recommendation: **PASS** for the repeat-injection patch. Distribution/production recommendation: **HOLD** until the focused Chrome and Edge manual checks pass. The next round may proceed to controlled manual QA; do not auto-publish.
+
 ## 2026-07-23 Browser Extension 0.5.8 QA
 
 ### Reviewed Implementation

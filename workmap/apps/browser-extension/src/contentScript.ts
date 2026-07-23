@@ -14,9 +14,14 @@ declare const chrome: {
   };
 };
 
-const workMapWindow = window as Window & { __workmapDomainActivityInstalled?: boolean };
+// A registered content script and the recovery injection can legitimately run
+// in the same document. Keep every lexical binding inside a fresh function
+// scope so the second classic-script execution can reach the page marker
+// instead of failing during parsing with a duplicate `const` declaration.
+(() => {
+  const workMapWindow = window as Window & { __workmapDomainActivityInstalled?: boolean };
 
-if (!workMapWindow.__workmapDomainActivityInstalled) {
+  if (workMapWindow.__workmapDomainActivityInstalled) return;
   workMapWindow.__workmapDomainActivityInstalled = true;
   const isTopFrame = window === window.top;
   const throttleMs = 250;
@@ -85,4 +90,4 @@ if (!workMapWindow.__workmapDomainActivityInstalled) {
     });
     queueMicrotask(sendPageCheckpoint);
   }
-}
+})();
