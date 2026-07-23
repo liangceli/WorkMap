@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { fileURLToPath, URL } from "node:url";
 import { join } from "node:path";
-import { platform } from "node:process";
+import { env, platform, stdout } from "node:process";
 import { promisify } from "node:util";
 
 if (platform !== "win32") {
@@ -28,10 +28,25 @@ const archivePath = join(
 
 await mkdir(artifactDirectory, { recursive: true });
 await rm(archivePath, { force: true });
-await execFileAsync("powershell.exe", [
+const powershellPath = join(
+  env.SystemRoot ?? "C:\\Windows",
+  "System32",
+  "WindowsPowerShell",
+  "v1.0",
+  "powershell.exe",
+);
+await execFileAsync(powershellPath, [
   "-NoProfile",
+  "-NonInteractive",
   "-ExecutionPolicy",
   "Bypass",
   "-Command",
-  `Compress-Archive -Path '${join(unpackedDirectory, "*")}' -DestinationPath '${archivePath}' -Force`,
+  `$ErrorActionPreference = 'Stop'; Compress-Archive -Path '${join(unpackedDirectory, "*")}' -DestinationPath '${archivePath}' -Force`,
 ]);
+
+const archive = await stat(archivePath);
+if (!archive.isFile() || archive.size === 0) {
+  throw new Error(`Browser Extension archive was not created: ${archivePath}`);
+}
+
+stdout.write(`Created ${archivePath} (${archive.size} bytes).\n`);

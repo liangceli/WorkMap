@@ -77,3 +77,13 @@ test("Chrome and Edge overlapping the same user, hostname and metric are unioned
   assert.equal(result.user.focusActiveMs, 40_000n);
   assert.equal(result.subjects.get("domain-docs")?.focusActiveMs, 40_000n);
 });
+
+test("Chrome and Edge Domain runtime overlap is unioned for the same hostname", () => {
+  const result = computeTarget([
+    fragment("chrome-device", "domain-docs", TrackingActivityMetric.OPEN_RUNTIME, 0, 30_000),
+    fragment("edge-device", "domain-docs", TrackingActivityMetric.OPEN_RUNTIME, 10_000, 40_000),
+  ]);
+
+  assert.equal(result.user.openRuntimeMs, 40_000n);
+  assert.equal(result.subjects.get("domain-docs")?.openRuntimeMs, 40_000n);
+});

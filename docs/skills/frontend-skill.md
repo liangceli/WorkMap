@@ -1,5 +1,13 @@
 # Frontend Skill
 
+## Browser Connection Audit And Domain Runtime 0.5.8
+
+- Owner employee `/reports` refreshes Browser audit history with the five-second live cycle. Show confirmed Browser transitions and inferred heartbeat gaps separately; current heartbeat staleness becomes `Signal interrupted` at the shared 90-second boundary.
+- Render `RUNNING` as `Extension started`, `RESTARTED` as `Browser profile started`, lock/unlock/network/service statuses from their stored reason, and inferred `UNKNOWN_INTERRUPTED` as `Signal interrupted (inferred)`. Never invent exact browser close, disable, uninstall, crash or sleep language.
+- Do not derive a fake start event from pairing/enabled time. De-duplicate the same inferred interruption when coverage history and current v2 live health describe the same device/time.
+- Compliance exposes Browser Domain open/runtime as a separate default-off policy action. Enabling it creates a new version and the acknowledgement copy must say that it means eligible hostname tabs remained open, not that the employee actively worked.
+- `/reports` receives separate `appOpenRuntimeEnabled` and `domainOpenRuntimeEnabled` flags. Show confirmed Domain open/runtime only when the Browser policy is enabled and official ledger rows exist. Keep Domain, App, Focus and runtime semantics separate.
+
 ## Reports Live Browser Device Presentation
 
 - `/reports` Live signals is a current-status surface, not a complete device registry. For each employee/browser identity, fresh Browser Extension devices take priority and older inactive cards are hidden from the live grid and its visible coverage/attention counts.

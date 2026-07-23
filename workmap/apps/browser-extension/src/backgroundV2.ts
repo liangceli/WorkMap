@@ -1,4 +1,5 @@
 import { BrowserFocusEngineV2 } from "./browserFocusEngineV2.js";
+import { BrowserOpenRuntimeEngineV2 } from "./browserOpenRuntimeEngineV2.js";
 import {
   advanceBrowserFocusTimelineThroughAt,
   calculateBrowserServerOffsetMs,
@@ -23,14 +24,20 @@ import {
   isUpgradeRequiredError,
   prepareProtocolV2,
   sendDomainUsage,
+  sendExtensionStatus,
   syncTrackingV2,
 } from "./extensionApi.js";
 import {
+  enqueueStatusEvent,
+  normalizeStatusQueue,
   readStoredState,
   removeStoredState,
   resolveStoredConfig,
+  retryStatusEvents,
   writeStoredState,
   type ExtensionConfig,
+  type ExtensionDeviceStatusName,
+  type ExtensionDeviceStatusReason,
   type ExtensionStatus,
   type QueuedDomainEvent,
 } from "./extensionStorage.js";
@@ -86,7 +93,9 @@ type ChromeEvent<T> = { addListener(listener: T): void };
 
 type ChromeApi = {
   runtime: {
-    onInstalled: ChromeEvent<() => void>;
+    onInstalled: ChromeEvent<
+      (details: { reason: "install" | "update" | "chrome_update" | "shared_module_update" }) => void
+    >;
     onStartup: ChromeEvent<() => void>;
     onMessage: ChromeEvent<
       (
@@ -98,6 +107,7 @@ type ChromeApi = {
     lastError?: { message?: string };
   };
   tabs: {
+    onCreated: ChromeEvent<(tab: ChromeTab) => void>;
     onActivated: ChromeEvent<
       (info: { tabId: number; windowId: number }) => void
     >;
@@ -241,6 +251,7 @@ export class BrowserExtensionRuntimeV2 {
   private browserName: BrowserNameV2 | null = null;
   private state: BrowserTrackingRuntimeStateV2 | null = null;
   private engine: BrowserFocusEngineV2 | null = null;
+  private openRuntimeEngine: BrowserOpenRuntimeEngineV2 | null = null;
   private initialized = false;
   private initializing: Promise<void> | null = null;
   private connectionState: TrackingConnectionStateV2 = "OFFLINE";
@@ -279,6 +290,7 @@ export class BrowserExtensionRuntimeV2 {
     this.browserName = null;
     this.state = null;
     this.engine = null;
+    this.openRuntimeEngine = null;
     this.connectionState = "OFFLINE";
     this.collectorState = "PAUSED";
     this.errorCode = "NONE";
@@ -286,7 +298,34 @@ export class BrowserExtensionRuntimeV2 {
     this.lastPolicyRefreshAtMs = 0;
     this.lastSyncAttemptAtMs = 0;
     this.initialized = false;
+    await writeStoredState({ workmapStatusQueue: [] });
     await this.initialize();
+    const initializedState =
+      this.state as BrowserTrackingRuntimeStateV2 | null;
+    if (initializedState?.protocolActivatedAt) {
+      await this.queueStatusTransition(
+        "RUNNING",
+        "AGENT_STARTED",
+        "CONFIRMED",
+        true,
+        "pairing",
+      );
+      await this.flushStatusQueue();
+    }
+  }
+
+  async handleRuntimeStarted(operation: "profile-start" | "extension-update") {
+    await this.ensureInitialized();
+    if (!this.state?.protocolActivatedAt) return;
+    await this.queueStatusTransition(
+      "RESTARTED",
+      "AGENT_RESTART",
+      "CONFIRMED",
+      true,
+      operation,
+    );
+    await this.flushStatusQueue();
+    await this.requestSync(true);
   }
 
   async handlePermissionChange() {
@@ -294,6 +333,7 @@ export class BrowserExtensionRuntimeV2 {
     if (!this.config) return;
     const registered = await this.registerContentScript();
     if (!registered) {
+      await this.clearOpenRuntime(performance.now(), true);
       await this.pauseCollector(
         "INTERACTION_PERMISSION_REQUIRED",
         "Website tracking access is required.",
@@ -301,6 +341,7 @@ export class BrowserExtensionRuntimeV2 {
       return;
     }
     await this.restoreCollectorIfAllowed();
+    await this.reconcileOpenRuntime(true);
     await this.reconcileBrowserReality(true);
   }
 
@@ -316,7 +357,13 @@ export class BrowserExtensionRuntimeV2 {
     ) {
       await this.clearFocus(false, performance.now(), true);
     }
+    await this.reconcileOpenRuntime(true);
     await this.reconcileBrowserReality(true);
+  }
+
+  async handleTabCreated() {
+    await this.ensureInitialized();
+    await this.reconcileOpenRuntime(true);
   }
 
   async handleTabActivated(tabId: number, windowId: number) {
@@ -338,6 +385,7 @@ export class BrowserExtensionRuntimeV2 {
     tab: ChromeTab,
   ) {
     await this.ensureInitialized();
+    await this.reconcileOpenRuntime(true);
     if (!this.state || tabId !== this.state.activeTabId) return;
     if (tab.windowId !== this.state.focusedWindowId) return;
     const domain = eligibleDomainForTab(
@@ -361,14 +409,19 @@ export class BrowserExtensionRuntimeV2 {
 
   async handleTabRemoved(tabId: number) {
     await this.ensureInitialized();
-    if (!this.state || tabId !== this.state.activeTabId) return;
-    await this.clearFocus(false, performance.now(), true);
+    if (!this.state) return;
+    if (tabId === this.state.activeTabId) {
+      await this.clearFocus(false, performance.now(), true);
+    }
+    await this.reconcileOpenRuntime(true);
     await this.reconcileBrowserReality(true);
   }
 
   async handleTabReplaced(addedTabId: number, removedTabId: number) {
     await this.ensureInitialized();
-    if (!this.state || removedTabId !== this.state.activeTabId) return;
+    if (!this.state) return;
+    await this.reconcileOpenRuntime(true);
+    if (removedTabId !== this.state.activeTabId) return;
     await this.clearFocus(false, performance.now(), true);
     if (this.state.focusedWindowId === null) {
       await this.requestSync(true);
@@ -428,8 +481,11 @@ export class BrowserExtensionRuntimeV2 {
 
   async handleWindowRemoved(windowId: number) {
     await this.ensureInitialized();
-    if (!this.state || windowId !== this.state.focusedWindowId) return;
-    await this.clearFocus(false, performance.now(), true);
+    if (!this.state) return;
+    if (windowId === this.state.focusedWindowId) {
+      await this.clearFocus(false, performance.now(), true);
+    }
+    await this.reconcileOpenRuntime(true);
     await this.reconcileBrowserReality(true);
   }
 
@@ -437,16 +493,35 @@ export class BrowserExtensionRuntimeV2 {
     await this.ensureInitialized();
     if (!this.state) return;
     await this.guardLifecycleContinuity();
+    const previousState = this.state.lastSystemState;
     const isIdle = state !== "active";
-    this.state = { ...this.state, systemIdle: isIdle };
+    this.state = {
+      ...this.state,
+      systemIdle: isIdle,
+      lastSystemState: state,
+    };
     if (isIdle) {
       this.collectorState = "PAUSED";
       await this.clearFocus(true);
+      if (state === "locked") {
+        await this.clearOpenRuntime(performance.now(), true);
+        if (previousState !== "locked") {
+          await this.queueStatusTransition("LOCKED", "SYSTEM_LOCK");
+        }
+      } else {
+        await this.reconcileOpenRuntime(false);
+      }
       await this.store.writeRuntimeState(this.state);
+      await this.flushStatusQueue();
       return;
     }
+    if (previousState === "locked") {
+      await this.queueStatusTransition("RECONNECTED", "SYSTEM_UNLOCK");
+    }
     await this.restoreCollectorIfAllowed();
+    await this.reconcileOpenRuntime(true);
     await this.reconcileBrowserReality(true);
+    await this.flushStatusQueue();
   }
 
   async handleMessage(message: RuntimeMessage, sender: MessageSender) {
@@ -532,8 +607,20 @@ export class BrowserExtensionRuntimeV2 {
             true,
           );
         }
+        if (
+          this.openRuntimeCollectionAllowed() &&
+          this.openRuntimeEngine &&
+          !discontinuity
+        ) {
+          await this.persistOpenRuntimeUpdate(
+            this.openRuntimeEngine.settle(performance.now()),
+            true,
+          );
+        }
+        await this.reconcileOpenRuntime(false);
         await this.reconcileBrowserReality(false);
         await this.flushLegacyQueue();
+        await this.flushStatusQueue();
         await this.restoreAfterQueuePressure();
       },
       (error) => this.recordCollectorMaintenanceFailure(error),
@@ -706,10 +793,13 @@ export class BrowserExtensionRuntimeV2 {
         this.state = {
           ...this.state,
           systemIdle: idleState !== "active",
+          lastSystemState: idleState,
         };
         if (this.state.systemIdle) this.collectorState = "PAUSED";
         await this.store.writeRuntimeState(this.state);
+        await this.reconcileOpenRuntime(true);
         await this.reconcileBrowserReality(true);
+        await this.flushStatusQueue();
       },
       (error) => this.recordCollectorMaintenanceFailure(error),
       () => this.requestSync(true),
@@ -756,62 +846,79 @@ export class BrowserExtensionRuntimeV2 {
   }
 
   private async closeRecoveredV2Tail() {
-    if (
-      !this.state?.clock ||
-      !this.state.engineCheckpoint ||
-      !this.state.policy ||
-      !this.browserName
-    ) {
-      return;
-    }
-    const recovered = new BrowserFocusEngineV2(
-      this.state.clock,
-      this.state.policy,
-      this.browserName,
-      this.state.engineCheckpoint,
-    );
-    const boundary = this.state.engineCheckpoint.lastObservedAtMonotonicMs;
-    const update = recovered.clearFocus(boundary);
-    const recoveredState = {
-      ...this.state,
-      engineCheckpoint: recovered.checkpoint(),
-      latestSnapshot: update.snapshot,
-      snapshotConfirmation: {
-        state: "LOCAL_PENDING" as const,
-        snapshotSequence: update.snapshot.snapshotSequence,
-        observedAt: update.snapshot.lastObservedAt,
-        confirmedAt: null,
-        rejectionCode: null,
-        requestId: null,
-      },
-      focusTimelineThroughAt: advanceBrowserFocusTimelineThroughAt(
-        this.state.focusTimelineThroughAt,
-        update.intervals,
-      ),
-    };
-    try {
-      const persistedState = await this.store.persistEngineUpdate(
-        update.intervals,
-        recoveredState,
-        update.snapshot,
+    if (!this.state?.policy || !this.browserName) return;
+    if (this.state.clock && this.state.engineCheckpoint) {
+      const recovered = new BrowserFocusEngineV2(
+        this.state.clock,
+        this.state.policy,
+        this.browserName,
+        this.state.engineCheckpoint,
       );
-      this.state = persistedState;
-    } catch (error) {
-      if (error instanceof BrowserV2QueuePressureError) {
-        await this.pauseCollector("QUEUE_PRESSURE", error.message);
-        await this.requestSync(true);
-        return;
+      const boundary = this.state.engineCheckpoint.lastObservedAtMonotonicMs;
+      const update = recovered.clearFocus(boundary);
+      const recoveredState = {
+        ...this.state,
+        engineCheckpoint: recovered.checkpoint(),
+        latestSnapshot: update.snapshot,
+        snapshotConfirmation: {
+          state: "LOCAL_PENDING" as const,
+          snapshotSequence: update.snapshot.snapshotSequence,
+          observedAt: update.snapshot.lastObservedAt,
+          confirmedAt: null,
+          rejectionCode: null,
+          requestId: null,
+        },
+        focusTimelineThroughAt: advanceBrowserFocusTimelineThroughAt(
+          this.state.focusTimelineThroughAt,
+          update.intervals,
+        ),
+      };
+      try {
+        this.state = await this.store.persistEngineUpdate(
+          update.intervals,
+          recoveredState,
+          update.snapshot,
+        );
+      } catch (error) {
+        if (error instanceof BrowserV2QueuePressureError) {
+          await this.pauseCollector("QUEUE_PRESSURE", error.message);
+          await this.requestSync(true);
+          return;
+        }
+        throw error;
       }
-      throw error;
+    }
+    const runtimeState = this.state;
+    if (
+      runtimeState.openRuntimeClock &&
+      runtimeState.openRuntimeCheckpoint &&
+      runtimeState.policy?.collectDomainOpenRuntime
+    ) {
+      const recoveredRuntime = new BrowserOpenRuntimeEngineV2(
+        runtimeState.openRuntimeClock,
+        runtimeState.policy,
+        this.browserName,
+        runtimeState.openRuntimeCheckpoint,
+      );
+      const update = recoveredRuntime.clear(
+        runtimeState.openRuntimeCheckpoint.lastObservedAtMonotonicMs,
+      );
+      this.state = await this.store.persistOpenRuntimeUpdate(update.intervals, {
+        ...this.state,
+        openRuntimeCheckpoint: recoveredRuntime.checkpoint(),
+      });
     }
     this.state = {
       ...this.state,
       clock: null,
       engineCheckpoint: null,
+      openRuntimeClock: null,
+      openRuntimeCheckpoint: null,
       activeTabId: null,
       activeDomain: null,
     };
     this.engine = null;
+    this.openRuntimeEngine = null;
     await this.store.writeRuntimeState(this.state);
   }
 
@@ -946,6 +1053,117 @@ export class BrowserExtensionRuntimeV2 {
     return true;
   }
 
+  private ensureOpenRuntimeEngine(atMonotonicMs: number) {
+    if (this.openRuntimeEngine) return true;
+    if (
+      !this.state ||
+      !this.browserName ||
+      !this.openRuntimeCollectionAllowed()
+    ) {
+      return false;
+    }
+    const policy = this.state.policy!;
+    const clock = createBrowserFocusClockV2({
+      serverNowMs: serverNow(this.state),
+      processingMonotonicMs: performance.now(),
+      observationMonotonicMs: atMonotonicMs,
+      protocolActivatedAt: this.state.protocolActivatedAt,
+      focusTimelineThroughAt: this.state.openRuntimeTimelineThroughAt,
+      policy,
+    });
+    if (!clock) return false;
+    this.state = { ...this.state, openRuntimeClock: clock };
+    this.openRuntimeEngine = new BrowserOpenRuntimeEngineV2(
+      clock,
+      policy,
+      this.browserName,
+    );
+    return true;
+  }
+
+  private async reconcileOpenRuntime(immediateSync: boolean) {
+    if (!this.state || !this.config) return;
+    const atMonotonicMs = performance.now();
+    if (!this.openRuntimeCollectionAllowed()) {
+      await this.clearOpenRuntime(atMonotonicMs, immediateSync);
+      return;
+    }
+    const tabs = await queryTabs(this.chromeApi, {});
+    const domains = tabs
+      .map((tab) =>
+        eligibleDomainForTab(tab, this.config?.excludedHostnames),
+      )
+      .filter((domain): domain is string => Boolean(domain));
+    if (domains.length === 0 && !this.openRuntimeEngine) return;
+    if (!this.ensureOpenRuntimeEngine(atMonotonicMs)) return;
+    await this.persistOpenRuntimeUpdate(
+      this.openRuntimeEngine!.observeOpenDomains(domains, atMonotonicMs),
+      immediateSync,
+    );
+  }
+
+  private async clearOpenRuntime(
+    atMonotonicMs = performance.now(),
+    immediateSync = false,
+  ) {
+    if (!this.state) return;
+    const hadEngine = this.openRuntimeEngine !== null;
+    if (this.openRuntimeEngine) {
+      await this.persistOpenRuntimeUpdate(
+        this.openRuntimeEngine.clear(atMonotonicMs),
+        immediateSync,
+      );
+    }
+    this.openRuntimeEngine = null;
+    this.state = {
+      ...this.state,
+      openRuntimeClock: null,
+      openRuntimeCheckpoint: null,
+    };
+    await this.store.writeRuntimeState(this.state);
+    if (immediateSync && hadEngine) await this.requestSync(true);
+  }
+
+  private async persistOpenRuntimeUpdate(
+    update: ReturnType<BrowserOpenRuntimeEngineV2["settle"]>,
+    immediateSync: boolean,
+  ) {
+    if (!this.openRuntimeEngine || !this.state) return false;
+    const durableState = this.state;
+    try {
+      this.state = await this.store.persistOpenRuntimeUpdate(
+        update.intervals,
+        {
+          ...durableState,
+          openRuntimeCheckpoint: this.openRuntimeEngine.checkpoint(),
+          lastLifecycleObservation: {
+            wallClockMs: Date.now(),
+            monotonicMs: performance.now(),
+          },
+          lastErrorCode: this.errorCode,
+        },
+      );
+    } catch (error) {
+      if (error instanceof BrowserV2QueuePressureError) {
+        this.openRuntimeEngine = null;
+        this.state = {
+          ...durableState,
+          lastErrorCode: "QUEUE_PRESSURE",
+        };
+        await this.store.writeRuntimeState(this.state);
+        await this.pauseCollector("QUEUE_PRESSURE", error.message);
+        await this.requestSync(true);
+        return false;
+      }
+      throw error;
+    }
+    await this.updateVisibleStatus();
+    if (immediateSync || update.intervals.length > 0) {
+      await this.requestSync(immediateSync);
+    }
+    return true;
+  }
+
   private async guardLifecycleContinuity() {
     if (!this.state) return false;
     const current = {
@@ -974,11 +1192,22 @@ export class BrowserExtensionRuntimeV2 {
         false,
       );
     }
+    if (this.openRuntimeEngine && this.state.openRuntimeCheckpoint) {
+      await this.persistOpenRuntimeUpdate(
+        this.openRuntimeEngine.clear(
+          this.state.openRuntimeCheckpoint.lastObservedAtMonotonicMs,
+        ),
+        false,
+      );
+    }
     this.engine = null;
+    this.openRuntimeEngine = null;
     this.state = {
       ...this.state,
       clock: null,
       engineCheckpoint: null,
+      openRuntimeClock: null,
+      openRuntimeCheckpoint: null,
       activeTabId: null,
       activeDomain: null,
       lastLifecycleObservation: current,
@@ -1002,23 +1231,18 @@ export class BrowserExtensionRuntimeV2 {
   private async closeAtPolicyBoundary() {
     if (!this.state) return;
     this.collectorState = "PAUSED";
+    const nowMonotonicMs = performance.now();
+    const nowServerMs = serverNow(this.state);
+    const latestWindowEnd = (this.state.policy?.allowedUtcWindows ?? [])
+      .map((window) => Date.parse(window.endsAt))
+      .filter((value) => Number.isFinite(value) && value <= nowServerMs)
+      .sort((left, right) => right - left)[0];
     if (this.engine && this.state.clock && this.state.engineCheckpoint) {
-      const nowMonotonicMs = performance.now();
-      const nowServerMs = serverNow(this.state);
-      const latestWindowEnd = (this.state.policy?.allowedUtcWindows ?? [])
-        .map((window) => Date.parse(window.endsAt))
-        .filter((value) => Number.isFinite(value) && value <= nowServerMs)
-        .sort((left, right) => right - left)[0];
-      const projectedBoundary = latestWindowEnd === undefined
-        ? this.state.engineCheckpoint.lastObservedAtMonotonicMs
-        : this.state.clock.clockEpochStartedMonotonicMs +
-          (latestWindowEnd - Date.parse(this.state.clock.clockEpochStartedAt));
-      const boundary = Math.min(
+      const boundary = policyBoundaryMonotonic(
+        this.state.clock,
+        this.state.engineCheckpoint.lastObservedAtMonotonicMs,
+        latestWindowEnd,
         nowMonotonicMs,
-        Math.max(
-          this.state.engineCheckpoint.lastObservedAtMonotonicMs,
-          projectedBoundary,
-        ),
       );
       await this.persistUpdate(
         this.engine.setCollectorState("PAUSED", boundary),
@@ -1033,6 +1257,30 @@ export class BrowserExtensionRuntimeV2 {
       activeTabId: null,
       activeDomain: null,
     };
+    if (!this.openRuntimeCollectionAllowed()) {
+      if (
+        this.openRuntimeEngine &&
+        this.state.openRuntimeClock &&
+        this.state.openRuntimeCheckpoint
+      ) {
+        const boundary = policyBoundaryMonotonic(
+          this.state.openRuntimeClock,
+          this.state.openRuntimeCheckpoint.lastObservedAtMonotonicMs,
+          latestWindowEnd,
+          nowMonotonicMs,
+        );
+        await this.persistOpenRuntimeUpdate(
+          this.openRuntimeEngine.clear(boundary),
+          false,
+        );
+      }
+      this.openRuntimeEngine = null;
+      this.state = {
+        ...this.state,
+        openRuntimeClock: null,
+        openRuntimeCheckpoint: null,
+      };
+    }
     await this.store.writeRuntimeState(this.state);
     await this.updateVisibleStatus();
   }
@@ -1146,6 +1394,7 @@ export class BrowserExtensionRuntimeV2 {
   }
 
   private async performSyncOutsideOperation() {
+    await this.flushStatusQueue();
     const prepared = await schedule(async () => {
       if (
         !this.config ||
@@ -1212,6 +1461,7 @@ export class BrowserExtensionRuntimeV2 {
     requestStartedAtMs: number,
   ) {
     if (!this.syncPreparationIsCurrent(prepared)) return;
+    const previousConnectionState = this.connectionState;
     const confirmedAt = response.serverTime;
     const confirmedRequestId = safeRequestId(response.requestId)
       ? response.requestId
@@ -1267,6 +1517,17 @@ export class BrowserExtensionRuntimeV2 {
     this.errorCode = "NONE";
     await this.store.writeRuntimeState(this.state);
     await this.updateVisibleStatus();
+    if (previousConnectionState !== "ONLINE") {
+      const storedStatus = await readStoredState(["workmapStatus"]);
+      if (
+        storedStatus.workmapStatus?.deviceStatus === "NETWORK_OFFLINE" ||
+        storedStatus.workmapStatus?.deviceStatus === "SERVER_UNREACHABLE" ||
+        storedStatus.workmapStatus?.deviceStatus === "UNKNOWN_INTERRUPTED"
+      ) {
+        await this.queueStatusTransition("RECONNECTED", "UNKNOWN");
+        await this.flushStatusQueue();
+      }
+    }
 
     if (
       sentSnapshotIsCurrent &&
@@ -1462,7 +1723,10 @@ export class BrowserExtensionRuntimeV2 {
       const changed =
         this.state.policy?.policyLeaseId !== policy.policyLeaseId ||
         this.state.policy?.policyVersion !== policy.policyVersion;
-      if (changed) await this.clearFocus(true);
+      if (changed) {
+        await this.clearFocus(true);
+        await this.clearOpenRuntime(performance.now(), true);
+      }
       this.state = { ...this.state, policy };
       this.collectorState = collectorStateForPolicy(
         policy,
@@ -1556,6 +1820,20 @@ export class BrowserExtensionRuntimeV2 {
     );
   }
 
+  private openRuntimeCollectionAllowed() {
+    const policy = this.state?.policy;
+    if (!this.state || !policy) return false;
+    return (
+      policy.collectDomainOpenRuntime &&
+      this.state.lastSystemState !== "locked" &&
+      this.state.trackingAccess.hostPermission === "GRANTED" &&
+      this.state.trackingAccess.contentRegistration === "REGISTERED" &&
+      this.errorCode !== "QUEUE_PRESSURE" &&
+      this.errorCode !== "INTERACTION_PERMISSION_REQUIRED" &&
+      collectorStateForPolicy(policy, serverNow(this.state)) === "HEALTHY"
+    );
+  }
+
   private async createHealth(): Promise<BrowserClientHealthV2> {
     const stats = await this.store.stats();
     return {
@@ -1587,7 +1865,11 @@ export class BrowserExtensionRuntimeV2 {
   private async updateVisibleStatus(error?: string) {
     if (!this.state) return;
     const stats = await this.store.stats();
-    const legacy = await readStoredState(["workmapQueue"]);
+    const legacy = await readStoredState([
+      "workmapStatus",
+      "workmapQueue",
+      "workmapStatusQueue",
+    ]);
     const statusState: ExtensionStatus["state"] =
       this.policySetupMessage
         ? "policy_required"
@@ -1604,6 +1886,7 @@ export class BrowserExtensionRuntimeV2 {
                 : "offline";
     await writeStoredState({
       workmapStatus: {
+        ...legacy.workmapStatus,
         state: statusState,
         connectionState: this.connectionState,
         collectorState: this.collectorState,
@@ -1612,7 +1895,9 @@ export class BrowserExtensionRuntimeV2 {
         lastUploadAt: this.state.lastSuccessfulSyncAt ?? undefined,
         queuedEvents:
           stats.pending + (legacy.workmapQueue?.length ?? 0),
-        queuedStatusEvents: 0,
+        queuedStatusEvents: normalizeStatusQueue(
+          legacy.workmapStatusQueue,
+        ).length,
         trackingState:
           this.state.trackingAccess.contentRegistration === "FAILED"
             ? "registration_failed"
@@ -1624,6 +1909,119 @@ export class BrowserExtensionRuntimeV2 {
         error: error ?? this.policySetupMessage ?? undefined,
       },
     });
+  }
+
+  private async queueStatusTransition(
+    status: ExtensionDeviceStatusName,
+    reason: ExtensionDeviceStatusReason,
+    confidence: "CONFIRMED" | "INFERRED" = "CONFIRMED",
+    force = false,
+    operation?: string,
+  ) {
+    if (!this.config || !this.state?.protocolActivatedAt) return;
+    const stored = await readStoredState([
+      "workmapStatus",
+      "workmapStatusQueue",
+    ]);
+    if (
+      !force &&
+      stored.workmapStatus?.deviceStatus === status
+    ) {
+      return;
+    }
+    const now = new Date().toISOString();
+    const queue = enqueueStatusEvent(
+      normalizeStatusQueue(stored.workmapStatusQueue),
+      {
+        protocolVersion: TRACKING_PROTOCOL_VERSION_V2,
+        clientEventId: crypto.randomUUID(),
+        deviceId: this.config.deviceId,
+        status,
+        reason,
+        startedAt: now,
+        recordedAt: now,
+        ...(this.state.lastSuccessfulHeartbeatAt
+          ? { lastHeartbeatAt: this.state.lastSuccessfulHeartbeatAt }
+          : {}),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        confidence,
+        metadata: {
+          ...(operation ? { operation } : {}),
+          agentVersion: BROWSER_EXTENSION_VERSION,
+          trackingState:
+            this.state.trackingAccess.contentRegistration === "FAILED"
+              ? "registration_failed"
+              : this.errorCode === "INTERACTION_PERMISSION_REQUIRED"
+                ? "permission_required"
+                : "ready",
+        },
+      },
+    );
+    await writeStoredState({
+      workmapStatusQueue: queue,
+      workmapStatus: {
+        ...(stored.workmapStatus ?? {
+          state: "offline",
+          queuedEvents: 0,
+        }),
+        deviceStatus: status,
+        queuedStatusEvents: queue.length,
+      },
+    });
+  }
+
+  private async flushStatusQueue() {
+    if (!this.config || !this.state?.protocolActivatedAt) return false;
+    const stored = await readStoredState([
+      "workmapStatus",
+      "workmapStatusQueue",
+    ]);
+    let queue = normalizeStatusQueue(stored.workmapStatusQueue);
+    const ready = queue
+      .filter((item) => item.nextAttemptAtMs <= Date.now())
+      .slice(0, 20);
+    if (ready.length === 0) return true;
+    for (let index = 0; index < ready.length; index += 1) {
+      const item = ready[index]!;
+      try {
+        await sendExtensionStatus(this.config, item.event);
+        queue = queue.filter(
+          (candidate) =>
+            candidate.event.clientEventId !== item.event.clientEventId,
+        );
+        await writeStoredState({
+          workmapStatusQueue: queue,
+          workmapStatus: {
+            ...(stored.workmapStatus ?? {
+              state: "offline",
+              queuedEvents: 0,
+            }),
+            deviceStatus: item.event.status,
+            lastStatusUploadAt: new Date().toISOString(),
+            queuedStatusEvents: queue.length,
+          },
+        });
+      } catch {
+        const retryIds = new Set(
+          ready
+            .slice(index)
+            .map((candidate) => candidate.event.clientEventId),
+        );
+        queue = retryStatusEvents(queue, retryIds);
+        await writeStoredState({
+          workmapStatusQueue: queue,
+          workmapStatus: {
+            ...(stored.workmapStatus ?? {
+              state: "offline",
+              queuedEvents: 0,
+            }),
+            queuedStatusEvents: queue.length,
+          },
+        });
+        return false;
+      }
+    }
+    return true;
   }
 
   private async registerContentScript() {
@@ -1792,6 +2190,17 @@ export class BrowserExtensionRuntimeV2 {
         }),
       };
       await this.store.writeRuntimeState(this.state);
+    }
+    if (
+      isRetryableError(error) &&
+      this.connectionState === "OFFLINE"
+    ) {
+      const online =
+        typeof navigator === "undefined" || navigator.onLine !== false;
+      await this.queueStatusTransition(
+        online ? "SERVER_UNREACHABLE" : "NETWORK_OFFLINE",
+        online ? "SERVER_REQUEST_FAILED" : "NETWORK_UNAVAILABLE",
+      );
     }
     await this.updateVisibleStatus(safeError(error));
   }
@@ -2105,6 +2514,22 @@ function serverNow(state: BrowserTrackingRuntimeStateV2) {
   return Date.now() + state.serverOffsetMs;
 }
 
+export function policyBoundaryMonotonic(
+  clock: NonNullable<BrowserTrackingRuntimeStateV2["clock"]>,
+  lastObservedAtMonotonicMs: number,
+  latestWindowEnd: number | undefined,
+  nowMonotonicMs: number,
+) {
+  const projectedBoundary = latestWindowEnd === undefined
+    ? lastObservedAtMonotonicMs
+    : clock.clockEpochStartedMonotonicMs +
+      (latestWindowEnd - Date.parse(clock.clockEpochStartedAt));
+  return Math.min(
+    nowMonotonicMs,
+    Math.max(lastObservedAtMonotonicMs, projectedBoundary),
+  );
+}
+
 export function isRetryableError(error: unknown) {
   if (error instanceof BrowserRuntimeDiagnosticError) {
     return error.retryable;
@@ -2224,11 +2649,16 @@ function queryIdleState(api: ChromeApi, seconds: number) {
 
 function installRuntimeListeners(api: ChromeApi) {
   const runtime = new BrowserExtensionRuntimeV2(api);
-  api.runtime.onInstalled.addListener(() => {
-    void schedule(() => runtime.initialize());
+  api.runtime.onInstalled.addListener((details) => {
+    void schedule(async () => {
+      await runtime.initialize();
+      if (details.reason === "update") {
+        await runtime.handleRuntimeStarted("extension-update");
+      }
+    });
   });
   api.runtime.onStartup.addListener(() => {
-    void schedule(() => runtime.initialize());
+    void schedule(() => runtime.handleRuntimeStarted("profile-start"));
   });
   api.permissions.onAdded.addListener(() => {
     void schedule(() => runtime.handlePermissionChange());
@@ -2238,6 +2668,9 @@ function installRuntimeListeners(api: ChromeApi) {
   });
   api.tabs.onActivated.addListener(({ tabId, windowId }) => {
     void schedule(() => runtime.handleTabActivated(tabId, windowId));
+  });
+  api.tabs.onCreated.addListener(() => {
+    void schedule(() => runtime.handleTabCreated());
   });
   api.tabs.onUpdated.addListener((tabId, change, tab) => {
     if (

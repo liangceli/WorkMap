@@ -160,6 +160,36 @@ test("browser tracking-health transitions persist without turning repeated statu
   assert.equal(prisma.deviceRow.lastSeenAt.toISOString(), lastHeartbeatBeforeHealthEvent);
 });
 
+test("separate Browser profile starts remain distinct lifecycle events", async () => {
+  const prisma = new AgentSessionPrisma();
+  const service = new DevicesService(prisma as any);
+  const firstAt = new Date(Date.now() - 1_000).toISOString();
+  const secondAt = new Date().toISOString();
+
+  for (const [clientEventId, recordedAt] of [
+    ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", firstAt],
+    ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", secondAt],
+  ]) {
+    await service.recordDeviceStatus(context, {
+      deviceId: DEVICE_ID,
+      clientEventId,
+      status: "RESTARTED",
+      reason: "AGENT_RESTART",
+      startedAt: recordedAt,
+      recordedAt,
+      timeZone: "Australia/Adelaide",
+      metadata: { operation: "profile-start" },
+    }, DeviceClientType.BROWSER_EXTENSION);
+  }
+
+  assert.equal(
+    prisma.statusEvents.filter(
+      (event) => event.status === "RESTARTED",
+    ).length,
+    2,
+  );
+});
+
 class AgentSessionPrisma {
   deviceRow = {
     id: DEVICE_ID,

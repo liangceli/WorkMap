@@ -225,6 +225,7 @@ export class ComplianceService {
         collectAppUsage: true,
         collectOpenRuntime: true,
         collectWebsiteDomain: true,
+        collectDomainOpenRuntime: true,
         collectFullUrl: true,
         collectScreenshots: true,
         collectKeystrokes: true,
@@ -262,6 +263,87 @@ export class ComplianceService {
         collectAppUsage: policy.collectAppUsage,
         collectOpenRuntime: true,
         collectWebsiteDomain: policy.collectWebsiteDomain,
+        collectDomainOpenRuntime: policy.collectDomainOpenRuntime,
+        collectFullUrl: policy.collectFullUrl,
+        collectScreenshots: policy.collectScreenshots,
+        collectKeystrokes: policy.collectKeystrokes,
+        workHoursOnly: policy.workHoursOnly,
+        workdayStart: policy.workdayStart,
+        workdayEnd: policy.workdayEnd,
+        scheduleTimeZone: policy.scheduleTimeZone,
+        retentionDays: policy.retentionDays,
+        employeeCanViewOwnData: policy.employeeCanViewOwnData,
+        policyVersion,
+        activeFrom: new Date(
+          Math.max(now.getTime(), policy.activeFrom.getTime() + 1),
+        ),
+      },
+    });
+  }
+
+  async enableDomainOpenRuntimeCollection(
+    context: RequestContext,
+    monitoringPolicyId: string,
+  ) {
+    if (!canManageCompliance(context)) {
+      throw new ForbiddenException(
+        "Only an authorised policy administrator can enable Browser Domain open/runtime collection.",
+      );
+    }
+
+    const now = new Date();
+    const policy = await this.prisma.monitoringPolicy.findFirst({
+      where: {
+        companyId: context.companyId,
+        activeFrom: { lte: now },
+      },
+      orderBy: [{ activeFrom: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        companyId: true,
+        name: true,
+        collectAppUsage: true,
+        collectOpenRuntime: true,
+        collectWebsiteDomain: true,
+        collectDomainOpenRuntime: true,
+        collectFullUrl: true,
+        collectScreenshots: true,
+        collectKeystrokes: true,
+        workHoursOnly: true,
+        workdayStart: true,
+        workdayEnd: true,
+        scheduleTimeZone: true,
+        retentionDays: true,
+        employeeCanViewOwnData: true,
+        policyVersion: true,
+        activeFrom: true,
+      },
+    });
+    if (!policy || policy.id !== monitoringPolicyId) {
+      throw new NotFoundException("Active monitoring policy not found.");
+    }
+    if (!policy.collectWebsiteDomain) {
+      throw new BadRequestException(
+        "Browser Domain open/runtime collection requires Browser Domain collection to remain enabled.",
+      );
+    }
+    if (policy.collectDomainOpenRuntime) return policy;
+
+    const versions = await this.prisma.monitoringPolicy.findMany({
+      where: { companyId: context.companyId },
+      select: { policyVersion: true },
+    });
+    const policyVersion = nextPolicyVersion(
+      versions.map((item) => item.policyVersion),
+    );
+    return this.prisma.monitoringPolicy.create({
+      data: {
+        companyId: policy.companyId,
+        name: policy.name,
+        collectAppUsage: policy.collectAppUsage,
+        collectOpenRuntime: policy.collectOpenRuntime,
+        collectWebsiteDomain: policy.collectWebsiteDomain,
+        collectDomainOpenRuntime: true,
         collectFullUrl: policy.collectFullUrl,
         collectScreenshots: policy.collectScreenshots,
         collectKeystrokes: policy.collectKeystrokes,

@@ -127,21 +127,21 @@ async function testActivityIngestionAndReportsLoop() {
       {
         deviceId: DEVICE_ID,
         appName: "Visual Studio Code",
-        startedAt: "2026-06-17T09:00:00.000Z",
-        endedAt: "2026-06-17T09:05:00.000Z",
+        startedAt: "2026-07-17T09:00:00.000Z",
+        endedAt: "2026-07-17T09:05:00.000Z",
         isIdle: false,
       },
       {
         deviceId: DEVICE_ID,
         appName: "Visual Studio Code",
-        startedAt: "2026-06-17T09:05:00.000Z",
+        startedAt: "2026-07-17T09:05:00.000Z",
         durationSeconds: 60,
         isIdle: true,
       },
       {
         deviceId: DEVICE_ID,
         appName: "Outlook",
-        startedAt: "2026-06-17T09:06:00.000Z",
+        startedAt: "2026-07-17T09:06:00.000Z",
         durationSeconds: 120,
         isIdle: false,
         isActiveWindow: false,
@@ -154,7 +154,7 @@ async function testActivityIngestionAndReportsLoop() {
         deviceId: DEVICE_ID,
         domain: "https://Github.com/workmap/private-path?token=secret#fragment",
         browserName: "Chrome",
-        startedAt: "2026-06-17T09:05:00.000Z",
+        startedAt: "2026-07-17T09:05:00.000Z",
         durationSeconds: 180,
         isIdle: false,
       },
@@ -162,7 +162,7 @@ async function testActivityIngestionAndReportsLoop() {
         deviceId: DEVICE_ID,
         domain: "github.com",
         browserName: "CHROME",
-        startedAt: "2026-06-17T09:08:00.000Z",
+        startedAt: "2026-07-17T09:08:00.000Z",
         durationSeconds: 60,
         isIdle: true,
       },
@@ -170,7 +170,7 @@ async function testActivityIngestionAndReportsLoop() {
         deviceId: DEVICE_ID,
         domain: "github.com",
         browserName: "CHROME",
-        startedAt: "2026-06-17T09:04:00.000Z",
+        startedAt: "2026-07-17T09:04:00.000Z",
         durationSeconds: 600,
         isIdle: false,
         isActiveWindow: false,
@@ -179,7 +179,7 @@ async function testActivityIngestionAndReportsLoop() {
         deviceId: DEVICE_ID,
         domain: "github.com",
         browserName: "EDGE",
-        startedAt: "2026-06-17T09:06:00.000Z",
+        startedAt: "2026-07-17T09:06:00.000Z",
         durationSeconds: 60,
         isIdle: false,
         isActiveWindow: true,
@@ -205,7 +205,7 @@ async function testActivityIngestionAndReportsLoop() {
   assert(!JSON.stringify(prisma.activityEvents).includes("private-path"));
   assert(!JSON.stringify(prisma.activityEvents).includes("secret"));
 
-  const ownSummary = await reports.getUsageSummary(employeeContext, { from: "2026-06-17", to: "2026-06-17" });
+  const ownSummary = await reports.getUsageSummary(employeeContext, { from: "2026-07-17", to: "2026-07-17" });
   assert.equal(ownSummary.scope, "user");
   assert.equal(ownSummary.userId, EMPLOYEE_ID);
   assert.deepEqual(ownSummary.apps.map((row: any) => [row.appName, row.activeSeconds, row.idleSeconds, row.openRuntimeSeconds]), [
@@ -219,9 +219,9 @@ async function testActivityIngestionAndReportsLoop() {
   assert.equal(ownSummary.websites[0]?.idleSeconds, 60);
   assert.equal(ownSummary.apps[0]?.productivityLabel, "PRODUCTIVE");
   assert.equal(ownSummary.websites[0]?.productivityLabel, "PRODUCTIVE");
-  assert.deepEqual(ownSummary.range, { from: "2026-06-17", to: "2026-06-17", timeZone: "UTC" });
+  assert.deepEqual(ownSummary.range, { from: "2026-07-17", to: "2026-07-17", timeZone: "UTC" });
   assert.deepEqual(ownSummary.daily, [{
-    date: "2026-06-17",
+    date: "2026-07-17",
     appActiveSeconds: 300,
     appIdleSeconds: 60,
     domainActiveSeconds: 180,
@@ -233,7 +233,7 @@ async function testActivityIngestionAndReportsLoop() {
     usersWithActivity: 1,
   });
 
-  const companySummary = await reports.getUsageSummary(ownerContext, { scope: "company", from: "2026-06-17", to: "2026-06-17" });
+  const companySummary = await reports.getUsageSummary(ownerContext, { scope: "company", from: "2026-07-17", to: "2026-07-17" });
   assert.equal(companySummary.scope, "company");
   assert.equal(companySummary.userId, null);
   assert.equal(companySummary.apps[0]?.appName, "Visual Studio Code");
@@ -247,14 +247,14 @@ async function testActivityIngestionAndReportsLoop() {
   const departmentSummary = await reports.getUsageSummary(ownerContext, {
     scope: "company",
     departmentId: DEPARTMENT_ID,
-    from: "2026-06-17",
-    to: "2026-06-17",
+    from: "2026-07-17",
+    to: "2026-07-17",
   });
   assert.equal(departmentSummary.departmentId, DEPARTMENT_ID);
   assert.equal(departmentSummary.apps[0]?.activeSeconds, 300);
 
   await assertRejectsWith(
-    () => reports.getUsageSummary(ownerContext, { from: "2025-01-01", to: "2026-06-17" }),
+    () => reports.getUsageSummary(ownerContext, { from: "2025-01-01", to: "2026-07-17" }),
     BadRequestException,
   );
 
@@ -262,7 +262,7 @@ async function testActivityIngestionAndReportsLoop() {
     () => activity.ingestAppUsage(employeeContext, {
       deviceId: OTHER_DEVICE_ID,
       appName: "Outlook",
-      startedAt: "2026-06-17T09:00:00.000Z",
+      startedAt: "2026-07-17T09:00:00.000Z",
       durationSeconds: 60,
     }),
     ForbiddenException,
@@ -272,7 +272,7 @@ async function testActivityIngestionAndReportsLoop() {
       deviceId: DEVICE_ID,
       domain: "not a hostname",
       browserName: "CHROME",
-      startedAt: "2026-06-17T09:00:00.000Z",
+      startedAt: "2026-07-17T09:00:00.000Z",
       durationSeconds: 60,
     }),
     BadRequestException,
@@ -383,7 +383,7 @@ async function testBrowserExtensionCoverageLossAndRestore() {
 
 async function testLegacyActivityStopsAtProtocolActivation() {
   const prisma = new MockPrisma();
-  const protocolActivatedAt = new Date("2026-06-17T09:10:00.000Z");
+  const protocolActivatedAt = new Date("2026-07-17T09:10:00.000Z");
   prisma.seedDevice({
     id: DEVICE_ID,
     companyId: COMPANY_ID,
@@ -395,7 +395,7 @@ async function testLegacyActivityStopsAtProtocolActivation() {
   const accepted = await activity.ingestAppUsage(employeeContext, {
     deviceId: DEVICE_ID,
     appName: "Visual Studio Code",
-    startedAt: "2026-06-17T09:08:00.000Z",
+    startedAt: "2026-07-17T09:08:00.000Z",
     endedAt: protocolActivatedAt.toISOString(),
     isIdle: false,
   });
@@ -405,8 +405,8 @@ async function testLegacyActivityStopsAtProtocolActivation() {
     await activity.ingestAppUsage(employeeContext, {
       deviceId: DEVICE_ID,
       appName: "Visual Studio Code",
-      startedAt: "2026-06-17T09:10:00.000Z",
-      endedAt: "2026-06-17T09:10:01.000Z",
+      startedAt: "2026-07-17T09:10:00.000Z",
+      endedAt: "2026-07-17T09:10:01.000Z",
       isIdle: false,
     });
     assert.fail("Expected v1 activity after the v2 activation boundary to be rejected.");
@@ -589,14 +589,14 @@ async function testCrossMidnightUsageIsSplitPrecisely() {
     deviceId: DEVICE_ID,
     clientEventId: "77777777-7777-4777-8777-777777777777",
     appName: "Visual Studio Code",
-    startedAt: "2026-06-20T23:59:30.000Z",
-    endedAt: "2026-06-21T00:00:30.000Z",
+    startedAt: "2026-07-20T23:59:30.000Z",
+    endedAt: "2026-07-21T00:00:30.000Z",
     durationSeconds: 60,
   });
   assert.equal(result.accepted, 2);
   assert.deepEqual(prisma.appSummaries.map((row) => [row.date.toISOString().slice(0, 10), row.activeSeconds]), [
-    ["2026-06-20", 30],
-    ["2026-06-21", 30],
+    ["2026-07-20", 30],
+    ["2026-07-21", 30],
   ]);
 }
 
@@ -615,17 +615,17 @@ async function testPlatformAdminAggregateBoundary() {
     domain: null,
     isIdle: false,
     isActiveWindow: true,
-    startedAt: new Date("2026-06-17T09:00:00.000Z"),
-    endedAt: new Date("2026-06-17T09:05:00.000Z"),
+    startedAt: new Date("2026-07-17T09:00:00.000Z"),
+    endedAt: new Date("2026-07-17T09:05:00.000Z"),
     durationSeconds: 300,
-    createdAt: new Date("2026-06-17T09:05:01.000Z"),
-    updatedAt: new Date("2026-06-17T09:05:01.000Z"),
+    createdAt: new Date("2026-07-17T09:05:01.000Z"),
+    updatedAt: new Date("2026-07-17T09:05:01.000Z"),
   });
   const platform = new PlatformService(prisma as any);
 
   const healthResult = await platform.getTenantHealth(platformContext, COMPANY_ID);
   assert.deepEqual(Object.keys(healthResult.health).sort(), ["counts", "lastActivityAt", "lastVirtualOfficePositionAt", "readiness"]);
-  assert.equal(healthResult.health.lastActivityAt, "2026-06-17T09:05:01.000Z");
+  assert.equal(healthResult.health.lastActivityAt, "2026-07-17T09:05:01.000Z");
   assert(!JSON.stringify(healthResult).includes("Visual Studio Code"));
   assert(!JSON.stringify(healthResult).includes("github.com"));
 
@@ -1023,8 +1023,8 @@ function mockCompany() {
     id: COMPANY_ID,
     name: "WorkMap Demo Company",
     slug: "workmap-demo-company",
-    createdAt: new Date("2026-06-01T00:00:00.000Z"),
-    updatedAt: new Date("2026-06-17T00:00:00.000Z"),
+    createdAt: new Date("2026-07-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-07-17T00:00:00.000Z"),
     _count: {
       users: 2,
       devices: 1,
@@ -1165,17 +1165,17 @@ async function testBrowserUsageUpdatesReportRevision() {
     clientEventId: "88888888-8888-4888-8888-888888888888",
     domain: "example.com",
     browserName: "CHROME",
-    startedAt: "2026-06-17T09:00:00.000Z",
+    startedAt: "2026-07-17T09:00:00.000Z",
     durationSeconds: 60,
   });
   const browserEvent = prisma.activityEvents.find((event) => event.eventType === ActivityEventType.BROWSER);
   assert(browserEvent);
-  browserEvent.createdAt = new Date("2026-07-14T00:00:02.000Z");
+  browserEvent.createdAt = new Date("2026-07-18T00:00:02.000Z");
   const browserSummary = prisma.websiteSummaries.find((summary) => summary.domain === "example.com");
   assert(browserSummary);
   browserSummary.updatedAt = browserEvent.createdAt;
 
-  const live = await reports.getAgentLiveStatus(employeeContext, { from: "2026-06-17", to: "2026-06-17" });
+  const live = await reports.getAgentLiveStatus(employeeContext, { from: "2026-07-17", to: "2026-07-17" });
   assert.equal(live.activityRevision, browserEvent.createdAt.toISOString());
 }
 

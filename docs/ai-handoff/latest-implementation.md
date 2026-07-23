@@ -1,5 +1,100 @@
 # Latest Implementation Handoff
 
+## 2026-07-23 Browser Extension 0.5.8 Connection Audit And Domain Runtime
+
+### Original Task Brief
+
+- Release Browser Extension `0.5.8` only after reaching at least 95% confidence in the current MV3/Tracking v2 architecture.
+- Send every Browser lifecycle transition that Chrome/Edge can honestly observe to Owner `/reports` Connection Audit in near real time, including start/restart, lock/unlock, network/service interruption and recovery. Do not claim an exact close, disable, crash, or sleep cause when the Extension cannot observe it.
+- Implement policy-controlled Browser Domain open/runtime end to end without reusing the Desktop `collectOpenRuntime` flag. Same-host tabs must de-duplicate, different hosts may run in parallel, rejected data must not enter Reports, and Chrome/Edge overlap must not double-count.
+- Preserve hostname-only privacy, pairing, device credential binding, policy version/lease/acknowledgement/windows, durable queues, terminal diagnostics, tenant/RBAC boundaries, and all Desktop Agent behavior.
+
+### Changed Files
+
+- Browser runtime/store/release: `workmap/apps/browser-extension/src/backgroundV2.ts`, new `browserOpenRuntimeEngineV2.ts`, `browserFocusTimelineV2.ts`, `trackingV2Store.ts`, `trackingV2Types.ts`, `extensionStorage.ts`, `options.ts`, `manifest.json`, `package.json`, `scripts/package-alpha.mjs`, generated `alpha-unpacked/manifest.json`, and Browser tests.
+- Shared/API/policy/ledger/reports: `workmap/packages/shared-types/src/tracking-v2.ts`, Compliance controller/service, device policy/sync/status services, Reports services, Prisma schema, and migration `20260723120000_browser_domain_runtime_policy`.
+- Web: Compliance policy/acknowledgement UI and API types/client, `/reports` live/audit/Domain metric presentation, and focused Web tests.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/api-contract-skill.md`, `frontend-skill.md`, `qa-skill.md`, and `deployment-skill.md`.
+- No file under `workmap/apps/desktop-agent` was modified.
+
+### Connection Audit Implementation
+
+- Browser status events use the scoped device credential, stable `clientEventId`, durable local queue, retry/backoff, protocol v2 identity, safe metadata, and server occurrence/receipt separation.
+- Directly observable transitions are queued immediately: pairing start (`RUNNING / AGENT_STARTED`), browser profile start or Extension update (`RESTARTED / AGENT_RESTART`), lock (`LOCKED / SYSTEM_LOCK`), unlock (`RECONNECTED / SYSTEM_UNLOCK`), confirmed network/service failures, and confirmed recovery.
+- Owner `/reports` requests audit history every five seconds while the selected employee report is visible. Stored Browser status history is no longer excluded, multiple genuine profile starts with different event IDs remain distinct, and retries of one event ID remain idempotent.
+- A last server-confirmed Browser heartbeat older than 90 seconds creates an honest current `Signal interrupted` row even before recovery. On the next successful heartbeat, the API persists an inferred `UNKNOWN_INTERRUPTED / HEARTBEAT_TIMEOUT` gap and a recovery row unless a more specific client-reported lock/network/service transition already explains the gap.
+- Chrome/Edge cannot reliably report an exact browser close, Extension disable/uninstall, process crash, machine power loss, or sleep entry while no JavaScript can run. These remain `Signal interrupted` with inferred coverage-lost time and recovery time; the UI does not label them as a user stop or exact sleep/close cause. `runtime.onSuspend` is deliberately not treated as reliable asynchronous telemetry.
+- The previous fake “Extension started” row derived from pairing/enabled time was removed. Connection Audit now distinguishes confirmed client transitions from inferred heartbeat gaps and de-duplicates the same current interruption across coverage and live-heartbeat sources.
+
+### Browser Domain Open/Runtime Implementation
+
+- New immutable policy field and lease grant: `collectDomainOpenRuntime`, default `false`. An authorised policy administrator enables it through `POST /compliance/policy/:policyId/domain-open-runtime-version`, which creates a new policy version and requires a new employee acknowledgement. Desktop `collectOpenRuntime` remains separate.
+- Runtime begins only when policy, acknowledgement, lease, schedule UTC window, host permission, content-script registration, Browser identity and queue capacity all permit it. The API requires both the active policy and the issued lease to grant Browser Domain runtime; otherwise it returns terminal `OPEN_RUNTIME_NOT_ENABLED`.
+- The Extension enumerates only eligible, permission-granted ordinary HTTP/HTTPS tabs and stores/sends hostname only. A hostname with one or more open tabs has one runtime clock; three same-host tabs open for five minutes produce five minutes, not fifteen. Different hostnames may run in parallel.
+- Minimized/background windows and ordinary user idle do not close open/runtime because it describes “page remained open,” not work or Focus. Last-tab close, cross-host navigation, exclusion/permission loss, lock, policy/window/lease boundary, queue pressure, and proven lifecycle discontinuity close the relevant runtime interval. Service-worker/browser/sleep gaps stop at the last durable observation and are never backfilled.
+- Open/runtime has its own clock/checkpoint/watermark and IndexedDB stream sequence identity. Runtime state and emitted intervals are atomically persisted; worker restart seals only proven time. The v2 queue schema migrates old Focus rows without changing their stable IDs.
+- Accepted Browser `BROWSER_DOMAIN / OPEN_RUNTIME` intervals enter the official ledger and Domain Reports. Duplicate intervals remain idempotent; terminal rejections remain dead-letter evidence with safe code/request ID and never enter totals.
+- Reports exposes separate App and Domain runtime-enabled flags. Confirmed same-user/same-host/same-metric overlaps from Chrome and Edge are unioned during reconciliation instead of added. App and Domain totals remain separate and are not presented as one “total work” duration.
+
+### Privacy, Policy, And Access Behavior
+
+- Recorded: Browser/device/version identity, server-confirmed health, safe lifecycle state/reason/time/confidence, hostname-only Focus Active/Focused Idle/open-runtime intervals, policy/lease/window/version, queue/result state, and bounded safe diagnostics.
+- Never recorded: full URL, path/query/fragment, title, page/iframe URL or content, key value, typed text, form value, target element, pointer coordinate, scroll direction/distance, screenshots, clipboard, camera, microphone, bearer token, or reusable device credential.
+- Iframe trusted interaction can prove top-level page Focus but remains attributed only to the top-level hostname. One Browser instance still has at most one Focus hostname, based on the OS-focused usable window plus the one eligible page that proves focus/trusted interaction. Multiple displays do not create multiple Focus lanes.
+- Focus stops on minimize, background/focus loss, internal/protected page, ordinary idle threshold, lock, lifecycle discontinuity, and policy boundary. Open/runtime is deliberately broader context and is never described as active work.
+- Incognito remains manifest-disabled. Chrome/Edge/profile devices remain separate identities; server Reports performs confirmed overlap union where possible.
+- Owner/HR policy-management authorization, employee acknowledgement, tenant isolation, revocation, activation, credential binding and source/browser identity validation are unchanged.
+
+### Verification, Artifact, And Manual QA
+
+- Final automated results: Browser typecheck/lint/build/release pass and tests `65/65`; API typecheck/lint/build pass and tests `55/55`; Web typecheck/lint/build pass and tests `88/88`; shared types typecheck/build pass; Prisma client generation passes.
+- The first API regression run caught a same-status/different-ID idempotency issue; the rule was narrowed so only distinct Browser profile-start events remain separate. Final API suite is green.
+- `git diff --check` passes. Scoped secret scan excluding `.env*`, dependency/build/output/reference directories found no secret signature. No Desktop Agent code diff exists.
+- Unpacked: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.8.zip`; manifest/package `0.5.8`; 22 entries; size `48,842` bytes; SHA-256 `B739FB3AB5CA916FA3F3270752F1B0D5AE471FB9AEC45B8A51C65266BCF1E9F2`.
+- `release:zip` was hardened to fail if the ZIP is missing/empty after compression; this prevents a successful command from leaving the prior-version artifact as the newest visible package.
+- Real Chrome and Edge load-unpacked QA is **NOT RUN**. No Chrome Web Store, Edge Add-ons, GitHub Release, database migration, API/Web production deployment, or other publication was performed.
+- Deploy migration/API/Web before enabling the new Domain runtime policy and before distributing 0.5.8. Then reload the same unpacked Extension entry to preserve pairing/IndexedDB and complete the manual matrix recorded in `latest-qa.md`.
+
+## 2026-07-23 Desktop Agent Connection Audit Semantics Review
+
+### Original Task Brief
+
+- Inspect the current Owner `/reports` Connection Audit implementation and explain which Desktop Agent states produce which visible labels.
+- Interpret the supplied `Locked / System Lock` and `Reconnected / System Unlock` rows from source rather than treating the audit list as the current live connection state.
+
+### Changed Files
+
+- Diagnostic handoff only: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, API, Web, schema, policy, release, artifact, or production behavior was changed.
+
+### Implementation And Data-Flow Findings
+
+- The current source package is Desktop Agent `0.6.8`. Electron emits `SLEEPING / SYSTEM_SUSPEND`, `RECONNECTED / SYSTEM_RESUME`, `LOCKED / SYSTEM_LOCK`, and `RECONNECTED / SYSTEM_UNLOCK` from Windows power/session events. Tracking v2 also queues `RUNNING / AGENT_STARTED` at runtime start and `STOPPED_BY_USER / USER_STOP` on an in-app Quit Agent.
+- A lock or sleep event first closes the current foreground interval boundary, then durably queues the lifecycle status. Unlock/resume is therefore a recovery transition; it does not retroactively count the locked/sleeping period as focus.
+- The API stores confirmed client occurrence time separately from server receipt time. Reports uses the event `startedAt` as the displayed time, formatted in the viewing browser's locale. If receipt trails occurrence by more than 30 seconds, the detail appends a separate `synced <time>` value.
+- Device status history is tenant/user scoped, filtered to `DESKTOP_AGENT`, limited to 500 records, and selected by the report range using server-side `recordedAt`. Consecutive identical device/session/status/reason rows are coalesced.
+- The Web audit combines legacy `AgentSession` rows with only six supplemental device statuses: `NETWORK_OFFLINE`, `SERVER_UNREACHABLE`, `SLEEPING`, `LOCKED`, `RECONNECTED`, and `RESTARTED`. Positive green markers apply only to `RUNNING` and `RECONNECTED`; attention red applies to network/server loss, crash, termination, and unknown interruption; other displayed statuses use a neutral grey marker.
+
+### Screenshot Interpretation
+
+- `Locked — Desktop Agent - System Lock — 12:49 PM` means Windows reported a lock-screen transition and the Agent closed the current focus boundary at that client-reported time.
+- `Reconnected — Desktop Agent - System Unlock — 1:52 PM` means Windows later reported unlock and the Agent delivered that transition. Here `Reconnected` means recovery from lock; it is not proof of a network failure.
+- These two rows are historical transitions in the selected report range. They do not determine whether the Agent is currently online; current connection is shown in Live signals from fresh server-confirmed health/heartbeat.
+
+### Confirmed Presentation Gap
+
+- Tracking v2 status events for `RUNNING`, `STOPPED_BY_USER`, `DEVICE_SHUTDOWN`, `AGENT_CRASHED`, `AGENT_TERMINATED`, and `UNKNOWN_INTERRUPTED` are not in the supplemental allow-list. Because the current v2 runtime does not create the legacy `AgentSession` used by the other audit branch, its normal start/quit and several terminal events can be absent from this timeline even though they were stored.
+- `RECONNECTED` is intentionally reused for both `SYSTEM_RESUME` and `SYSTEM_UNLOCK`; the reason line is required to tell which occurred. `RESTARTED` currently receives a neutral marker rather than a recovery-positive marker.
+- Current Tracking v2 does not emit `NETWORK_OFFLINE` or `SERVER_UNREACHABLE` lifecycle events for ordinary sync failures; those enum values are primarily legacy-compatible. Live health and diagnostics remain the reliable current network indicators.
+- No product fix was made because this round requested source-backed explanation. A future narrow API/Web change should render all v2 lifecycle transitions directly and add focused audit tests without changing collection, policy, or live heartbeat semantics.
+
+### Verification And Manual QA
+
+- Reviewed Desktop Electron power hooks, Tracking v2 lifecycle queue/finalization, status API persistence/deduplication, Reports query/coalescing, and Web audit rendering/tone/formatting.
+- `git diff --check` and a scoped secret scan were run after this documentation update.
+- No new automated product test was required because runtime behavior was not changed. Real Windows lock/unlock QA was not run in this review; the supplied screenshot is manual evidence for one stored lock/unlock pair.
+
 ## 2026-07-23 Browser Extension 0.5.7 Cross-Epoch Focus Reliability
 
 ### Original Task Brief

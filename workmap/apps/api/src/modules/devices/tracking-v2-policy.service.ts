@@ -43,6 +43,7 @@ type DeviceTrackingPolicy = {
   collectAppFocus: boolean;
   collectDomainFocus: boolean;
   collectOpenRuntime: boolean;
+  collectDomainOpenRuntime: boolean;
   acknowledgementState: "ACKNOWLEDGED" | "REQUIRED";
   acknowledgedAt: string | null;
 };
@@ -93,6 +94,7 @@ export class TrackingV2PolicyService {
       expiresAt: Date;
       allowedUtcWindows: unknown;
       windowSetHash: string;
+      collectDomainOpenRuntime: boolean;
     } | null = null;
     if (policyAuthorised && policy.scheduleTimeZone) {
       lease = await this.getOrCreatePolicyLease(
@@ -128,6 +130,9 @@ export class TrackingV2PolicyService {
       collectOpenRuntime:
         identity.clientType === DeviceClientType.DESKTOP_AGENT &&
         policy.collectOpenRuntime,
+      collectDomainOpenRuntime:
+        identity.clientType === DeviceClientType.BROWSER_EXTENSION &&
+        Boolean(lease?.collectDomainOpenRuntime),
       acknowledgementState: acknowledgement ? "ACKNOWLEDGED" : "REQUIRED",
       acknowledgedAt: acknowledgement?.acknowledgedAt.toISOString() ?? null,
     };
@@ -355,6 +360,7 @@ export class TrackingV2PolicyService {
       workHoursOnly: boolean;
       workdayStart: string;
       workdayEnd: string;
+      collectDomainOpenRuntime: boolean;
       activeFrom: Date;
     },
     scheduleTimeZone: string,
@@ -379,10 +385,12 @@ export class TrackingV2PolicyService {
         expiresAt: true,
         allowedUtcWindows: true,
         windowSetHash: true,
+        collectDomainOpenRuntime: true,
       },
     });
     if (
       reusable &&
+      reusable.collectDomainOpenRuntime === policy.collectDomainOpenRuntime &&
       leaseWindowSetMatchesPolicy(reusable, {
         scheduleTimeZone,
         workHoursOnly: policy.workHoursOnly,
@@ -419,6 +427,7 @@ export class TrackingV2PolicyService {
         scheduleTimeZone,
         allowedUtcWindows,
         windowSetHash,
+        collectDomainOpenRuntime: policy.collectDomainOpenRuntime,
       },
       select: {
         id: true,
@@ -426,6 +435,7 @@ export class TrackingV2PolicyService {
         expiresAt: true,
         allowedUtcWindows: true,
         windowSetHash: true,
+        collectDomainOpenRuntime: true,
       },
     });
   }

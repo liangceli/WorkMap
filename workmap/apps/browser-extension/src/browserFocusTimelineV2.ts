@@ -82,8 +82,17 @@ export function advanceBrowserFocusTimelineThroughAt(
   previous: string | null,
   intervals: readonly BrowserActivityIntervalV2[],
 ) {
+  return advanceBrowserTimelineThroughAt(previous, intervals, "FOCUS");
+}
+
+export function advanceBrowserTimelineThroughAt(
+  previous: string | null,
+  intervals: readonly BrowserActivityIntervalV2[],
+  stream: BrowserActivityIntervalV2["stream"],
+) {
   let latestMs = parseBoundary(previous);
   for (const interval of intervals) {
+    if (interval.stream !== stream) continue;
     const endedAtMs = Date.parse(interval.endedAt);
     if (Number.isFinite(endedAtMs)) latestMs = Math.max(latestMs, endedAtMs);
   }

@@ -1,4 +1,4 @@
-export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.7";
+export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.8";
 export const TRACKING_PROTOCOL_VERSION_V2 = 2 as const;
 export const BROWSER_V2_QUEUE_CAPACITY = 10_000;
 export const BROWSER_V2_SYNC_BATCH_SIZE = 50;
@@ -112,6 +112,7 @@ export type DeviceTrackingPolicyV2 = {
   collectAppFocus: boolean;
   collectDomainFocus: boolean;
   collectOpenRuntime: false;
+  collectDomainOpenRuntime: boolean;
   acknowledgementState: "ACKNOWLEDGED" | "REQUIRED";
   acknowledgedAt: string | null;
 };
@@ -121,8 +122,8 @@ export type BrowserActivityIntervalV2 = {
   activitySessionId: string;
   sequenceNumber: number;
   source: "BROWSER_DOMAIN";
-  stream: "FOCUS";
-  metric: "FOCUS_ACTIVE" | "FOCUS_IDLE";
+  stream: "FOCUS" | "OPEN_RUNTIME";
+  metric: "FOCUS_ACTIVE" | "FOCUS_IDLE" | "OPEN_RUNTIME";
   subjectKey: string;
   displayName: string;
   browserName: BrowserNameV2;
@@ -194,8 +195,22 @@ export type BrowserClockEpochV2 = {
   clockEpochStartedMonotonicMs: number;
 };
 
+export type BrowserOpenRuntimeDomainStateV2 = {
+  activitySessionId: string;
+  subject: { subjectKey: string; displayName: string };
+  openedAtMonotonicMs: number;
+  confirmedThroughMonotonicMs: number;
+};
+
+export type BrowserOpenRuntimeCheckpointV2 = {
+  version: 1;
+  nextIntervalSequence: number;
+  lastObservedAtMonotonicMs: number;
+  current: BrowserOpenRuntimeDomainStateV2[];
+};
+
 export type BrowserTrackingRuntimeStateV2 = {
-  version: 7;
+  version: 8;
   migrationState: TrackingMigrationStateV2;
   activationId: string | null;
   proposedActivatedAt: string | null;
@@ -205,6 +220,8 @@ export type BrowserTrackingRuntimeStateV2 = {
   clientInstanceId: string;
   clock: BrowserClockEpochV2 | null;
   engineCheckpoint: BrowserFocusCheckpointV2 | null;
+  openRuntimeClock: BrowserClockEpochV2 | null;
+  openRuntimeCheckpoint: BrowserOpenRuntimeCheckpointV2 | null;
   latestSnapshot: BrowserLiveFocusSnapshotV2 | null;
   focusedWindowId: number | null;
   activeTabId: number | null;
@@ -217,6 +234,8 @@ export type BrowserTrackingRuntimeStateV2 = {
   confirmedIntervalThrough: string | null;
   /** Latest end of every locally emitted Focus interval across all epochs. */
   focusTimelineThroughAt: string | null;
+  /** Latest end of every locally emitted Domain open/runtime interval. */
+  openRuntimeTimelineThroughAt: string | null;
   lastRequestId: string | null;
   diagnostics: BrowserTrackingDiagnosticV2[];
   trackingAccess: BrowserTrackingAccessV2;
@@ -225,6 +244,7 @@ export type BrowserTrackingRuntimeStateV2 = {
     wallClockMs: number;
     monotonicMs: number;
   } | null;
+  lastSystemState: "active" | "idle" | "locked" | null;
   lastErrorCode: TrackingHealthErrorCodeV2;
   /** Retained v0.5.1 terminal count whose original safe code was not stored. */
   terminalRejections: number;
@@ -271,7 +291,7 @@ export type BrowserTrackingSyncResponseV2 = {
   results: TrackingSyncItemResultV2[];
   cursors: Array<{
     source: "BROWSER_DOMAIN";
-    stream: "FOCUS";
+    stream: "FOCUS" | "OPEN_RUNTIME";
     clockEpochId: string;
     contiguousThroughSequence: number;
     latestAcceptedEndedAt: string | null;
@@ -318,6 +338,7 @@ export type ProtocolV2ConfirmResponse = {
 export type BrowserV2QueueRecord = {
   clientEventId: string;
   clockEpochId: string;
+  stream: BrowserActivityIntervalV2["stream"];
   sequenceNumber: number;
   interval: BrowserActivityIntervalV2;
   attempts: number;
@@ -346,7 +367,7 @@ export type BrowserV2DeadLetterRecord = {
 
 export function createInitialBrowserTrackingV2State(): BrowserTrackingRuntimeStateV2 {
   return {
-    version: 7,
+    version: 8,
     migrationState: "V1",
     activationId: null,
     proposedActivatedAt: null,
@@ -356,6 +377,8 @@ export function createInitialBrowserTrackingV2State(): BrowserTrackingRuntimeSta
     clientInstanceId: crypto.randomUUID(),
     clock: null,
     engineCheckpoint: null,
+    openRuntimeClock: null,
+    openRuntimeCheckpoint: null,
     latestSnapshot: null,
     focusedWindowId: null,
     activeTabId: null,
@@ -374,6 +397,7 @@ export function createInitialBrowserTrackingV2State(): BrowserTrackingRuntimeSta
     lastIntervalUpload: null,
     confirmedIntervalThrough: null,
     focusTimelineThroughAt: null,
+    openRuntimeTimelineThroughAt: null,
     lastRequestId: null,
     diagnostics: [],
     trackingAccess: {
@@ -383,12 +407,12 @@ export function createInitialBrowserTrackingV2State(): BrowserTrackingRuntimeSta
       error: null,
     },
     coverageLimitations: [
-      "Domain open/runtime is disabled until a Browser-specific policy contract exists.",
       "Incognito collection is disabled by the extension manifest.",
       "Split View focus switching requires Chrome 140+ splitViewId support; other versions keep one conservative active page.",
       "Chrome and Edge profiles are separate devices; confirmed Reports de-duplicate overlapping same-user/same-domain metric ranges.",
     ],
     lastLifecycleObservation: null,
+    lastSystemState: null,
     lastErrorCode: "NONE",
     terminalRejections: 0,
   };

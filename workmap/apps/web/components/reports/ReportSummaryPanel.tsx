@@ -53,7 +53,7 @@ type CurrentLiveData = {
 
 const LIVE_REFRESH_MS = 5_000;
 const SUMMARY_REVISION_CHECK_MS = LIVE_REFRESH_MS;
-const AUDIT_REFRESH_MS = 60_000;
+const AUDIT_REFRESH_MS = 5_000;
 
 export function ReportSummaryPanel() {
   const [auth, setAuth] = useState<AuthContext | null>(null);
@@ -67,6 +67,7 @@ export function ReportSummaryPanel() {
   const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
   const nextRevisionCheckAtRef = useRef(0);
   const [auditState, setAuditState] = useState<AuditState>({ loading: false, audit: null });
+  const nextAuditRefreshAtRef = useRef(0);
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
     summary: null,
@@ -163,6 +164,7 @@ export function ReportSummaryPanel() {
         void loadAudit(context, initialFilters, () => cancelled, setAuditState, (audit) => {
           updateReportSnapshot(snapshotKey, { audit });
         });
+        nextAuditRefreshAtRef.current = now + AUDIT_REFRESH_MS;
       }
 
       // The user directory only fills the Owner filter controls. It must not block
@@ -195,6 +197,15 @@ export function ReportSummaryPanel() {
         liveStatus: result.data.legacy,
         trackingV2Live: result.data.trackingV2,
       });
+      if (
+        appliedFilters.view !== "company" &&
+        Date.now() >= nextAuditRefreshAtRef.current
+      ) {
+        nextAuditRefreshAtRef.current = Date.now() + AUDIT_REFRESH_MS;
+        void loadAudit(auth, appliedFilters, () => cancelled, setAuditState, (audit) => {
+          updateReportSnapshot(snapshotKey, { audit });
+        });
+      }
       if (
         revisionDue
         &&
@@ -392,6 +403,7 @@ export function ReportSummaryPanel() {
           audit={auditState.audit}
           loading={auditState.loading}
           rows={liveUser?.browserExtensionCoverage ?? summary.browserExtensionCoverage}
+          v2Devices={trackingV2Live?.devices ?? []}
         />
       ) : null}
 
@@ -413,7 +425,9 @@ export function ReportSummaryPanel() {
                 App and domain totals remain separate because domain time is a browser breakdown, not extra work time.
                 Every card highlights confirmed focus active; current provisional activity is shown only in Live signals.
                 {appOpenRuntimeEnabled ? " Expand an App card for measured focused idle and App open/runtime context." : " App open/runtime collection is not enabled for v2 tracking."}
-                {" Browser Domain open/runtime remains disabled until its separate policy contract exists."}
+                {domainOpenRuntimeEnabled
+                  ? " Expand a Domain card for measured focused idle and Domain open/runtime context."
+                  : " Browser Domain open/runtime collection is not enabled for v2 tracking."}
               </p>
             </div>
             <span style={styles.scopePill}>{summary.scope === "company" ? "Company scope" : "User scope"}</span>
@@ -849,20 +863,27 @@ function EmployeeConnectionAudit({
   audit,
   loading,
   rows,
+  v2Devices,
 }: {
   audit: WorkMapApiTrackingAudit | null;
   loading: boolean;
   rows: WorkMapApiUsageSummary["browserExtensionCoverage"];
+  v2Devices: WorkMapApiTrackingV2LiveActivity["devices"];
 }) {
   const desktopEntries = audit ? buildDesktopAuditEntries(audit) : [];
-  const browserEntries = audit ? buildBrowserAuditEntries({ ...audit, browserExtensionCoverage: rows }) : [];
+  const browserEntries = audit
+    ? buildBrowserAuditEntries(
+        { ...audit, browserExtensionCoverage: rows },
+        v2Devices,
+      )
+    : [];
   return (
     <section className="wm-report-detail-section" style={styles.reportSection} aria-labelledby="connection-audit-heading">
       <div style={styles.sectionHeader}>
         <div>
           <p style={styles.panelLabel}>Connection audit</p>
           <h2 id="connection-audit-heading" style={styles.sectionTitle}>Start, stop and interruption history</h2>
-          <p style={styles.panelText}>Exact client-reported times are shown separately for the Agent and Extension.</p>
+          <p style={styles.panelText}>Confirmed client transitions and inferred heartbeat gaps are shown separately for the Agent and Extension.</p>
         </div>
         <History size={22} aria-hidden />
       </div>
@@ -940,22 +961,24 @@ function buildDesktopAuditEntries(summary: Pick<WorkMapApiUsageSummary, "agentSe
   return sortAuditEntries(entries);
 }
 
-function buildBrowserAuditEntries(summary: Pick<WorkMapApiUsageSummary, "browserExtensionCoverage" | "deviceStatusHistory">): AuditEntry[] {
+export function buildBrowserAuditEntries(
+  summary: Pick<WorkMapApiUsageSummary, "browserExtensionCoverage" | "deviceStatusHistory">,
+  v2Devices: WorkMapApiTrackingV2LiveActivity["devices"] = [],
+): AuditEntry[] {
   const entries: AuditEntry[] = [];
   const coverageByDevice = new Map(summary.browserExtensionCoverage.map((row) => [row.deviceId, row]));
-  for (const row of summary.browserExtensionCoverage) {
-    entries.push({
-      id: `${row.deviceId}:enabled`,
-      title: "Extension started",
-      detail: `${formatBrowserName(row.browserName)} tracking enabled`,
-      timestamp: row.enabledAt,
-      tone: "positive",
-    });
-  }
   for (const event of summary.deviceStatusHistory) {
-    if (event.source !== "BROWSER_EXTENSION" || event.status === "RUNNING") continue;
+    if (event.source !== "BROWSER_EXTENSION") continue;
     const browser = coverageByDevice.get(event.deviceId);
-    entries.push(statusToAuditEntry(event, browser ? formatBrowserName(browser.browserName) : "Browser Extension"));
+    const browserName = event.browserName ?? browser?.browserName ?? "UNKNOWN";
+    entries.push(
+      statusToAuditEntry(
+        event,
+        browserName === "UNKNOWN"
+          ? "Browser Extension"
+          : `${formatBrowserName(browserName)} Extension`,
+      ),
+    );
   }
   for (const row of summary.browserExtensionCoverage) {
     if (row.state !== "signal_lost" || !row.coverageLostDetectedAt) continue;
@@ -969,6 +992,37 @@ function buildBrowserAuditEntries(summary: Pick<WorkMapApiUsageSummary, "browser
         title: "Signal interrupted",
         detail: `${formatBrowserName(row.browserName)} stopped sending heartbeats; the cause is not confirmed`,
         timestamp: row.coverageLostDetectedAt,
+        tone: "attention",
+      });
+    }
+  }
+  for (const device of v2Devices) {
+    if (
+      device.clientType !== "BROWSER_EXTENSION" ||
+      device.connectionFresh ||
+      !device.connectionConfirmedAt
+    ) {
+      continue;
+    }
+    const coverageLostDetectedAt = new Date(
+      Date.parse(device.connectionConfirmedAt) +
+        device.connectionFreshnessLimitMs,
+    ).toISOString();
+    const hasMatchingInterruption = entries.some(
+      (entry) =>
+        entry.id.startsWith(`${device.deviceId}:`) &&
+        entry.title === "Signal interrupted" &&
+        Math.abs(
+          Date.parse(entry.timestamp) -
+            Date.parse(coverageLostDetectedAt),
+        ) <= 90_000,
+    );
+    if (!hasMatchingInterruption) {
+      entries.push({
+        id: `${device.deviceId}:v2-coverage-lost`,
+        title: "Signal interrupted",
+        detail: `${formatBrowserName(device.browserName ?? "UNKNOWN")} Extension stopped sending confirmed heartbeats; the cause is not confirmed`,
+        timestamp: coverageLostDetectedAt,
         tone: "attention",
       });
     }
@@ -1533,6 +1587,9 @@ function isAttentionAgentState(state: NonNullable<WorkMapApiUsageSummary["agentS
 }
 
 function formatDeviceStatus(status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"]) {
+  if (status === "RUNNING") return "Extension started";
+  if (status === "RESTARTED") return "Browser profile started";
+  if (status === "UNKNOWN_INTERRUPTED") return "Signal interrupted";
   return status.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 

@@ -1,5 +1,14 @@
 # API Contract Skill
 
+## Browser Domain Runtime And Connection Audit 0.5.8 Addendum
+
+- Browser Domain runtime is controlled only by `MonitoringPolicy.collectDomainOpenRuntime` and the matching immutable `DevicePolicyLease.collectDomainOpenRuntime`. Both default false. Never reuse Desktop `collectOpenRuntime`.
+- `POST /compliance/policy/:policyId/domain-open-runtime-version` is an authorised policy-admin action. It creates a new immutable policy version, preserves other policy fields, requires `collectWebsiteDomain`, and requires new employee acknowledgement.
+- Browser `BROWSER_DOMAIN / OPEN_RUNTIME` intervals require the credential-bound Browser identity, matching browserName/source/stream, protocol activation, explicit policy + lease grant, acknowledgement and full containment in `allowedUtcWindows`. Disabled runtime is terminal `OPEN_RUNTIME_NOT_ENABLED` and never enters `ActivityInterval` or Reports.
+- Same-user/same-host/same-metric Chrome/Edge accepted ranges are unioned during reconciliation. Runtime is context, remains separate from Focus Active/Focused Idle and Desktop App metrics, and must not be added to a “total work” number.
+- Browser device status v2 accepts stable `clientEventId` and preserves separate real profile-start events. Retries of the same ID and repeated non-start state are idempotent. Status history is tenant/user scoped and includes browserName/clientVersion for `/reports`.
+- A recovered Browser health gap older than 90 seconds persists inferred `UNKNOWN_INTERRUPTED / HEARTBEAT_TIMEOUT` plus recovery unless a confirmed lock/network/service event already explains the range. This must never be labelled as exact close, disable, crash, uninstall, power loss or sleep.
+
 ## Tracking v2 Browser 0.5.4 Integer-Millisecond Addendum
 
 - Tracking v2 `durationMs` and any supplied `startedMonotonicMs` / `endedMonotonicMs` are whole, safe integer milliseconds. Browser `performance.now()` must be quantized before creating a durable interval.

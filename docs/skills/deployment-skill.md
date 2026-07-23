@@ -1,5 +1,14 @@
 # Deployment Skill
 
+## Browser Extension 0.5.8 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.8.zip`; SHA-256 `B739FB3AB5CA916FA3F3270752F1B0D5AE471FB9AEC45B8A51C65266BCF1E9F2`; size `48,842` bytes; 22 entries.
+- Required deployment order: apply migration `20260723120000_browser_domain_runtime_policy`; deploy shared/API; deploy Web; verify policy/Reports contracts; reload 0.5.8; complete Chrome/Edge QA; only then enable the new Browser Domain runtime policy version and collect acknowledgements.
+- Reload the existing unpacked entry to preserve pairing, IndexedDB queue and historical rejection evidence. Do not remove/re-pair simply to clear old tombstones.
+- Browser close/disable/crash/sleep gaps remain inferred from heartbeat timeout and recovery. Do not market Connection Audit as exact native process/power telemetry.
+- No Chrome Web Store, Edge Add-ons, GitHub Release, production migration/deployment, or policy enablement was performed in the implementation round.
+
 ## Browser Extension 0.5.7 Release Notes
 
 - Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.

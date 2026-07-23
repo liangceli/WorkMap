@@ -212,6 +212,7 @@ export type WorkMapApiCompliancePolicy = {
   collectAppUsage: boolean;
   collectOpenRuntime: boolean;
   collectWebsiteDomain: boolean;
+  collectDomainOpenRuntime: boolean;
   collectFullUrl: boolean;
   collectScreenshots: boolean;
   collectKeystrokes: boolean;
@@ -329,6 +330,7 @@ export type WorkMapApiUsageSummary = {
   }>;
   deviceStatusHistory: Array<{
     id: string;
+    clientEventId?: string | null;
     deviceId: string;
     agentSessionId: string | null;
     status: "RUNNING" | "STOPPED_BY_USER" | "NETWORK_OFFLINE" | "DEVICE_SHUTDOWN" | "SLEEPING" | "LOCKED" | "AGENT_CRASHED" | "AGENT_TERMINATED" | "SERVER_UNREACHABLE" | "UNKNOWN_INTERRUPTED" | "RECONNECTED" | "RESTARTED";
@@ -339,6 +341,8 @@ export type WorkMapApiUsageSummary = {
     recordedAt: string;
     receivedAt: string;
     source: "DESKTOP_AGENT" | "BROWSER_EXTENSION";
+    browserName: "CHROME" | "EDGE" | null;
+    clientVersion: string | null;
     timeZone: string | null;
     confidence: "CONFIRMED" | "INFERRED";
   }>;

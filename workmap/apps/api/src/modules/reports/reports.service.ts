@@ -41,6 +41,7 @@ type AgentSessionReportRow = {
 };
 type DeviceStatusReportRow = {
   id: string;
+  clientEventId: string | null;
   deviceId: string;
   agentSessionId: string | null;
   status: DeviceStatus;
@@ -190,7 +191,7 @@ export class ReportsService {
       ? await this.optionalReportSection("desktop agent sessions", () => this.getAgentSessions(filter), [])
       : [];
     const deviceStatusHistory = includeAudit
-      ? await this.optionalReportSection("desktop status history", () => this.getDeviceStatusHistory(filter), [])
+      ? await this.optionalReportSection("device status history", () => this.getDeviceStatusHistory(filter), [])
       : [];
     const appTimeline = includeAudit
       ? await this.optionalReportSection("desktop app timeline", () => this.getAppTimeline(filter), [])
@@ -271,7 +272,7 @@ export class ReportsService {
     const filter = { companyId: context.companyId, userId, range };
     const [agentSessions, deviceStatusHistory, appTimeline] = await Promise.all([
       this.optionalReportSection("desktop agent sessions", () => this.getAgentSessions(filter), []),
-      this.optionalReportSection("desktop status history", () => this.getDeviceStatusHistory(filter), []),
+      this.optionalReportSection("device status history", () => this.getDeviceStatusHistory(filter), []),
       this.optionalReportSection("desktop app timeline", () => this.getAppTimeline(filter), []),
     ]);
 
@@ -813,13 +814,13 @@ export class ReportsService {
       where: {
         companyId: filter.companyId,
         userId: filter.userId,
-        source: DeviceClientType.DESKTOP_AGENT,
         recordedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
       },
       orderBy: { recordedAt: "desc" },
       take: 500,
       select: {
         id: true,
+        clientEventId: true,
         deviceId: true,
         agentSessionId: true,
         status: true,
@@ -832,10 +833,17 @@ export class ReportsService {
         source: true,
         timeZone: true,
         confidence: true,
+        device: {
+          select: {
+            browserName: true,
+            agentVersion: true,
+          },
+        },
       },
     });
     return coalesceDeviceStatusHistory(events.map((event) => ({
       id: event.id,
+      clientEventId: event.clientEventId,
       deviceId: event.deviceId,
       agentSessionId: event.agentSessionId,
       status: event.status,
@@ -848,6 +856,8 @@ export class ReportsService {
       source: event.source,
       timeZone: event.timeZone,
       confidence: event.confidence,
+      browserName: event.device?.browserName ?? null,
+      clientVersion: event.device?.agentVersion ?? null,
     })));
   }
 
@@ -1059,6 +1069,12 @@ function coalesceDeviceStatusHistory(events: DeviceStatusReportRow[]) {
       && previous.source === event.source
       && previous.status === event.status
       && previous.reason === event.reason
+      && !(
+        (event.status === DeviceStatus.RUNNING
+          || event.status === DeviceStatus.RESTARTED)
+        && event.clientEventId
+        && previous.clientEventId !== event.clientEventId
+      )
     ) {
       continue;
     }

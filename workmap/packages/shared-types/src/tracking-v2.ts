@@ -99,6 +99,7 @@ export type DevicePolicyLeaseV2 = {
   expiresAt: string;
   scheduleTimeZone: string;
   allowedUtcWindows: TrackingPolicyUtcWindowV2[];
+  collectDomainOpenRuntime: boolean;
 };
 
 export type TrackingSyncRequestV2 = {

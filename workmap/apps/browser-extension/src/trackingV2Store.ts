@@ -11,10 +11,13 @@ import {
   type BrowserV2QueueStats,
   type TrackingSyncItemResultV2,
 } from "./trackingV2Types.js";
-import { advanceBrowserFocusTimelineThroughAt } from "./browserFocusTimelineV2.js";
+import {
+  advanceBrowserFocusTimelineThroughAt,
+  advanceBrowserTimelineThroughAt,
+} from "./browserFocusTimelineV2.js";
 
 const DATABASE_NAME = "workmap-tracking-v2";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const INTERVAL_STORE = "intervals";
 const DEAD_LETTER_STORE = "deadLetters";
 const META_STORE = "meta";
@@ -25,8 +28,19 @@ type MetaRecord = {
   value: BrowserTrackingRuntimeStateV2;
 };
 
-type LegacyRuntimeStateV6 = Omit<
+type LegacyRuntimeStateV7 = Omit<
   BrowserTrackingRuntimeStateV2,
+  | "version"
+  | "openRuntimeClock"
+  | "openRuntimeCheckpoint"
+  | "openRuntimeTimelineThroughAt"
+  | "lastSystemState"
+> & {
+  version: 7;
+};
+
+type LegacyRuntimeStateV6 = Omit<
+  LegacyRuntimeStateV7,
   "version" | "focusTimelineThroughAt"
 > & {
   version: 6;
@@ -48,7 +62,21 @@ export class BrowserTrackingV2Store {
       transaction.objectStore(META_STORE).get(RUNTIME_KEY),
     );
     await transactionDone(transaction);
-    if (record?.value?.version === 7) return record.value;
+    if ((record?.value as unknown as LegacyRuntimeStateV7 | undefined)?.version === 7) {
+      const initial = createInitialBrowserTrackingV2State();
+      const legacy = record!.value as unknown as LegacyRuntimeStateV7;
+      const migrated: BrowserTrackingRuntimeStateV2 = {
+        ...initial,
+        ...legacy,
+        version: 8,
+        openRuntimeClock: null,
+        openRuntimeCheckpoint: null,
+        openRuntimeTimelineThroughAt: null,
+        lastSystemState: null,
+      };
+      await this.writeRuntimeState(migrated);
+      return migrated;
+    }
     if ((record?.value as unknown as LegacyRuntimeStateV6 | undefined)?.version === 6) {
       const initial = createInitialBrowserTrackingV2State();
       const legacy = record!.value as unknown as LegacyRuntimeStateV6;
@@ -56,7 +84,7 @@ export class BrowserTrackingV2Store {
       const migrated: BrowserTrackingRuntimeStateV2 = {
         ...initial,
         ...legacy,
-        version: 7,
+        version: 8,
         focusTimelineThroughAt: advanceBrowserFocusTimelineThroughAt(
           legacy.confirmedIntervalThrough,
           queued.map((row) => row.interval),
@@ -72,7 +100,7 @@ export class BrowserTrackingV2Store {
       const migrated: BrowserTrackingRuntimeStateV2 = {
         ...initial,
         ...legacy,
-        version: 7,
+        version: 8,
         snapshotConfirmation: initial.snapshotConfirmation,
         lastIntervalUpload: null,
         confirmedIntervalThrough: null,
@@ -126,6 +154,7 @@ export class BrowserTrackingV2Store {
       const bySequence =
         await requestAsPromise<BrowserV2QueueRecord | undefined>(
           sequenceIndex.get([
+            interval.stream,
             interval.clockEpochId,
             interval.sequenceNumber,
           ]),
@@ -134,6 +163,7 @@ export class BrowserTrackingV2Store {
       if (existing) {
         if (
           existing.clientEventId === interval.clientEventId &&
+          existing.interval.stream === interval.stream &&
           existing.clockEpochId === interval.clockEpochId &&
           existing.sequenceNumber === interval.sequenceNumber &&
           JSON.stringify(existing.interval) === JSON.stringify(interval)
@@ -154,6 +184,7 @@ export class BrowserTrackingV2Store {
       intervalStore.add({
         clientEventId: interval.clientEventId,
         clockEpochId: interval.clockEpochId,
+        stream: interval.stream,
         sequenceNumber: interval.sequenceNumber,
         interval,
         attempts: 0,
@@ -167,6 +198,84 @@ export class BrowserTrackingV2Store {
       focusTimelineThroughAt: advanceBrowserFocusTimelineThroughAt(
         state.focusTimelineThroughAt,
         newIntervals,
+      ),
+    };
+    transaction.objectStore(META_STORE).put({
+      key: RUNTIME_KEY,
+      value: persistedState,
+    } satisfies MetaRecord);
+    await transactionDone(transaction);
+    return persistedState;
+  }
+
+  async persistOpenRuntimeUpdate(
+    intervals: BrowserActivityIntervalV2[],
+    state: BrowserTrackingRuntimeStateV2,
+  ): Promise<BrowserTrackingRuntimeStateV2> {
+    const database = await this.database();
+    const transaction = database.transaction(
+      [INTERVAL_STORE, META_STORE],
+      "readwrite",
+    );
+    const intervalStore = transaction.objectStore(INTERVAL_STORE);
+    const sequenceIndex = intervalStore.index("sequence");
+    const existingCount = await requestAsPromise<number>(intervalStore.count());
+    const newIntervals: BrowserActivityIntervalV2[] = [];
+
+    for (const interval of intervals) {
+      if (interval.stream !== "OPEN_RUNTIME") {
+        transaction.abort();
+        throw new Error("Only Domain open/runtime intervals can use this persistence path.");
+      }
+      const byEvent = await requestAsPromise<BrowserV2QueueRecord | undefined>(
+        intervalStore.get(interval.clientEventId),
+      );
+      const bySequence = await requestAsPromise<BrowserV2QueueRecord | undefined>(
+        sequenceIndex.get([
+          interval.stream,
+          interval.clockEpochId,
+          interval.sequenceNumber,
+        ]),
+      );
+      const existing = byEvent ?? bySequence;
+      if (existing) {
+        if (
+          existing.clientEventId === interval.clientEventId &&
+          existing.interval.stream === interval.stream &&
+          existing.clockEpochId === interval.clockEpochId &&
+          existing.sequenceNumber === interval.sequenceNumber &&
+          JSON.stringify(existing.interval) === JSON.stringify(interval)
+        ) {
+          continue;
+        }
+        transaction.abort();
+        throw new Error(
+          "Browser activity event or sequence identity already exists with different content.",
+        );
+      }
+      newIntervals.push(interval);
+    }
+
+    assertBrowserQueueCapacity(existingCount, newIntervals.length);
+    const nowMs = Date.now();
+    for (const interval of newIntervals) {
+      intervalStore.add({
+        clientEventId: interval.clientEventId,
+        clockEpochId: interval.clockEpochId,
+        stream: interval.stream,
+        sequenceNumber: interval.sequenceNumber,
+        interval,
+        attempts: 0,
+        nextAttemptAtMs: nowMs,
+        createdAtMs: nowMs,
+      } satisfies BrowserV2QueueRecord);
+    }
+    const persistedState: BrowserTrackingRuntimeStateV2 = {
+      ...state,
+      openRuntimeTimelineThroughAt: advanceBrowserTimelineThroughAt(
+        state.openRuntimeTimelineThroughAt,
+        newIntervals,
+        "OPEN_RUNTIME",
       ),
     };
     transaction.objectStore(META_STORE).put({
@@ -404,7 +513,7 @@ export function calculateBrowserRetryAt(nowMs: number, attempts: number) {
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const database = request.result;
       if (!database.objectStoreNames.contains(INTERVAL_STORE)) {
         const intervals = database.createObjectStore(INTERVAL_STORE, {
@@ -412,11 +521,36 @@ function openDatabase() {
         });
         intervals.createIndex(
           "sequence",
-          ["clockEpochId", "sequenceNumber"],
+          ["stream", "clockEpochId", "sequenceNumber"],
           { unique: true },
         );
         intervals.createIndex("nextAttemptAtMs", "nextAttemptAtMs");
         intervals.createIndex("createdAtMs", "createdAtMs");
+      } else if ((event as IDBVersionChangeEvent).oldVersion < 3) {
+        const intervals = request.transaction!.objectStore(INTERVAL_STORE);
+        if (intervals.indexNames.contains("sequence")) {
+          intervals.deleteIndex("sequence");
+        }
+        intervals.createIndex(
+          "sequence",
+          ["stream", "clockEpochId", "sequenceNumber"],
+          { unique: true },
+        );
+        const cursorRequest = intervals.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const value = cursor.value as BrowserV2QueueRecord & {
+            stream?: BrowserActivityIntervalV2["stream"];
+          };
+          if (!value.stream) {
+            cursor.update({
+              ...value,
+              stream: value.interval?.stream ?? "FOCUS",
+            });
+          }
+          cursor.continue();
+        };
       }
       if (!database.objectStoreNames.contains(META_STORE)) {
         database.createObjectStore(META_STORE, { keyPath: "key" });

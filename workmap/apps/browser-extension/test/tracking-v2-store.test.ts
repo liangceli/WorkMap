@@ -72,7 +72,7 @@ test("IndexedDB queue uses atomic state/event writes and dual unique identity", 
     /transaction\(\s*\[INTERVAL_STORE, META_STORE\],\s*"readwrite"/,
   );
   assert.match(source, /keyPath: "clientEventId"/);
-  assert.match(source, /\["clockEpochId", "sequenceNumber"\]/);
+  assert.match(source, /\["stream", "clockEpochId", "sequenceNumber"\]/);
   assert.match(source, /\{ unique: true \}/);
   assert.match(source, /DEAD_LETTER_STORE/);
   assert.match(source, /requestId/);

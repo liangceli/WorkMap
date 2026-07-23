@@ -248,7 +248,13 @@ function renderDiagnostics(
     ["Last request ID", runtime.lastRequestId ?? "None"],
     ["Policy version", policy?.policyVersion ?? "Unavailable"],
     ["Domain Focus", policy?.collectDomainFocus ? "Enabled" : "Disabled"],
-    ["Domain open/runtime", "Disabled", "A Browser-specific policy/schema contract is not implemented; the Desktop flag is not reused."],
+    [
+      "Domain open/runtime",
+      policy?.collectDomainOpenRuntime ? "Enabled" : "Disabled",
+      policy?.collectDomainOpenRuntime
+        ? "Counts eligible HTTP/HTTPS hostname time while at least one matching tab remains open. Same-host tabs are de-duplicated; this is context, not Focus or work time."
+        : "Disabled by the Browser-specific policy. The Desktop App runtime flag is not reused.",
+    ],
     ["Acknowledgement", policy?.acknowledgementState ?? "Unavailable", formatTime(policy?.acknowledgedAt ?? undefined)],
     ["Schedule", policy ? `${policy.scheduleTimeZone ?? "Timezone required"} / ${policy.workdayStart}-${policy.workdayEnd}` : "Unavailable"],
     ["Allowed UTC windows", policy?.allowedUtcWindows.length ? policy.allowedUtcWindows.map((window) => `${window.startsAt} to ${window.endsAt}`).join("; ") : "None"],

@@ -32,10 +32,18 @@ test("domain card uses the same focus-first collapsed presentation", () => {
   assert.doesNotMatch(html, /Open\/runtime/);
 });
 
-test("expanded domain card reveals focused idle and honestly disabled Browser runtime", () => {
+test("expanded domain card displays confirmed Browser runtime only when enabled", () => {
+  const enabledHtml = renderToStaticMarkup(createElement(DomainUsageMetricCard, {
+    row: domainRow,
+    initiallyExpanded: true,
+    openRuntimeEnabled: true,
+  }));
+  assert.match(enabledHtml, /Focused idle/);
+  assert.match(enabledHtml, /45s/);
+  assert.match(enabledHtml, /Open\/runtime/);
+  assert.match(enabledHtml, /10m 0s/);
+
   const html = renderToStaticMarkup(createElement(DomainUsageMetricCard, { row: domainRow, initiallyExpanded: true }));
-  assert.match(html, /Focused idle/);
-  assert.match(html, /45s/);
   assert.match(html, /Open\/runtime/);
   assert.match(html, /Not enabled/);
   assert.doesNotMatch(html, /10m 0s/);

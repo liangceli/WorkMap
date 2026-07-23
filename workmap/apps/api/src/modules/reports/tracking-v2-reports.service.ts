@@ -405,7 +405,10 @@ export class TrackingV2ReportsService {
           activeFrom: { lte: new Date() },
         },
         orderBy: [{ activeFrom: "desc" }, { id: "desc" }],
-        select: { collectOpenRuntime: true },
+        select: {
+          collectOpenRuntime: true,
+          collectDomainOpenRuntime: true,
+        },
       }),
     ]);
     if (activatedDeviceCount === 0) return null;
@@ -596,7 +599,9 @@ export class TrackingV2ReportsService {
 
     return buildConfirmedUsageResponse({
       activatedDeviceCount,
-      openRuntimeEnabled: activePolicy?.collectOpenRuntime ?? false,
+      appOpenRuntimeEnabled: activePolicy?.collectOpenRuntime ?? false,
+      domainOpenRuntimeEnabled:
+        activePolicy?.collectDomainOpenRuntime ?? false,
       subjectDays,
       userDays,
       dirtyTargets: targets,
@@ -711,7 +716,8 @@ function correlateBrowserFocus(
 
 function buildConfirmedUsageResponse(input: {
   activatedDeviceCount: number;
-  openRuntimeEnabled: boolean;
+  appOpenRuntimeEnabled: boolean;
+  domainOpenRuntimeEnabled: boolean;
   subjectDays: ConfirmedSubjectDay[];
   userDays: ConfirmedUserDay[];
   dirtyTargets: Array<{
@@ -823,9 +829,10 @@ function buildConfirmedUsageResponse(input: {
     daily,
     coverage: {
       activatedDeviceCount: input.activatedDeviceCount,
-      openRuntimeEnabled: input.openRuntimeEnabled,
-      appOpenRuntimeEnabled: input.openRuntimeEnabled,
-      domainOpenRuntimeEnabled: false,
+      openRuntimeEnabled:
+        input.appOpenRuntimeEnabled || input.domainOpenRuntimeEnabled,
+      appOpenRuntimeEnabled: input.appOpenRuntimeEnabled,
+      domainOpenRuntimeEnabled: input.domainOpenRuntimeEnabled,
       reconciliationState:
         input.dirtyTargets.length > 0 ? "LEDGER_FALLBACK" : "RECONCILED",
       dirtyDates: input.dirtyTargets.map((target) => ({

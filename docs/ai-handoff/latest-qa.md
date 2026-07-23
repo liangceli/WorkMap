@@ -1,5 +1,82 @@
 # Latest QA Handoff
 
+## 2026-07-23 Browser Extension 0.5.8 QA
+
+### Reviewed Implementation
+
+- Reviewed the full Browser flow: MV3 listeners, OS-focused Domain Focus lane, trusted all-frame evidence, hostname eligibility/privacy, Domain runtime tab-set engine, durable checkpoint/queue migration, policy/lease/acknowledgement/window enforcement, sync correlation and terminal diagnostics, official ledger/reconciliation, Owner Connection Audit, Compliance enablement, and Domain Reports rendering.
+- Reviewed official Chrome Extension API limits: profile startup is observable; idle exposes active/idle/locked; service-worker suspend/termination does not provide reliable asynchronous close telemetry. The product therefore separates confirmed events from inferred heartbeat loss.
+- No Desktop Agent behavior or source file was modified.
+
+### Diff Review Findings
+
+- No open critical or high-severity finding remains.
+- Fixed during QA: same status with a different client event ID initially bypassed API duplicate suppression for all statuses. The final rule preserves only distinct Browser `profile-start` events and keeps ordinary status retries/coincident duplicate states idempotent.
+- Fixed during QA: a stale Browser could produce two identical `Signal interrupted` audit rows when both coverage history and current v2 health supplied the same inferred timestamp. The final presentation de-duplicates by device/title/time and has an executable regression.
+- Fixed during release QA: `release:zip` could return success without leaving a 0.5.8 ZIP, risking accidental reuse of 0.5.7. The script now uses the explicit Windows PowerShell path and verifies a non-empty archive.
+- Historical rejected rows are intentionally retained. A pre-existing `FOCUS_OVERLAP` or `INVALID_DURATION` tombstone may still appear but remains excluded from official totals.
+
+### Automated Verification
+
+- `pnpm --filter @workmap/browser-extension typecheck` — pass.
+- `pnpm --filter @workmap/browser-extension lint` — pass.
+- `pnpm --filter @workmap/browser-extension test` — pass, `65/65`.
+- `pnpm --filter @workmap/browser-extension build` — pass.
+- `pnpm --filter @workmap/browser-extension release:zip` — pass with explicit artifact confirmation.
+- `pnpm --filter @workmap/api typecheck` / `lint` / `build` — pass.
+- `pnpm --filter @workmap/api test` — pass, `55/55`.
+- `pnpm --filter @workmap/web typecheck` / `lint` / `build` — pass.
+- `pnpm --filter @workmap/web test` — pass, `88/88`.
+- `pnpm --filter @workmap/shared-types typecheck` / `build` — pass.
+- `pnpm prisma:generate` — pass.
+- `git diff --check` — pass.
+- Scoped secret scan excluding `.env*`, `node_modules`, `dist`, `.next`, `alpha-unpacked`, `artifacts`, `*.tsbuildinfo`, generated and reference directories — no finding.
+- ZIP inspection — package/manifest `0.5.8`, 22 entries, 48,842 bytes, SHA-256 `B739FB3AB5CA916FA3F3270752F1B0D5AE471FB9AEC45B8A51C65266BCF1E9F2`.
+
+### Covered Executable Scenarios
+
+- Same-host tabs de-duplicate; different hosts run in parallel; worker restart closes only through the durable observation; runtime cannot start without its separate lease flag; policy closure projects exactly to the authorised UTC boundary.
+- One Focus hostname across windows/displays; same-host tab identity; Split View trusted peer; `WINDOW_ID_NONE`; minimize; idle/lock; protected/excluded/incognito pages; trusted/untrusted/background/iframe evidence; SPA and cross-host navigation; reload/replace/remove; host permission/registration recovery.
+- Queue identity/backoff/capacity, encrypted credentials, lifecycle gaps/clock jumps/no-backfill, snapshot rejection separate from health, accepted/duplicate/rejected evidence, policy/ack/lease/window gates, and service-worker persistence.
+- API accepts Browser Domain Focus/runtime into the ledger, rejects disabled runtime, persists inferred interruption/recovery, unions Chrome/Edge same-host Focus/runtime overlap, and preserves status idempotency.
+- Web displays separate App/Domain runtime policy and metrics, confirmed versus inferred Browser audit events, current stale heartbeat interruption, and de-duplicated coverage/live interruption.
+
+### Manual QA Status And Required Matrix
+
+- Real Chrome load-unpacked: **NOT RUN**.
+- Real Edge load-unpacked: **NOT RUN**.
+- Not yet manually verified: upgrade in place while retaining pairing/IndexedDB; website access grant/revoke/regrant; single/dual windows and dual displays; same/different-host multi-tab; supported Split View; address bar/DevTools/internal/PDF pages; minimize/restore; lock/unlock; sleep/wake; offline/reconnect; browser restart; Extension reload/disable/enable; policy version enablement and employee re-acknowledgement; `/reports` live Domain, Connection Audit and historical Focus/open-runtime totals.
+- Browser close/disable/crash/sleep cannot be labelled with an exact cause or occurrence time by MV3. Manual QA should require a current inferred interruption at confirmed-heartbeat + 90 seconds and a persisted inferred gap/recovery after reconnect, not a fabricated “closed,” “disabled,” or “sleeping” row.
+- Open/runtime QA must prove: three same-host tabs equal one wall-clock range; different hosts can accumulate in parallel; minimize/background/ordinary idle retain open context; lock and last-tab close stop it; disabled/unacknowledged/outside-window/expired lease rejects or pauses it; Chrome/Edge same-host overlap is not doubled in Reports.
+
+### Recommendation
+
+- Automated QA: **PASS**.
+- Production/store release: **HOLD** until migration/API/Web are deployed in order and real Chrome + Edge load-unpacked QA passes.
+- The next round may proceed to controlled manual QA. Do not auto-publish or enable the runtime policy before the server contract is deployed.
+
+## 2026-07-23 Desktop Agent Connection Audit Semantics QA
+
+### Reviewed Implementation
+
+- Reviewed Desktop Agent `0.6.8` Electron lock/unlock/suspend/resume hooks, Tracking v2 lifecycle production and durable status queue, API status persistence and duplicate suppression, Reports range query/coalescing, and Owner Web audit rendering.
+- No product implementation was modified.
+
+### Findings Ordered By Severity
+
+- Confirmed - Medium: the Connection Audit is a historical transition list, not the source of current online/offline state. The supplied `Locked` then `Reconnected` rows accurately represent Windows System Lock and System Unlock, while current connection must be read from Live signals.
+- Confirmed - Medium: the v2 timeline is incomplete. Web renders only six supplemental status values, while v2 normal start, user stop, shutdown, crash, termination, and unknown-interruption status records can be omitted because v2 does not create the legacy session rows used by the other branch.
+- Confirmed - Low: `Reconnected` represents both resume and unlock; the displayed reason disambiguates them. Delayed status delivery over 30 seconds is labeled with the later server sync time.
+- Confirmed - Low: repeated identical status/reason transitions are coalesced, results are limited to 500, and timestamps are displayed from client occurrence time in the viewer's browser locale.
+- Separate scope: Browser Extension connection audit remains incomplete and `0 events` is not proof that no Browser interruption occurred.
+
+### Test, Manual QA, Risk, And Recommendation
+
+- Source/diff review: pass for the screenshot interpretation.
+- `git diff --check`: pass. Scoped secret scan: pass.
+- Automated product tests were not rerun because this round changed documentation only. Real Windows lifecycle QA was not run; the supplied screenshot provides manual evidence for the lock/unlock pair.
+- Pass for explaining the current behavior. Do not call the full v2 Start/Stop/Interruption audit complete. A future narrow API/Web correction should render all stored v2 lifecycle events and cover start, quit, lock/unlock, sleep/resume, crash/unknown, dedupe, delayed sync, and live-state independence.
+
 ## 2026-07-23 Browser Extension 0.5.7 Cross-Epoch Focus Reliability QA
 
 ### Reviewed Implementation

@@ -8,6 +8,9 @@ import {
 import {
   BrowserName,
   DeviceClientType,
+  DeviceStatus,
+  DeviceStatusConfidence,
+  DeviceStatusReason,
   Prisma,
   TrackingActivityMetric,
   TrackingActivitySource,
@@ -52,6 +55,7 @@ const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 const MAX_SUBJECT_KEY_LENGTH = 200;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_IDENTITY_LENGTH = 160;
+const BROWSER_HEARTBEAT_FRESH_MS = 90_000;
 
 type StoredPolicyLease = {
   id: string;
@@ -62,10 +66,12 @@ type StoredPolicyLease = {
   issuedAt: Date;
   expiresAt: Date;
   allowedUtcWindows: unknown;
+  collectDomainOpenRuntime: boolean;
   monitoringPolicy: {
     collectAppUsage: boolean;
     collectOpenRuntime: boolean;
     collectWebsiteDomain: boolean;
+    collectDomainOpenRuntime: boolean;
   };
 };
 
@@ -186,6 +192,7 @@ export class TrackingV2SyncService {
               collectAppUsage: true,
               collectOpenRuntime: true,
               collectWebsiteDomain: true,
+              collectDomainOpenRuntime: true,
             },
           },
         },
@@ -863,12 +870,6 @@ function validateCandidatePolicyAndIdentity(input: {
     return "INVALID_STREAM_METRIC";
   }
   if (
-    openRuntimeInterval &&
-    input.expectedSource !== TrackingActivitySource.DESKTOP_APP
-  ) {
-    return "OPEN_RUNTIME_NOT_ENABLED";
-  }
-  if (
     interval.source === "BROWSER_DOMAIN" &&
     interval.browserName !== input.browserName
   ) {
@@ -901,14 +902,22 @@ function validateCandidatePolicyAndIdentity(input: {
   ) {
     return "POLICY_REJECTED";
   }
-  if (openRuntimeInterval && !lease.monitoringPolicy.collectOpenRuntime) {
-    return "OPEN_RUNTIME_NOT_ENABLED";
+  if (openRuntimeInterval) {
+    const runtimeAllowed =
+      input.expectedSource === TrackingActivitySource.DESKTOP_APP
+        ? lease.monitoringPolicy.collectOpenRuntime
+        : lease.collectDomainOpenRuntime &&
+          lease.monitoringPolicy.collectDomainOpenRuntime;
+    if (!runtimeAllowed) return "OPEN_RUNTIME_NOT_ENABLED";
   }
   const sourceAllowed =
     input.expectedSource === TrackingActivitySource.DESKTOP_APP
       ? lease.monitoringPolicy.collectAppUsage &&
         (focusInterval || lease.monitoringPolicy.collectOpenRuntime)
-      : lease.monitoringPolicy.collectWebsiteDomain;
+      : lease.monitoringPolicy.collectWebsiteDomain &&
+        (focusInterval ||
+          (lease.collectDomainOpenRuntime &&
+            lease.monitoringPolicy.collectDomainOpenRuntime));
   if (
     !sourceAllowed ||
     !isIntervalInsidePolicyWindowsV2(
@@ -1769,6 +1778,28 @@ async function storeClientHealth(
   } | null,
   clearServerDiagnostic: boolean,
 ) {
+  const previous = await tx.clientHealthSnapshot.findUnique({
+    where: {
+      deviceId_source: {
+        deviceId: context.deviceId,
+        source,
+      },
+    },
+    select: { receivedAt: true },
+  });
+  if (
+    context.clientType === DeviceClientType.BROWSER_EXTENSION &&
+    previous &&
+    receivedAt.getTime() - previous.receivedAt.getTime() >
+      BROWSER_HEARTBEAT_FRESH_MS
+  ) {
+    await recordRecoveredBrowserHeartbeatGap(
+      tx,
+      context,
+      previous.receivedAt,
+      receivedAt,
+    );
+  }
   const data = {
     companyId: context.companyId,
     userId: context.userId,
@@ -1823,6 +1854,89 @@ async function storeClientHealth(
       serverDiagnosticAt: serverDiagnostic?.at ?? null,
     },
   });
+}
+
+async function recordRecoveredBrowserHeartbeatGap(
+  tx: Prisma.TransactionClient,
+  context: DeviceRequestContext,
+  lastConfirmedAt: Date,
+  recoveredAt: Date,
+) {
+  const coverageLostAt = new Date(
+    lastConfirmedAt.getTime() + BROWSER_HEARTBEAT_FRESH_MS,
+  );
+  const reportedInterruption = await tx.deviceStatusEvent.findFirst({
+    where: {
+      companyId: context.companyId,
+      userId: context.userId,
+      deviceId: context.deviceId,
+      source: DeviceClientType.BROWSER_EXTENSION,
+      recordedAt: { gte: lastConfirmedAt, lte: recoveredAt },
+      status: {
+        in: [
+          DeviceStatus.NETWORK_OFFLINE,
+          DeviceStatus.SERVER_UNREACHABLE,
+          DeviceStatus.LOCKED,
+        ],
+      },
+    },
+    select: { id: true },
+  });
+  if (!reportedInterruption) {
+    await tx.deviceStatusEvent.create({
+      data: {
+        companyId: context.companyId,
+        userId: context.userId,
+        deviceId: context.deviceId,
+        status: DeviceStatus.UNKNOWN_INTERRUPTED,
+        reason: DeviceStatusReason.HEARTBEAT_TIMEOUT,
+        startedAt: coverageLostAt,
+        endedAt: recoveredAt,
+        lastHeartbeatAt: lastConfirmedAt,
+        recordedAt: coverageLostAt,
+        receivedAt: recoveredAt,
+        source: DeviceClientType.BROWSER_EXTENSION,
+        confidence: DeviceStatusConfidence.INFERRED,
+        metadata: { operation: "server-heartbeat-gap" },
+      },
+    });
+  }
+
+  const reportedRecovery = await tx.deviceStatusEvent.findFirst({
+    where: {
+      companyId: context.companyId,
+      userId: context.userId,
+      deviceId: context.deviceId,
+      source: DeviceClientType.BROWSER_EXTENSION,
+      recordedAt: { gte: coverageLostAt, lte: recoveredAt },
+      status: {
+        in: [
+          DeviceStatus.RUNNING,
+          DeviceStatus.RECONNECTED,
+          DeviceStatus.RESTARTED,
+        ],
+      },
+    },
+    select: { id: true },
+  });
+  if (!reportedRecovery) {
+    await tx.deviceStatusEvent.create({
+      data: {
+        companyId: context.companyId,
+        userId: context.userId,
+        deviceId: context.deviceId,
+        status: DeviceStatus.RECONNECTED,
+        reason: DeviceStatusReason.UNKNOWN,
+        startedAt: recoveredAt,
+        lastHeartbeatAt: recoveredAt,
+        recordedAt: recoveredAt,
+        receivedAt: recoveredAt,
+        source: DeviceClientType.BROWSER_EXTENSION,
+        confidence: DeviceStatusConfidence.CONFIRMED,
+        metadata: { operation: "server-heartbeat-recovered" },
+      },
+    });
+  }
 }
 
 function parseSnapshot(value: unknown): LiveFocusSnapshotV2 {
@@ -2105,7 +2219,11 @@ function collectLaneKeys(
     source: candidate.interval.source as TrackingActivitySource,
     stream: candidate.interval.stream as TrackingActivityStream,
   }));
-  if (snapshot) {
+  // The Browser Focus lane also serializes its single per-device health row.
+  // This makes Browser heartbeat-gap inference deterministic even for
+  // health-only syncs without changing Desktop Agent write behaviour.
+  void snapshot;
+  if (expectedSource === TrackingActivitySource.BROWSER_DOMAIN) {
     values.push({
       source: expectedSource,
       stream: TrackingActivityStream.FOCUS,

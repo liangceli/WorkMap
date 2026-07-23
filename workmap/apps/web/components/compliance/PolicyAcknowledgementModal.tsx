@@ -7,11 +7,12 @@ type PolicyAcknowledgementModalProps = {
   busy?: boolean;
   policyVersion?: string;
   collectOpenRuntime?: boolean;
+  collectDomainOpenRuntime?: boolean;
   onClose: () => void;
   onAcknowledge: () => void | Promise<void>;
 };
 
-export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, collectOpenRuntime = false, onClose, onAcknowledge }: PolicyAcknowledgementModalProps) {
+export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, collectOpenRuntime = false, collectDomainOpenRuntime = false, onClose, onAcknowledge }: PolicyAcknowledgementModalProps) {
   if (!open) {
     return null;
   }
@@ -33,6 +34,7 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
           WorkMap may collect presence, avatar location, workspace status, desktop app name and usage duration, browser domain and
           usage duration, device heartbeat, freshness, and last-seen context so workspace activity summaries stay transparent.
           {collectOpenRuntime ? " The current policy also measures how long an App has a user-visible Windows window open; this is separate from Focus active time." : ""}
+          {collectDomainOpenRuntime ? " It also measures how long at least one eligible browser tab for a hostname remains open; this is separate from Domain Focus and may overlap across different hostnames." : ""}
           WorkMap messages, waves, reactions, and Notice read state are stored when users intentionally send them. It does not
           collect screenshots, screen recordings, keystrokes, clipboard data, webcam or microphone data, external private
           message, Teams, or email body content, webpage body content, form inputs, or passwords.
@@ -46,6 +48,7 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
               <li>Browser domain name</li>
               <li>Usage duration and timestamps for summaries</li>
               {collectOpenRuntime ? <li>App open/runtime for user-visible Windows windows</li> : null}
+              {collectDomainOpenRuntime ? <li>Browser Domain open/runtime, de-duplicated per hostname</li> : null}
               <li>Device heartbeat status</li>
               <li>Avatar room or office area</li>
               <li>Workspace status and freshness</li>

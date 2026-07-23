@@ -458,6 +458,144 @@ test("Browser Domain Focus active and focused-idle enter the official ledger and
   assert.equal(prisma.tombstones.at(-1)?.requestId, REQUEST_ID);
 });
 
+test("Browser Domain open/runtime uses its own policy and reaches confirmed Domain Reports", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  prisma.lease.collectDomainOpenRuntime = true;
+  prisma.lease.monitoringPolicy.collectDomainOpenRuntime = true;
+  const sync = new TrackingV2SyncService(
+    prisma as any,
+    browserPolicyService(now) as any,
+  );
+  const startedAt = new Date(now - 20_000);
+  const endedAt = new Date(now - 10_000);
+  const runtimeInterval = (
+    clientEventId: string,
+    sequenceNumber: number,
+    domain: string,
+  ) => ({
+    clientEventId,
+    activitySessionId: crypto.randomUUID(),
+    sequenceNumber,
+    source: "BROWSER_DOMAIN",
+    stream: "OPEN_RUNTIME",
+    metric: "OPEN_RUNTIME",
+    subjectKey: domain,
+    displayName: domain,
+    browserName: "CHROME",
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    clockEpochId: CLOCK_ID,
+    startedMonotonicMs: 1_000,
+    endedMonotonicMs: 11_000,
+    durationMs: 10_000,
+    policyVersion: "v1",
+    policyLeaseId: LEASE_ID,
+  });
+
+  const response = await sync.sync(
+    browserContext(now),
+    browserSyncRequest(now, {
+      intervals: [
+        runtimeInterval(
+          "83838383-8383-4383-8383-838383838381",
+          1,
+          "docs.example",
+        ),
+        runtimeInterval(
+          "83838383-8383-4383-8383-838383838382",
+          2,
+          "chat.example",
+        ),
+      ],
+    }),
+    REQUEST_ID,
+  );
+  assert.deepEqual(response.results.map((item) => item.status), [
+    "ACCEPTED",
+    "ACCEPTED",
+  ]);
+
+  const reports = new TrackingV2ReportsService(
+    prisma as any,
+    {
+      reconcileTargets: async () => {
+        throw new Error("Use ledger fallback.");
+      },
+    } as any,
+  );
+  const usage = await reports.getConfirmedUsage({
+    companyId: COMPANY_ID,
+    userId: USER_ID,
+    range: {
+      from: new Date(`${startedAt.toISOString().slice(0, 10)}T00:00:00.000Z`),
+      to: new Date(`${startedAt.toISOString().slice(0, 10)}T23:59:59.999Z`),
+    },
+  });
+  assert.equal(usage.coverage.domainOpenRuntimeEnabled, true);
+  assert.deepEqual(
+    usage.websites
+      .map((row) => [row.domain, row.openRuntimeMs])
+      .sort(),
+    [
+      ["chat.example", 10_000],
+      ["docs.example", 10_000],
+    ],
+  );
+
+  const disabledPrisma = new SyncPrisma(now);
+  const rejected = await new TrackingV2SyncService(
+    disabledPrisma as any,
+    browserPolicyService(now) as any,
+  ).sync(
+    browserContext(now),
+    browserSyncRequest(now, {
+      intervals: [
+        runtimeInterval(
+          "83838383-8383-4383-8383-838383838383",
+          1,
+          "docs.example",
+        ),
+      ],
+    }),
+    REQUEST_ID,
+  );
+  assert.equal(rejected.results[0]?.status, "REJECTED");
+  assert.equal(
+    rejected.results[0]?.rejectionCode,
+    "OPEN_RUNTIME_NOT_ENABLED",
+  );
+  assert.equal(disabledPrisma.intervals.length, 0);
+});
+
+test("a recovered Browser heartbeat persists an inferred interruption and recovery", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  prisma.previousHealthReceivedAt = new Date(now - 120_000);
+  const sync = new TrackingV2SyncService(
+    prisma as any,
+    browserPolicyService(now) as any,
+  );
+
+  await sync.sync(
+    browserContext(now),
+    browserSyncRequest(now),
+    REQUEST_ID,
+  );
+
+  assert.deepEqual(
+    prisma.statusEvents.map((event) => [
+      event.status,
+      event.reason,
+      event.confidence,
+    ]),
+    [
+      ["UNKNOWN_INTERRUPTED", "HEARTBEAT_TIMEOUT", "INFERRED"],
+      ["RECONNECTED", "UNKNOWN", "CONFIRMED"],
+    ],
+  );
+});
+
 test("fractional Browser monotonic bounds become a terminal tombstone instead of a 500", async () => {
   const now = Date.now();
   const prisma = new SyncPrisma(now);
@@ -855,7 +993,7 @@ function browserSyncRequest(
     health: {
       ...request.health,
       clientType: "BROWSER_EXTENSION",
-      clientVersion: "browser-extension-mv3/0.5.2",
+      clientVersion: "browser-extension-mv3/0.5.8",
       platform: "CHROME",
     },
   };
@@ -905,6 +1043,8 @@ class SyncPrisma {
   savedSnapshot: any = null;
   healthUpdate: any = null;
   deviceHeartbeatWritten = false;
+  previousHealthReceivedAt: Date | null = null;
+  statusEvents: any[] = [];
 
   constructor(now: number) {
     this.now = now;
@@ -926,7 +1066,9 @@ class SyncPrisma {
         collectAppUsage: true,
         collectOpenRuntime: true,
         collectWebsiteDomain: true,
+        collectDomainOpenRuntime: false,
       },
+      collectDomainOpenRuntime: false,
     };
   }
 
@@ -935,7 +1077,12 @@ class SyncPrisma {
     findFirst: async () => ({ id: LEASE_ID }),
   };
   monitoringPolicy = {
-    findFirst: async () => ({ policyVersion: "v1", collectOpenRuntime: true }),
+    findFirst: async () => ({
+      policyVersion: "v1",
+      collectOpenRuntime: true,
+      collectDomainOpenRuntime:
+        this.lease.monitoringPolicy.collectDomainOpenRuntime,
+    }),
   };
   clientWriteLane = {
     upsert: async () => ({ id: "12121212-1212-4212-8212-121212121212" }),
@@ -1027,9 +1174,20 @@ class SyncPrisma {
     },
   };
   clientHealthSnapshot = {
+    findUnique: async () =>
+      this.previousHealthReceivedAt
+        ? { receivedAt: this.previousHealthReceivedAt }
+        : null,
     upsert: async ({ update }: any) => {
       this.healthUpdate = update;
       return update;
+    },
+  };
+  deviceStatusEvent = {
+    findFirst: async () => null,
+    create: async ({ data }: any) => {
+      this.statusEvents.push(data);
+      return data;
     },
   };
   device = {

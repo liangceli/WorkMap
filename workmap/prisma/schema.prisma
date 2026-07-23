@@ -517,6 +517,7 @@ model DevicePolicyLease {
   scheduleTimeZone    String
   allowedUtcWindows   Json
   windowSetHash       String
+  collectDomainOpenRuntime Boolean               @default(false)
   createdAt           DateTime                   @default(now())
   company             Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1082,6 +1083,7 @@ model MonitoringPolicy {
   collectAppUsage        Boolean                 @default(true)
   collectOpenRuntime     Boolean                 @default(false)
   collectWebsiteDomain   Boolean                 @default(true)
+  collectDomainOpenRuntime Boolean               @default(false)
   collectFullUrl         Boolean                 @default(false)
   collectScreenshots     Boolean                 @default(false)
   collectKeystrokes      Boolean                 @default(false)

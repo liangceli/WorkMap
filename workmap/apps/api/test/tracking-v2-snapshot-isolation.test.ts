@@ -15,6 +15,7 @@ test("v2 sync isolates a rejected live snapshot from heartbeat confirmation", as
     activityInterval: { findMany: async () => [] },
     clientSequenceTombstone: { findMany: async () => [] },
     clientHealthSnapshot: {
+      findUnique: async () => null,
       upsert: async (input: { update: Record<string, unknown> }) => {
         healthWrite = input.update;
         return input.update;

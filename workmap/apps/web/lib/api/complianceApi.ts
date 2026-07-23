@@ -55,3 +55,14 @@ export function enableComplianceOpenRuntime(
     options,
   );
 }
+
+export function enableComplianceDomainOpenRuntime(
+  policyId: string,
+  options?: ApiClientOptions,
+) {
+  return workMapApiPost<WorkMapApiOpenRuntimePolicyVersion>(
+    `/compliance/policy/${encodeURIComponent(policyId)}/domain-open-runtime-version`,
+    undefined,
+    options,
+  );
+}

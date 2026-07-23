@@ -1,5 +1,14 @@
 # QA Skill
 
+## Browser Extension 0.5.8 QA Baseline
+
+- Upgrade the same 0.5.7 unpacked entry without clearing storage. State v7 must migrate to v8, the IndexedDB queue index must add stream identity, and existing Focus queue/dead-letter/pairing/policy evidence must remain intact.
+- Connection Audit: verify immediate profile start, lock/unlock and network/service recovery; verify retry idempotency; verify current stale interruption at heartbeat + 90 seconds; verify recovery persists an inferred gap only when no confirmed event explains it. Never require exact close/disable/crash/sleep cause.
+- Domain runtime: same-host tabs de-duplicate, different hosts run in parallel, SPA does not split, last-tab/cross-host navigation closes correctly, and restart/sleep/worker gaps never backfill. Minimize/background/ordinary idle retain “open” context; lock, permission loss, policy/window/lease boundary and queue pressure close/pause it.
+- Policy QA must enable `collectDomainOpenRuntime` through a new version, require new acknowledgement, issue a lease with the explicit flag, reject disabled data with `OPEN_RUNTIME_NOT_ENABLED`, and keep rejected rows out of Reports.
+- Reports QA must prove accepted/duplicate/rejected evidence, separate App/Domain/runtime/Focus metrics, and union overlapping Chrome/Edge same-user/same-host/same-metric runtime.
+- Required real QA remains Chrome + Edge load-unpacked across grant/revoke, windows/displays/tabs/Split View, minimize, lock, sleep, offline, restart, reload/disable/enable and signed-in `/reports`.
+
 ## Browser Extension 0.5.7 QA Baseline
 
 - Upgrade the same unpacked 0.5.6 entry without clearing extension storage. Pairing, queued intervals, terminal diagnostics, acknowledgement, and policy lease must remain visible after state version 6 migrates to 7.

@@ -48,7 +48,9 @@ export type ExtensionDeviceStatusName =
   | "NETWORK_OFFLINE"
   | "LOCKED"
   | "SERVER_UNREACHABLE"
-  | "RECONNECTED";
+  | "UNKNOWN_INTERRUPTED"
+  | "RECONNECTED"
+  | "RESTARTED";
 
 export type ExtensionDeviceStatusReason =
   | "AGENT_STARTED"
@@ -56,9 +58,12 @@ export type ExtensionDeviceStatusReason =
   | "SYSTEM_LOCK"
   | "SYSTEM_UNLOCK"
   | "SERVER_REQUEST_FAILED"
+  | "HEARTBEAT_TIMEOUT"
+  | "AGENT_RESTART"
   | "UNKNOWN";
 
 export type ExtensionDeviceStatusEvent = {
+  protocolVersion?: 1 | 2;
   clientEventId: string;
   deviceId: string;
   status: ExtensionDeviceStatusName;

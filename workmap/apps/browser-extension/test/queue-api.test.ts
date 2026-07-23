@@ -55,6 +55,7 @@ test("status API uses the scoped device credential and status queue persists ret
       statusEvent(1),
     );
     assert(requestBody.includes("NETWORK_OFFLINE"));
+    assert(requestBody.includes('"protocolVersion":2'));
     assert(!requestBody.includes("wmdev_test"));
 
     let queue = enqueueStatusEvent([], statusEvent(1), 1_000);
@@ -140,6 +141,7 @@ function event(index: number): DomainUsageEvent {
 
 function statusEvent(index: number) {
   return {
+    protocolVersion: 2 as const,
     clientEventId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     deviceId: "22222222-2222-4222-8222-222222222222",
     status: "NETWORK_OFFLINE" as const,

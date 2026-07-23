@@ -343,12 +343,21 @@ export class DevicesService {
       where: { companyId: context.companyId, deviceId, source: clientType },
       orderBy: { recordedAt: "desc" },
     });
+    const isDistinctBrowserProfileStart = Boolean(
+      latestTransition
+      && clientType === DeviceClientType.BROWSER_EXTENSION
+      && metadata?.operation === "profile-start"
+      && (status === DeviceStatus.RUNNING || status === DeviceStatus.RESTARTED)
+      && clientEventId
+      && latestTransition.clientEventId !== clientEventId,
+    );
     if (
       latestTransition
       && latestTransition.status === status
       && latestTransition.reason === reason
       && latestTransition.agentSessionId === agentSessionId
       && hasSameTrackingState(latestTransition.metadata, metadata)
+      && !isDistinctBrowserProfileStart
     ) {
       return toStatusEventResponse(latestTransition);
     }

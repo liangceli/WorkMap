@@ -132,6 +132,25 @@ test("enabling open/runtime creates a new policy version that requires a new ack
   );
 });
 
+test("enabling Browser Domain runtime creates a separate policy version", async () => {
+  const prisma = new OpenRuntimePrisma();
+  const service = new ComplianceService(prisma as any);
+
+  const result = await service.enableDomainOpenRuntimeCollection(
+    context("OWNER"),
+    POLICY_ID,
+  );
+
+  assert.equal(result.policyVersion, "v2");
+  assert.equal(result.collectDomainOpenRuntime, true);
+  assert.equal(
+    result.collectOpenRuntime,
+    false,
+    "the Browser policy does not reuse the Desktop App runtime flag",
+  );
+  assert.equal(result.collectWebsiteDomain, true);
+});
+
 test("policy version generation advances numeric versions without reusing an id", () => {
   assert.equal(nextPolicyVersion(["v1", "v2", "custom"]), "v3");
 });
@@ -179,6 +198,7 @@ class OpenRuntimePrisma {
     name: "Transparent activity policy",
     collectAppUsage: true,
     collectOpenRuntime: false,
+    collectDomainOpenRuntime: false,
     collectWebsiteDomain: true,
     collectFullUrl: false,
     collectScreenshots: false,

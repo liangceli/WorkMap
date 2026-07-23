@@ -5,6 +5,7 @@ import { PolicyAcknowledgementModal } from "./PolicyAcknowledgementModal";
 import {
   acknowledgeCompliancePolicy,
   confirmCompliancePolicyScheduleTimeZone,
+  enableComplianceDomainOpenRuntime,
   enableComplianceOpenRuntime,
   getCompliancePolicy,
   updateCompliancePolicyWorkHours,
@@ -50,6 +51,7 @@ export function CompliancePolicyPanel() {
   const [workdayEnd, setWorkdayEnd] = useState("23:00");
   const [savingWorkHours, setSavingWorkHours] = useState(false);
   const [enablingOpenRuntime, setEnablingOpenRuntime] = useState(false);
+  const [enablingDomainOpenRuntime, setEnablingDomainOpenRuntime] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,6 +229,32 @@ export function CompliancePolicyPanel() {
     );
   };
 
+  const enableDomainOpenRuntime = async () => {
+    if (!policy || policy.collectDomainOpenRuntime) return;
+    const auth = await getWorkMapApiAuthOptions();
+    if (!auth.available) {
+      setStatusText("Sign in with an authorised policy administrator account before enabling Browser Domain open/runtime collection.");
+      return;
+    }
+
+    setEnablingDomainOpenRuntime(true);
+    const result = await enableComplianceDomainOpenRuntime(
+      policy.id,
+      auth.options,
+    );
+    setEnablingDomainOpenRuntime(false);
+    if (!result.ok) {
+      setStatusText(result.error);
+      return;
+    }
+
+    setPolicy(result.data);
+    setAcknowledgedAt(null);
+    setStatusText(
+      `Policy ${result.data.policyVersion} now includes Browser Domain open/runtime collection. Review and acknowledge this new version before Browser Extensions receive an authorised runtime lease.`,
+    );
+  };
+
   return (
     <div className="wm-compliance-policy" style={styles.stack}>
       <section className="wm-compliance-card-grid" style={styles.policyGrid}>
@@ -346,6 +374,30 @@ export function CompliancePolicyPanel() {
         </section>
       ) : null}
 
+      {policy ? (
+        <section style={styles.ackPanel}>
+          <div>
+            <p style={styles.panelLabel}>Browser Domain open/runtime</p>
+            <h2 style={styles.panelTitle}>
+              {policy.collectDomainOpenRuntime ? "Enabled by the current policy" : "Not enabled"}
+            </h2>
+            <p style={styles.panelText}>
+              Domain open/runtime measures how long at least one eligible HTTP/HTTPS tab for a hostname remains open in Chrome or Edge. Multiple tabs for the same hostname are counted once; different hostnames may accumulate concurrently. It is context only, not Focus or work time, and WorkMap stores no path, query, page title, or content.
+            </p>
+          </div>
+          {canManageWorkHours && !policy.collectDomainOpenRuntime ? (
+            <button
+              type="button"
+              onClick={() => void enableDomainOpenRuntime()}
+              disabled={enablingDomainOpenRuntime}
+              style={styles.primaryButton}
+            >
+              {enablingDomainOpenRuntime ? "Creating policy version..." : "Enable and create new policy version"}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
       <section style={styles.ackPanel}>
         <div>
           <p style={styles.panelLabel}>Policy acknowledgement</p>
@@ -372,6 +424,7 @@ export function CompliancePolicyPanel() {
         busy={acknowledging}
         policyVersion={policy?.policyVersion}
         collectOpenRuntime={policy?.collectOpenRuntime}
+        collectDomainOpenRuntime={policy?.collectDomainOpenRuntime}
         onClose={() => setModalOpen(false)}
         onAcknowledge={acknowledgePolicy}
       />
