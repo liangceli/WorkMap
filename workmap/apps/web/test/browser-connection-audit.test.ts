@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBrowserAuditEntries, buildBrowserAuditGroups } from "../components/reports/ReportSummaryPanel.js";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import {
+  BrowserAuditTimeline,
+  buildBrowserAuditEntries,
+  buildBrowserAuditGroups,
+  type BrowserAuditGroup,
+} from "../components/reports/ReportSummaryPanel.js";
 
 test("Browser Connection Audit separates confirmed transitions from inferred heartbeat loss", () => {
   const base = "2026-07-23T01:00:00.000Z";
@@ -117,6 +124,50 @@ test("Browser Connection Audit keeps Chrome, Edge and same-browser profiles stri
   assert.deepEqual(chromeProfileGroup?.entries.map((entry) => entry.id), ["chrome-profile-device:status:chrome-profile-event"]);
   assert.equal(edgeGroup?.title, "Microsoft Edge Extension");
   assert.deepEqual(edgeGroup?.entries.map((entry) => entry.id), ["edge-device:status:edge-event"]);
+});
+
+test("Browser Connection Audit renders many device histories without shrinking them into blank bars", () => {
+  const groups: BrowserAuditGroup[] = Array.from({ length: 16 }, (_, index) => ({
+    deviceId: `device-${index}`,
+    browserName: index % 2 === 0 ? "CHROME" : "EDGE",
+    title: index % 2 === 0 ? `Google Chrome Extension ${index}` : `Microsoft Edge Extension ${index}`,
+    detail: `Device ${index} · browser-extension-mv3/0.5.9`,
+    entries: [{
+      id: `event-${index}`,
+      title: index % 2 === 0 ? "Browser profile started" : "Reconnected",
+      detail: index % 2 === 0 ? "Google Chrome Extension - Agent Restart" : "Microsoft Edge Extension - System Unlock",
+      timestamp: `2026-07-24T01:${String(index).padStart(2, "0")}:00.000Z`,
+      tone: "positive",
+    }],
+  }));
+
+  const html = renderToStaticMarkup(createElement(BrowserAuditTimeline, { groups }));
+
+  assert.match(html, /16 events/);
+  assert.match(html, /Google Chrome Extension 0/);
+  assert.match(html, /Microsoft Edge Extension 15/);
+  assert.match(html, /Google Chrome Extension - Agent Restart/);
+  assert.match(html, /Microsoft Edge Extension - System Unlock/);
+  assert.match(html, /display:flex;flex-direction:column/);
+  assert.equal((html.match(/flex:0 0 auto/g) ?? []).length, 16);
+  assert.doesNotMatch(html, /Loading connection history/);
+});
+
+test("Browser Connection Audit omits paired devices that have no historical transition", () => {
+  const groups = buildBrowserAuditGroups(
+    {
+      browserExtensionCoverage: [{
+        deviceId: "fresh-device-without-history",
+        browserName: "CHROME",
+        version: "browser-extension-mv3/0.5.9",
+        state: "connected",
+      }],
+      deviceStatusHistory: [],
+    } as never,
+    [],
+  );
+
+  assert.deepEqual(groups, []);
 });
 
 function status(

@@ -916,7 +916,7 @@ export function AuditTimeline({ title, icon, entries }: { title: string; icon: R
   );
 }
 
-function BrowserAuditTimeline({ groups }: { groups: BrowserAuditGroup[] }) {
+export function BrowserAuditTimeline({ groups }: { groups: BrowserAuditGroup[] }) {
   const eventCount = groups.reduce((total, group) => total + group.entries.length, 0);
   return (
     <article style={styles.auditCard} aria-label="Browser Extension connection history">
@@ -1126,7 +1126,7 @@ export function buildBrowserAuditGroups(
       detail: identity.version ? `${identityDetail} · ${identity.version}` : identityDetail,
       entries,
     };
-  }).sort((left, right) => {
+  }).filter((group) => group.entries.length > 0).sort((left, right) => {
     const newestDifference = Date.parse(right.entries[0]?.timestamp ?? "") - Date.parse(left.entries[0]?.timestamp ?? "");
     return Number.isNaN(newestDifference) || newestDifference === 0
       ? left.title.localeCompare(right.title) || left.deviceId.localeCompare(right.deviceId)
@@ -1803,8 +1803,8 @@ const styles = {
   auditTitle: { margin: 0, color: wm.colors.text, fontSize: "16px", lineHeight: 1.25 },
   auditCount: { color: wm.colors.textMuted, fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" as const },
   auditRows: { display: "grid", alignContent: "start", maxHeight: "420px", overflowY: "auto" as const, padding: "0 16px" },
-  browserAuditGroups: { display: "grid", alignContent: "start", gap: "12px", maxHeight: "420px", overflowY: "auto" as const, padding: "12px" },
-  auditDeviceGroup: { border: `1px solid ${wm.colors.borderSubtle}`, borderRadius: wm.radius.md, overflow: "hidden", background: wm.colors.surface },
+  browserAuditGroups: { display: "flex", flexDirection: "column" as const, alignItems: "stretch", gap: "12px", maxHeight: "420px", overflowY: "auto" as const, padding: "12px" },
+  auditDeviceGroup: { flex: "0 0 auto", border: `1px solid ${wm.colors.borderSubtle}`, borderRadius: wm.radius.md, overflow: "hidden", background: wm.colors.surface },
   auditDeviceHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "11px 12px", borderBottom: `1px solid ${wm.colors.borderSubtle}`, background: wm.colors.surfaceLow },
   auditDeviceIdentity: { display: "grid", gap: "2px", minWidth: 0, color: wm.colors.text, fontSize: "13px", overflowWrap: "anywhere" as const },
   auditDeviceRows: { display: "grid", alignContent: "start", padding: "0 12px" },

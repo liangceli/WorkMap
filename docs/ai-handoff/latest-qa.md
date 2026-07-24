@@ -1,5 +1,29 @@
 # Latest QA Handoff
 
+## 2026-07-24 Reports Browser Audit Collapsed-Row QA
+
+### Reviewed Implementation And Findings
+
+- Confirmed from the supplied UI and Network evidence that `OPTIONS 204` is normal preflight and the actual audit `GET` returns `200`. The visible `16 events` count means audit events were already present in frontend state.
+- Fixed - High: the height-bounded Browser audit CSS Grid compressed many implicit device rows because each child could shrink and clipped overflow. This produced the exact repeated grey-bar pattern while hiding every device/event label.
+- The Browser audit scroll area is now a vertical Flex column; device groups cannot shrink. Empty devices with no history are excluded, while Chrome/Edge/profile histories remain keyed by `deviceId`.
+- No API/backend or client telemetry change was needed. Desktop Agent behavior is untouched.
+
+### Automated Verification
+
+- Focused Browser/refresh tests - pass, `8/8`.
+- `pnpm --filter @workmap/web typecheck` - pass.
+- `pnpm --filter @workmap/web lint` - pass.
+- `pnpm --filter @workmap/web test` - pass, `93/93`.
+- `pnpm --filter @workmap/web build` - pass. Existing warning: Next.js plugin is not detected in the current ESLint configuration.
+- Final diff, generated-file cleanup, `git diff --check`, and scoped secret scan are recorded at the end of this round.
+
+### Manual QA, Risks, And Recommendation
+
+- Post-fix signed-in Owner `/reports` QA is **NOT RUN**. The in-app inspection surface had no authenticated WorkMap tab, so production behavior was not claimed from source tests alone.
+- After Web deployment, verify the same `16 events` dataset displays readable per-device titles and rows, each device list remains separate, the 420px area scrolls, and silent polling neither blanks nor compresses the content.
+- Automated recommendation: **PASS** for Web deployment consideration. No Browser Extension/Desktop Agent release is needed. Production acceptance remains **HOLD** until the short signed-in visual check passes.
+
 ## 2026-07-24 Reports Connection Audit Refresh QA
 
 ### Reviewed Implementation And Findings

@@ -1,5 +1,12 @@
 # QA Skill
 
+## Reports Browser Audit Layout QA Baseline
+
+- Load a user report containing enough Chrome/Edge/profile audit groups to exceed the 420px history cap. Every group header and event row must retain full height; the container scrolls instead of showing narrow blank grey bars.
+- The Browser total must equal the visible grouped event counts. Devices without any historical transition must not produce empty groups; each visible group remains keyed to one real `deviceId`.
+- Network `OPTIONS 204` is normal CORS preflight. Diagnose audit data from the subsequent authenticated `GET` and the rendered event count/rows, not from the preflight body.
+- Current automated baseline: focused `8/8`, full Web `93/93`, typecheck/lint/build pass. Signed-in deployed visual QA remains required.
+
 ## Reports Connection Audit Refresh QA Baseline
 
 - Keep a user-scoped Owner report open across at least six polling cycles. Existing Desktop and Browser rows must never be replaced by `Loading connection history...`, and the scroll container must remain mounted.

@@ -1,5 +1,11 @@
 # Frontend Skill
 
+## Reports Browser Audit Non-Shrinking History
+
+- A height-bounded Connection Audit list with many device groups must scroll; it must never distribute/shrink all child rows to fit the cap. The Browser history container uses a vertical Flex column and each `deviceId` group is non-shrinking.
+- Only devices with at least one confirmed transition or honest inferred interruption belong in Connection Audit. Pairing/current-health-only devices remain represented in Live signals rather than as empty historical cards.
+- Keep an executable React render regression with enough groups to exceed the 420px cap and assert both early/late browser identities and event details remain in the rendered output.
+
 ## Reports Connection Audit Silent Refresh
 
 - Connection Audit polling must be stale-while-revalidate: never replace mounted history rows with a periodic loading state. Initial/empty history may show the honest empty message; existing rows and scroll position remain visible during background requests.

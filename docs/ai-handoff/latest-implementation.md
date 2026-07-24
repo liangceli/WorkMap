@@ -1,5 +1,34 @@
 # Latest Implementation Handoff
 
+## 2026-07-24 Reports Browser Connection Audit Collapsed-Row Fix
+
+### Original Task Brief
+
+- Continue investigating the deployed Owner `/reports` Connection Audit after Browser Extension reported `16 events` but rendered only sixteen blank grey bars and no readable history.
+- Interpret the supplied Network evidence and fix the real cause without changing working Browser Extension, Desktop Agent, API, auth, RBAC, or tenant behavior.
+
+### Changed Files
+
+- Web implementation: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`.
+- Web regression: `workmap/apps/web/test/browser-connection-audit.test.ts`.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/frontend-skill.md`, and `docs/skills/qa-skill.md`.
+- No API, shared type, Prisma schema/migration, Browser Extension runtime/version/artifact, Desktop Agent, policy, deployment, or production data changed.
+
+### Root Cause And Implementation Summary
+
+- The `OPTIONS 204` in the supplied Network panel is the expected CORS preflight. The following `GET 200` is the real audit request. The Browser card's `16 events` count proves those records reached the Web component; this was not an empty API response or Browser upload failure.
+- The Browser device container used a height-bounded CSS Grid. With many implicit device rows and child groups using `overflow: hidden`, the rows were allowed to shrink together inside roughly 420px. Every group's title and events were clipped, leaving only its low-surface background as a narrow grey bar.
+- The scroll container now uses a vertical Flex layout and every device history is `flex: 0 0 auto`. Histories keep their intrinsic content height and the outer container scrolls instead of compressing rows.
+- Devices with no historical transition/inferred interruption are omitted from Connection Audit. Chrome, Edge, future browser identities, and multiple profiles remain strictly separated by real `deviceId`; current connection status remains in Live signals.
+- Owner/user report authorization and tenant scoping are unchanged.
+
+### Verification, Manual QA, Risks, And Next Steps
+
+- Focused executable React render tests pass `8/8`, including sixteen device groups with visible first/last Chrome/Edge titles, event details, non-shrinking styles, and no loading text.
+- Web typecheck and lint pass. Full Web tests pass `93/93`. Production Web build passes; the existing non-blocking Next.js ESLint-plugin detection warning remains.
+- Real signed-in post-fix Owner visual QA is **NOT RUN** because this checkout did not have access to the user's authenticated browser tab. The supplied screenshots are accepted pre-fix evidence only.
+- Deploy the Web build, then reopen the same user/date report and verify readable per-device histories, scrolling, and silent five-second refresh. No Browser Extension or Desktop Agent release is required for this Web-only repair.
+
 ## 2026-07-24 Reports Connection Audit Silent Refresh And Browser Separation
 
 ### Original Task Brief
