@@ -1,5 +1,37 @@
 # Latest Implementation Handoff
 
+## 2026-07-24 Browser Extension 0.5.10 Durable Focus/Runtime Continuity
+
+### Original Task Brief
+
+- Investigate real Owner `/reports` evidence where the employee used Edge from roughly 09:30, Desktop Agent showed about 54 minutes of Edge Focus active, but confirmed Browser Domains totalled only about seven minutes and Domain open/runtime contained mostly a few seconds.
+- Fix Browser Extension under-counting only. Do not modify Desktop Agent.
+
+### Root Cause And Metric Boundary
+
+- The fresh Edge `0.5.9` Live signal was online and server-confirmed snapshots continued, but `Confirmed through` still showed no confirmed interval. This isolates the failure to Browser interval creation rather than pairing, heartbeat, current snapshot, API authentication, or Reports rendering.
+- The content script captured trusted clicks, keyboard, wheel and touch start but explicitly omitted trusted pointer movement. Windows last-input semantics include mouse movement, so ordinary mouse-led Edge use refreshed Desktop Focus but not Browser Domain Focus. `pointermove` now contributes occurrence time only; no coordinate, direction, target, URL, title or page content is read or sent.
+- Chrome can terminate an MV3 worker after 30 seconds of inactivity, while production alarms have a 30-second minimum cadence and can be delayed. The prior worker commonly terminated just before the alarm; startup conservatively sealed Focus and Domain runtime at the old durable checkpoint, then reopened at the current instant. Repeating that lifecycle generated only short switch/close fragments.
+- While a proven Focus or authorised Domain open/runtime engine exists, the worker now owns one bounded 20-second collector keepalive. Its checkpoint calls real Chrome APIs and persists current state before the 30-second termination boundary, allowing the existing alarm to emit durable official slices. It stops when no authorised collection session remains.
+- Unexpected worker termination remains conservative. Lock, policy/window closure, queue pressure, sleep/clock gaps beyond the existing continuity tolerance and browser/extension shutdown are not backfilled.
+- Browser Focus active is expected to approach Desktop Edge Focus only while Edge is OS-foreground and the current page is eligible HTTP/HTTPS content. It is not required to equal Desktop Edge time because browser chrome, internal/protected pages, inaccessible PDFs, DevTools, address-bar time and other unobservable surfaces remain excluded. Domain open/runtime is separate open-tab context and also must not be compared as equal to Desktop app runtime.
+
+### Changed Files
+
+- Browser runtime: `workmap/apps/browser-extension/src/backgroundV2.ts`, `contentScript.ts`, and version constant in `trackingV2Types.ts`.
+- Release metadata/output: Browser `package.json`, `manifest.json`, `alpha-unpacked/manifest.json`, and `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.10.zip`.
+- Tests: new `collector-keepalive.test.ts`, extended content-script executable test, and service-worker/version assertions.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/qa-skill.md`, and `docs/skills/deployment-skill.md`.
+- No Desktop Agent, API, Web, Prisma schema/migration, policy/RBAC, or tenant behavior changed.
+
+### Verification, Artifact, Manual QA, And Next Steps
+
+- Focused regression passes `22/22`; full Browser Extension suite passes `68/68`. Typecheck and lint pass.
+- A two-hour executable engine simulation with trusted activity, 20-second checkpoints and 30-second alarm settlement produces exactly two hours of non-overlapping Focus active plus two hours of Domain open/runtime for one eligible Edge hostname.
+- Browser build and `release:zip` pass. ZIP has 22 entries, manifest `0.5.10`, size `49,734` bytes, SHA-256 `DDB2461E28D6B4111E0D85FB0D01866C737E802DFE3FEB30B643C78DFFEB456B`.
+- Real Chrome/Edge load-unpacked QA is **NOT RUN**. Upgrade the existing unpacked entry without clearing storage, then observe at least 10 minutes of continuous mouse-led eligible page use plus a 60-second no-input idle transition. Options must show accepted/duplicate intervals and advancing `Confirmed interval through`; `/reports` must gain Focus active/Focused idle/open-runtime without requiring a tab close.
+- No store upload, GitHub Release, API/Web deployment, policy change, or production publication was performed.
+
 ## 2026-07-24 Reports Browser Connection Audit Collapsed-Row Fix
 
 ### Original Task Brief

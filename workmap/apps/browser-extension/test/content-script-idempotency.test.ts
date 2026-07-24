@@ -14,12 +14,17 @@ test("the content script can execute twice in one document without duplicate lis
   }).outputText;
 
   const windowListeners: string[] = [];
+  const windowCallbacks = new Map<string, Array<(event: unknown) => void>>();
   const documentListeners: string[] = [];
   const runtimeListeners: unknown[] = [];
   const sentMessages: unknown[] = [];
   const fakeWindow: Record<string, unknown> = {
-    addEventListener(eventName: string) {
+    addEventListener(eventName: string, listener: (event: unknown) => void) {
       windowListeners.push(eventName);
+      windowCallbacks.set(eventName, [
+        ...(windowCallbacks.get(eventName) ?? []),
+        listener,
+      ]);
     },
     clearTimeout() {},
     setTimeout() {
@@ -68,6 +73,28 @@ test("the content script can execute twice in one document without duplicate lis
   assert.ok(firstCounts.document > 0);
   assert.ok(firstCounts.runtime > 0);
 
+  const pointerMove = windowCallbacks.get("pointermove")?.[0];
+  assert.ok(pointerMove, "trusted pointer movement must be instrumented");
+  const beforePointerMessages = sentMessages.length;
+  pointerMove({ isTrusted: false });
+  assert.equal(sentMessages.length, beforePointerMessages);
+  pointerMove({ isTrusted: true });
+  assert.deepEqual(
+    Object.keys(sentMessages.at(-1) as Record<string, unknown>).sort(),
+    ["activityAt", "type"],
+  );
+  assert.equal(
+    (sentMessages.at(-1) as { type?: string }).type,
+    "workmap:domain-activity",
+  );
+
+  const countsAfterPointer = {
+    window: windowListeners.length,
+    document: documentListeners.length,
+    runtime: runtimeListeners.length,
+    messages: sentMessages.length,
+  };
+
   assert.doesNotThrow(() => vm.runInContext(compiled, context));
   assert.deepEqual(
     {
@@ -76,6 +103,6 @@ test("the content script can execute twice in one document without duplicate lis
       runtime: runtimeListeners.length,
       messages: sentMessages.length,
     },
-    firstCounts,
+    countsAfterPointer,
   );
 });

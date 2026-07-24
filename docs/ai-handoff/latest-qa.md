@@ -1,5 +1,33 @@
 # Latest QA Handoff
 
+## 2026-07-24 Browser Extension 0.5.10 Durable Focus/Runtime QA
+
+### Reviewed Implementation And Findings
+
+- P0 fixed: normal trusted pointer movement was absent, causing Browser Domain Focus active to expire while Desktop Windows last-input remained active.
+- P0 fixed: the 30-second MV3 termination boundary raced the 30-second alarm. Repeated worker recovery sealed both Focus and Domain runtime at zero-length old tails, explaining online heartbeats/current snapshots with few or no confirmed historical intervals.
+- The fix uses one 20-second timer only while a proven Focus or policy-authorised Domain runtime engine exists. Each tick runs bounded reconciliation/persistence; no URL, coordinate, target or content is collected.
+- Existing conservative discontinuity behavior is preserved: unexpected termination, sleep, restart, lock and clock gaps are not fabricated or backfilled.
+- Desktop Agent was not modified. API/Reports ledger and aggregation contracts were not modified because real evidence already showed accepted Browser rows and the fresh-client defect was pre-ledger interval generation.
+
+### Automated Verification
+
+- `pnpm --filter @workmap/browser-extension typecheck`: PASS.
+- `pnpm --filter @workmap/browser-extension lint`: PASS.
+- Focused Browser tests: PASS `22/22`.
+- Full Browser tests: PASS `68/68`.
+- `pnpm --filter @workmap/browser-extension build`: PASS.
+- `pnpm --filter @workmap/browser-extension release:zip`: PASS.
+- Two-hour continuous eligible Edge simulation: exact `7,200,000ms` Focus active and `7,200,000ms` Domain open/runtime, positive adjacent/non-overlapping intervals only.
+- Final diff/secret/artifact checks are recorded in the final task report.
+
+### Manual QA, Risks, And Recommendation
+
+- Real Chrome/Edge load-unpacked QA is **NOT RUN**. Automated checks cannot prove the browser will retain the worker exactly as expected on the user's installed Edge build.
+- The 20-second keepalive is intentionally active only during a proven collection session. Chrome documents 30-second service-worker inactivity termination and permits periodic extension API calls for exceptional lifetime-sensitive work; resource impact should still be observed during manual QA.
+- Browser Domain Focus is not required to equal Desktop Edge Focus on browser chrome, internal/protected pages, inaccessible PDFs or other pages where content instrumentation cannot run.
+- Recommendation: implementation PASS; production acceptance HOLD until same-entry upgrade QA confirms confirmed-through advances during an uninterrupted eligible page session, pointer movement maintains active state, no-input becomes Focused idle, and sleep/lock remain excluded.
+
 ## 2026-07-24 Reports Browser Audit Collapsed-Row QA
 
 ### Reviewed Implementation And Findings

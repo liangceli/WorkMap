@@ -23,7 +23,11 @@ test("MV3 runtime listens to page activity and complete tab/window lifecycle", a
     "sendExtensionStatus",
     "BrowserOpenRuntimeEngineV2",
   ]) assert(source.includes(marker), `missing ${marker}`);
-  assert(!source.includes("setInterval("));
+  assert.match(source, /COLLECTOR_KEEPALIVE_INTERVAL_MS = 20_000/);
+  assert.match(source, /runCollectorKeepAliveCheckpoint/);
+  assert.match(source, /stopCollectorKeepAlive/);
+  assert.equal(source.match(/setInterval\(/g)?.length, 1);
+  assert.equal(source.match(/clearInterval\(/g)?.length, 1);
 });
 
 test("local extension status does not preserve stale connected state", async () => {
@@ -34,11 +38,11 @@ test("local extension status does not preserve stale connected state", async () 
   const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
   const types = await readFile(new URL("../src/trackingV2Types.ts", import.meta.url), "utf8");
 
-  assert.equal(manifest.version, "0.5.9");
-  assert.equal(packageJson.version, "0.5.9");
+  assert.equal(manifest.version, "0.5.10");
+  assert.equal(packageJson.version, "0.5.10");
   assert.equal(manifest.incognito, "not_allowed");
   assert.equal(manifest.background.service_worker, "dist/backgroundV2.js");
-  assert.match(types, /browser-extension-mv3\/0\.5\.9/);
+  assert.match(types, /browser-extension-mv3\/0\.5\.10/);
   assert.match(api, /BROWSER_EXTENSION_VERSION/);
   assert.match(background, /connectionState === "ONLINE"/);
   assert.match(background, /connectionState === "AUTH_REQUIRED"/);
@@ -95,6 +99,7 @@ test("content script emits only trusted transient pulses and never owns the idle
     '"wheel"',
     '"keydown"',
     '"pointerdown"',
+    '"pointermove"',
     '"mousedown"',
     '"touchstart"',
     '"input"',
@@ -116,7 +121,6 @@ test("content script emits only trusted transient pulses and never owns the idle
     "MEDIA_START_FROM_INTERACTION_MS",
     "IDLE_THRESHOLD_MS",
     "workmap:domain-idle",
-    '"pointermove"',
     '"touchmove"',
     "selectionchange",
   ]) {

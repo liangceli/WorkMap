@@ -1,5 +1,14 @@
 # Deployment Skill
 
+## Browser Extension 0.5.10 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.10.zip`; SHA-256 `DDB2461E28D6B4111E0D85FB0D01866C737E802DFE3FEB30B643C78DFFEB456B`; size `49,734` bytes; 22 entries; embedded manifest `0.5.10`.
+- Reload the existing unpacked Extension entry so encrypted pairing, IndexedDB queues, policy acknowledgement/lease and safe historical diagnostics remain. Do not remove/re-pair merely to install this patch.
+- This is a Browser-only reliability release: trusted pointer movement now refreshes Domain activity and one bounded 20-second keepalive persists proven Focus/runtime sessions ahead of the MV3 30-second termination boundary.
+- No API, Web, Prisma migration, Desktop Agent, policy or deployment change is required for this patch. Browser Domain open/runtime still requires the already-deployed independent `collectDomainOpenRuntime` policy version, employee acknowledgement and valid lease.
+- No Chrome Web Store, Edge Add-ons, GitHub Release or production publication was performed.
+
 ## Browser Extension 0.5.8 Release Notes
 
 - Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.

@@ -1,5 +1,13 @@
 # QA Skill
 
+## Browser Extension 0.5.10 Durable Session QA Baseline
+
+- Continuous mouse-led page work must include trusted `pointermove` occurrence time without ever reading coordinates, target, direction, URL, title or content. Untrusted synthetic movement must remain ignored.
+- With an eligible Focus or policy-authorised Domain runtime engine, exactly one bounded 20-second collector keepalive runs before Chrome's 30-second MV3 inactivity boundary. It must stop when neither session is authorised/active.
+- A two-hour controlled sequence of 20-second checkpoints and 30-second settlements must ledger the full proven interval with positive adjacent slices and no overlap. It must not require tab close/navigation to make `Confirmed interval through` advance.
+- Lock, policy/window closure, queue pressure, browser/Extension shutdown, sleep and clock gaps remain conservative boundaries; keepalive must never be used to backfill a detected discontinuity.
+- Real Edge and Chrome acceptance: upgrade the same unpacked entry, retain pairing, verify pointer-led active time, exact policy idle transition, minimized/background runtime, lock/sleep exclusion, accepted/duplicate evidence, and `/reports` totals.
+
 ## Reports Browser Audit Layout QA Baseline
 
 - Load a user report containing enough Chrome/Edge/profile audit groups to exceed the 420px history cap. Every group header and event row must retain full height; the container scrolls instead of showing narrow blank grey bars.

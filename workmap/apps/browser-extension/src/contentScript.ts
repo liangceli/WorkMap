@@ -24,7 +24,10 @@ declare const chrome: {
   if (workMapWindow.__workmapDomainActivityInstalled) return;
   workMapWindow.__workmapDomainActivityInstalled = true;
   const isTopFrame = window === window.top;
-  const throttleMs = 250;
+  // Pointer movement is trusted input evidence just like a click, but only the
+  // occurrence time is retained. A one-second pulse avoids high-frequency
+  // messages and never reads coordinates, direction, target, or page content.
+  const throttleMs = 1_000;
   let lastSentAt = 0;
   let latestActivityAt = 0;
   let trailingTimer: number | undefined;
@@ -57,6 +60,7 @@ declare const chrome: {
   for (const eventName of [
     "keydown",
     "pointerdown",
+    "pointermove",
     "mousedown",
     "wheel",
     "touchstart",

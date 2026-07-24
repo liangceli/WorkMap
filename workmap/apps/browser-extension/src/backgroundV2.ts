@@ -173,6 +173,12 @@ declare const chrome: ChromeApi;
 const ALARM_NAME = "workmap-tracking-v2";
 const LEGACY_BATCH_SIZE = 50;
 const INTERACTION_SYNC_THROTTLE_MS = 1_000;
+// Chrome may terminate an MV3 worker after 30 seconds of inactivity, which is
+// also the minimum production alarm cadence. While a proven Focus or Domain
+// runtime session exists, checkpoint just before that boundary so the alarm
+// can settle official intervals instead of repeatedly recovering at a
+// zero-length durable tail. Unexpected termination remains conservative.
+const COLLECTOR_KEEPALIVE_INTERVAL_MS = 20_000;
 const LIFECYCLE_MAX_UNOBSERVED_MS = 45_000;
 const CLOCK_DIVERGENCE_TOLERANCE_MS = 10_000;
 
@@ -264,6 +270,7 @@ export class BrowserExtensionRuntimeV2 {
   private syncRequested = false;
   private syncImmediate = false;
   private syncInFlight: Promise<void> | null = null;
+  private collectorKeepAliveTimer: number | null = null;
   private runtimeGeneration = 0;
 
   constructor(private readonly chromeApi: ChromeApi) {}
@@ -279,6 +286,7 @@ export class BrowserExtensionRuntimeV2 {
 
   async resetAfterPairing() {
     this.runtimeGeneration += 1;
+    this.stopCollectorKeepAlive();
     this.syncRequested = false;
     this.syncImmediate = false;
     if (this.syncTimer !== null) {
@@ -919,6 +927,7 @@ export class BrowserExtensionRuntimeV2 {
     };
     this.engine = null;
     this.openRuntimeEngine = null;
+    this.stopCollectorKeepAlive();
     await this.store.writeRuntimeState(this.state);
   }
 
@@ -1022,6 +1031,7 @@ export class BrowserExtensionRuntimeV2 {
       activeDomain: null,
     };
     await this.store.writeRuntimeState(this.state);
+    this.refreshCollectorKeepAlive();
     if (immediateSync && !hadEngine) await this.requestSync(true);
   }
 
@@ -1121,6 +1131,7 @@ export class BrowserExtensionRuntimeV2 {
       openRuntimeCheckpoint: null,
     };
     await this.store.writeRuntimeState(this.state);
+    this.refreshCollectorKeepAlive();
     if (immediateSync && hadEngine) await this.requestSync(true);
   }
 
@@ -1158,6 +1169,7 @@ export class BrowserExtensionRuntimeV2 {
       throw error;
     }
     await this.updateVisibleStatus();
+    this.refreshCollectorKeepAlive();
     if (immediateSync || update.intervals.length > 0) {
       await this.requestSync(immediateSync);
     }
@@ -1331,6 +1343,7 @@ export class BrowserExtensionRuntimeV2 {
       throw error;
     }
     await this.updateVisibleStatus();
+    this.refreshCollectorKeepAlive();
     if (!deferSync && (immediateSync || update.intervals.length > 0)) {
       await this.requestSync(immediateSync);
     }
@@ -1516,6 +1529,7 @@ export class BrowserExtensionRuntimeV2 {
     this.connectionState = "ONLINE";
     this.errorCode = "NONE";
     await this.store.writeRuntimeState(this.state);
+    this.refreshCollectorKeepAlive();
     await this.updateVisibleStatus();
     if (previousConnectionState !== "ONLINE") {
       const storedStatus = await readStoredState(["workmapStatus"]);
@@ -1804,7 +1818,57 @@ export class BrowserExtensionRuntimeV2 {
       this.state = { ...this.state, lastErrorCode: errorCode };
       await this.store.writeRuntimeState(this.state);
     }
+    this.refreshCollectorKeepAlive();
     await this.updateVisibleStatus(message);
+  }
+
+  private refreshCollectorKeepAlive() {
+    const hasFocusedDomain = Boolean(this.engine?.checkpoint().current);
+    const hasOpenRuntimeDomain = Boolean(
+      this.openRuntimeEngine?.checkpoint().current.length,
+    );
+    const shouldRun = Boolean(
+      (hasFocusedDomain && this.captureAllowed()) ||
+      (hasOpenRuntimeDomain && this.openRuntimeCollectionAllowed()),
+    );
+    if (!shouldRun) {
+      this.stopCollectorKeepAlive();
+      return;
+    }
+    if (this.collectorKeepAliveTimer !== null) return;
+    this.collectorKeepAliveTimer = setInterval(() => {
+      void schedule(async () => {
+        try {
+          await this.runCollectorKeepAliveCheckpoint();
+        } catch (error) {
+          await this.recordCollectorMaintenanceFailure(error);
+          await this.requestSync(true);
+        }
+      });
+    }, COLLECTOR_KEEPALIVE_INTERVAL_MS) as unknown as number;
+  }
+
+  private stopCollectorKeepAlive() {
+    if (this.collectorKeepAliveTimer === null) return;
+    clearInterval(this.collectorKeepAliveTimer);
+    this.collectorKeepAliveTimer = null;
+  }
+
+  private async runCollectorKeepAliveCheckpoint() {
+    await this.ensureInitialized();
+    if (!this.state) {
+      this.stopCollectorKeepAlive();
+      return;
+    }
+    const discontinuity = await this.guardLifecycleContinuity();
+    await this.refreshPolicyIfDue();
+    await this.restoreCollectorIfAllowed();
+    if (!this.captureAllowed()) await this.closeAtPolicyBoundary();
+    await this.reconcileOpenRuntime(false);
+    await this.reconcileBrowserReality(false);
+    await this.restoreAfterQueuePressure();
+    this.refreshCollectorKeepAlive();
+    if (discontinuity) await this.requestSync(true);
   }
 
   private captureAllowed() {
