@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBrowserAuditEntries } from "../components/reports/ReportSummaryPanel.js";
+import { buildBrowserAuditEntries, buildBrowserAuditGroups } from "../components/reports/ReportSummaryPanel.js";
 
 test("Browser Connection Audit separates confirmed transitions from inferred heartbeat loss", () => {
   const base = "2026-07-23T01:00:00.000Z";
@@ -86,6 +86,37 @@ test("coverage and live-heartbeat views do not duplicate the same inferred inter
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0]?.title, "Signal interrupted");
+});
+
+test("Browser Connection Audit keeps Chrome, Edge and same-browser profiles strictly separate", () => {
+  const chrome = status("chrome-event", "LOCKED", "SYSTEM_LOCK", "2026-07-23T01:00:00.000Z");
+  const chromeProfile = {
+    ...status("chrome-profile-event", "RECONNECTED", "SYSTEM_UNLOCK", "2026-07-23T01:00:30.000Z"),
+    deviceId: "chrome-profile-device",
+  };
+  const edge = {
+    ...status("edge-event", "RESTARTED", "AGENT_RESTART", "2026-07-23T01:01:00.000Z"),
+    deviceId: "edge-device",
+    browserName: "EDGE",
+  };
+  const groups = buildBrowserAuditGroups(
+    {
+      browserExtensionCoverage: [],
+      deviceStatusHistory: [chrome, chromeProfile, edge],
+    } as never,
+    [],
+  );
+
+  assert.equal(groups.length, 3);
+  const chromeGroup = groups.find((group) => group.deviceId === "device-id");
+  const chromeProfileGroup = groups.find((group) => group.deviceId === "chrome-profile-device");
+  const edgeGroup = groups.find((group) => group.deviceId === "edge-device");
+  assert.equal(chromeGroup?.title, "Google Chrome Extension");
+  assert.deepEqual(chromeGroup?.entries.map((entry) => entry.id), ["device-id:status:chrome-event"]);
+  assert.equal(chromeProfileGroup?.title, "Google Chrome Extension");
+  assert.deepEqual(chromeProfileGroup?.entries.map((entry) => entry.id), ["chrome-profile-device:status:chrome-profile-event"]);
+  assert.equal(edgeGroup?.title, "Microsoft Edge Extension");
+  assert.deepEqual(edgeGroup?.entries.map((entry) => entry.id), ["edge-device:status:edge-event"]);
 });
 
 function status(

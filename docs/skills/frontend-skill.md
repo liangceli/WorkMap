@@ -1,5 +1,12 @@
 # Frontend Skill
 
+## Reports Connection Audit Silent Refresh
+
+- Connection Audit polling must be stale-while-revalidate: never replace mounted history rows with a periodic loading state. Initial/empty history may show the honest empty message; existing rows and scroll position remain visible during background requests.
+- Apply audit results only when session boundaries or device lifecycle records change. Ordinary heartbeat movement belongs to Live signals and must not rewrite historical `Agent started` detail.
+- Browser audit presentation is keyed and grouped by `deviceId`. Browser name, workstation, version, and short device identity are labels only; Chrome, Edge, unknown/future browsers, and multiple profiles of one browser must retain independent lists and counts.
+- The current implementation uses silent five-second polling because no Connection Audit push contract exists. Do not claim it is realtime push; a future SSE/WebSocket design must preserve tenant/user/RBAC scoping and stable event identity.
+
 ## Browser Connection Audit And Domain Runtime 0.5.8
 
 - Owner employee `/reports` refreshes Browser audit history with the five-second live cycle. Show confirmed Browser transitions and inferred heartbeat gaps separately; current heartbeat staleness becomes `Signal interrupted` at the shared 90-second boundary.

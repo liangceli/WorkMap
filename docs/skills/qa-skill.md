@@ -1,5 +1,13 @@
 # QA Skill
 
+## Reports Connection Audit Refresh QA Baseline
+
+- Keep a user-scoped Owner report open across at least six polling cycles. Existing Desktop and Browser rows must never be replaced by `Loading connection history...`, and the scroll container must remain mounted.
+- An identical audit response must preserve state identity. A new lifecycle record must appear automatically without clearing existing rows.
+- Verify Desktop lock/unlock and sleep/resume rows are historical transitions; current heartbeat freshness remains in Live signals rather than changing `Agent started` detail every poll.
+- Pair or simulate Chrome and Edge with distinct device IDs and require separate nested histories. Also cover two profiles of the same browser and an unknown/future browser identity; no device may display another device's event ID.
+- Current automated baseline: focused tests `6/6`, full Web `91/91`, typecheck/lint/build pass. Real signed-in Owner lifecycle/scroll QA remains required.
+
 ## Browser Extension 0.5.8 QA Baseline
 
 - Upgrade the same 0.5.7 unpacked entry without clearing storage. State v7 must migrate to v8, the IndexedDB queue index must add stream identity, and existing Focus queue/dead-letter/pairing/policy evidence must remain intact.

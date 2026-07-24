@@ -1,5 +1,35 @@
 # Latest Implementation Handoff
 
+## 2026-07-24 Reports Connection Audit Silent Refresh And Browser Separation
+
+### Original Task Brief
+
+- Fix the Owner `/reports` Connection Audit section repeatedly replacing both Desktop Agent and Browser Extension history lists with `Loading connection history...` every few seconds.
+- Keep existing rows visible and add confirmed transitions such as sleep, lock, restart, interruption, and recovery without a loading flash.
+- Strictly separate Chrome, Edge, and any additional Browser device/profile histories instead of mixing every Browser Extension event into one undifferentiated list.
+
+### Changed Files
+
+- Web implementation: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`.
+- Web tests: `workmap/apps/web/test/browser-connection-audit.test.ts` and new `connection-audit-refresh.test.ts`.
+- Long-lived memory: this handoff, `latest-qa.md`, `docs/skills/frontend-skill.md`, and `docs/skills/qa-skill.md`.
+- No Desktop Agent, Browser Extension runtime/version/artifact, API, shared type, Prisma schema/migration, auth, RBAC, tenant isolation, policy, or deployment behavior changed.
+
+### Implementation Summary
+
+- Removed Connection Audit's visible loading state entirely. The existing five-second audit request remains a silent fallback because Reports currently has no Connection Audit SSE/WebSocket subscription contract; the current rows and scroll container remain mounted while it runs.
+- Audit state now uses a stable transition-only revision derived from session open/close and device status records. Identical responses return the existing React state object, so ordinary polling does not update the history UI. A newly confirmed transition changes the revision and appears automatically in the list.
+- Active Desktop Agent session history no longer embeds the changing `lastHeartbeatAt` value in the historical `Agent started` row. Current heartbeat/connection belongs to Live signals; Connection Audit now changes for lifecycle transitions rather than every heartbeat.
+- Browser histories are grouped by real `deviceId`, not merely by source. Each nested section shows its resolved Chrome/Edge identity, a safe short device/workstation identity, version when available, its own event count, and only that device's events. Multiple profiles of the same browser also remain separate.
+- Existing confirmed/inferred semantics, heartbeat-gap inference, stable event IDs, event ordering, report-range filtering, Owner access, and API tenant scoping are unchanged.
+
+### Verification And Manual QA
+
+- Focused executable tests pass `6/6`: no loading replacement, unchanged refresh state identity, new transition insertion, Chrome/Edge device separation, inferred interruption semantics, and interruption de-duplication.
+- Web typecheck and lint pass. Full Web tests pass `91/91`. Production Web build passes; the existing non-blocking Next.js ESLint-plugin configuration warning remains.
+- `git diff --check`, scoped secret scan, and final diff review are recorded in `latest-qa.md`.
+- Real signed-in Owner browser QA is **NOT RUN**. No Web/API production deployment was performed. Next manual QA should leave the panel open across several silent polls, then trigger Desktop lock/unlock and Browser restart/interruption/recovery and confirm only the relevant per-device list gains a row without losing scroll position.
+
 ## 2026-07-23 Browser Extension 0.5.9 Repeated Content-Script Injection Fix
 
 ### Original Task Brief

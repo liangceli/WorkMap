@@ -41,7 +41,6 @@ type ReportState = {
 };
 
 type AuditState = {
-  loading: boolean;
   audit: WorkMapApiTrackingAudit | null;
 };
 
@@ -66,7 +65,7 @@ export function ReportSummaryPanel() {
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
   const nextRevisionCheckAtRef = useRef(0);
-  const [auditState, setAuditState] = useState<AuditState>({ loading: false, audit: null });
+  const [auditState, setAuditState] = useState<AuditState>({ audit: null });
   const nextAuditRefreshAtRef = useRef(0);
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
@@ -105,7 +104,7 @@ export function ReportSummaryPanel() {
       const now = Date.now();
       if (snapshot?.liveStatus) setLiveStatus(snapshot.liveStatus);
       if (snapshot?.trackingV2Live) setTrackingV2Live(snapshot.trackingV2Live);
-      if (snapshot?.audit) setAuditState({ loading: false, audit: snapshot.audit });
+      if (snapshot?.audit) setAuditState({ audit: snapshot.audit });
       if (snapshot?.summary) {
         activityRevisionRef.current = currentLiveRevision({
           trackingV2: snapshot.trackingV2Live,
@@ -264,7 +263,7 @@ export function ReportSummaryPanel() {
       return;
     }
     setReportState((current) => ({ ...current, loading: true, error: null, statusText: "Refreshing report..." }));
-    setAuditState({ loading: filters.view !== "company", audit: null });
+    setAuditState({ audit: null });
     failedSummaryRevisionRef.current = undefined;
     setLiveStatus(null);
     setTrackingV2Live(null);
@@ -401,7 +400,6 @@ export function ReportSummaryPanel() {
       {!reportState.loading && summary?.scope === "user" ? (
         <EmployeeConnectionAudit
           audit={auditState.audit}
-          loading={auditState.loading}
           rows={liveUser?.browserExtensionCoverage ?? summary.browserExtensionCoverage}
           v2Devices={trackingV2Live?.devices ?? []}
         />
@@ -861,18 +859,16 @@ type AuditEntry = {
 
 function EmployeeConnectionAudit({
   audit,
-  loading,
   rows,
   v2Devices,
 }: {
   audit: WorkMapApiTrackingAudit | null;
-  loading: boolean;
   rows: WorkMapApiUsageSummary["browserExtensionCoverage"];
   v2Devices: WorkMapApiTrackingV2LiveActivity["devices"];
 }) {
   const desktopEntries = audit ? buildDesktopAuditEntries(audit) : [];
-  const browserEntries = audit
-    ? buildBrowserAuditEntries(
+  const browserGroups = audit
+    ? buildBrowserAuditGroups(
         { ...audit, browserExtensionCoverage: rows },
         v2Devices,
       )
@@ -888,8 +884,8 @@ function EmployeeConnectionAudit({
         <History size={22} aria-hidden />
       </div>
       <div style={styles.twoColumnGrid}>
-        <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} loading={loading} />
-        <AuditTimeline title="Browser Extension" icon={<Globe2 size={18} aria-hidden />} entries={browserEntries} loading={loading} />
+        <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} />
+        <BrowserAuditTimeline groups={browserGroups} />
       </div>
     </section>
   );
@@ -905,7 +901,7 @@ function trackingStateLabel(state: WorkMapApiUsageSummary["browserExtensionCover
   return "Tracking unavailable";
 }
 
-function AuditTimeline({ title, icon, entries, loading }: { title: string; icon: React.ReactNode; entries: AuditEntry[]; loading: boolean }) {
+export function AuditTimeline({ title, icon, entries }: { title: string; icon: React.ReactNode; entries: AuditEntry[] }) {
   return (
     <article style={styles.auditCard} aria-label={`${title} connection history`}>
       <div style={styles.auditCardHeader}>
@@ -914,21 +910,55 @@ function AuditTimeline({ title, icon, entries, loading }: { title: string; icon:
         <span style={styles.auditCount}>{entries.length} events</span>
       </div>
       <div style={styles.auditRows}>
-        {loading ? <p style={styles.emptyText}>Loading connection history...</p> : entries.length === 0 ? <p style={styles.emptyText}>No connection events in this report range.</p> : entries.map((entry) => (
-          <div key={entry.id} style={styles.auditRow}>
-            <span style={{ ...styles.auditMarker, ...(entry.tone === "attention" ? styles.auditMarkerAttention : entry.tone === "positive" ? styles.auditMarkerPositive : {}) }} />
-            <div style={styles.auditContent}>
-              <div style={styles.auditLine}>
-                <strong style={styles.auditEventTitle}>{entry.title}</strong>
-                <time style={styles.auditTime}>{formatDateTime(entry.timestamp)}</time>
+        <AuditRows entries={entries} emptyText="No connection events in this report range." />
+      </div>
+    </article>
+  );
+}
+
+function BrowserAuditTimeline({ groups }: { groups: BrowserAuditGroup[] }) {
+  const eventCount = groups.reduce((total, group) => total + group.entries.length, 0);
+  return (
+    <article style={styles.auditCard} aria-label="Browser Extension connection history">
+      <div style={styles.auditCardHeader}>
+        <span style={styles.auditIcon}><Globe2 size={18} aria-hidden /></span>
+        <h3 style={styles.auditTitle}>Browser Extension</h3>
+        <span style={styles.auditCount}>{eventCount} events</span>
+      </div>
+      <div style={styles.browserAuditGroups}>
+        {groups.length === 0 ? <p style={styles.emptyText}>No connection events in this report range.</p> : groups.map((group) => (
+          <section key={group.deviceId} style={styles.auditDeviceGroup} aria-label={`${group.title} connection history`}>
+            <div style={styles.auditDeviceHeader}>
+              <div style={styles.auditDeviceIdentity}>
+                <strong>{group.title}</strong>
+                <span>{group.detail}</span>
               </div>
-              <span style={styles.auditDetail}>{entry.detail}</span>
+              <span style={styles.auditCount}>{group.entries.length} events</span>
             </div>
-          </div>
+            <div style={styles.auditDeviceRows}>
+              <AuditRows entries={group.entries} emptyText="No connection events for this browser in the report range." />
+            </div>
+          </section>
         ))}
       </div>
     </article>
   );
+}
+
+function AuditRows({ entries, emptyText }: { entries: AuditEntry[]; emptyText: string }) {
+  if (entries.length === 0) return <p style={styles.emptyText}>{emptyText}</p>;
+  return entries.map((entry) => (
+    <div key={entry.id} style={styles.auditRow}>
+      <span style={{ ...styles.auditMarker, ...(entry.tone === "attention" ? styles.auditMarkerAttention : entry.tone === "positive" ? styles.auditMarkerPositive : {}) }} />
+      <div style={styles.auditContent}>
+        <div style={styles.auditLine}>
+          <strong style={styles.auditEventTitle}>{entry.title}</strong>
+          <time style={styles.auditTime}>{formatDateTime(entry.timestamp)}</time>
+        </div>
+        <span style={styles.auditDetail}>{entry.detail}</span>
+      </div>
+    </div>
+  ));
 }
 
 function buildDesktopAuditEntries(summary: Pick<WorkMapApiUsageSummary, "agentSessions" | "deviceStatusHistory">): AuditEntry[] {
@@ -937,7 +967,7 @@ function buildDesktopAuditEntries(summary: Pick<WorkMapApiUsageSummary, "agentSe
     entries.push({
       id: `${session.id}:started`,
       title: "Agent started",
-      detail: session.endedAt ? "Desktop monitoring session opened" : `Running - last signal ${formatDateTime(session.lastHeartbeatAt)}`,
+      detail: "Desktop monitoring session opened",
       timestamp: session.startedAt,
       tone: "positive",
     });
@@ -1028,6 +1058,80 @@ export function buildBrowserAuditEntries(
     }
   }
   return sortAuditEntries(entries);
+}
+
+export type BrowserAuditGroup = {
+  deviceId: string;
+  browserName: "CHROME" | "EDGE" | "UNKNOWN";
+  title: string;
+  detail: string;
+  entries: AuditEntry[];
+};
+
+export function buildBrowserAuditGroups(
+  summary: Pick<WorkMapApiUsageSummary, "browserExtensionCoverage" | "deviceStatusHistory">,
+  v2Devices: WorkMapApiTrackingV2LiveActivity["devices"] = [],
+): BrowserAuditGroup[] {
+  const devices = new Map<string, {
+    browserName: "CHROME" | "EDGE" | "UNKNOWN";
+    version: string | null;
+    workstationName: string | null;
+  }>();
+  const remember = (
+    deviceId: string,
+    browserName: "CHROME" | "EDGE" | "UNKNOWN" | null | undefined,
+    version: string | null | undefined,
+    workstationName?: string | null,
+  ) => {
+    const current = devices.get(deviceId);
+    const resolvedBrowserName = browserName && browserName !== "UNKNOWN"
+      ? browserName
+      : current?.browserName ?? "UNKNOWN";
+    devices.set(deviceId, {
+      browserName: resolvedBrowserName,
+      version: version ?? current?.version ?? null,
+      workstationName: workstationName ?? current?.workstationName ?? null,
+    });
+  };
+
+  for (const event of summary.deviceStatusHistory) {
+    if (event.source === "BROWSER_EXTENSION") remember(event.deviceId, event.browserName, event.clientVersion);
+  }
+  for (const row of summary.browserExtensionCoverage) {
+    remember(row.deviceId, row.browserName, row.version);
+  }
+  for (const device of v2Devices) {
+    if (device.clientType === "BROWSER_EXTENSION") {
+      remember(device.deviceId, device.browserName, device.clientVersion, device.workstationName);
+    }
+  }
+
+  return Array.from(devices, ([deviceId, identity]) => {
+    const entries = buildBrowserAuditEntries(
+      {
+        browserExtensionCoverage: summary.browserExtensionCoverage.filter((row) => row.deviceId === deviceId),
+        deviceStatusHistory: summary.deviceStatusHistory.filter((event) => event.deviceId === deviceId),
+      },
+      v2Devices.filter((device) => device.deviceId === deviceId),
+    );
+    const identityDetail = identity.workstationName
+      ? identity.workstationName
+      : `Device ${deviceId.slice(0, 8)}`;
+    return {
+      deviceId,
+      browserName: identity.browserName,
+      title: identity.browserName === "UNKNOWN"
+        ? "Browser Extension"
+        : `${formatBrowserName(identity.browserName)} Extension`,
+      detail: identity.version ? `${identityDetail} · ${identity.version}` : identityDetail,
+      entries,
+    };
+  }).sort((left, right) => {
+    const newestDifference = Date.parse(right.entries[0]?.timestamp ?? "") - Date.parse(left.entries[0]?.timestamp ?? "");
+    return Number.isNaN(newestDifference) || newestDifference === 0
+      ? left.title.localeCompare(right.title) || left.deviceId.localeCompare(right.deviceId)
+      : newestDifference;
+  });
 }
 
 function statusToAuditEntry(
@@ -1341,7 +1445,6 @@ async function loadAudit(
   setState: React.Dispatch<React.SetStateAction<AuditState>>,
   onLoaded?: (audit: WorkMapApiTrackingAudit) => void,
 ) {
-  setState((current) => ({ loading: true, audit: current.audit }));
   const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
   const result = await getTrackingAudit({
     ...auth.options,
@@ -1352,8 +1455,36 @@ async function loadAudit(
     to: filters.to,
   });
   if (isCancelled()) return;
-  if (result.ok) onLoaded?.(result.data);
-  setState((current) => ({ loading: false, audit: result.ok ? result.data : current.audit }));
+  if (!result.ok) return;
+  onLoaded?.(result.data);
+  setState((current) => mergeAuditState(current, result.data));
+}
+
+export function mergeAuditState(current: AuditState, nextAudit: WorkMapApiTrackingAudit): AuditState {
+  if (current.audit && auditHistoryRevision(current.audit) === auditHistoryRevision(nextAudit)) return current;
+  return { audit: nextAudit };
+}
+
+function auditHistoryRevision(audit: WorkMapApiTrackingAudit) {
+  const sessions = audit.agentSessions
+    .map((session) => [session.id, session.startedAt, session.endedAt, session.endReason])
+    .sort((left, right) => String(left[0]).localeCompare(String(right[0])));
+  const statuses = audit.deviceStatusHistory
+    .map((event) => [
+      event.id,
+      event.deviceId,
+      event.status,
+      event.reason,
+      event.startedAt,
+      event.endedAt,
+      event.receivedAt,
+      event.source,
+      event.browserName,
+      event.clientVersion,
+      event.confidence,
+    ])
+    .sort((left, right) => String(left[0]).localeCompare(String(right[0])));
+  return JSON.stringify([audit.scope, audit.userId, sessions, statuses]);
 }
 
 async function loadDirectory(
@@ -1672,6 +1803,11 @@ const styles = {
   auditTitle: { margin: 0, color: wm.colors.text, fontSize: "16px", lineHeight: 1.25 },
   auditCount: { color: wm.colors.textMuted, fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" as const },
   auditRows: { display: "grid", alignContent: "start", maxHeight: "420px", overflowY: "auto" as const, padding: "0 16px" },
+  browserAuditGroups: { display: "grid", alignContent: "start", gap: "12px", maxHeight: "420px", overflowY: "auto" as const, padding: "12px" },
+  auditDeviceGroup: { border: `1px solid ${wm.colors.borderSubtle}`, borderRadius: wm.radius.md, overflow: "hidden", background: wm.colors.surface },
+  auditDeviceHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "11px 12px", borderBottom: `1px solid ${wm.colors.borderSubtle}`, background: wm.colors.surfaceLow },
+  auditDeviceIdentity: { display: "grid", gap: "2px", minWidth: 0, color: wm.colors.text, fontSize: "13px", overflowWrap: "anywhere" as const },
+  auditDeviceRows: { display: "grid", alignContent: "start", padding: "0 12px" },
   auditRow: { display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: "10px", borderBottom: `1px solid ${wm.colors.borderSubtle}`, padding: "12px 0", minWidth: 0 },
   auditMarker: { width: "8px", height: "8px", marginTop: "5px", borderRadius: wm.radius.full, background: wm.colors.offline },
   auditMarkerPositive: { background: wm.colors.success },

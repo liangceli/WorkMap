@@ -1,5 +1,31 @@
 # Latest QA Handoff
 
+## 2026-07-24 Reports Connection Audit Refresh QA
+
+### Reviewed Implementation And Findings
+
+- Confirmed the screenshot defect directly in source: `loadAudit()` set `loading: true` before every five-second request, and `AuditTimeline` replaced all rows with a loading paragraph whenever that flag was true.
+- Fixed the high-impact UX defect by removing Connection Audit loading presentation/state and retaining the mounted list during silent polling.
+- Added transition-only audit revision comparison. The current state object is preserved for identical session/status history; only a real session boundary or device lifecycle record changes the displayed history.
+- Reviewed Browser identity fields across audit, coverage, and Tracking v2 live data. Grouping is keyed by `deviceId`, with browser/workstation/version used only for labeling, so Chrome, Edge, unknown/future identities, and multiple same-browser profiles cannot share one event list.
+- No API change was required because existing responses already contain device ID, browser name, version, and workstation metadata.
+
+### Automated Verification
+
+- Focused Connection Audit tests - pass, `6/6`.
+- `pnpm --filter @workmap/web typecheck` - pass.
+- `pnpm --filter @workmap/web lint` - pass.
+- `pnpm --filter @workmap/web test` - pass, `91/91`.
+- `pnpm --filter @workmap/web build` - pass. Existing warning: Next.js plugin is not detected in the current ESLint configuration.
+- `git diff --check` - pass with line-ending warnings only. Scoped secret scan excluding environment, dependency, build, generated, artifact, cache, and reference directories - no finding. Desktop Agent, Browser Extension runtime, API, shared-types, and Prisma diff - none.
+
+### Manual QA, Risks, And Recommendation
+
+- Real Owner `/reports` browser QA is **NOT RUN**. The supplied screenshots are valid pre-fix evidence only.
+- Required QA: keep one user-scoped report open for at least 30 seconds and confirm no loading flash; preserve a non-top scroll position; trigger Desktop sleep/resume and lock/unlock; restart Chrome and Edge separately; confirm each new transition appears only in the matching device section; test two profiles of the same browser if available.
+- The page still performs silent five-second polling. True push-only updates would require a separately designed, authenticated, tenant-scoped SSE/WebSocket audit subscription and is intentionally not fabricated in this frontend-only repair.
+- Automated recommendation: **PASS**. Proceed to signed-in visual/lifecycle QA, then deploy Web if it passes. No Browser Extension or Desktop Agent release is needed for this frontend repair.
+
 ## 2026-07-23 Browser Extension 0.5.9 Repeated Injection QA
 
 ### Reviewed Implementation And Findings
