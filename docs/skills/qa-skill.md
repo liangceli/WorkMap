@@ -1,5 +1,13 @@
 # QA Skill
 
+## Browser Extension 0.5.12 Current-State Round-Trip QA Baseline
+
+- Every current IndexedDB runtime schema version must have an explicit non-mutating read path before legacy migration branches. Reading current state must return exact values and perform zero writes.
+- Keep a controlled storage regression with non-default protocol activation, heartbeat, confirmed-through and request ID fields. It must fail if any diagnostics/background read replaces the state with defaults.
+- Unknown future or corrupt runtime versions must fail closed and preserve the record; never silently initialize over durable evidence.
+- Keep Options open across many five-second refreshes while confirming policy, lease, permission, heartbeat, confirmed-through, diagnostics and timeline watermarks remain stable/monotonic.
+- After upgrading the same paired entry, require accepted/duplicate interval evidence and `/reports` growth without tab close. Existing 0.5.11 time already erased with queue `0/0/0` is not recoverable and must not be backfilled.
+
 ## Browser Extension 0.5.11 Independent Settlement QA Baseline
 
 - A collector keepalive must itself call both formal engine `settle()` paths and durably persist emitted intervals. Never make confirmed Focus/runtime ledger progress depend on a 30-second alarm firing on time.

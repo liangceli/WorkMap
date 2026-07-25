@@ -1,5 +1,14 @@
 # Deployment Skill
 
+## Browser Extension 0.5.12 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.12.zip`; SHA-256 `4F0C6121A78C21D3200E01295F8AD1FE4CA0A29A2BC7ED10CA996C89301E287C`; size `50,036` bytes; 22 entries; manifest `0.5.12`.
+- Reload the existing unpacked entry so encrypted pairing and any surviving queues remain. Do not remove the Extension, clear storage or re-pair solely for this upgrade.
+- This Browser-only critical patch stops valid current v8 Tracking state from being reset every time Background or Options reads it. No API, Web, Prisma, shared contract, policy or Desktop deployment is required.
+- Time already erased by 0.5.11 cannot be reconstructed when the local queue is empty. Validate only new post-upgrade activity.
+- Do not publish to Chrome Web Store, Edge Add-ons, GitHub Releases or production without explicit authorization and real Edge/Chrome acceptance.
+
 ## Browser Extension 0.5.11 Release Notes
 
 - Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.

@@ -1,5 +1,62 @@
 # Latest Implementation Handoff
 
+## 2026-07-25 Browser Extension 0.5.12 Current Runtime State Preservation
+
+### Original Task Brief
+
+- Continue debugging Edge `0.5.11` after a complete Options capture showed the paired device entirely reset to pending/unknown/paused despite the same device having previously uploaded lifecycle events.
+- Fix Browser Extension only. Do not modify Desktop Agent.
+
+### Root Cause And Implementation
+
+- `BrowserTrackingV2Store.readRuntimeState()` migrated legacy versions 5, 6 and 7 but omitted the current version 8 success branch. Every read of a valid v8 runtime therefore fell through to `createInitialBrowserTrackingV2State()` and overwrote the IndexedDB meta record.
+- Options reads runtime diagnostics every five seconds, so merely leaving Options open repeatedly erased protocol activation, policy/lease, heartbeat/sync confirmations, timeline watermarks, diagnostics and tracking-access state. The background also reads runtime after a sync result, so confirmed state could be erased during normal collection. The supplied screenshot exactly matched the generated initial v8 state.
+- Current v8 records now return unchanged and without an IndexedDB write. Legacy 5/6/7 migrations remain intact. An existing record with an unknown future/corrupt version now fails closed instead of being destructively replaced with an initial state.
+- Added an executable storage regression using a controlled IndexedDB transaction. It persists representative v8 activation, heartbeat, confirmed-through and request-correlation fields, reads the state, asserts exact equality, and asserts zero writes during the read. This test fails on 0.5.11 and passes on 0.5.12.
+- Version advanced to `browser-extension-mv3/0.5.12`; source package, manifest, generated alpha manifest and version assertions are aligned.
+
+### Changed Files And Boundaries
+
+- Runtime fix: `workmap/apps/browser-extension/src/trackingV2Store.ts`.
+- Version metadata: `trackingV2Types.ts`, Browser `package.json`, `manifest.json`, and generated `alpha-unpacked/manifest.json`.
+- Regression tests: `tracking-v2-store.test.ts` and `service-worker.test.ts`.
+- Release/QA memory: this handoff, `latest-qa.md`, `docs/skills/qa-skill.md`, and `docs/skills/deployment-skill.md`.
+- No Desktop Agent, API, Web, shared contract, Prisma schema/migration, policy, RBAC, tenant isolation or production deployment changed.
+
+### Verification, Artifact, Manual QA, And Risks
+
+- Browser Extension typecheck and lint pass; full test suite passes `71/71`; build and `release:zip` pass.
+- `git diff --check` passes with line-ending normalization warnings only; scoped high-confidence secret scan reports zero matches.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.12.zip`; 22 entries; 50,036 bytes; embedded manifest `0.5.12`; SHA-256 `4F0C6121A78C21D3200E01295F8AD1FE4CA0A29A2BC7ED10CA996C89301E287C`.
+- Real Edge/Chrome load-unpacked QA: **NOT RUN**. Reload the existing unpacked entry from `workmap/apps/browser-extension/alpha-unpacked` without removing it or clearing storage. The same pairing should remain.
+- The 0.5.11 screenshot showed queue `0/0/0`; there is no retained interval payload to reconstruct the time already erased before 0.5.12. Future state and newly generated time are preserved. Existing server ledger rows remain unchanged.
+- Required acceptance: keep Options open while using one foreground eligible page for at least 5 minutes. Policy/lease/permission fields must remain stable, heartbeat and confirmed-through must advance, interval upload must show accepted/duplicate, and `/reports` Domain totals must grow without closing the tab.
+- The separately identified 10-second client timeout versus longer server transaction allowance remains a robustness risk and was not mixed into this precise state-corruption patch.
+
+## 2026-07-25 Browser Extension 0.5.11 Field Sync Failure Triage (No Runtime Change)
+
+### Original Task Brief
+
+- Debug a real Edge `0.5.11` Connection Audit row showing `Server Unreachable / Server Request Failed` after startup, and determine whether it explains Browser Domain totals growing too slowly.
+- Explain whether a future full-access browser QA session can operate prepared domains and compare Options with Owner `/reports` without modifying Desktop Agent.
+
+### Investigation And Current Conclusion
+
+- The audit row is a historical retryable request failure, not proof that the API is currently unavailable. A direct read-only check on 2026-07-25 found both public API health and database readiness healthy.
+- Browser intervals are atomically persisted before upload. A retryable sync failure retains those interval identities and applies bounded retry delays of 5 seconds, 10 seconds, then up to 5 minutes; it does not terminally delete them. One such failure should delay Reports confirmation rather than permanently lose the interval.
+- The audit event intentionally does not expose credential or payload data, but is too coarse to distinguish client timeout, fetch/CORS/network failure, or API 5xx. The exact Options diagnostic, request ID, queue counts, last interval result and `Confirmed interval through` are required to distinguish a recovered delay from a stuck upload.
+- A concrete robustness mismatch exists: all Extension API requests currently use a 10-second browser timeout while Tracking v2 permits up to 5 seconds to acquire its transaction and 15 seconds inside it. This can cause a client-side abort before a legitimate slow sync completes. It is not yet attributed as this field failure at 95% confidence because the supplied screenshot omits the diagnostic code/message and current queue state.
+- Current tests cover durable queue backoff, HTTP failure classification, and keepalive interval generation independently, but do not exercise the full runtime path from failed/aborted fetch through retry to accepted server confirmation. No production code or version was changed in this triage round.
+- Domain Focus is not mathematically required to equal Desktop Edge Focus: the Browser excludes address bar/browser chrome, internal or protected pages, DevTools, inaccessible PDFs, background/minimized/locked time, and any time without one eligible hostname. A large continuing gap on one foreground eligible HTTP/HTTPS page still requires investigation.
+
+### Verification, Manual QA, And Next Step
+
+- `pnpm --filter @workmap/browser-extension test`: pass `70/70` on `0.5.11`.
+- Real browser interaction QA: **NOT RUN**. No authenticated page or device was controlled in this round.
+- Next evidence required from the affected Edge profile: one complete Options diagnostics capture after 3-5 minutes on a foreground eligible page, including Last interval upload, Confirmed interval through, queue pending/ready/dead-letter, Last request ID, and Historical rejected/network diagnostics. Do not include credentials or tokens.
+- With explicit authorization and a supported signed-in browser-control surface, a future session can operate user-prepared Chrome tabs and compare timed interactions against Options and `/reports`. Full filesystem/shell permission alone does not guarantee arbitrary Edge or Windows UI control; lock/sleep and Edge-only checks may still require user actions.
+- No Desktop Agent, API, Web, shared contract, artifact, deployment, or historical data was changed.
+
 ## 2026-07-25 Browser Extension 0.5.11 Independent Interval Settlement And Startup Idempotency
 
 ### Original Task Brief

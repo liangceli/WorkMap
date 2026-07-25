@@ -62,6 +62,9 @@ export class BrowserTrackingV2Store {
       transaction.objectStore(META_STORE).get(RUNTIME_KEY),
     );
     await transactionDone(transaction);
+    if (record?.value.version === 8) {
+      return record.value;
+    }
     if ((record?.value as unknown as LegacyRuntimeStateV7 | undefined)?.version === 7) {
       const initial = createInitialBrowserTrackingV2State();
       const legacy = record!.value as unknown as LegacyRuntimeStateV7;
@@ -116,6 +119,11 @@ export class BrowserTrackingV2Store {
       };
       await this.writeRuntimeState(migrated);
       return migrated;
+    }
+    if (record) {
+      throw new Error(
+        `Unsupported Browser tracking runtime state version: ${String((record.value as { version?: unknown }).version ?? "missing")}.`,
+      );
     }
     const initial = createInitialBrowserTrackingV2State();
     await this.writeRuntimeState(initial);

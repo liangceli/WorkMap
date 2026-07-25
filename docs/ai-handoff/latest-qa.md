@@ -1,5 +1,48 @@
 # Latest QA Handoff
 
+## 2026-07-25 Browser Extension 0.5.12 Runtime Preservation QA
+
+### Reviewed Implementation And Findings
+
+- **Resolved, critical:** current v8 runtime records were treated as unknown and destructively replaced with initial state on every read. Options' five-second diagnostics refresh and background post-sync reads therefore reset live Tracking v2 state and explain the exact all-pending screenshot plus severe report undercount.
+- The fix returns a v8 record unchanged before all legacy migration branches. Legacy versions 5/6/7 retain their existing migrations; unknown stored versions now throw rather than silently erase evidence.
+- The new controlled IndexedDB test proves activation, heartbeat, confirmed-through and request ID round-trip exactly with zero write calls. It fails against the previous implementation.
+- Diff review found no Desktop Agent, API, Web, shared contract, Prisma, auth, policy, RBAC or tenant change. Hostname-only privacy and durable queue behavior are unchanged.
+
+### Verification Status
+
+- `pnpm --filter @workmap/browser-extension typecheck`: PASS.
+- `pnpm --filter @workmap/browser-extension lint`: PASS.
+- `pnpm --filter @workmap/browser-extension test`: PASS `71/71`.
+- `pnpm --filter @workmap/browser-extension build`: PASS.
+- `pnpm --filter @workmap/browser-extension release:zip`: PASS.
+- `git diff --check`: PASS with line-ending normalization warnings only; scoped high-confidence secret scan: PASS, zero matches.
+- Artifact: 22 entries; 50,036 bytes; manifests `0.5.12`; SHA-256 `4F0C6121A78C21D3200E01295F8AD1FE4CA0A29A2BC7ED10CA996C89301E287C`.
+
+### Manual QA, Risks, Recommendation
+
+- Real Chrome/Edge QA: **NOT RUN**. The user screenshot is diagnostic evidence from broken 0.5.11, not post-fix acceptance.
+- Previously erased local time cannot be fabricated. The affected screenshot had no queued or dead-letter rows available for recovery.
+- Remaining risk: browser-specific scheduling and the existing sync timeout budget require field observation after upgrade.
+- Recommendation: **PASS for same-entry Edge/Chrome load-unpacked QA; HOLD store/production publication until live heartbeat, accepted interval, confirmed-through and `/reports` growth are observed.** The next QA round can proceed.
+
+## 2026-07-25 Browser Extension 0.5.11 Field Sync Failure Triage QA
+
+### Reviewed Evidence And Findings
+
+- The supplied audit row proves one Edge request failed at 2:07 PM and that the failure event itself reached the server later; it does not identify whether Tracking v2 failed by browser timeout/network/CORS or HTTP 5xx.
+- Source review confirms retryable failures retain durable interval IDs and apply bounded IndexedDB retry backoff. The row therefore supports a temporary confirmation lag, not a conclusion that the interval was discarded.
+- Public API health and database readiness were healthy when checked during this round. This cannot reconstruct the historical 2:07 PM failure.
+- Found a real timeout-budget risk: the Extension aborts every API request after 10 seconds, shorter than the Tracking v2 transaction's 5-second acquisition plus 15-second execution allowances.
+- Found a coverage gap: there is no executable runtime test that drives a failed/aborted sync through durable retry and a later accepted confirmation. Existing queue and API classification tests pass but do not prove that composed recovery path.
+
+### Verification, Manual QA, And Recommendation
+
+- Browser Extension suite: PASS `70/70`.
+- Real Edge/Chrome timed QA: **NOT RUN**.
+- No code diff was made because the current screenshot does not provide 95% attribution for the undercount. Obtain the affected Edge Options diagnostic/request ID/queue state before choosing between a sync-timeout recovery fix and a different collector or server-side investigation.
+- Recommendation: **HOLD additional Browser release; continue field diagnosis.** The next round can proceed immediately once the complete Options diagnostics capture is available.
+
 ## 2026-07-25 Browser Extension 0.5.11 QA
 
 ### Reviewed Implementation And Findings
