@@ -76,7 +76,82 @@ test("active collection owns one bounded 20-second MV3 keepalive and stops it wh
   }
 });
 
-test("twenty-second checkpoints plus thirty-second alarms ledger a two-hour active Edge page and open tab", () => {
+test("the keepalive checkpoint itself settles both proven collectors without an alarm", async () => {
+  const focusUpdate = { source: "focus" };
+  const runtimeUpdate = { source: "runtime" };
+  const calls: string[] = [];
+  const runtime = new BrowserExtensionRuntimeV2({} as never) as unknown as {
+    state: unknown;
+    engine: { settle(at: number): unknown };
+    openRuntimeEngine: { settle(at: number): unknown };
+    ensureInitialized(): Promise<void>;
+    guardLifecycleContinuity(): Promise<boolean>;
+    refreshPolicyIfDue(): Promise<void>;
+    restoreCollectorIfAllowed(): Promise<void>;
+    captureAllowed(): boolean;
+    openRuntimeCollectionAllowed(): boolean;
+    persistUpdate(update: unknown, immediateSync: boolean): Promise<boolean>;
+    persistOpenRuntimeUpdate(update: unknown, immediateSync: boolean): Promise<boolean>;
+    reconcileOpenRuntime(immediateSync: boolean): Promise<void>;
+    reconcileBrowserReality(immediateSync: boolean): Promise<void>;
+    restoreAfterQueuePressure(): Promise<void>;
+    refreshCollectorKeepAlive(): void;
+    runCollectorKeepAliveCheckpoint(): Promise<void>;
+  };
+  runtime.state = {};
+  runtime.engine = {
+    settle: (at) => {
+      assert(Number.isFinite(at));
+      calls.push("focus-settle");
+      return focusUpdate;
+    },
+  };
+  runtime.openRuntimeEngine = {
+    settle: (at) => {
+      assert(Number.isFinite(at));
+      calls.push("runtime-settle");
+      return runtimeUpdate;
+    },
+  };
+  runtime.ensureInitialized = async () => undefined;
+  runtime.guardLifecycleContinuity = async () => false;
+  runtime.refreshPolicyIfDue = async () => undefined;
+  runtime.restoreCollectorIfAllowed = async () => undefined;
+  runtime.captureAllowed = () => true;
+  runtime.openRuntimeCollectionAllowed = () => true;
+  runtime.persistUpdate = async (update, immediateSync) => {
+    assert.equal(update, focusUpdate);
+    assert.equal(immediateSync, false);
+    calls.push("focus-persist");
+    return true;
+  };
+  runtime.persistOpenRuntimeUpdate = async (update, immediateSync) => {
+    assert.equal(update, runtimeUpdate);
+    assert.equal(immediateSync, false);
+    calls.push("runtime-persist");
+    return true;
+  };
+  runtime.reconcileOpenRuntime = async () => {
+    calls.push("runtime-reconcile");
+  };
+  runtime.reconcileBrowserReality = async () => {
+    calls.push("focus-reconcile");
+  };
+  runtime.restoreAfterQueuePressure = async () => undefined;
+  runtime.refreshCollectorKeepAlive = () => undefined;
+
+  await runtime.runCollectorKeepAliveCheckpoint();
+  assert.deepEqual(calls, [
+    "focus-settle",
+    "focus-persist",
+    "runtime-settle",
+    "runtime-persist",
+    "runtime-reconcile",
+    "focus-reconcile",
+  ]);
+});
+
+test("twenty-second keepalive settlement alone ledgers a two-hour active Edge page and open tab", () => {
   const clock: BrowserClockEpochV2 = {
     clockEpochId: "long-edge-epoch",
     clockEpochStartedAt: "2026-07-24T00:00:00.000Z",
@@ -139,8 +214,6 @@ test("twenty-second checkpoints plus thirty-second alarms ledger a two-hour acti
       runtimeIntervals.push(
         ...runtime.observeOpenDomains(["work.example"], at).intervals,
       );
-    }
-    if (at % 30_000 === 0) {
       focusIntervals.push(...focus.settle(at).intervals);
       runtimeIntervals.push(...runtime.settle(at).intervals);
     }

@@ -1,5 +1,13 @@
 # Deployment Skill
 
+## Browser Extension 0.5.11 Release Notes
+
+- Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.
+- ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.11.zip`; SHA-256 `AB718F8849ABFF078D98C7856B63EFBA33E508401972DA2B262D2D58356E426F`; size `49,974` bytes; 22 entries; manifest `0.5.11`.
+- Reload the existing unpacked extension path to retain pairing and local diagnostics. Do not remove the Extension or clear storage for upgrade QA.
+- This Browser-only patch makes 20-second keepalive settlement independently produce official Focus/runtime intervals and de-duplicates duplicate same-boot startup callbacks. No API/Web/Prisma/Desktop deployment is required.
+- Do not publish to Chrome Web Store, Edge Add-ons, GitHub Releases, or production without explicit authorization and real Edge/Chrome acceptance.
+
 ## Browser Extension 0.5.10 Release Notes
 
 - Unpacked path: `workmap/apps/browser-extension/alpha-unpacked`.

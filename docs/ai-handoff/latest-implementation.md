@@ -1,5 +1,37 @@
 # Latest Implementation Handoff
 
+## 2026-07-25 Browser Extension 0.5.11 Independent Interval Settlement And Startup Idempotency
+
+### Original Task Brief
+
+- Continue debugging real Owner `/reports` evidence from Edge `0.5.10`: the Extension heartbeat and current hostname snapshot were server-confirmed, but `Confirmed through` remained empty and confirmed Domain Focus totalled only 49 seconds while Desktop Edge Focus showed 7 minutes 52 seconds.
+- Investigate two identical `Browser profile started` rows for the same Edge device at the same second.
+- Fix Browser Extension only. Do not modify Desktop Agent.
+
+### Root Cause And Implementation
+
+- The 0.5.10 20-second MV3 keepalive only called Chrome reconciliation/observation APIs. Formal `BrowserFocusEngineV2.settle()` and `BrowserOpenRuntimeEngineV2.settle()` remained exclusive to the 30-second alarm path. Real Edge proved that heartbeat/snapshot maintenance could continue while no alarm-created interval reached the durable queue. The previous two-hour test incorrectly supplied both 20-second checkpoints and guaranteed 30-second alarms, so it did not cover this production failure.
+- The keepalive is now an independent correctness path: every proven, authorised 20-second checkpoint settles and atomically persists Focus and Domain open/runtime slices, then schedules their existing Tracking v2 sync. Alarm delivery remains useful maintenance but is no longer required for interval creation or `Confirmed interval through` progress.
+- Lifecycle discontinuity, policy/window closure, lock, queue pressure and unknown gaps still prevent settlement/backfill. No hostname is created for browser chrome, internal/protected pages, DevTools, inaccessible PDFs or other ineligible surfaces.
+- Every startup callback previously forced a new `RESTARTED / AGENT_RESTART` event with a fresh ID, and the API intentionally preserves distinct profile starts. A 5-second local durable guard keyed by device now collapses duplicate startup/update callbacks from one Browser boot into one queued status event. It does not merge events between devices or normal later restarts.
+- Browser Domain Focus is expected to approach, but not exactly equal, Desktop Edge Focus: only OS-foreground eligible HTTP/HTTPS page time can be attributed to a hostname. The supplied 49-second result plus no confirmed interval was nevertheless a real Extension defect, not a valid metric-boundary difference.
+
+### Changed Files
+
+- Browser runtime/storage/version: `workmap/apps/browser-extension/src/backgroundV2.ts`, `extensionStorage.ts`, `trackingV2Types.ts`, `package.json`, and `manifest.json`.
+- Tests: `collector-keepalive.test.ts`, new `runtime-start-dedupe.test.ts`, and version assertions in `service-worker.test.ts`.
+- Generated release outputs: `workmap/apps/browser-extension/alpha-unpacked` and `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.11.zip`.
+- Long-lived QA/release memory: this handoff, `latest-qa.md`, `docs/skills/qa-skill.md`, and `docs/skills/deployment-skill.md`.
+- No Desktop Agent, API, Web, shared contract, Prisma schema/migration, policy, RBAC, tenant isolation, or production deployment changed.
+
+### Verification, Artifact, Manual QA, And Next Steps
+
+- Focused executable regression passes `11/11`; full Browser Extension suite passes `70/70`; typecheck and lint pass.
+- A runtime-orchestration test calls the actual keepalive checkpoint and proves both engines are settled/persisted without an alarm. A two-hour engine simulation with no alarm delivery produces exactly 7,200,000ms of adjacent non-overlapping Focus active plus 7,200,000ms of Domain open/runtime. A storage-backed runtime test proves two same-boot startup callbacks create one durable event.
+- Build and `release:zip` pass. ZIP has 22 entries, manifest `0.5.11`, size `49,974` bytes, SHA-256 `AB718F8849ABFF078D98C7856B63EFBA33E508401972DA2B262D2D58356E426F`.
+- Real Edge/Chrome load-unpacked QA is **NOT RUN**. Reload the existing unpacked entry from `workmap/apps/browser-extension/alpha-unpacked` without clearing pairing/storage. On one eligible Edge page, Options should show accepted/duplicate interval evidence and `Confirmed interval through` advancing within roughly 20-40 seconds; `/reports` should then gain Domain Focus/runtime without tab close. One browser start should add no more than one new profile-start row.
+- Existing duplicate historical rows and previously missed time are not rewritten or backfilled. No store upload, GitHub Release, API/Web deployment, or production publication was performed.
+
 ## 2026-07-24 Browser Extension 0.5.10 Durable Focus/Runtime Continuity
 
 ### Original Task Brief

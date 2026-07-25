@@ -1,5 +1,32 @@
 # Latest QA Handoff
 
+## 2026-07-25 Browser Extension 0.5.11 QA
+
+### Reviewed Implementation And Findings
+
+- **Resolved, high:** real Edge `0.5.10` could maintain server-confirmed heartbeat/snapshot while producing no confirmed interval because the 20-second keepalive did not settle either formal ledger engine. The keepalive now settles/persists Focus and Browser Domain runtime itself; correctness no longer assumes punctual 30-second alarms.
+- **Resolved, medium:** repeated startup callbacks created distinct forced status IDs, which the API correctly retained as distinct profile starts. A device-scoped 5-second durable guard now suppresses only duplicate callbacks from the same boot.
+- **Expected boundary, not a defect:** Domain Focus totals can be lower than Desktop Edge Focus because Browser Extension excludes browser chrome, address bar, protected/internal pages, DevTools, inaccessible PDFs and any interval that cannot be assigned to one eligible hostname. A large gap accompanied by `No confirmed interval`, as in the supplied evidence, is not accepted as normal.
+- Diff review found no Desktop Agent, API, Web, shared contract, Prisma, auth, policy, RBAC or tenant-isolation change. Hostname-only privacy and unknown-gap non-backfill are preserved.
+
+### Verification Status
+
+- Focused executable tests: pass `11/11`.
+- `pnpm --filter @workmap/browser-extension typecheck`: pass.
+- `pnpm --filter @workmap/browser-extension lint`: pass.
+- `pnpm --filter @workmap/browser-extension test`: pass `70/70`.
+- `pnpm --filter @workmap/browser-extension build`: pass.
+- `pnpm --filter @workmap/browser-extension release:zip`: pass.
+- Artifact inspection: 22 entries; manifest `0.5.11`; 49,974 bytes; SHA-256 `AB718F8849ABFF078D98C7856B63EFBA33E508401972DA2B262D2D58356E426F`.
+- `git diff --check`: pass. Scoped secret scan with generated/reference/env exclusions: pass, no matches.
+
+### Manual QA, Risks, Recommendation
+
+- Real Chrome/Edge load-unpacked QA: **NOT RUN**. The user screenshots are post-0.5.10 failure evidence, not post-0.5.11 acceptance.
+- Existing duplicate status rows and unrecorded historical time remain immutable evidence; 0.5.11 prevents new same-boot duplicates and creates future intervals, but does not fabricate/backfill history.
+- Remaining manual risk is Browser scheduling behavior in the user's installed Edge/Chrome builds. Validate accepted/duplicate interval evidence and advancing `Confirmed interval through` across at least 10 minutes, then tab switch, idle, minimize, lock/unlock, sleep/wake and browser restart.
+- Automated recommendation: **PASS for load-unpacked QA; not yet accepted for store/production publication.** The next QA round can proceed.
+
 ## 2026-07-24 Browser Extension 0.5.10 Durable Focus/Runtime QA
 
 ### Reviewed Implementation And Findings

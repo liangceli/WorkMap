@@ -175,10 +175,12 @@ const LEGACY_BATCH_SIZE = 50;
 const INTERACTION_SYNC_THROTTLE_MS = 1_000;
 // Chrome may terminate an MV3 worker after 30 seconds of inactivity, which is
 // also the minimum production alarm cadence. While a proven Focus or Domain
-// runtime session exists, checkpoint just before that boundary so the alarm
-// can settle official intervals instead of repeatedly recovering at a
-// zero-length durable tail. Unexpected termination remains conservative.
+// runtime session exists, settle and persist an official slice before that
+// boundary. The keepalive is an independent durability path: alarm delivery is
+// useful maintenance, but correctness must not depend on an alarm firing on
+// time. Unexpected termination remains conservative.
 const COLLECTOR_KEEPALIVE_INTERVAL_MS = 20_000;
+const RUNTIME_START_DEDUPE_WINDOW_MS = 5_000;
 const LIFECYCLE_MAX_UNOBSERVED_MS = 45_000;
 const CLOCK_DIVERGENCE_TOLERANCE_MS = 10_000;
 
@@ -324,13 +326,27 @@ export class BrowserExtensionRuntimeV2 {
 
   async handleRuntimeStarted(operation: "profile-start" | "extension-update") {
     await this.ensureInitialized();
-    if (!this.state?.protocolActivatedAt) return;
+    if (!this.state?.protocolActivatedAt || !this.config) return;
+    const stored = await readStoredState(["workmapStatus"]);
+    const observedAtMs = Date.now();
+    const guard = stored.workmapStatus?.runtimeStartGuard;
+    if (
+      guard?.deviceId === this.config.deviceId &&
+      observedAtMs >= guard.observedAtMs &&
+      observedAtMs - guard.observedAtMs <= RUNTIME_START_DEDUPE_WINDOW_MS
+    ) {
+      return;
+    }
     await this.queueStatusTransition(
       "RESTARTED",
       "AGENT_RESTART",
       "CONFIRMED",
       true,
       operation,
+      {
+        deviceId: this.config.deviceId,
+        observedAtMs,
+      },
     );
     await this.flushStatusQueue();
     await this.requestSync(true);
@@ -1863,7 +1879,24 @@ export class BrowserExtensionRuntimeV2 {
     const discontinuity = await this.guardLifecycleContinuity();
     await this.refreshPolicyIfDue();
     await this.restoreCollectorIfAllowed();
-    if (!this.captureAllowed()) await this.closeAtPolicyBoundary();
+    if (!this.captureAllowed()) {
+      await this.closeAtPolicyBoundary();
+    } else if (this.engine && !discontinuity) {
+      await this.persistUpdate(
+        this.engine.settle(performance.now()),
+        false,
+      );
+    }
+    if (
+      this.openRuntimeCollectionAllowed() &&
+      this.openRuntimeEngine &&
+      !discontinuity
+    ) {
+      await this.persistOpenRuntimeUpdate(
+        this.openRuntimeEngine.settle(performance.now()),
+        false,
+      );
+    }
     await this.reconcileOpenRuntime(false);
     await this.reconcileBrowserReality(false);
     await this.restoreAfterQueuePressure();
@@ -1981,6 +2014,7 @@ export class BrowserExtensionRuntimeV2 {
     confidence: "CONFIRMED" | "INFERRED" = "CONFIRMED",
     force = false,
     operation?: string,
+    runtimeStartGuard?: ExtensionStatus["runtimeStartGuard"],
   ) {
     if (!this.config || !this.state?.protocolActivatedAt) return;
     const stored = await readStoredState([
@@ -2030,6 +2064,7 @@ export class BrowserExtensionRuntimeV2 {
         }),
         deviceStatus: status,
         queuedStatusEvents: queue.length,
+        ...(runtimeStartGuard ? { runtimeStartGuard } : {}),
       },
     });
   }

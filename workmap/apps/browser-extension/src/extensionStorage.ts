@@ -39,6 +39,10 @@ export type ExtensionStatus = {
   error?: string;
   connectionState?: TrackingConnectionStateV2;
   collectorState?: TrackingCollectorStateV2;
+  runtimeStartGuard?: {
+    deviceId: string;
+    observedAtMs: number;
+  };
 };
 
 export type QueuedDomainEvent = { event: DomainUsageEvent; attempts: number; nextAttemptAtMs: number; createdAtMs: number };

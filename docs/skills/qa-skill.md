@@ -1,5 +1,13 @@
 # QA Skill
 
+## Browser Extension 0.5.11 Independent Settlement QA Baseline
+
+- A collector keepalive must itself call both formal engine `settle()` paths and durably persist emitted intervals. Never make confirmed Focus/runtime ledger progress depend on a 30-second alarm firing on time.
+- Keep an executable no-alarm simulation: two hours of 20-second settlement must total exactly two hours for one continuously trusted eligible Focus page and two hours for its policy-authorised open/runtime context, with positive adjacent non-overlapping slices.
+- A server-confirmed heartbeat or snapshot does not prove interval creation. Real acceptance requires accepted/duplicate interval results plus advancing `Confirmed interval through` and `/reports` ledger totals.
+- Duplicate startup/update callbacks for one device within one Browser boot must create one durable status event. Later real restarts and different device/profile IDs remain distinct.
+- Domain Focus sum may be lower than Desktop Browser-app Focus only for explicit Browser coverage exclusions; a large gap plus no confirmed interval is a release failure.
+
 ## Browser Extension 0.5.10 Durable Session QA Baseline
 
 - Continuous mouse-led page work must include trusted `pointermove` occurrence time without ever reading coordinates, target, direction, URL, title or content. Untrusted synthetic movement must remain ignored.
