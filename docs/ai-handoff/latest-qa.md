@@ -1,5 +1,79 @@
 # Latest QA Handoff
 
+## 2026-07-27 Desktop Connection Audit Web-Only QA
+
+### Reviewed Implementation
+
+- Reviewed the Desktop-specific all-status renderer, status titles/details/tones, legacy-session fallback, linked-session deduplication, Browser formatter isolation, source filtering, sorting, inferred/delayed-sync labels, and the complete current Web suite.
+- Confirmed that this scope changes Web presentation only. Desktop Agent `0.6.8`, Tracking v2 queues/sync, policy/lease, API persistence, database/schema and Reports activity totals are untouched.
+
+### Findings Ordered By Severity
+
+- Fixed - Medium: stored Desktop v2 start, user stop, shutdown, crash, termination and unknown-interruption events were omitted by the former supplemental allow-list.
+- Fixed - Medium: Desktop `RESTARTED` could be labelled `Browser profile started`; Desktop now has an isolated `Agent restarted` mapping.
+- Fixed - Medium: directly showing all status rows could duplicate legacy session start/end rows. Linked v2 evidence now wins by `agentSessionId`, with legacy rows retained only as fallback.
+- Preserved - High: no collection/upload/ledger/policy behavior changed. Audit history remains independent from current Live heartbeat and confirmed App totals.
+- Remaining - Low: signed-in production rendering and real Windows restart/lock/sleep/quit sequencing have not been manually exercised. Existing concurrent Browser changes share the Web component and must remain included/reviewed when the worktree is committed.
+
+### Test And Verification Status
+
+- Focused audit tests: pass `12/12`.
+- `pnpm.cmd --filter @workmap/web typecheck`: pass.
+- `pnpm.cmd --filter @workmap/web lint`: pass.
+- `pnpm.cmd --filter @workmap/web test`: pass `98/98` after retaining the explicit Desktop source-filter invariant required by the full suite.
+- `pnpm.cmd --filter @workmap/web build`: pass.
+- `git diff --check`: pass. Scoped secret scan: pass.
+
+### Manual QA And Recommendation
+
+- Real signed-in Owner `/reports` and Windows lifecycle QA: **NOT RUN**.
+- Pass for Web-only source implementation. No Agent/API/database release is needed. Proceed to manual audit-history verification and deploy Web only after the concurrent Browser work is intentionally reconciled.
+
+## 2026-07-27 Browser Extension 0.5.13 Connection Health QA
+
+### Reviewed Implementation
+
+- Reviewed the complete Browser sync failure/success path, retry classification, status queue transitions, server heartbeat-gap inference, Connection Audit grouping/presentation, API transaction budget, and the real 0.5.12 screenshots.
+- Verified that a short online request failure is a local diagnostic only, browser-confirmed network loss remains a real transition, heartbeat expiry does not fabricate a cause, and recovery remains correlated to a later server-confirmed heartbeat.
+
+### Findings Ordered By Severity
+
+- Fixed - High: a single 408/429/5xx/fetch timeout previously emitted `SERVER_UNREACHABLE`, and the next success emitted `RECONNECTED`, creating the observed infinite alternating audit history.
+- Fixed - High: the 10-second `/sync-v2` timeout was shorter than the API's possible 5-second transaction wait plus 15-second transaction runtime. The Extension now permits 30 seconds for this route.
+- Fixed - Medium: `Signal interrupted` implied a stronger lifecycle conclusion than Browser APIs can prove. Current wording states only that WorkMap did not receive a confirmed heartbeat within 90 seconds and lists the indistinguishable possible causes.
+- Preserved - Medium: old false transitions remain in historical audit data. Removing or rewriting server history was intentionally rejected; validation must focus on whether 0.5.13 stops creating new rows.
+- Preserved - Low: Chrome and Edge/profile identities remain separate devices and histories; no grouping or tenant/RBAC behavior changed.
+
+### Verification And Recommendation
+
+- Browser Extension: typecheck pass; lint pass; 72/72 tests pass; build pass; release ZIP pass.
+- Web Browser-specific validation: typecheck pass; lint pass; production build pass; 12/12 focused live/audit tests pass.
+- Full Web suite: 97/98. The only failure is an unrelated concurrent Desktop Connection Audit source-string assertion; it appeared after another conversation added Desktop implementation/tests during this round. Browser tests remain green and Desktop code was not altered here.
+- `git diff --check`: pass. Scoped secret scan: pass. Artifact manifest/version/content/size/hash: pass.
+- Manual QA: not run. Do not claim real Chrome or Edge completion until the ten-minute open-browser and close/reopen heartbeat-gap sequence is executed for both browsers.
+- Recommendation: proceed to real Chrome/Edge load-unpacked QA with 0.5.13. Do not publish or deploy until that QA confirms no new `WorkMap request unavailable` / `Connection restored` flapping.
+
+## 2026-07-27 Desktop Connection Audit Current-State QA
+
+### Reviewed Implementation
+
+- Reviewed current Desktop Agent `0.6.8` v2 lifecycle production, Electron lock/unlock/suspend/resume integration, API status-history query/coalescing, legacy session compatibility, and Owner Web audit filtering, titles, details, timestamps, and tones.
+- No product implementation was changed.
+
+### Findings Ordered By Severity
+
+- Confirmed - Medium: `0 events` is not a connection failure. Normal v2 startup is stored as `RUNNING / AGENT_STARTED` but filtered from the Desktop audit card; current connection belongs to Live signals.
+- Confirmed - Medium: the Desktop v2 history remains incomplete because the Web allow-list omits direct start, user-stop, shutdown, crash, termination, and unknown-interruption status rows.
+- Confirmed - Medium: a Desktop `RESTARTED` row currently receives the Browser-specific title `Browser profile started` because both clients share one formatter. This is incorrect presentation, not a collection or ledger defect.
+- Confirmed - Low: lock/sleep close the current foreground boundary; unlock/resume render as `Reconnected`, with the reason line distinguishing the actual Windows transition.
+- Confirmed - Low: server-inferred recovered heartbeat gaps currently exist for Browser Extension. Current Desktop v2 does not have the same persisted gap-inference flow; the generic section subtitle is broader than Desktop's implementation.
+
+### Verification, Risk, And Recommendation
+
+- Source/diff review: pass for explaining current behavior. `git diff --check`: pass. Scoped secret scan: pass.
+- Automated product tests and real Windows lifecycle QA were not run because this round changed documentation only.
+- Pass for the status explanation; fail any claim that the Desktop v2 Start/Stop/Interruption timeline is complete. The next round may proceed with a narrowly tested Web/API audit correction if explicitly requested.
+
 ## 2026-07-25 Browser Extension 0.5.12 Runtime Preservation QA
 
 ### Reviewed Implementation And Findings

@@ -4,6 +4,8 @@ import {
   appendSyncDiagnostics,
   assertBrowserDeviceIdentity,
   BrowserRuntimeDiagnosticError,
+  BROWSER_SERVER_HEARTBEAT_FRESH_MS,
+  classifyRetryableConnectionFailure,
   collectorStateForPolicy,
   hasLifecycleDiscontinuity,
   isRetryableError,
@@ -72,6 +74,44 @@ test("real Browser identity mismatch is terminal and not a network retry", () =>
     assert.equal(isRetryableError(error), false);
     return true;
   });
+});
+
+test("transient request failures do not create false connection outages", () => {
+  const confirmedAt = "2026-07-27T00:00:00.000Z";
+  const confirmedAtMs = Date.parse(confirmedAt);
+  assert.deepEqual(
+    classifyRetryableConnectionFailure({
+      browserOnline: true,
+      lastSuccessfulHeartbeatAt: confirmedAt,
+      nowMs: confirmedAtMs + BROWSER_SERVER_HEARTBEAT_FRESH_MS,
+    }),
+    { connectionState: "ONLINE", statusTransition: null },
+    "a server-confirmed heartbeat remains authoritative through the freshness window",
+  );
+  assert.deepEqual(
+    classifyRetryableConnectionFailure({
+      browserOnline: true,
+      lastSuccessfulHeartbeatAt: confirmedAt,
+      nowMs: confirmedAtMs + BROWSER_SERVER_HEARTBEAT_FRESH_MS + 1,
+    }),
+    { connectionState: "OFFLINE", statusTransition: null },
+    "an online network interface cannot prove WorkMap connectivity after the heartbeat expires",
+  );
+  assert.deepEqual(
+    classifyRetryableConnectionFailure({
+      browserOnline: false,
+      lastSuccessfulHeartbeatAt: confirmedAt,
+      nowMs: confirmedAtMs + 1,
+    }),
+    {
+      connectionState: "OFFLINE",
+      statusTransition: {
+        status: "NETWORK_OFFLINE",
+        reason: "NETWORK_UNAVAILABLE",
+      },
+    },
+    "a browser-confirmed network loss can end connection health immediately",
+  );
 });
 
 test("HTTP 200 snapshot rejection remains distinct from connection health", () => {

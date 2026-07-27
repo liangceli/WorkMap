@@ -38,11 +38,11 @@ test("local extension status does not preserve stale connected state", async () 
   const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
   const types = await readFile(new URL("../src/trackingV2Types.ts", import.meta.url), "utf8");
 
-  assert.equal(manifest.version, "0.5.12");
-  assert.equal(packageJson.version, "0.5.12");
+  assert.equal(manifest.version, "0.5.13");
+  assert.equal(packageJson.version, "0.5.13");
   assert.equal(manifest.incognito, "not_allowed");
   assert.equal(manifest.background.service_worker, "dist/backgroundV2.js");
-  assert.match(types, /browser-extension-mv3\/0\.5\.12/);
+  assert.match(types, /browser-extension-mv3\/0\.5\.13/);
   assert.match(api, /BROWSER_EXTENSION_VERSION/);
   assert.match(background, /connectionState === "ONLINE"/);
   assert.match(background, /connectionState === "AUTH_REQUIRED"/);

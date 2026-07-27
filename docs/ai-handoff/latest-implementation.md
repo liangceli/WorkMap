@@ -1,5 +1,96 @@
 # Latest Implementation Handoff
 
+## 2026-07-27 Desktop Connection Audit Web-Only Completion
+
+### Original Task Brief
+
+- Proceed only with at least 95% confidence and optimise the Owner `/reports` Desktop Agent audit history without changing Desktop Agent `0.6.8`, its collection/upload behavior, policy, backend ingestion, database, or official App totals.
+- Render all already-stored Tracking v2 lifecycle events with Desktop-specific wording and avoid duplicate legacy-session rows.
+
+### Changed Files
+
+- Web presentation: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`.
+- New focused tests: `workmap/apps/web/test/desktop-connection-audit.test.ts`.
+- Long-lived handoff: this file and `docs/ai-handoff/latest-qa.md`.
+- Existing concurrent Browser Extension and Browser Reports changes were preserved. No Desktop Agent, API, shared contract, Prisma/schema/migration, policy, installer, artifact, or deployment file was changed by this Desktop audit work.
+
+### Implementation Summary
+
+- Desktop audit now consumes every stored `DESKTOP_AGENT` status instead of the former six-status allow-list. It has a Desktop-only formatter, so `RUNNING`, stop, shutdown, crash, termination, unknown interruption and restart use native Agent wording rather than Browser wording.
+- `RESTARTED` now displays `Agent restarted`, never `Browser profile started`; startup/reconnect/restart are positive, confirmed stops/lock/sleep/shutdown are neutral, and unavailable/crash/termination/unknown interruption are attention states.
+- Legacy `AgentSession` history remains a compatibility fallback. A linked v2 start/end status suppresses the equivalent legacy row by real `agentSessionId`, preventing duplicate start/stop entries while preserving old history when no v2 event exists.
+- Event occurrence time, inferred marker, delayed-sync timestamp, newest-first order and separate Live-signals semantics are unchanged. This is presentation-only: current connection still comes from health/heartbeat, and App Focus/Idle/Open-runtime totals still come from the official accepted interval ledger.
+
+### Verification, Manual QA, And Remaining Risk
+
+- Focused Desktop + Browser + silent-refresh audit tests: pass `12/12`.
+- Web typecheck: pass; lint: pass; full tests: pass `98/98`; production build: pass.
+- `git diff --check` and scoped secret scan pass. Diff review confirms no Desktop Agent/API/schema/policy modification from this scope.
+- Real signed-in Owner `/reports` and Windows lifecycle QA were **NOT RUN**. After the existing concurrent Browser work is reconciled, only the Web needs deployment for this Desktop audit improvement; no Agent release, API deployment, or migration is required.
+- Next manual check: open today's employee report, restart the Agent, lock/unlock, sleep/resume and use Quit Agent; require one correctly worded row per stored transition with no legacy duplicate and no change to Live signals or App totals.
+
+## 2026-07-27 Browser Extension 0.5.13 Connection-Flap Correction
+
+### Original Task Brief
+
+- Investigate real Chrome/Edge `0.5.12` Connection Audit histories that continuously alternated `Server Unreachable` and `Reconnected` while the Browser remained open.
+- Stop transient request failures from becoming false lifecycle transitions and replace the ambiguous browser-close label `Signal interrupted` with wording limited to what WorkMap can actually prove.
+
+### Changed Files
+
+- Browser Extension runtime/API/version/tests: `workmap/apps/browser-extension/src/backgroundV2.ts`, `extensionApi.ts`, `trackingV2Types.ts`, `package.json`, `manifest.json`, `alpha-unpacked/manifest.json`, and the focused queue/service-worker/sync-diagnostic tests.
+- Browser-only Reports presentation/tests: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`, `trackingV2LivePresentation.ts`, `browser-connection-audit.test.ts`, and `tracking-v2-live-presentation.test.ts`.
+- Generated release: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.13.zip`.
+- Existing concurrent Desktop Connection Audit edits in the shared Reports component and handoff files were preserved; this round did not author or change Desktop Agent behavior.
+
+### Implementation Summary And Behavior
+
+- Root cause confirmed: every retryable sync failure immediately set the Extension connection to `OFFLINE` and durably queued `SERVER_UNREACHABLE`; the next successful sync queued `RECONNECTED`. Because `/sync-v2` used a 10-second client timeout while the API transaction may wait 5 seconds and run for up to 15 seconds, harmless slow requests produced the exact alternating history seen in real screenshots.
+- `/sync-v2` now uses a 30-second timeout, leaving transport headroom above the API transaction budget. Other Extension API calls retain their existing 10-second timeout.
+- One online-interface request failure no longer proves server unreachability. While the most recent server-confirmed heartbeat is at most 90 seconds old, local connection remains `ONLINE`; after it expires, local health becomes `OFFLINE` but no unsupported `SERVER_UNREACHABLE` lifecycle cause is emitted. Bounded request diagnostics and durable interval retry behavior remain unchanged.
+- A browser-confirmed local network loss (`navigator.onLine === false`) still queues one `NETWORK_OFFLINE / NETWORK_UNAVAILABLE` transition. Lock/unlock, profile start, startup, policy, queue, Focus, and Domain open/runtime behavior are unchanged.
+- Persistent missing heartbeats continue to use the server's existing authoritative gap lane: one inferred interruption after the 90-second freshness boundary and one recovery row after a later confirmed heartbeat. This prevents request-level flapping while retaining honest outage coverage.
+- Browser Live signals and Connection Audit now use `Browser heartbeat not received` / `Heartbeat not received`. The detail explicitly says browser close, offline, disabled, sleep, or crash cannot be distinguished. Historical `SERVER_UNREACHABLE` rows are retained but presented as `WorkMap request unavailable`; recovery rows are presented as `Connection restored`, and an unknown reason is described as a confirmed heartbeat arriving again.
+- Existing historical flapping rows are not deleted or rewritten. Installing 0.5.13 stops new false request-failure transitions; older rows remain auditable in historical report ranges.
+
+### Verification, Manual QA, And Remaining Risk
+
+- Passed: Browser Extension typecheck, lint, all 72 tests, build, and `release:zip`.
+- Passed: Web typecheck, lint, production build, and 12 focused Browser live/audit tests.
+- Full Web test finished 97/98 with one unrelated concurrent Desktop test failure: `reports-information-order.test.ts` still expects the old Desktop source-filter text after another conversation refactored Desktop audit formatting. This round did not modify that Desktop work.
+- `git diff --check`, scoped secret scan, ZIP content/version/size/hash inspection were run after final edits.
+- Real Chrome and Edge load-unpacked QA was not run. Required check: leave each browser open for at least ten minutes, confirm no alternating request-failure/recovery rows appear, close it, wait over 90 seconds, and confirm exactly one `Heartbeat not received` row; reopening should add one `Connection restored` row.
+- Version: `browser-extension-mv3/0.5.13`. ZIP size: 50,520 bytes. SHA-256: `A701426522CD1B8BB7355CBB942331FA16110C583704EA3CF89014C779C560E6`.
+- No API/schema/policy, Desktop Agent behavior, deployment, store publication, or historical database deletion was performed.
+
+## 2026-07-27 Desktop Connection Audit Current-State Review
+
+### Original Task Brief
+
+- Inspect the current Owner `/reports` Desktop Agent Connection Audit card and explain every status it can show and the real condition represented by each label.
+- Explain the supplied `0 events` state from current source rather than treating it as proof that the Agent is offline or inactive.
+
+### Changed Files
+
+- Diagnostic handoff only: `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, API, Web, schema, policy, release, artifact, or deployment behavior was changed.
+
+### Current Code Findings
+
+- The source package remains Desktop Agent `0.6.8` on Tracking v2. The current v2 runtime durably emits `RUNNING / AGENT_STARTED` after activation, `STOPPED_BY_USER / USER_STOP` for the in-app Quit Agent path, `LOCKED / SYSTEM_LOCK`, `SLEEPING / SYSTEM_SUSPEND`, and `RECONNECTED` with either `SYSTEM_UNLOCK` or `SYSTEM_RESUME` from Electron power/session events.
+- The Desktop audit renderer still combines legacy `AgentSession` rows with a narrow status-event allow-list: `NETWORK_OFFLINE`, `SERVER_UNREACHABLE`, `SLEEPING`, `LOCKED`, `RECONNECTED`, and `RESTARTED`. Tracking v2 `RUNNING`, user-stop, shutdown, crash, termination, and unknown-interruption status events are therefore not rendered directly.
+- Consequently `0 events` means only that no renderable Desktop audit transition exists in the selected report range. It does not mean unpaired, offline, no heartbeat, or no App activity. Current online state remains the separate Live signals health/heartbeat lane.
+- Visible confirmed status rows are: `Sleeping / System Suspend` (neutral), `Locked / System Lock` (neutral), `Reconnected / System Resume|System Unlock` (positive), `Network Offline / Network Unavailable` (attention), and `Server Unreachable / Server Request Failed` (attention). Current v2 does not normally generate the last two lifecycle rows for ordinary sync failures; diagnostics and Live signals carry that state.
+- Legacy `AgentSession` rows can render `Agent started`, `Stopped by user`, `Device shut down`, `Suspended`, `Agent crashed`, `Agent terminated`, or `Interrupted`. Stale open legacy sessions older than 30 seconds are presented as an unknown interruption, but current Tracking v2 does not create those legacy sessions.
+- A current presentation defect remains: the shared Browser formatter maps `RESTARTED` to `Browser profile started`. Because Desktop keeps `RESTARTED` in its allow-list, a Desktop restart status would receive that Browser-specific title and a neutral marker. No fix was authorized or made in this explanation round.
+- Rows use client occurrence time, newest first. Confidence `INFERRED` appends `(inferred)`; delivery over 30 seconds appends the separate server sync time; consecutive identical status/reason transitions are coalesced.
+
+### Verification And Next Step
+
+- Re-read the current Desktop Electron/runtime v2 producer, API status-history query/coalescing, Browser heartbeat-gap inference, and Web audit renderer/formatter.
+- `git diff --check` and a scoped secret scan were run after this documentation update. No product test or real Windows lifecycle QA was run because product code did not change.
+- A future narrow Web/API correction should give Desktop its own status formatter, render all stored Tracking v2 lifecycle transitions once, and test that audit history remains independent from Live signals. It must not fabricate inferred causes or change tracking/policy behavior.
+
 ## 2026-07-25 Browser Extension 0.5.12 Current Runtime State Preservation
 
 ### Original Task Brief

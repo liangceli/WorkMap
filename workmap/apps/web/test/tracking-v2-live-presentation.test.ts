@@ -46,7 +46,7 @@ test("latest interrupted Browser card remains visible when that browser has no c
   assert.equal(selected.hiddenInactiveBrowserCount, 1);
 });
 
-test("snapshot policy rejection does not turn a fresh heartbeat into Signal interrupted", () => {
+test("snapshot policy rejection does not turn a fresh heartbeat into an unavailable Browser heartbeat", () => {
   const device = liveDevice({
     connectionFresh: true,
     snapshotFresh: false,
@@ -62,6 +62,20 @@ test("snapshot policy rejection does not turn a fresh heartbeat into Signal inte
   assert.equal(snapshot.label, "Current activity not confirmed");
   assert.equal(snapshot.pill, "Outside collection window");
   assert.doesNotMatch(snapshot.detail, /signal interrupted/i);
+});
+
+test("a stale Browser connection states only the observable heartbeat fact", () => {
+  const device = browserDevice(
+    "chrome-stale",
+    false,
+    "2026-07-27T00:00:00.000Z",
+  );
+
+  const connection = trackingV2ConnectionPresentation(device);
+
+  assert.equal(connection.label, "Browser heartbeat not received");
+  assert.match(connection.detail, /cannot be distinguished/);
+  assert.doesNotMatch(connection.detail, /user stopped|server unreachable/i);
 });
 
 test("a valid fresh snapshot presents the current App independently from connection health", () => {

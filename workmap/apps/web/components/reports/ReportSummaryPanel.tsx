@@ -755,7 +755,7 @@ function BrowserLiveCard({ rows }: { rows: WorkMapApiUsageSummary["browserExtens
         <span style={styles.clientIcon}>{connectedCount > 0 ? <Globe2 size={20} aria-hidden /> : <WifiOff size={20} aria-hidden />}</span>
         <div style={styles.clientHeading}>
           <p style={styles.clientLabel}>Browser Extension</p>
-          <h3 style={styles.clientTitle}>{rows.length === 0 ? "Not paired" : connectedCount > 0 ? "Connected" : "Signal interrupted"}</h3>
+          <h3 style={styles.clientTitle}>{rows.length === 0 ? "Not paired" : connectedCount > 0 ? "Connected" : "Browser heartbeat not received"}</h3>
         </div>
         {rows.length > 0 ? (
           <span style={{ ...styles.connectionPill, ...(connectedCount > 0 ? styles.connectionPillConnected : styles.connectionPillAttention) }}>
@@ -961,17 +961,35 @@ function AuditRows({ entries, emptyText }: { entries: AuditEntry[]; emptyText: s
   ));
 }
 
-function buildDesktopAuditEntries(summary: Pick<WorkMapApiUsageSummary, "agentSessions" | "deviceStatusHistory">): AuditEntry[] {
-  const entries: AuditEntry[] = [];
+export function buildDesktopAuditEntries(summary: Pick<WorkMapApiUsageSummary, "agentSessions" | "deviceStatusHistory">): AuditEntry[] {
+  const desktopStatuses: WorkMapApiUsageSummary["deviceStatusHistory"] = [];
+  for (const event of summary.deviceStatusHistory) {
+    if (event.source !== "DESKTOP_AGENT") continue;
+    desktopStatuses.push(event);
+  }
+  const entries: AuditEntry[] = desktopStatuses.map(desktopStatusToAuditEntry);
+  const sessionsWithStatusStart = new Set(
+    desktopStatuses
+      .filter((event) => event.agentSessionId && (event.status === "RUNNING" || event.status === "RESTARTED"))
+      .map((event) => event.agentSessionId),
+  );
+  const sessionsWithStatusEnd = new Set(
+    desktopStatuses
+      .filter((event) => event.agentSessionId && isDesktopSessionEndStatus(event.status))
+      .map((event) => event.agentSessionId),
+  );
+
   for (const session of summary.agentSessions) {
-    entries.push({
-      id: `${session.id}:started`,
-      title: "Agent started",
-      detail: "Desktop monitoring session opened",
-      timestamp: session.startedAt,
-      tone: "positive",
-    });
-    if (session.endedAt) {
+    if (!sessionsWithStatusStart.has(session.id)) {
+      entries.push({
+        id: `${session.id}:started`,
+        title: "Agent started",
+        detail: "Desktop monitoring session opened",
+        timestamp: session.startedAt,
+        tone: "positive",
+      });
+    }
+    if (session.endedAt && !sessionsWithStatusEnd.has(session.id)) {
       const interrupted = session.endReason === "UNEXPECTED_STOP" || session.endReason === "UNKNOWN_INTERRUPTED" || session.endReason === "AGENT_CRASHED" || session.endReason === "AGENT_TERMINATED";
       entries.push({
         id: `${session.id}:ended`,
@@ -982,13 +1000,54 @@ function buildDesktopAuditEntries(summary: Pick<WorkMapApiUsageSummary, "agentSe
       });
     }
   }
-
-  const supplementalStatuses = new Set(["NETWORK_OFFLINE", "SERVER_UNREACHABLE", "SLEEPING", "LOCKED", "RECONNECTED", "RESTARTED"]);
-  for (const event of summary.deviceStatusHistory) {
-    if (event.source !== "DESKTOP_AGENT" || !supplementalStatuses.has(event.status)) continue;
-    entries.push(statusToAuditEntry(event, "Desktop Agent"));
-  }
   return sortAuditEntries(entries);
+}
+
+function desktopStatusToAuditEntry(
+  event: WorkMapApiUsageSummary["deviceStatusHistory"][number],
+): AuditEntry {
+  return {
+    id: `${event.deviceId}:status:${event.id}`,
+    title: formatDesktopStatus(event.status),
+    detail: `Desktop Agent - ${formatDesktopStatusReason(event.reason)}${event.confidence === "INFERRED" ? " (inferred)" : ""}${statusSyncWasDelayed(event) ? ` - synced ${formatDateTime(event.receivedAt)}` : ""}`,
+    timestamp: event.startedAt,
+    tone: desktopStatusTone(event.status),
+  };
+}
+
+function formatDesktopStatus(status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"]) {
+  switch (status) {
+    case "RUNNING": return "Agent started";
+    case "STOPPED_BY_USER": return "Stopped by user";
+    case "NETWORK_OFFLINE": return "Network offline";
+    case "DEVICE_SHUTDOWN": return "Device shut down";
+    case "SLEEPING": return "Sleeping";
+    case "LOCKED": return "Locked";
+    case "AGENT_CRASHED": return "Agent crashed";
+    case "AGENT_TERMINATED": return "Agent terminated";
+    case "SERVER_UNREACHABLE": return "WorkMap service unreachable";
+    case "UNKNOWN_INTERRUPTED": return "Interrupted";
+    case "RECONNECTED": return "Reconnected";
+    case "RESTARTED": return "Agent restarted";
+  }
+}
+
+function formatDesktopStatusReason(reason: WorkMapApiUsageSummary["deviceStatusHistory"][number]["reason"]) {
+  return reason.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function desktopStatusTone(
+  status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"],
+): AuditEntry["tone"] {
+  if (["RUNNING", "RECONNECTED", "RESTARTED"].includes(status)) return "positive";
+  if (["NETWORK_OFFLINE", "AGENT_CRASHED", "AGENT_TERMINATED", "SERVER_UNREACHABLE", "UNKNOWN_INTERRUPTED"].includes(status)) return "attention";
+  return "neutral";
+}
+
+function isDesktopSessionEndStatus(
+  status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"],
+) {
+  return ["STOPPED_BY_USER", "DEVICE_SHUTDOWN", "SLEEPING", "AGENT_CRASHED", "AGENT_TERMINATED", "UNKNOWN_INTERRUPTED"].includes(status);
 }
 
 export function buildBrowserAuditEntries(
@@ -1019,8 +1078,8 @@ export function buildBrowserAuditEntries(
     if (!hasMatchingInterruption) {
       entries.push({
         id: `${row.deviceId}:coverage-lost`,
-        title: "Signal interrupted",
-        detail: `${formatBrowserName(row.browserName)} stopped sending heartbeats; the cause is not confirmed`,
+        title: "Heartbeat not received",
+        detail: browserHeartbeatUnavailableDetail(`${formatBrowserName(row.browserName)} Extension`),
         timestamp: row.coverageLostDetectedAt,
         tone: "attention",
       });
@@ -1041,7 +1100,7 @@ export function buildBrowserAuditEntries(
     const hasMatchingInterruption = entries.some(
       (entry) =>
         entry.id.startsWith(`${device.deviceId}:`) &&
-        entry.title === "Signal interrupted" &&
+        entry.title === "Heartbeat not received" &&
         Math.abs(
           Date.parse(entry.timestamp) -
             Date.parse(coverageLostDetectedAt),
@@ -1050,8 +1109,8 @@ export function buildBrowserAuditEntries(
     if (!hasMatchingInterruption) {
       entries.push({
         id: `${device.deviceId}:v2-coverage-lost`,
-        title: "Signal interrupted",
-        detail: `${formatBrowserName(device.browserName ?? "UNKNOWN")} Extension stopped sending confirmed heartbeats; the cause is not confirmed`,
+        title: "Heartbeat not received",
+        detail: browserHeartbeatUnavailableDetail(`${formatBrowserName(device.browserName ?? "UNKNOWN")} Extension`),
         timestamp: coverageLostDetectedAt,
         tone: "attention",
       });
@@ -1141,7 +1200,9 @@ function statusToAuditEntry(
   return {
     id: `${event.deviceId}:status:${event.id}`,
     title: formatDeviceStatus(event.status),
-    detail: `${clientName} - ${formatDeviceStatusReason(event.reason)}${event.confidence === "INFERRED" ? " (inferred)" : ""}${statusSyncWasDelayed(event) ? ` - synced ${formatDateTime(event.receivedAt)}` : ""}`,
+    detail: event.status === "UNKNOWN_INTERRUPTED"
+      ? `${browserHeartbeatUnavailableDetail(clientName)} (inferred)${statusSyncWasDelayed(event) ? ` - synced ${formatDateTime(event.receivedAt)}` : ""}`
+      : `${clientName} - ${formatDeviceStatusReason(event.reason, event.status)}${event.confidence === "INFERRED" ? " (inferred)" : ""}${statusSyncWasDelayed(event) ? ` - synced ${formatDateTime(event.receivedAt)}` : ""}`,
     timestamp: event.startedAt,
     tone: isAttentionDeviceStatus(event.status) ? "attention" : event.status === "RECONNECTED" || event.status === "RUNNING" ? "positive" : "neutral",
   };
@@ -1720,7 +1781,9 @@ function isAttentionAgentState(state: NonNullable<WorkMapApiUsageSummary["agentS
 function formatDeviceStatus(status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"]) {
   if (status === "RUNNING") return "Extension started";
   if (status === "RESTARTED") return "Browser profile started";
-  if (status === "UNKNOWN_INTERRUPTED") return "Signal interrupted";
+  if (status === "UNKNOWN_INTERRUPTED") return "Heartbeat not received";
+  if (status === "SERVER_UNREACHABLE") return "WorkMap request unavailable";
+  if (status === "RECONNECTED") return "Connection restored";
   return status.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
@@ -1728,8 +1791,19 @@ function isAttentionDeviceStatus(status: WorkMapApiUsageSummary["deviceStatusHis
   return ["NETWORK_OFFLINE", "AGENT_CRASHED", "AGENT_TERMINATED", "SERVER_UNREACHABLE", "UNKNOWN_INTERRUPTED"].includes(status);
 }
 
-function formatDeviceStatusReason(reason: WorkMapApiUsageSummary["deviceStatusHistory"][number]["reason"]) {
+function formatDeviceStatusReason(
+  reason: WorkMapApiUsageSummary["deviceStatusHistory"][number]["reason"],
+  status?: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"],
+) {
+  if (reason === "SERVER_REQUEST_FAILED") return "WorkMap request failed";
+  if (reason === "UNKNOWN" && status === "RECONNECTED") {
+    return "Confirmed heartbeat received again";
+  }
   return reason.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function browserHeartbeatUnavailableDetail(clientName: string) {
+  return `WorkMap did not receive a confirmed heartbeat from ${clientName} within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished`;
 }
 
 function statusSyncWasDelayed(row: WorkMapApiUsageSummary["deviceStatusHistory"][number]) {

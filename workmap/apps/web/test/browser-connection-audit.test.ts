@@ -33,8 +33,8 @@ test("Browser Connection Audit separates confirmed transitions from inferred hea
   assert.deepEqual(
     entries.map((entry) => entry.title),
     [
-      "Reconnected",
-      "Signal interrupted",
+      "Connection restored",
+      "Heartbeat not received",
       "Locked",
       "Browser profile started",
     ],
@@ -61,9 +61,9 @@ test("a stale confirmed Browser heartbeat becomes an honest current interruption
     ] as never,
   );
 
-  assert.equal(entries[0]?.title, "Signal interrupted");
+  assert.equal(entries[0]?.title, "Heartbeat not received");
   assert.equal(entries[0]?.timestamp, "2026-07-23T01:01:30.000Z");
-  assert.match(entries[0]?.detail ?? "", /cause is not confirmed/);
+  assert.match(entries[0]?.detail ?? "", /cannot be distinguished/);
 });
 
 test("coverage and live-heartbeat views do not duplicate the same inferred interruption", () => {
@@ -92,7 +92,7 @@ test("coverage and live-heartbeat views do not duplicate the same inferred inter
   );
 
   assert.equal(entries.length, 1);
-  assert.equal(entries[0]?.title, "Signal interrupted");
+  assert.equal(entries[0]?.title, "Heartbeat not received");
 });
 
 test("Browser Connection Audit keeps Chrome, Edge and same-browser profiles strictly separate", () => {

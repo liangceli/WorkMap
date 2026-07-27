@@ -183,6 +183,7 @@ const COLLECTOR_KEEPALIVE_INTERVAL_MS = 20_000;
 const RUNTIME_START_DEDUPE_WINDOW_MS = 5_000;
 const LIFECYCLE_MAX_UNOBSERVED_MS = 45_000;
 const CLOCK_DIVERGENCE_TOLERANCE_MS = 10_000;
+export const BROWSER_SERVER_HEARTBEAT_FRESH_MS = 90_000;
 
 type BrowserDeviceIdentityV2 = Awaited<
   ReturnType<typeof getDeviceClientStatus>
@@ -2216,6 +2217,15 @@ export class BrowserExtensionRuntimeV2 {
     fallbackRequestId?: string,
   ) {
     this.policySetupMessage = null;
+    const retryable = isRetryableError(error);
+    const browserOnline =
+      typeof navigator === "undefined" || navigator.onLine !== false;
+    const retryableFailureOutcome = classifyRetryableConnectionFailure({
+      browserOnline,
+      lastSuccessfulHeartbeatAt:
+        this.state?.lastSuccessfulHeartbeatAt ?? null,
+      nowMs: this.state ? serverNow(this.state) : Date.now(),
+    });
     if (error instanceof BrowserRuntimeDiagnosticError) {
       this.connectionState = error.connectionState;
       this.collectorState = "PAUSED";
@@ -2238,7 +2248,7 @@ export class BrowserExtensionRuntimeV2 {
       this.collectorState = "ERROR";
       this.errorCode = "UNKNOWN";
     } else {
-      this.connectionState = "OFFLINE";
+      this.connectionState = retryableFailureOutcome.connectionState;
       if (
         !this.state?.policy ||
         !policyLeaseValid(
@@ -2255,7 +2265,6 @@ export class BrowserExtensionRuntimeV2 {
         error instanceof ExtensionApiError
           ? error.detail.requestId ?? fallbackRequestId ?? null
           : fallbackRequestId ?? null;
-      const retryable = isRetryableError(error);
       const statusCode =
         error instanceof BrowserRuntimeDiagnosticError
           ? error.code
@@ -2290,15 +2299,10 @@ export class BrowserExtensionRuntimeV2 {
       };
       await this.store.writeRuntimeState(this.state);
     }
-    if (
-      isRetryableError(error) &&
-      this.connectionState === "OFFLINE"
-    ) {
-      const online =
-        typeof navigator === "undefined" || navigator.onLine !== false;
+    if (retryable && retryableFailureOutcome.statusTransition) {
       await this.queueStatusTransition(
-        online ? "SERVER_UNREACHABLE" : "NETWORK_OFFLINE",
-        online ? "SERVER_REQUEST_FAILED" : "NETWORK_UNAVAILABLE",
+        retryableFailureOutcome.statusTransition.status,
+        retryableFailureOutcome.statusTransition.reason,
       );
     }
     await this.updateVisibleStatus(safeError(error));
@@ -2640,6 +2644,42 @@ export function isRetryableError(error: unknown) {
     error.status === 408 ||
     error.status === 429
   );
+}
+
+export function classifyRetryableConnectionFailure(input: {
+  browserOnline: boolean;
+  lastSuccessfulHeartbeatAt: string | null;
+  nowMs: number;
+}): {
+  connectionState: TrackingConnectionStateV2;
+  statusTransition: {
+    status: ExtensionDeviceStatusName;
+    reason: ExtensionDeviceStatusReason;
+  } | null;
+} {
+  if (!input.browserOnline) {
+    return {
+      connectionState: "OFFLINE",
+      statusTransition: {
+        status: "NETWORK_OFFLINE",
+        reason: "NETWORK_UNAVAILABLE",
+      },
+    };
+  }
+  const heartbeatMs = input.lastSuccessfulHeartbeatAt
+    ? Date.parse(input.lastSuccessfulHeartbeatAt)
+    : Number.NaN;
+  if (
+    Number.isFinite(heartbeatMs) &&
+    Math.max(0, input.nowMs - heartbeatMs) <=
+      BROWSER_SERVER_HEARTBEAT_FRESH_MS
+  ) {
+    return { connectionState: "ONLINE", statusTransition: null };
+  }
+  // An online browser network interface does not prove that the WorkMap API is
+  // unreachable. Keep the request failure in bounded diagnostics and let the
+  // server's heartbeat-gap lane infer one honest interruption if it persists.
+  return { connectionState: "OFFLINE", statusTransition: null };
 }
 
 function safeError(error: unknown) {

@@ -100,7 +100,10 @@ export function syncTrackingV2(
     "/device-client/sync-v2",
     config.credential,
     body,
-    { requestId },
+    // The API permits up to 5 seconds to acquire the transaction and up to
+    // 15 seconds to execute it. Leave transport headroom so a valid sync is
+    // not misclassified as a lost connection by the Browser Extension.
+    { requestId, timeoutMs: 30_000 },
   );
 }
 
@@ -116,7 +119,7 @@ async function requestJson<T>(
   path: string,
   credential: string | undefined,
   body?: unknown,
-  options: { requestId?: string } = {},
+  options: { requestId?: string; timeoutMs?: number } = {},
 ): Promise<T> {
   let response: Response;
   try {
@@ -131,7 +134,7 @@ async function requestJson<T>(
           : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
     });
   } catch (error) {
     throw new ExtensionApiError(error instanceof Error ? error.message : "Network request failed.");

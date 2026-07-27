@@ -80,10 +80,10 @@ export function trackingV2ConnectionPresentation(
   if (!device.health || !device.connectionFresh) {
     return {
       connected: false,
-      label: "Signal interrupted",
+      label: "Browser heartbeat not received",
       pill: device.health ? "Stale" : "Health pending",
       detail: device.health
-        ? "No recent server-confirmed health signal."
+        ? "WorkMap has not received a confirmed Browser Extension heartbeat within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished."
         : "Waiting for the first server-confirmed health signal.",
     };
   }
@@ -177,7 +177,7 @@ export function trackingV2SnapshotPresentation(
       label: "Current activity not confirmed",
       detail: device.connectionFresh
         ? `The connection is online, but the last ${subject} snapshot is stale.`
-        : `The last ${subject} snapshot is stale and the connection signal is interrupted.`,
+        : `The last ${subject} snapshot is stale and no current Browser Extension heartbeat has been confirmed.`,
       pill: "Snapshot stale",
     };
   }

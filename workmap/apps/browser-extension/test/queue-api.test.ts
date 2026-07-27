@@ -70,8 +70,14 @@ test("status API uses the scoped device credential and status queue persists ret
 
 test("v2 sync correlates successful and failed requests without retaining credentials", async () => {
   const originalFetch = globalThis.fetch;
+  const originalTimeout = AbortSignal.timeout;
   const requestId = "extension-test-request-1";
+  const capturedTimeouts: number[] = [];
   try {
+    AbortSignal.timeout = ((timeoutMs: number) => {
+      capturedTimeouts.push(timeoutMs);
+      return originalTimeout(timeoutMs);
+    }) as typeof AbortSignal.timeout;
     globalThis.fetch = async (_input, init) => {
       const headers = new Headers(init?.headers);
       assert.equal(headers.get("x-workmap-request-id"), requestId);
@@ -92,6 +98,7 @@ test("v2 sync correlates successful and failed requests without retaining creden
       });
     };
     const response = await syncTrackingV2(config(), syncBody(), requestId);
+    assert.equal(capturedTimeouts[0], 30_000);
     assert.equal(response.requestId, requestId);
     assert.deepEqual(response.focusSnapshotResult, {
       status: "REJECTED",
@@ -122,6 +129,7 @@ test("v2 sync correlates successful and failed requests without retaining creden
     }
   } finally {
     globalThis.fetch = originalFetch;
+    AbortSignal.timeout = originalTimeout;
   }
 });
 
