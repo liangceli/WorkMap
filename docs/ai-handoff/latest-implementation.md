@@ -1,5 +1,12 @@
 # Latest Implementation Handoff
 
+## 2026-07-28 Production Migration P3009 Follow-up
+
+- A direct retry of `prisma migrate deploy` returned `P3009` because the failed `20260728130000_tracking_query_performance` record had not first been marked rolled back.
+- The local migration remains corrected and contains only transaction-compatible `CREATE INDEX IF NOT EXISTS` statements.
+- Required production order remains: rotate the exposed database credential, run `prisma migrate resolve --rolled-back 20260728130000_tracking_query_performance --schema prisma/schema.prisma`, confirm success, then run `prisma migrate deploy --schema prisma/schema.prisma`.
+- No application or schema change was needed for this follow-up; production recovery is still pending user execution.
+
 ## 2026-07-28 Tracking Query Migration Transaction Compatibility
 
 ### Original Task Brief And Incident

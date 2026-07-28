@@ -1,5 +1,11 @@
 # Latest QA Handoff
 
+## 2026-07-28 Production Migration P3009 Follow-up QA
+
+- Confirmed the new `P3009` is Prisma's expected guard for an unresolved failed migration record, not a second SQL/index failure.
+- Confirmed the checked-in/local migration file still uses transaction-compatible `CREATE INDEX IF NOT EXISTS` and does not require another code change.
+- Production recovery is not complete until `migrate resolve --rolled-back` succeeds before `migrate deploy`; no production command was run by Codex.
+
 ## 2026-07-28 Tracking Query Migration Recovery QA
 
 ### Reviewed Failure And Correction
