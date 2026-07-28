@@ -1,5 +1,29 @@
 # Latest QA Handoff
 
+## 2026-07-28 Tracking Query Migration Recovery QA
+
+### Reviewed Failure And Correction
+
+- Confirmed Prisma `P3018` wraps the migration in a transaction and PostgreSQL rejected the first `CREATE INDEX CONCURRENTLY` with SQLSTATE `25001`.
+- The first statement could not execute, so the transaction did not create either index; recovery must mark the failed migration rolled back and retry the corrected file.
+- Replaced only the two migration statements with transaction-compatible `CREATE INDEX IF NOT EXISTS`. Schema, query predicates and runtime behavior are unchanged.
+
+### Findings Ordered By Severity
+
+- Critical external security action: the screenshot exposed the complete production database URL. The Supabase database password must be rotated and Render updated before any further migration or deployment.
+- High, corrected locally: the original concurrent index syntax is incompatible with the observed Prisma production migration transaction.
+- Medium deployment risk: regular index creation can temporarily block Tracking writes. Stop all tracking clients and avoid Reports during the migration; retained local queues prevent data loss.
+- No evidence of a partial index or data mutation exists because PostgreSQL rejected the first statement before index creation.
+
+### Verification And Recommendation
+
+- `git diff --check`: passed.
+- `prisma validate --schema prisma/schema.prisma` with a non-production placeholder URL: passed.
+- Installed Prisma CLI help confirms the recovery syntax `migrate resolve --rolled-back <migration> --schema <schema>`.
+- Application source did not change in this correction, so the previously passing API tests/typecheck/lint/build remain the relevant application verification.
+- Production migration retry, Render reconnection with the rotated password, and real queue-drain QA are not run.
+- Pass for a follow-up commit and controlled migration recovery. Do not proceed with the exposed credential or run a new migration before resolving `20260728130000_tracking_query_performance`.
+
 ## 2026-07-28 Supabase Query And Lock-Pressure QA
 
 ### Reviewed Implementation And Diff
@@ -13,7 +37,7 @@
 - High, fixed in source: the serialized overlap read omitted `companyId`, preventing the company-leading lane/time index from being a usable plan and extending the write-lane lock into tens of seconds.
 - High, pending production migration: `/reports` company coverage needs a company/date-leading covering index; the supplied query took roughly 102 seconds without it.
 - High, external state: Supabase Pro/Micro is active, but compute alone cannot correct these query plans. The production indexes and API code still need deployment.
-- Medium, expected deployment risk: concurrent index creation consumes database I/O while building. It avoids the heavy write lock of ordinary `CREATE INDEX`, but production query/IO metrics must still be watched during migration.
+- Medium, expected deployment risk: the corrected transaction-compatible index build can temporarily block writes, so production clients must be stopped for the bounded migration window and query/IO metrics watched.
 - No regression was found in tenant isolation, same-App overlap rejection, different-App runtime concurrency, confirmed ledger insertion or report aggregation semantics.
 
 ### Test And Verification Status

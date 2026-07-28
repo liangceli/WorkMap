@@ -1,5 +1,33 @@
 # Latest Implementation Handoff
 
+## 2026-07-28 Tracking Query Migration Transaction Compatibility
+
+### Original Task Brief And Incident
+
+- Recover production migration `20260728130000_tracking_query_performance` after Prisma returned `P3018` / PostgreSQL `25001` because `CREATE INDEX CONCURRENTLY` cannot execute inside Prisma Migrate's transaction block.
+- Preserve the already-pushed API query/pool fixes and avoid changing Desktop Agent, Browser Extension, policy, queue or report semantics.
+
+### Changed Files And Implementation
+
+- `workmap/prisma/migrations/20260728130000_tracking_query_performance/migration.sql`: replaced both unsupported `CREATE INDEX CONCURRENTLY IF NOT EXISTS` statements with transaction-compatible `CREATE INDEX IF NOT EXISTS` statements.
+- Because the failed statement was the first operation inside a transaction, PostgreSQL did not partially create either index. The failed Prisma migration record must be marked rolled back before retrying the corrected file.
+- This migration was already committed as `c9311cc` before the production failure, so the corrected migration requires a follow-up commit. No successful environment is known to have applied the original checksum.
+
+### Deployment And Safety
+
+- Rotate the Supabase database password before any retry because the production connection string was exposed in a screenshot. Update Render `DATABASE_URL` and the current shell variable; never commit or paste the replacement value.
+- Stop tracking clients and avoid Reports during the short migration window because regular PostgreSQL index creation can temporarily block writes. Run `prisma migrate resolve --rolled-back 20260728130000_tracking_query_performance`, then `prisma migrate deploy` with the corrected migration.
+- After migration success, deploy/restart Render, enable one Desktop Agent, and verify queue drainage before restoring additional clients.
+
+### Verification / Unchanged / Risk
+
+- `git diff --check`: passed.
+- `prisma validate --schema prisma/schema.prisma` with a non-production placeholder URL: passed.
+- Installed Prisma CLI help confirms the recovery syntax `migrate resolve --rolled-back <migration> --schema <schema>`.
+- Prisma schema and index definitions are unchanged; only the migration execution form changed.
+- No application, Desktop, Browser, Web, auth/RBAC, tenant, policy or stored-data behavior changed in this correction.
+- Production retry and real queue-drain QA are not run. Index build duration depends on current table size and database load; keep clients stopped until the command completes.
+
 ## 2026-07-28 Supabase Query And Lock-Pressure Fix
 
 ### Original Task Brief
@@ -19,7 +47,7 @@
 - `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`: the overlap lookup now includes the authenticated `companyId` alongside device/source/stream/time. Acceptance, duplicate and overlap semantics are unchanged; the predicate both strengthens tenant bounding and enables the intended lane/time index path.
 - `workmap/apps/api/test/tracking-v2-live-semantics.test.ts`: captures the overlap query and asserts that it is scoped to the authenticated company and device while preserving the existing same-App runtime overlap rejection test.
 - `workmap/prisma/schema.prisma`: adds an `ActivityInterval(companyId, deviceId, source, stream, endedAt)` index for recent overlap candidates and an `ActivityEvent(companyId, startedAt, userId)` covering index for company/date coverage reads.
-- `workmap/prisma/migrations/20260728130000_tracking_query_performance/migration.sql`: adds both indexes with PostgreSQL `CREATE INDEX CONCURRENTLY IF NOT EXISTS` so active tracking writes are not blocked by a normal index build.
+- `workmap/prisma/migrations/20260728130000_tracking_query_performance/migration.sql`: adds both indexes with transaction-compatible PostgreSQL `CREATE INDEX IF NOT EXISTS`; apply it during a bounded maintenance window with tracking clients stopped.
 - The earlier uncommitted Prisma `pool_timeout=10` fail-fast hardening and its tests are preserved as part of the same recovery deployment.
 
 ### Role, Collection And Data Behavior
@@ -39,7 +67,7 @@
 ### Intentionally Unchanged, Remaining Risks And Next Steps
 
 - No Web UI, Desktop Agent, Browser Extension, policy schedule, auth/RBAC or report calculation code changed.
-- The new indexes do not exist in production until `prisma migrate deploy` applies the migration. Deploy the migration before or with the API code; do not use `db push` and do not clear client queues.
+- The new indexes do not exist in production until the corrected `prisma migrate deploy` succeeds. Resolve the failed migration as rolled back, retry it during a bounded maintenance window, do not use `db push`, and do not clear client queues.
 - Deploy/restart the Render API after the database is healthy. Start with one Desktop Agent and require pending to decrease, server-confirmed heartbeat/confirmed-through to advance and terminal rejected to stay unchanged. Then re-enable the second client set incrementally.
 - Recheck Supabase Query Performance after traffic resumes. The previous 38-102 second query shapes should disappear; if they remain slow after the new indexes are built, capture fresh `EXPLAIN (ANALYZE, BUFFERS)` evidence before buying Small compute.
 
