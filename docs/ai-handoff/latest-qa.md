@@ -1,5 +1,185 @@
 # Latest QA Handoff
 
+## 2026-07-28 Tracking Backpressure / Desktop 0.6.9 QA
+
+### Reviewed Implementation
+
+- Reviewed the single-Agent failure-rate evidence, Desktop request scheduling and durable queue, API transaction/cursor path, reconciliation worker, Reports dirty-ledger fallback, Prisma pool limit, release versioning and generated NSIS installer.
+- Diff review confirms that collection engines and Browser Extension code were not modified. Product changes are limited to Desktop upload transport/backpressure and API ingestion/reconciliation/read-path cost.
+
+### Findings Ordered By Severity
+
+- Resolved - Blocker: newly created Desktop intervals no longer bypass retryable failure backoff. One global 5/15/30/60-second gate coalesces all retry triggers while SQLite continues retaining new intervals.
+- Resolved - Blocker: Reports reads no longer launch write-heavy reconciliation against the same active date that ingestion is updating. Dirty dates remain accurate through the existing official-ledger fallback.
+- Resolved - High: reconciliation waits for 60 seconds of target quiet, runs every 30 seconds and takes four targets, removing the intentional 15-second collision with continuous 15-second interval settlements.
+- Resolved - High: cursor refresh uses the persisted contiguous prefix and unresolved tail instead of an unbounded full-epoch rescan. Tests cover a gap, a terminal rejection, preserved historical rejection and latest accepted time.
+- Resolved - High: Desktop now permits the bounded API/pool envelope to return an acknowledgement and limits each transaction to 20 intervals. Stable IDs and duplicate acknowledgements preserve replay safety.
+- Verified - High: valid Focus active/focused idle/open-runtime intervals still enter the formal ledger and Reports; snapshot-policy rejection remains isolated from confirmed health; Browser multi-window, multi-screen, lock/minimize and queue behavior still pass.
+- Remaining - High: no deployed queue-drain or current Render log was observed. Code-level pass is not proof that the existing production pending count has recovered.
+- Remaining - Medium: one sustained active date intentionally stays in ledger-fallback state until it is quiet for 60 seconds. Totals remain exact, but cached summary coverage can lag by that bounded interval.
+
+### Test / Verification Status
+
+- `pnpm --filter @workmap/desktop-agent typecheck`: pass.
+- `pnpm --filter @workmap/desktop-agent lint`: pass.
+- `pnpm --filter @workmap/desktop-agent test`: pass, 68/68.
+- `pnpm --filter @workmap/desktop-agent build`: pass.
+- `pnpm --filter @workmap/desktop-agent release:windows`: pass after rerunning with permitted network access; the first sandboxed attempt failed only with outbound `EACCES`.
+- `pnpm --filter @workmap/api typecheck`: pass.
+- `pnpm --filter @workmap/api lint`: pass.
+- `pnpm --filter @workmap/api test`: pass, 57/57.
+- `pnpm --filter @workmap/api build`: pass.
+- `pnpm --filter @workmap/browser-extension typecheck`: pass.
+- `pnpm --filter @workmap/browser-extension lint`: pass.
+- `pnpm --filter @workmap/browser-extension test`: pass, 72/72.
+- `pnpm --filter @workmap/browser-extension build`: pass.
+- `git diff --check`: pass. Changed-text secret scan: pass.
+
+### Manual QA And Recommendation
+
+- Real Windows installation, local SQLite queue drainage, deployed API latency, Supabase connection use, `/reports` load time, and 1/2/4-client recovery were not run.
+- QA recommendation: code/release candidate pass; production recovery remains conditional. Deploy API first, install 0.6.9 without deleting/re-pairing, and require pending to trend down to zero plus advancing confirmed timestamps before re-enabling other clients.
+- No migration is required. Do not alter policy or clear the 56 historical terminal rejections; they are separate retained evidence and are not the current pending backlog.
+- The next round can proceed to controlled deployment and real-device verification, but not yet to a production-readiness or capacity declaration.
+
+## 2026-07-28 Standard Four-Client Non-Recovery QA
+
+### Reviewed Evidence And Findings
+
+- Reviewed the Standard instance screenshot, affected Desktop UI, Owner Reports state, latest local redacted NDJSON, Desktop 15-second transport and retry scheduling, Browser 30-second transport, API 15-second transaction, eight-connection pool fallback, cursor refresh, and reconciliation cadence.
+- Blocker: Standard did not restore client acknowledgements. The latest 30-minute Desktop window has 113 attempts, 0 confirmations and 112 failures; 110 terminate at the exact 15-second client envelope while pending rises to 129.
+- Blocker: `/reports` is slow and warns about sequence gaps under the same load. This is consistent with backend request/database starvation affecting both write and read paths.
+- High: `Confirmed through 10:07` and a 10:09 received snapshot prove some server-side completion after the client's 09:41 last-confirmed sync. Durable pending therefore includes possibly already-committed rows awaiting accepted/duplicate acknowledgement; deleting the queue would be unsafe.
+- High: four active tracking clients plus continuous retry is beyond current evidence-backed capacity. More compute alone does not remove the eight-connection, long-transaction and repeated-reconstruction bottlenecks.
+- Remaining: exact post-upgrade server exception is not confirmed because the signed-in Render dashboard tab was unavailable. A current Render `P2024`/transaction-stage log and database active-connection view are still required for final server correlation.
+
+### Verification And Recommendation
+
+- Read-only local log/source/screenshot diagnosis: pass. Product tests, deliberate load test, Render restart, client isolation/recovery and signed-in post-upgrade log inspection: not run.
+- Current four-client Standard readiness: fail. Reduce active clients to one for controlled queue drainage, then implement the scoped Desktop/API performance correction before reintroducing four simultaneous clients.
+- The next round can proceed with implementation, preserving local collection accuracy, durable queue identity, policy/tenant/device boundaries and accepted Reports ledger semantics.
+
+## 2026-07-28 Render Standard Capacity Estimate QA
+
+### Reviewed Evidence And Findings
+
+- Verified current Desktop 10-second health / 15-second settlement cadence, 15-second client timeout, API 15-second transaction envelope, 15-second reconciliation worker cadence, and Prisma's 8-connection session-pool fallback.
+- Recomputed the observed single-Agent rate as 3,915 attempts over 454.6 minutes, or 8.61 requests/minute. Combined with observed 5.9-second p50 / 11.2-second p95 response time, five Agents can consume approximately 4.2 / 8.0 concurrent Tracking requests before non-Tracking work.
+- High: Standard's 2 GB / 1 CPU is required headroom but does not remove the 8-connection or long-transaction bottleneck.
+- High: two simultaneous employees are the conservative current pilot gate; three is supervised-test-only, and five or more is not evidence-backed.
+
+### Verification And Recommendation
+
+- Read-only source/log calculation: pass. Standard deployment, controlled load test and real multi-device QA: not run.
+- Multi-user production readiness remains fail. The next performance round can proceed, but no higher employee capacity should be advertised until load gates pass with pending returning to zero and no `P2024`, OOM or reconciliation timeout.
+
+## 2026-07-28 Two-Employee Prisma Pool Exhaustion QA
+
+### Reviewed Implementation And Evidence
+
+- Reviewed the supplied Render Prisma stack trace, current Desktop redacted NDJSON, existing Desktop retry/dead-letter rules, API transaction/pool configuration, and the prior 512 MB memory-limit evidence.
+- No product or infrastructure setting was changed.
+
+### Findings Ordered By Severity
+
+- Blocker: Prisma exhausted all 8 configured application connections and timed out queued queries after 30 seconds (`P2024`). Tracking syncs then failed retryably after 46-142 seconds; policy/device/activity queries were also starved.
+- Blocker: the local queue continued growing from 11 to 47 while nearly every request hit the Desktop 15-second timeout. The current API deployment is not reliable for a two-employee sustained Tracking v2 test.
+- High: adding the second employee increased load but did not create a policy error. It exposed existing request amplification, long transactions, reconciliation pressure and insufficient 512 MB instance headroom.
+- High: pending intervals remain retryable local data and the terminal rejected count stayed at 56. Recovery is expected after backend stability, but it has not yet been observed for this incident.
+- Medium: increasing only Prisma `connection_limit` is not an adequate fix and can overload the database. Vertical API headroom must be paired with shorter/coalesced work and bounded retry/reconciliation.
+
+### Verification And Recommendation
+
+- Read-only log/source diagnosis: pass. Automated tests, Render resize, deployed load testing, database connection metrics and real two-device recovery QA: not run.
+- Upgrade the API to Render Standard 2 GB / 1 CPU now as operational containment; no migration or Agent reinstall is required. Do not onboard more sustained clients until the performance patch and 1/5/20/50-client load gates are completed.
+- Current multi-user readiness: fail. The next round should proceed with server/runtime performance corrections while preserving collection accuracy, durable queues, policy enforcement, tenant/device boundaries and official Reports ledger semantics.
+
+## 2026-07-28 Reports Stale Heartbeat Versus Policy QA
+
+### Reviewed Implementation And Evidence
+
+- Reviewed API connection freshness calculation, snapshot rejection precedence, visible Browser-device selection, Web connection/snapshot presentation, server diagnostic presentation, and the supplied Live signals screenshot.
+- No product implementation was changed.
+
+### Findings Ordered By Severity
+
+- Verified - High: all visible health rows say `Policy Active`; `0/3 connected` is caused by stale server-received heartbeat timestamps, not a global policy failure.
+- Verified - High: Desktop uses a 30-second health freshness limit and Browser uses 90 seconds. The shown Desktop 09:41 confirmation became stale only because no later health row was received.
+- Verified - Medium: Chrome's last snapshot has a specific expired/replaced-lease rejection, but the stale client is not currently completing automatic lease refresh. Edge shows only an older terminal interval tombstone.
+- Confirmed - Medium: Desktop stale connection and snapshot copy incorrectly says `Browser heartbeat` / `Browser Extension` because shared Web presentation hardcodes Browser wording. Connection/policy logic remains separate and correct.
+- Remaining - Medium: the screenshot cannot identify whether the current missing heartbeat is caused by a stopped Agent, sleep, local network, API outage, or timeout. Local Desktop diagnostics are required.
+
+### Verification And Recommendation
+
+- Read-only source/screenshot diagnosis: pass. Automated product tests and real deployed client QA: not run.
+- Do not alter policy from this evidence. Require advancing Desktop heartbeat/sync and a refreshed Chrome lease/snapshot. A Web-only client-specific wording correction is safe to schedule separately.
+- The next round can proceed, but current client connectivity must be re-established before declaring live tracking healthy.
+
+## 2026-07-27 Render Memory Exhaustion And Tracking v2 Scalability QA
+
+### Reviewed Implementation And Evidence
+
+- Reviewed supplied Render memory/CPU/request graphs and API transaction logs, Desktop sync cadence/coalescing behavior, the Tracking v2 ingestion transaction, full-epoch cursor refresh, full-day reconciliation worker, Prisma runtime pool configuration, schema indexes, and current-day local NDJSON request statistics.
+- No product or deployment implementation was changed.
+
+### Findings Ordered By Severity
+
+- Blocker: a single sustained Desktop client generated 3,787 `sync-v2` attempts over 439 minutes (8.63/minute) while the 512 MB API instance reached its memory limit and restarted. The current deployment is not acceptable for a simultaneous multi-user pilot.
+- Blocker: API logs contain repeated transaction-stage `TRACKING_SYNC_INTERNAL` failures taking 15-26 seconds, and the reconciliation worker exceeded its 10-second transaction timeout after 23,884 ms. Restart did not cure these failures.
+- High: normal Focus, open/runtime, and health activity can produce separate sync requests in one logical collection cycle. This needlessly multiplies server load without improving local tracking accuracy.
+- High: ingestion reconstructs cursor coverage from all rows in an active epoch, while reconciliation repeatedly loads and merges all fragments for the user/source/day. Both paths become more expensive as the workday grows.
+- High: the Desktop 15-second client timeout matches the API's transaction timeout. Timed-out client retries can overlap server-side completion/rollback and create a positive feedback loop under pressure.
+- Medium: available evidence strongly supports request amplification plus accumulating recomputation and constrained compute. It does not yet distinguish a separate retained-object memory leak; heap/RSS observation during a controlled idle window is still required.
+
+### Verification And Recommendation
+
+- Read-only source/log/metrics diagnosis: pass. Automated product tests, deployed heap profiling, query plans, load testing, and real multi-user QA: not run.
+- Operational recommendation: upgrade Render API to Standard 2 GB now as temporary containment, then implement sync coalescing/backoff and short/incremental ingestion plus bounded background reconciliation before onboarding multiple sustained clients.
+- Release recommendation: fail current backend scalability for multi-user Tracking v2. The next round may proceed with a deliberately scoped performance correction; it must preserve local collection, tenant/device credential boundaries, policy enforcement, idempotency, durable retry, and official Reports ledger accuracy.
+
+## 2026-07-27 Desktop Agent 0.6.8 HTTP 502 Recovery QA
+
+### Reviewed Implementation And Evidence
+
+- Reviewed Desktop `sync-v2` HTTP 5xx handling, retry/dead-letter state changes, supplied screenshots, exact local NDJSON rows around the 16:42 Adelaide burst, later confirmed syncs, and current Render platform status.
+- No product implementation was changed.
+
+### Findings Ordered By Severity
+
+- Confirmed - High: the user's Render notification states that `workmap-api` exceeded its memory limit and was automatically restarted. This closes the previously unproven service-side cause of the 502 burst.
+- Verified - High: the six-row 502 burst returned an HTML gateway page, not a Tracking v2 business rejection. All affected intervals stayed retryable; none increased the durable 56 rejected count.
+- Verified - High: HTTP 200 resumed in about 20 seconds and pending drained from 13 to zero across recovered requests while interval rejection stayed zero. Together with increasing `/reports` totals, there is no evidence of data loss in the observed batch.
+- Remaining - Medium: the restart cause is memory exhaustion, but the underlying memory-growth cause remains unresolved. Render metrics/API logs must distinguish leak, traffic/load spike, expensive request concurrency, and insufficient instance memory.
+- Confirmed - Medium: the diagnostic renderer exposes a bounded fragment of raw non-JSON HTML for 502 responses instead of a clear retry message. This is a presentation defect, not queue or ledger corruption.
+- Remaining - Medium: 62 current-day 15-second no-response timeouts remain a separate transport/diagnostic reliability concern even though observed retries recovered.
+
+### Verification And Recommendation
+
+- Read-only source/log diagnosis: pass. Public hosting status check: no July 27 platform-wide incident reported.
+- Automated product tests and manual fault injection were not run because this round changed documentation only.
+- Pass the observed queue recovery and accepted-data path. No emergency release is required solely for this short recovered 502 burst. Proceed to a narrowly scoped Desktop transport/diagnostic refinement only if the user wants clearer errors and fewer false timeout rows; do not change collection or ledger logic.
+
+## 2026-07-27 Desktop Agent 0.6.8 Network Diagnostics QA
+
+### Reviewed Implementation And Evidence
+
+- Reviewed Desktop `sync-v2` 15-second timeout, failure classification, retry/dead-letter state changes, SQLite queue statistics, recent-failure persistence, renderer fallback wording and the current-day local redacted NDJSON.
+- No product implementation was changed.
+
+### Findings Ordered By Severity
+
+- Verified - High: current no-response/network failures retry pending intervals and do not increment terminal dead letter. A stable historical `56 rejected` is therefore correct.
+- Verified - High: after the last displayed timeout, HTTP 200 resumed, a 12-interval request confirmed with zero rejection, pending drained to zero and dead letter stayed 56. The observed queued data recovered rather than being newly rejected.
+- Confirmed - Medium: 44 of 45 current-day failures align with the exact 15-second Desktop client timeout; the remaining failure is HTTP 502. Frequent timeouts are not ideal even though recovery worked.
+- Confirmed - Medium: current 0.6.8 no-response diagnostics incorrectly receive the legacy-history fallback sentence and omit `Automatic retry: yes`, even though the runtime follows the retry branch.
+- Remaining - Low: no server request-log correlation or deliberate network/latency fault injection was performed, so the exact upstream source of the slow response is not proven.
+
+### Verification And Recommendation
+
+- Read-only source/log diagnosis: pass. `git diff --check`: pass. Scoped secret scan: pass.
+- Automated product tests and manual network QA were not run because this round changed documentation only.
+- Pass the queue behavior and observed recovery. Do not describe 45 daily request failures as ideal network health. A future separate Desktop transport/diagnostic patch may raise timeout headroom and correct wording, but must leave collection, Tracking v2 intervals, policy and Reports ledger semantics unchanged.
+
 ## 2026-07-27 Desktop Connection Audit Web-Only QA
 
 ### Reviewed Implementation

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { TrackingActivityMetric } from "@prisma/client";
-import { computeTarget } from "../src/modules/devices/tracking-v2-reconciliation.service.js";
+import {
+  computeTarget,
+  TRACKING_RECONCILIATION_QUIET_PERIOD_MS,
+  TrackingV2ReconciliationService,
+} from "../src/modules/devices/tracking-v2-reconciliation.service.js";
+import { advanceTrackingCursorCoverageV2 } from "../src/modules/devices/tracking-v2-sync.service.js";
 
 const BASE = Date.parse("2026-07-17T09:00:00.000Z");
 
@@ -86,4 +91,77 @@ test("Chrome and Edge Domain runtime overlap is unioned for the same hostname", 
 
   assert.equal(result.user.openRuntimeMs, 40_000n);
   assert.equal(result.subjects.get("domain-docs")?.openRuntimeMs, 40_000n);
+});
+
+test("cursor refresh advances from its contiguous prefix without rescanning accepted history", () => {
+  const coverage = advanceTrackingCursorCoverageV2(
+    {
+      contiguousThroughSequence: 100,
+      latestAcceptedEndedAt: "2026-07-17T10:00:00.000Z",
+      rejectedRanges: [
+        { from: 5, to: 5, code: "POLICY_REJECTED" },
+        { from: 102, to: 102, code: "STALE_CACHE" },
+      ],
+    },
+    [
+      {
+        sequenceNumber: 101,
+        status: "ACCEPTED",
+        endedAt: "2026-07-17T10:01:00.000Z",
+      },
+      {
+        sequenceNumber: 102,
+        status: "REJECTED",
+        terminal: true,
+        rejectionCode: "FOCUS_OVERLAP",
+      },
+      {
+        sequenceNumber: 104,
+        status: "ACCEPTED",
+        endedAt: "2026-07-17T10:04:00.000Z",
+      },
+    ],
+  );
+
+  assert.deepEqual(coverage, {
+    contiguousThroughSequence: 102,
+    latestAcceptedEndedAt: "2026-07-17T10:04:00.000Z",
+    missingRanges: [{ from: 103, to: 103 }],
+    rejectedRanges: [
+      { from: 5, to: 5, code: "POLICY_REJECTED" },
+      { from: 102, to: 102, code: "FOCUS_OVERLAP" },
+    ],
+  });
+});
+
+test("background reconciliation waits for a quiet target instead of racing active uploads", async () => {
+  type DirtyTargetQuery = {
+    where: { dirtyAt: { lte: Date } };
+    take: number;
+  };
+  let query: DirtyTargetQuery | null = null;
+  const service = new TrackingV2ReconciliationService({
+    usageReconciliationTarget: {
+      updateMany: async () => ({ count: 0 }),
+      findMany: async (input: DirtyTargetQuery) => {
+        query = input;
+        return [];
+      },
+    },
+  } as never);
+  const before = Date.now();
+
+  const result = await service.reconcileDirtyTargets();
+  const observedQuery = query as DirtyTargetQuery | null;
+  assert(observedQuery);
+  const cutoff = observedQuery.where.dirtyAt.lte;
+
+  assert.deepEqual(result, { reconciled: 0 });
+  assert.equal(observedQuery.take, 4);
+  assert.ok(
+    cutoff.getTime() <= before - TRACKING_RECONCILIATION_QUIET_PERIOD_MS + 100,
+  );
+  assert.ok(
+    cutoff.getTime() >= before - TRACKING_RECONCILIATION_QUIET_PERIOD_MS - 100,
+  );
 });

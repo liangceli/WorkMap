@@ -154,10 +154,17 @@ export function syncTrackingV2(
     "/device-client/sync-v2",
     config.credential,
     request,
-    15_000,
+    TRACKING_V2_SYNC_TIMEOUT_MS,
     { requestId },
   );
 }
+
+// The API can legitimately spend up to 5 seconds waiting for an interactive
+// transaction and up to 15 seconds inside it. A saturated database pool can
+// add further bounded wait time before that transaction starts. Aborting at
+// 15 seconds caused the server to commit after the Agent had already retained
+// the same rows for retry, amplifying load without improving durability.
+export const TRACKING_V2_SYNC_TIMEOUT_MS = 60_000;
 
 export function isUpgradeRequiredError(error: unknown) {
   return (

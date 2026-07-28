@@ -1,5 +1,282 @@
 # Latest Implementation Handoff
 
+## 2026-07-28 Tracking v2 Backpressure And Reconciliation Fix / Desktop 0.6.9
+
+### Original Task Brief
+
+- Investigate why one remaining Desktop Agent continued accumulating pending uploads after the other employee's Desktop Agent and both Browser Extensions were stopped.
+- Implement only after reaching at least 95% confidence, preserve the existing Desktop/Browser collection and data semantics, and concentrate the change on request amplification, database concurrency and Reports latency.
+
+### Root Cause Confirmed Before Editing
+
+- The latest single-Agent NDJSON window contained 113 attempts in 30 minutes, zero confirmations and 112 failures; 110 ended at the old Desktop 15-second transport limit and two returned retryable `TRACKING_SYNC_INTERNAL`.
+- The local queue kept growing even after three of four clients were stopped. This disproved a simple “Render Standard cannot handle two employees” explanation and confirmed a positive feedback loop in the application.
+- Desktop retried failed rows with per-row backoff, but every newly collected interval was immediately ready and could trigger another request. The old 15-second transport timeout was also shorter than the bounded pool-wait plus API transaction envelope, so the client could abandon a request that later committed and then replay the retained row.
+- API sync rebuilt cursor coverage from every interval/tombstone in the current clock epoch on every request. In parallel, the reconciliation worker ran every 15 seconds and Reports reads synchronously attempted the same write-heavy full-day reconciliation. Active uploads kept marking the same date dirty, so ingestion, Reports and reconciliation competed for the same eight Prisma connections.
+
+### Changed Files
+
+- Desktop 0.6.9: `apps/desktop-agent/package.json`, `alpha-windows/package.json`, `scripts/build-alpha.mjs`, `src/version.ts`, `src/windowsActivityHost.ts`, `src/apiClient.ts`, `src/runtimeV2.ts`, `src/trackingV2Types.ts`, release tests and regenerated Alpha native host binary.
+- API: `tracking-v2-sync.service.ts`, `tracking-v2-reconciliation.service.ts`, `tracking-v2-reconciliation.worker.ts`, `tracking-v2-reports.service.ts` and focused tests.
+- Handoff: this file and `docs/ai-handoff/latest-qa.md`.
+
+### Implementation Summary
+
+- Desktop collection engines, privacy fields, SQLite durability, sequence/event identities, policy enforcement and Tracking v2 request schema are unchanged.
+- Desktop `/sync-v2` now waits up to 60 seconds for a bounded server response, uploads at most 20 intervals per transaction, and applies one global retry gate after retryable network/429/5xx failures: 5s, 15s, 30s, then 60s maximum. Newly created rows can no longer bypass an outage backoff and sustain a retry storm. A confirmed response resets the gate; terminal 4xx handling remains unchanged.
+- API cursor maintenance now starts from the persisted contiguous sequence and reads only the unresolved tail instead of re-reading the full accepted epoch. Missing and terminal-rejection ranges, latest accepted time and duplicate semantics are preserved.
+- Background reconciliation now processes at most four targets every 30 seconds and only after a target has had no new interval for 60 seconds. Active-day ingestion is no longer deliberately raced by full-day summary writes.
+- Owner Reports no longer performs reconciliation write transactions on a normal read. Dirty dates use the existing exact formal-ledger fallback, so visible totals remain accurate while background summaries wait for a quiet point. The explicit operational retry path can still request immediate reconciliation.
+- No schema or database migration is required. Browser Extension 0.5.13 source/package was not changed.
+
+### Verification And Release Output
+
+- Desktop: typecheck pass; lint pass; test pass 68/68; build pass; Windows NSIS release pass.
+- API: typecheck pass; lint pass; test pass 57/57; build pass.
+- Browser Extension 0.5.13 regression: typecheck pass; lint pass; test pass 72/72; build pass.
+- `git diff --check`: pass. Changed-text secret scan: pass, no likely secrets.
+- Installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.9.exe`, 115,431,708 bytes, SHA-256 `5FABB6196F0EC368AEEB88FF409A87B64CD53A62F667AC6B7A671CFDC2EAA3EB`; file metadata reports product/file version 0.6.9.
+
+### Role / Access Behavior And Intentionally Unchanged Areas
+
+- Tenant, device credential, Browser/Desktop identity, Owner/Employee and policy acknowledgement boundaries are unchanged.
+- Focus active, focused idle, App open/runtime, Browser Domain logic, multi-window/multi-display handling, lock/sleep/minimize behavior, privacy exclusions and official interval validation are unchanged.
+- No queue rows were deleted or rewritten; old pending rows keep their original IDs and will be acknowledged as accepted or duplicate after recovery.
+- No policy schedule, Prisma connection limit, Render instance type, database schema, Web component or Browser Extension release was changed.
+
+### Manual QA, Remaining Risks And Next Steps
+
+- Real deployed Render/Supabase and real Windows drain QA were not run; the API code is not deployed and the 0.6.9 installer is not installed by this implementation round. Do not claim production recovery yet.
+- Deploy the API change first, then install Desktop 0.6.9 without clearing SQLite or re-pairing. Keep only one Agent enabled initially and observe that pending decreases to zero, `Confirmed through` advances, and new Render logs show no `P2024`, transaction timeout or memory restart. Then re-enable the second Agent and each unchanged Browser Extension one at a time.
+- Existing 0.6.8 Agents do not have the new global gate and should be upgraded. Browser 0.5.13 retains its existing 30-second transport/backoff behavior; its complete regression suite passed, but four-client production load remains a required manual gate.
+- Controlled 1/5/20/50-client load testing is still required before publishing a capacity number or calling the system production-ready. The next round can proceed to deployment and measured queue-drain QA.
+
+## 2026-07-28 Standard Upgrade Did Not Recover Four-Client Tracking
+
+### Original Task Brief
+
+- Investigate continued Desktop pending growth and very slow Owner `/reports` loading after upgrading `workmap-api` to Render Standard, with two employees each running a Desktop Agent and Browser Extension.
+
+### Changed Files
+
+- Diagnostic handoff only: this file and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, Browser Extension, API, Web, database, policy, Render setting or deployment was changed.
+
+### Post-Upgrade Evidence And Root-Cause Boundary
+
+- The Standard instance change is visibly active (`1 CPU / 2 GB`), but the affected Desktop Agent remained `Offline - retrying`; pending rose from the screenshot's 110 to 129 during inspection.
+- In the latest 30-minute local NDJSON window, Desktop made 113 sync attempts, confirmed 0, and failed 112. Of those failures, 110 ended at approximately 15.0 seconds as `NETWORK_ERROR`; two returned retryable HTTP 500 `TRACKING_SYNC_INTERNAL`.
+- Owner Reports independently shows Desktop queue 125, Browser queue 7, a sequence-gap warning, and prolonged selected-report loading. The 110-versus-125 screenshot difference is normal time progression while the queue is still growing, not two different counters.
+- Reports also shows Desktop `Confirmed through 10:07` and `Snapshot received 10:09` while the client's `Last sync` remains 09:41. This is evidence that at least some timed-out requests later completed server-side, but the 15-second Desktop caller did not receive the acknowledgement. Its local rows therefore remain pending and are replayed; the server may later classify them as duplicates. The incident is not evidence that all post-09:41 activity was lost.
+- Desktop `/sync-v2` still has a 15-second client timeout, equal to the API interactive transaction timeout and shorter than the previously observed total server durations. Browser 0.5.13 permits 30 seconds, matching its much smaller visible queue. Desktop serializes requests but new interval/health triggers can request another sync immediately after an in-flight timeout, while row-level backoff does not stop newly-created ready intervals from producing more requests.
+- Standard adds CPU/RAM but leaves the explicit Supabase session-pool fallback at eight connections and does not remove full-epoch cursor reconstruction or 15-second full-day reconciliation cadence. Current post-upgrade local evidence proves response starvation; a signed-in post-upgrade Render log was not available in the inspection environment, so whether the newest server error remains Prisma `P2024`, transaction timeout, or lock/queue waiting is not falsely claimed.
+
+### Immediate Containment And Required Product Fix
+
+- Do not upgrade to the $85 compute Pro instance as the next action. First close heavy `/reports` refreshes, temporarily disable (not remove or clear) both Browser Extensions, and pause one Desktop Agent. After in-flight work clears or the API is restarted, allow one Desktop Agent to drain before reintroducing the second Agent and then each Extension one at a time.
+- Required Desktop correction: increase the transport envelope beyond the API envelope, coalesce normal Focus/open-runtime/health sync, and apply a global retry circuit/backoff so new rows cannot sustain one request every 15 seconds during outage.
+- Required API correction: shorten ingestion transactions, replace per-sync full-epoch cursor reconstruction with incremental cursor maintenance, and coalesce/bound or separate reconciliation from the API process. Reports read performance must be measured under the same load.
+- No queue deletion, re-pairing, policy weakening or migration is indicated. Real Standard four-client recovery and post-upgrade Render log correlation remain not run.
+
+## 2026-07-28 Render Standard Current-Code Capacity Estimate
+
+### Original Task Brief
+
+- Estimate how many simultaneously monitored employees the Render Standard 2 GB / 1 CPU API instance can support with the current WorkMap implementation.
+
+### Evidence And Capacity Boundary
+
+- Current Desktop production constants settle tracking every 15 seconds and require health sync every 10 seconds; normal Focus, open/runtime and health triggers are not fully coalesced.
+- The observed single-Agent day contains 3,915 sync attempts over 454.6 minutes, or 8.61 requests/minute per Agent. The prior completed-request distribution was approximately 5.9-second p50 and 11.2-second p95.
+- At those measurements, two Agents generate about 17.2 requests/minute and consume roughly 1.7 concurrent database requests at p50 or 3.2 at p95. Five Agents generate about 43 requests/minute and reach roughly 4.2 concurrent requests at p50 or 8.0 at p95, before policy, authentication, Reports, reconciliation or retry work.
+- Prisma's Supabase session-pool configuration remains capped at 8 connections on Standard unless explicitly changed; Standard provides more CPU/RAM but does not automatically enlarge this application limit. Increasing the limit alone is not considered safe remediation.
+
+### Recommendation And Limits
+
+- Current conservative pilot capacity on one Standard instance: **two simultaneously monitored employees**. A third may be used only for short supervised testing with pending, latency, memory and `P2024` monitoring.
+- Do not plan five or more simultaneous monitored employees on the current implementation. Ten is outside the evidence-backed capacity. These are operational gates, not vendor instance limits.
+- No production capacity claim is valid until sync coalescing/backoff, shorter incremental transactions and bounded reconciliation are implemented and controlled 1/5/20/50-client load tests pass.
+- No product code, configuration, database, policy, Agent, deployment or Render setting was changed. Real Standard-instance load testing and multi-device recovery QA were not run.
+
+## 2026-07-28 Render Workspace Pro Versus API Compute Clarification
+
+### Original Task Brief
+
+- Determine whether purchasing the displayed Render Pro workspace plan will resolve the current Tracking v2 pending/P2024 incident.
+
+### Findings And Recommendation
+
+- The displayed `$25/mo Pro` purchase is a Render **workspace plan**. It adds team, bandwidth, build, preview, audit-log, compliance and autoscaling features, but it does not by itself change `workmap-api` RAM or CPU. Render explicitly bills compute separately from the workspace plan.
+- The required immediate containment is a separate service-level change: open the `workmap-api` Web Service and change its instance type to **Standard (2 GB RAM / 1 CPU)**. Keeping the Hobby workspace is sufficient for a solo owner unless Pro's collaboration/governance features are independently needed.
+- If Workspace Pro has already been selected, the API still needs the Standard instance change. Workspace Pro alone will not resolve Prisma `P2024`, 8-connection starvation, memory exhaustion or the growing local pending queue.
+- No code, policy, database, migration, Agent, Render setting or deployment was changed in this clarification round. Official Render workspace-plan, compute-instance and billing documentation was reviewed; live resize/recovery QA was not run.
+
+### Suggested Next Step
+
+- On the shown `Scaling` page, leave Autoscaling off and Manual Scaling at one instance. Open the service's left-side `Settings`, find `Instance Type`/plan, and change the current `Starter` compute badge to **Standard (2 GB RAM / 1 CPU)**.
+- Wait for `workmap-api` to become healthy, then verify both Agents' pending queues drain and confirmed-through timestamps advance. Treat Workspace Pro as optional unless its separate team/governance features are wanted.
+
+## 2026-07-28 Two-Employee Tracking Queue And Prisma Pool Exhaustion Diagnosis
+
+### Original Task Brief
+
+- Investigate a Desktop Agent that changed to `Recording locally` and accumulated 27 pending Tracking v2 uploads after a second monitored employee was added.
+- Determine from the supplied Render log whether the Render instance is overloaded and whether it should be upgraded.
+
+### Changed Files
+
+- Diagnostic handoff only: this file and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, API, Web, schema, migration, policy, database, Render setting, release artifact, or deployment behavior was changed.
+
+### Evidence And Conclusion
+
+- The Render log gives a direct backend failure: Prisma `P2024`, `Timed out fetching a new connection from the connection pool`, with `connection_limit: 8` and `timeout: 30`. Failures affected policy acknowledgement, device authorization, activity ingestion and Tracking v2 transaction-stage syncs, so this is system-wide database-pool starvation rather than a policy rejection.
+- Tracking sync failures were retryable HTTP 500 `TRACKING_SYNC_INTERNAL`; sampled server durations were 46-142 seconds. The Desktop transport stops waiting after 15 seconds, so most local entries appear as `NETWORK_ERROR` even while the corresponding server request remains queued or executing.
+- Local redacted NDJSON confirms the visible queue was still growing during the incident: pending increased from 11 to 47, nearly every request ended at the 15-second client timeout, and the durable terminal rejection count stayed at 56. Pending data remains in the local SQLite retry queue; this evidence does not indicate that it was deleted or terminally rejected.
+- A second employee increased concurrent sync, policy, credential and ingestion work and exposed the existing scalability defect sooner. Previous evidence already showed one sustained client could drive the 512 MB API to memory-limit restart. The current deployment is therefore undersized and inefficient for even a two-user sustained test.
+- Immediate containment recommendation: vertically upgrade the Render API to Standard (2 GB RAM / 1 CPU), then allow the existing Agents to retry without reinstalling, deleting local data, changing policy or running a database migration. The upgrade is necessary for test continuity but is not the complete product fix.
+- Required product follow-up remains: coalesce normal Tracking v2 sync triggers, add real exponential backoff/jitter, keep ingestion transactions short and incremental, and bound/separate full-day reconciliation. Do not merely increase Prisma `connection_limit`: more connections can shift pressure to the database and do not fix long-lived transactions or request amplification.
+
+### Verification, Manual QA, And Suggested Next Step
+
+- Parsed the supplied 200-line Render stack trace and correlated request IDs/timestamps with the current Desktop redacted NDJSON. Cross-checked official Render compute specifications and Prisma `P2024` pool behavior.
+- Product tests, Render resize, database metrics, production deployment, and two-device recovery QA were not run in this read-only round.
+- After resizing, require both Agents' secure heartbeat to advance, pending to trend to zero, confirmed-through to advance, durable rejected count to remain unchanged, and `/reports` accepted totals to increase. If pending does not begin falling within 5-10 minutes of stable API availability, capture the newest request ID and matching Render log before changing any queue or policy state.
+
+## 2026-07-28 Reports Stale Heartbeat Versus Policy Diagnosis
+
+### Original Task Brief
+
+- Explain whether the supplied Owner `/reports` Live signals screenshot means Tracking v2 policy stopped working.
+- Distinguish current heartbeat freshness, snapshot policy-lease rejection, and historical interval rejection.
+
+### Changed Files
+
+- Diagnostic handoff only: this file and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, Browser Extension, API, Web, schema, policy, database, release artifact, or deployment behavior was changed.
+
+### Findings
+
+- The screenshot does not show a globally broken policy. All three visible cards report `Policy Active`. The red card state and `0/3 connected` summary are driven by heartbeat freshness, not policy state.
+- API source determines connection only from the latest server-received health row: Desktop is fresh for 30 seconds and Browser Extension for 90 seconds. The Desktop health row was last received at Jul 28 09:41, but no newer confirmed health arrived before the screenshot, so the card correctly became stale after 30 seconds.
+- The Desktop snapshot and confirmed-through values are from Jul 27, the queue has one pending row, and no current heartbeat is confirmed. The screenshot alone cannot distinguish Agent stopped/closed, Windows sleep, local network loss, API unavailability, or a request timeout. Opening Desktop diagnostics and observing whether `Last secure heartbeat` advances is the next direct check.
+- Chrome `Policy lease needs refresh` is narrower: its last live Domain snapshot used an expired or replaced lease and received `SNAPSHOT_POLICY_LEASE_INVALID`. A running client normally fetches the current policy and sends a new snapshot, but this Chrome 0.5.12 client is also stale and therefore is not currently completing that recovery.
+- The Edge `POLICY_REJECTED` banner is a historical terminal interval tombstone. It remains excluded from official Domain totals and does not prove the current policy is inactive.
+- The 22 hidden inactive Browser connections are old pairings suppressed from the main Live view; they are not 22 currently connected clients.
+- A confirmed Web presentation defect exists: `trackingV2ConnectionPresentation()` hardcodes `Browser heartbeat not received` and Browser-specific detail for every stale device, including Desktop. The stale snapshot detail also hardcodes Browser Extension. The Desktop card should use Desktop-specific wording. This text bug does not alter API freshness, policy enforcement, ingestion, or Reports totals.
+
+### Verification, Manual QA, And Suggested Next Step
+
+- Reviewed current API freshness thresholds/calculation, live-device selection, connection/snapshot presentation, server diagnostic mapping, and the supplied timestamps/statuses.
+- Product tests and signed-in deployed QA were not run because this was a read-only diagnosis.
+- First operational check: open Desktop Agent and require heartbeat/last confirmed sync to advance repeatedly, not just once. For Chrome, keep/reload the current Extension and require a new heartbeat, current lease, and accepted snapshot. No policy schedule change or database migration is indicated by this screenshot.
+- A future Web-only wording correction can make Desktop and Browser stale messages client-specific without changing either collector.
+
+## 2026-07-27 Render Memory Exhaustion And Tracking v2 Scalability Diagnosis
+
+### Original Task Brief
+
+- Review the supplied Render metrics and API logs after the confirmed `workmap-api` memory-limit restart.
+- Explain how to resolve the issue and whether multiple simultaneous users would make it worse.
+
+### Changed Files
+
+- Diagnostic handoff only: this file and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, API, Web, schema, migration, policy, database, deployment, or Render configuration was changed.
+
+### Evidence And Root-Cause Model
+
+- Render shows a 512 MB / 0.5 CPU API instance. Memory rises from roughly 40% after the morning instance transition to a sustained 70-85%, then reaches the limit and restarts. CPU is usually moderate but has repeated request-correlated spikes. The public-request chart shows approximately 15,311 requests in the selected period.
+- The API logs show repeated `TRACKING_SYNC_INTERNAL` failures in transaction stage before the restart, commonly taking 15-26 seconds. The 16:42:42 Adelaide Nest startup log is the replacement instance coming online after the memory-limit restart. Slow transaction failures resume after startup, so restart restored availability but did not remove the underlying load.
+- The reconciliation worker also logged an expired Prisma transaction: its configured timeout is 10 seconds, while 23,884 ms had elapsed before a summary upsert. This is direct evidence that aggregation work is exceeding its current transaction budget.
+- The current Desktop runtime settles Focus every 15 seconds, settles all visible App open/runtime lanes every 15 seconds, and requires health sync every 10 seconds. Focus settlement, runtime settlement, and health can each trigger a separate serialized HTTP request in one logical tick.
+- The current-day local NDJSON contains 3,787 Desktop `sync-v2` attempts over 439 minutes: 8.63 requests/minute from one Agent. Of these, 1,435 carried zero intervals, 1,350 carried one interval, and 427 carried six intervals. Completed request p50 was 5.9 seconds, p95 was 11.2 seconds, 320 requests took at least 10 seconds, 67 hit the Desktop 15-second client timeout, and 9 received HTTP 502.
+- The API sync transaction repeatedly reads persisted interval/tombstone history to reconstruct cursors. `refreshCursors()` loads every disposition in the requested clock epoch and recomputes coverage, so work grows with the duration of the active epoch.
+- The background reconciliation worker runs every 15 seconds. For each dirty user/source/day target it loads every day fragment, recomputes merged ranges in Node memory, then performs per-subject upserts and company aggregation inside an interactive transaction. Continuous 15-second ingestion repeatedly dirties the same target while reconciliation is running, causing repeated full-day work and expired transactions.
+- Desktop's 15-second HTTP timeout aligns with the API's 15-second interactive transaction timeout. A client-aborted request can still be completing/rolling back server-side; the Agent then retries durable pending data, increasing pressure while the server is already slow.
+- This evidence supports workload amplification and growing full-history/full-day recomputation as immediate scalability defects. The graph alone does not prove a classic retained-object memory leak; a heap profile and idle/no-traffic comparison would still be required for that label.
+
+### Multi-User Impact And Required Resolution Order
+
+- Multiple users will increase independent ingestion lanes, interval rows, fragments, dirty reconciliation targets, database connections, in-flight transactions, Node allocations, and retry traffic. Some costs are linear per user, while repeated full-day reconciliation and contention can become worse than linear. The current 512 MB single-instance setup is not ready for a simultaneous multi-user pilot.
+- Immediate operational containment: move the API from Render Starter 512 MB to Standard 2 GB before more sustained testing. This provides four times the memory and twice the CPU, but is headroom rather than the complete fix.
+- First product fix: coalesce normal Focus settlement, open/runtime settlement, snapshot, and health into one bounded sync. Target roughly one normal sync per 30 seconds, retaining immediate durable local settlement and immediate boundary sync for lock, sleep, app transition, shutdown, and reconnect. Data accuracy must remain unchanged; only server confirmation latency increases modestly.
+- Second product fix: add explicit retry backoff/jitter/circuit-breaking for retryable 5xx/timeout bursts and give the Desktop transport more timeout headroom than the API transaction envelope. Prevent raw gateway HTML from being rendered as the diagnostic reason.
+- Third product fix: remove full-epoch cursor reconstruction from each ingestion transaction. Maintain `ClientSyncCursor` incrementally with controlled out-of-order/gap tests, and keep the ingestion transaction short.
+- Fourth product fix: stop running full-day in-memory reconciliation every 15 seconds in the API process. Coalesce one user/source/day job, process it at a bounded cadence, avoid per-subject sequential upserts, and preferably move aggregation to a separately sized background worker. Horizontal API scaling should follow this separation rather than multiplying the same background scan in every API instance.
+- Release gating: run controlled 1/5/20/50-client load tests and require stable memory after warm-up, no OOM restart, no transaction-expired warnings, bounded database connections, pending queues returning to zero, zero new terminal rejection, advancing confirmed-through values, and correct Reports totals.
+
+### Verification, Manual QA, And Remaining Risk
+
+- Reviewed the supplied Render metrics/logs, current Desktop scheduling and sync guard, API interactive transaction, cursor reconstruction, reconciliation worker/service, Prisma singleton/pool configuration, schema indexes, and the current-day local redacted NDJSON.
+- Cross-checked current official Render instance/metrics guidance and Prisma transaction guidance. Product tests, heap profiling, deployed load testing, database query plans, Supabase active-connection metrics, and real multi-user QA were not run because this was a read-only diagnosis.
+- Existing Desktop local queue/retry safety behaved correctly through the restart, but backend scalability is a release blocker for adding multiple sustained Tracking v2 clients.
+
+## 2026-07-27 Desktop Agent 0.6.8 HTTP 502 Burst Diagnosis
+
+### Original Task Brief
+
+- Explain why Desktop Agent diagnostics showed a burst of HTTP 502 rows while pending still returned to zero, Owner `/reports` totals kept increasing, and the durable rejected count remained at 56.
+- Determine whether this indicates invalid tracking data or data loss.
+
+### Changed Files
+
+- Diagnostic handoff only: this file and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, API, Web, schema, policy, database, release artifact, or deployment behavior was changed.
+
+### Evidence And Conclusion
+
+- Follow-up evidence from the user confirmed the service-side root cause: Render emailed that the `workmap-api` Web Service exceeded its memory limit, triggering an automatic restart and temporary unavailability. This directly explains the observed HTML 502 burst during the restart window; the earlier gateway/restart diagnosis is now confirmed rather than inferred.
+- The supplied 16:42 Adelaide screenshot corresponds to a local NDJSON burst of six HTTP 502 responses between 16:42:35 and 16:42:48. The response body is an HTML gateway error page rather than WorkMap's structured Tracking v2 JSON, so this was an upstream hosting/proxy response, not an interval validation rejection.
+- During the burst, pending rose from 6 to 13 while dead letter stayed at 56. HTTP 5xx follows the runtime retry branch; only terminal 4xx or explicit terminal interval results enter dead letter.
+- HTTP 200 resumed at 16:43:08. The first recovered request reduced pending to 12, and the next confirmed request at 16:43:23 drained pending to zero with dead letter still 56. Subsequent syncs continued to confirm with zero interval rejection. This proves the observed batch was retained and retried rather than discarded.
+- As of the inspected log tail, the day contained 9 HTTP 502 failures, 62 no-response/timeout failures, and 3,658 confirmed HTTP 200 syncs. The latest confirmed sync still had `pending=0`, `deadLetter=56`, and `intervalRejected=0`.
+- The user's independent observation that official `/reports` totals continue increasing is additional ledger evidence that accepted intervals are reaching the backend. Stable 56 remains the correct historical tombstone count, not a sign that new 502 failures are being hidden.
+- The event was service-specific memory exhaustion, not a platform-wide Render incident. Render/API metrics and logs are still required to distinguish an application memory leak from a workload spike or an undersized instance.
+
+### Confirmed Diagnostic UX Gap And Suggested Next Step
+
+- The Agent currently displays the sanitized raw HTML body returned by the gateway. This is noisy and user-hostile; an eventual narrow Agent diagnostic patch should replace non-JSON 5xx bodies with a bounded message such as `WorkMap service temporarily unavailable; automatic retry enabled`.
+- The separate 15-second timeout issue remains: current no-response diagnostics use misleading legacy fallback wording. A future transport/diagnostic-only release can address timeout headroom and truthful retry wording without touching collection, interval construction, policy, queue durability, or Reports ledger semantics.
+- No urgent repair is required for this recovered burst. Escalate to server-log/performance diagnosis if pending stops returning to zero, `Confirmed interval through` stops advancing, Reports totals stop growing, or 502 bursts recur for minutes rather than seconds.
+- The next server-side action is to inspect Render memory metrics and API logs immediately before the restart. Do not assume that upgrading the instance alone is a complete fix until sustained memory growth versus a one-time traffic/load spike is distinguished.
+
+### Verification
+
+- Reviewed current Desktop 5xx/4xx classification and retry/dead-letter branches, the supplied diagnostics, and the current-day local redacted NDJSON around the exact burst and recovery.
+- Public Render status was checked for current platform-level incident context. Product tests and deliberate network fault injection were not run because product code did not change.
+
+## 2026-07-27 Desktop Agent 0.6.8 Stable Rejection Count And Network-Timeout Diagnosis
+
+### Original Task Brief
+
+- Review the supplied current-day Desktop Agent network diagnostics and determine whether the Tracking v2 queue remaining at `56 rejected` for roughly one week is normal.
+- Distinguish historical terminal interval rejection from current request/network diagnostics using current source and the local redacted NDJSON evidence.
+
+### Changed Files
+
+- Diagnostic handoff only: this file and `docs/ai-handoff/latest-qa.md`.
+- No Desktop Agent, API, Web, schema, policy, installer, artifact, database, or deployment behavior was changed.
+
+### Evidence And Conclusion
+
+- `Tracking v2 queue rejected` is the durable SQLite count of terminal interval tombstones. It increases only when an interval receives a terminal server rejection or a terminal 4xx request classification. A no-response/timeout follows the retry path and does not enter dead letter, so a stable `56` while network diagnostics appear is expected and desirable.
+- The retained `56` are historical evidence: `FOCUS_OVERLAP 36`, `POLICY_REJECTED 13`, `RUNTIME_OVERLAP 5`, and `HTTP_400 2`. They are not a current failure counter and are intentionally not deleted after upgrade.
+- The 2026-07-27 local NDJSON contains 45 failed `sync-v2` requests: 44 `NETWORK_ERROR` entries finished in the 14.9-15.2 second window and one fast HTTP 502. Current Desktop `/sync-v2` has a 15-second client timeout, so the repeated no-response rows are strongly identified as client timeout/slow-response events rather than new invalid intervals.
+- The final shown timeout completed at `05:57:02Z`; successful HTTP 200 syncs resumed three seconds later. At `05:57:29Z`, one confirmed request carried 12 intervals, returned zero interval rejections, drained pending to zero and kept dead letter at 56. Later requests continued to confirm with HTTP 200. This proves retry recovery for the observed batch.
+- Stable rejected count plus `0 pending`, later confirmed sync and zero new interval rejection is good evidence that 0.6.8 is no longer creating the earlier overlap/policy tombstones. It does not by itself prove every Reports total; `Confirmed interval through` and official `/reports` totals remain the final ledger evidence.
+
+### Confirmed Diagnostic UX Gap And Suggested Next Step
+
+- Current no-response `AgentApiError` has no server message/remediation/retryable field. The renderer therefore incorrectly falls back to `Historical rejection: the Agent version ... did not save a detailed server reason`, even for a current 0.6.8 timeout. The runtime nevertheless retries those intervals.
+- The 15-second Desktop timeout equals the observed cutoff and is shorter than the API's possible transaction wait/runtime envelope documented by the Browser 0.5.13 investigation. A future narrowly scoped Desktop transport/diagnostic refinement could provide more headroom and truthful `request timed out / automatic retry` wording without changing collection, interval construction, policy or ledger rules.
+- No repair was made in this diagnosis round. Server-side request logs were not queried, so the source-backed conclusion is client timeout/slow response; the exact upstream latency component remains unproven.
+
+### Verification
+
+- Reviewed current Desktop API timeout, retry/dead-letter branches, SQLite queue counters, diagnostic rendering fallback and the current-day NDJSON request IDs/outcomes/durations.
+- `git diff --check` and scoped secret scan were run after the documentation update. No automated product test or real network fault injection was run because product code did not change.
+
 ## 2026-07-27 Desktop Connection Audit Web-Only Completion
 
 ### Original Task Brief

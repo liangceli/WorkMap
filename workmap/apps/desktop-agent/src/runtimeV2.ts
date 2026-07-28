@@ -105,6 +105,9 @@ export class DesktopAgentRuntimeV2 {
   private finalized = false;
   private syncInFlight: Promise<void> | null = null;
   private syncAgain = false;
+  private syncRetryTimer: NodeJS.Timeout | null = null;
+  private syncRetryNotBeforeMs = 0;
+  private consecutiveRetryableSyncFailures = 0;
   private lastSettlementAtMs = 0;
   private lastOpenRuntimeSettlementAtMs = 0;
   private lastHealthSyncAtMs = 0;
@@ -232,6 +235,7 @@ export class DesktopAgentRuntimeV2 {
   async shutdown(reason: ShutdownReason = "USER_STOP") {
     this.shutdownReason = reason;
     this.stopped = true;
+    this.clearScheduledSyncRetry();
     if (this.runPromise) return this.runPromise;
     await this.initializeQueues();
     await this.finalize();
@@ -945,6 +949,11 @@ export class DesktopAgentRuntimeV2 {
   private async requestSync() {
     if (!this.state.protocolActivatedAt) return;
     if (this.connectionState === "AUTH_REQUIRED" || this.connectionState === "UPGRADE_REQUIRED") return;
+    if (Date.now() < this.syncRetryNotBeforeMs) {
+      this.syncAgain = true;
+      this.scheduleSyncRetry();
+      return;
+    }
     if (this.syncInFlight) {
       this.syncAgain = true;
       return this.syncInFlight;
@@ -1017,6 +1026,7 @@ export class DesktopAgentRuntimeV2 {
       this.store.acknowledge(acknowledged);
       this.store.deadLetter(deadLetter);
       this.store.retry(retry);
+      this.resetSyncBackoff();
       this.connectionState = "ONLINE";
       if (
         this.lastErrorCode === "QUEUE_PRESSURE" &&
@@ -1231,11 +1241,48 @@ export class DesktopAgentRuntimeV2 {
         this.connectionState = "ERROR";
       } else {
         this.store.retry(ids, Date.now(), error instanceof AgentApiError ? error.retryAfterMs : undefined);
+        this.deferRetryableSync(error);
         this.connectionState = "OFFLINE";
       }
       if (!legacySnapshotPolicyFailure) await this.applyFailure(error, false);
     }
     await this.updateUiStatus();
+  }
+
+  private deferRetryableSync(error: unknown) {
+    this.consecutiveRetryableSyncFailures += 1;
+    const retryAfterMs =
+      error instanceof AgentApiError ? error.retryAfterMs ?? 0 : 0;
+    const localDelayMs = trackingSyncBackoffDelayV2(
+      this.consecutiveRetryableSyncFailures,
+    );
+    this.syncRetryNotBeforeMs = Math.max(
+      this.syncRetryNotBeforeMs,
+      Date.now() + Math.max(retryAfterMs, localDelayMs),
+    );
+    this.scheduleSyncRetry();
+  }
+
+  private resetSyncBackoff() {
+    this.consecutiveRetryableSyncFailures = 0;
+    this.syncRetryNotBeforeMs = 0;
+    this.clearScheduledSyncRetry();
+  }
+
+  private scheduleSyncRetry() {
+    if (this.stopped || this.syncRetryTimer) return;
+    const delayMs = Math.max(0, this.syncRetryNotBeforeMs - Date.now());
+    this.syncRetryTimer = setTimeout(() => {
+      this.syncRetryTimer = null;
+      this.syncAgain = false;
+      void this.requestSync();
+    }, delayMs);
+    this.syncRetryTimer.unref();
+  }
+
+  private clearScheduledSyncRetry() {
+    if (this.syncRetryTimer) clearTimeout(this.syncRetryTimer);
+    this.syncRetryTimer = null;
   }
 
   private recordSyncFailure(diagnostic: TrackingSyncDiagnosticV2) {
@@ -1671,6 +1718,15 @@ export function shouldImmediatelySyncHostEventV2(
   return eventType !== "interaction_pulse";
 }
 
+export function trackingSyncBackoffDelayV2(consecutiveFailures: number) {
+  const scheduleMs = [5_000, 15_000, 30_000, 60_000] as const;
+  const index = Math.max(
+    0,
+    Math.min(Math.floor(consecutiveFailures) - 1, scheduleMs.length - 1),
+  );
+  return scheduleMs[index] ?? scheduleMs[0];
+}
+
 export function eventClockAnchorUtcMsV2(input: {
   serverNowMs: number;
   currentMonotonicMs: number;
@@ -1915,7 +1971,7 @@ function intervalRejectionRemediation(
 ) {
   const codes = new Set(items.map((item) => item.code));
   if (codes.has("FOCUS_OVERLAP")) {
-    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.8 serializes lifecycle boundaries and keeps each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
+    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.9 serializes lifecycle boundaries and keeps each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
   }
   if (codes.has("RUNTIME_OVERLAP")) {
     return "The overlapping runtime interval was not counted. The Agent will continue from the current visible-window observation.";

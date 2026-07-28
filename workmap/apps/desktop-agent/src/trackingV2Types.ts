@@ -1,6 +1,9 @@
 export const TRACKING_PROTOCOL_VERSION_V2 = 2 as const;
 export const DESKTOP_V2_QUEUE_CAPACITY = 50_000;
-export const DESKTOP_V2_SYNC_BATCH_SIZE = 50;
+// Keep each interactive database transaction bounded. The durable queue is
+// drained across consecutive confirmed requests, so this changes neither the
+// collected intervals nor their ordering.
+export const DESKTOP_V2_SYNC_BATCH_SIZE = 20;
 export const DESKTOP_V2_SETTLEMENT_MS = 15_000;
 export const DESKTOP_V2_HEALTH_SYNC_MS = 10_000;
 export const DESKTOP_V2_POLICY_REFRESH_MS = 5 * 60_000;

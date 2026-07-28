@@ -39,6 +39,8 @@ import {
   type ClientHealthV2,
   type LiveFocusSnapshotV2,
   type TrackingSequenceDispositionV2,
+  type TrackingRejectedSequenceRangeV2,
+  type TrackingSequenceRangeV2,
   type TrackingSnapshotRejectionCodeV2,
   type TrackingSyncCursorV2,
   type TrackingSyncItemResultV2,
@@ -1453,14 +1455,36 @@ async function refreshCursors(
   }>,
 ): Promise<TrackingSyncCursorV2[]> {
   if (keys.length === 0) return [];
-  const where = keys.map((key) => ({
+  const keyWhere = keys.map((key) => ({
     source: key.source,
     stream: key.stream,
     clockEpochId: key.clockEpochId,
   }));
+  const existingCursors = await tx.clientSyncCursor.findMany({
+    where: { deviceId: context.deviceId, OR: keyWhere },
+    select: {
+      source: true,
+      stream: true,
+      clockEpochId: true,
+      contiguousThroughSequence: true,
+      latestAcceptedEndedAt: true,
+      rejectedRanges: true,
+    },
+  });
+  const existingByKey = new Map(
+    existingCursors.map((cursor) => [cursorKey(cursor), cursor]),
+  );
+  const tailWhere = keys.map((key) => ({
+    source: key.source,
+    stream: key.stream,
+    clockEpochId: key.clockEpochId,
+    sequenceNumber: {
+      gt: existingByKey.get(cursorKey(key))?.contiguousThroughSequence ?? 0,
+    },
+  }));
   const [intervals, tombstones] = await Promise.all([
     tx.activityInterval.findMany({
-      where: { deviceId: context.deviceId, OR: where },
+      where: { deviceId: context.deviceId, OR: tailWhere },
       select: {
         source: true,
         stream: true,
@@ -1470,7 +1494,7 @@ async function refreshCursors(
       },
     }),
     tx.clientSequenceTombstone.findMany({
-      where: { deviceId: context.deviceId, OR: where },
+      where: { deviceId: context.deviceId, OR: tailWhere },
       select: {
         source: true,
         stream: true,
@@ -1482,6 +1506,8 @@ async function refreshCursors(
   ]);
   const response: TrackingSyncCursorV2[] = [];
   for (const key of keys) {
+    const existing = existingByKey.get(cursorKey(key));
+    const baseline = existing?.contiguousThroughSequence ?? 0;
     const dispositions: TrackingSequenceDispositionV2[] = [
       ...intervals
         .filter((row) => sameCursorKey(row, key))
@@ -1499,7 +1525,15 @@ async function refreshCursors(
           rejectionCode: row.rejectionCode,
         })),
     ];
-    const coverage = computeTrackingSequenceCoverageV2(dispositions);
+    const coverage = advanceTrackingCursorCoverageV2(
+      {
+        contiguousThroughSequence: baseline,
+        latestAcceptedEndedAt:
+          existing?.latestAcceptedEndedAt?.toISOString() ?? null,
+        rejectedRanges: existing?.rejectedRanges,
+      },
+      dispositions,
+    );
     await tx.clientSyncCursor.upsert({
       where: {
         deviceId_source_stream_clockEpochId: {
@@ -1540,6 +1574,93 @@ async function refreshCursors(
     });
   }
   return response;
+}
+
+export function advanceTrackingCursorCoverageV2(
+  existing: {
+    contiguousThroughSequence: number;
+    latestAcceptedEndedAt: string | null;
+    rejectedRanges: unknown;
+  },
+  tailDispositions: TrackingSequenceDispositionV2[],
+) {
+  const baseline = Math.max(0, existing.contiguousThroughSequence);
+  const tail = computeTrackingSequenceCoverageV2(
+    tailDispositions
+      .filter((item) => item.sequenceNumber > baseline)
+      .map((item) => ({
+        ...item,
+        sequenceNumber: item.sequenceNumber - baseline,
+      })),
+  );
+  const latestAcceptedEndedAt = latestIso(
+    existing.latestAcceptedEndedAt,
+    tail.latestAcceptedEndedAt,
+  );
+  const priorRejected = parseRejectedRanges(existing.rejectedRanges)
+    .filter((range) => range.from <= baseline)
+    .map((range) => ({ ...range, to: Math.min(range.to, baseline) }));
+  return {
+    contiguousThroughSequence: baseline + tail.contiguousThroughSequence,
+    latestAcceptedEndedAt,
+    missingRanges: offsetRanges(tail.missingRanges, baseline),
+    rejectedRanges: mergeRejectedRanges([
+      ...priorRejected,
+      ...tail.rejectedRanges.map((range) => ({
+        ...range,
+        from: range.from + baseline,
+        to: range.to + baseline,
+      })),
+    ]),
+  };
+}
+
+function offsetRanges(ranges: TrackingSequenceRangeV2[], offset: number) {
+  return ranges.map((range) => ({
+    from: range.from + offset,
+    to: range.to + offset,
+  }));
+}
+
+function parseRejectedRanges(value: unknown): TrackingRejectedSequenceRangeV2[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (range): range is TrackingRejectedSequenceRangeV2 =>
+      typeof range === "object" &&
+      range !== null &&
+      Number.isInteger((range as { from?: unknown }).from) &&
+      Number.isInteger((range as { to?: unknown }).to) &&
+      typeof (range as { code?: unknown }).code === "string",
+  );
+}
+
+function mergeRejectedRanges(
+  ranges: TrackingRejectedSequenceRangeV2[],
+) {
+  const merged: TrackingRejectedSequenceRangeV2[] = [];
+  for (const range of [...ranges].sort((left, right) => left.from - right.from)) {
+    const previous = merged.at(-1);
+    if (previous && previous.code === range.code && range.from <= previous.to + 1) {
+      previous.to = Math.max(previous.to, range.to);
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  return merged;
+}
+
+function latestIso(left: string | null, right: string | null) {
+  if (!left) return right;
+  if (!right) return left;
+  return left > right ? left : right;
+}
+
+function cursorKey(value: {
+  source: TrackingActivitySource;
+  stream: TrackingActivityStream;
+  clockEpochId: string;
+}) {
+  return `${value.source}:${value.stream}:${value.clockEpochId}`;
 }
 
 async function storeFocusSnapshot(input: {

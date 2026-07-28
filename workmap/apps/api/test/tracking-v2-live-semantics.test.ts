@@ -322,10 +322,12 @@ test("valid Focus active and focused-idle intervals enter the ledger and Reports
     "a health-only confirmation preserves any prior snapshot diagnostic",
   );
 
+  let reconciliationCalls = 0;
   const reports = new TrackingV2ReportsService(
     prisma as any,
     {
       reconcileTargets: async () => {
+        reconciliationCalls += 1;
         throw new Error("Use the ledger fallback in this focused test.");
       },
     } as any,
@@ -344,6 +346,7 @@ test("valid Focus active and focused-idle intervals enter the ledger and Reports
   assert.equal(usage.apps[0]?.focusActiveMs, 10_000);
   assert.equal(usage.apps[0]?.focusedIdleMs, 30_000);
   assert.equal(usage.coverage.reconciliationState, "LEDGER_FALLBACK");
+  assert.equal(reconciliationCalls, 0);
 });
 
 test("Browser Domain Focus active and focused-idle enter the official ledger and Domain Reports", async () => {
@@ -1154,7 +1157,10 @@ class SyncPrisma {
     findMany: async () => this.targets,
   };
   deviceSubjectDailySummary = { upsert: async () => ({}) };
-  clientSyncCursor = { upsert: async () => ({}) };
+  clientSyncCursor = {
+    findMany: async () => [],
+    upsert: async () => ({}),
+  };
   liveFocusSnapshot = {
     findUnique: async () =>
       this.liveSnapshotSequence === null

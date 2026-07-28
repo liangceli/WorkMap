@@ -387,7 +387,7 @@ export class TrackingV2ReportsService {
   }
 
   async retryDirtySummaries() {
-    return this.reconciliation.reconcileDirtyTargets();
+    return this.reconciliation.reconcileDirtyTargets(20, 0);
   }
 
   async getConfirmedUsage(filter: ConfirmedUsageFilter) {
@@ -417,7 +417,7 @@ export class TrackingV2ReportsService {
       gte: utcDateOnly(filter.range.from),
       lte: utcDateOnly(filter.range.to),
     };
-    let targets =
+    const targets =
       await this.prisma.usageReconciliationTarget.findMany({
         where: {
           companyId: filter.companyId,
@@ -436,34 +436,9 @@ export class TrackingV2ReportsService {
           lastErrorCode: true,
         },
       });
-    if (targets.length > 0) {
-      try {
-        await this.reconciliation.reconcileTargets(targets);
-      } catch {
-        // The direct ledger fallback below preserves accuracy for dates that
-        // remain dirty after a best-effort reconciliation attempt.
-      }
-      targets =
-        await this.prisma.usageReconciliationTarget.findMany({
-          where: {
-            companyId: filter.companyId,
-            ...identityFilter(filter),
-            utcDate: dateFilter,
-            state: { not: TrackingReconciliationState.CLEAN },
-          },
-          select: {
-            companyId: true,
-            userId: true,
-            source: true,
-            utcDate: true,
-            state: true,
-            version: true,
-            dirtyAt: true,
-            lastErrorCode: true,
-          },
-        });
-    }
-
+    // Never run summary write transactions from the interactive read path.
+    // Dirty dates are computed exactly from official ledger fragments below;
+    // the quiet-period worker materializes their cached summaries later.
     const dirtyKeys = new Set(targets.map(summaryTargetKey));
     const [storedSubjectDays, storedUserDays] = await Promise.all([
       this.prisma.userSubjectDailySummary.findMany({

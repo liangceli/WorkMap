@@ -10,7 +10,8 @@ import {
 } from "./tracking-v2-reconciliation.service.js";
 
 const INITIAL_RECONCILIATION_DELAY_MS = 2_000;
-const RECONCILIATION_INTERVAL_MS = 15_000;
+const RECONCILIATION_INTERVAL_MS = 30_000;
+const RECONCILIATION_BATCH_SIZE = 4;
 
 @Injectable()
 export class TrackingV2ReconciliationWorker
@@ -46,7 +47,9 @@ export class TrackingV2ReconciliationWorker
 
   private async run() {
     try {
-      await this.reconciliation.reconcileDirtyTargets();
+      await this.reconciliation.reconcileDirtyTargets(
+        RECONCILIATION_BATCH_SIZE,
+      );
     } catch (error) {
       this.logger.warn(
         `Tracking v2 reconciliation retry failed; database targets remain retryable. ${describeTrackingV2Error(error)}`,

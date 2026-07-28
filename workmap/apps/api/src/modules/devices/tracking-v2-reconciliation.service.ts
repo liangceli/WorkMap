@@ -31,6 +31,8 @@ type MetricTotals = {
   openRuntimeMs: bigint;
 };
 
+export const TRACKING_RECONCILIATION_QUIET_PERIOD_MS = 60_000;
+
 @Injectable()
 export class TrackingV2ReconciliationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -52,8 +54,17 @@ export class TrackingV2ReconciliationService {
     }
   }
 
-  async reconcileDirtyTargets(limit = 20) {
+  async reconcileDirtyTargets(
+    limit = 4,
+    quietPeriodMs = TRACKING_RECONCILIATION_QUIET_PERIOD_MS,
+  ) {
+    // An actively written day is served exactly from ledger fragments by the
+    // Reports fallback. Waiting for a quiet point prevents summary writes from
+    // racing every ingestion transaction for the same target/version.
     const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
+    const quietBefore = new Date(
+      Date.now() - Math.max(0, quietPeriodMs),
+    );
     await this.prisma.usageReconciliationTarget.updateMany({
       where: {
         state: TrackingReconciliationState.PROCESSING,
@@ -66,6 +77,7 @@ export class TrackingV2ReconciliationService {
     });
     const targets = await this.prisma.usageReconciliationTarget.findMany({
       where: {
+        dirtyAt: { lte: quietBefore },
         state: {
           in: [
             TrackingReconciliationState.DIRTY,
