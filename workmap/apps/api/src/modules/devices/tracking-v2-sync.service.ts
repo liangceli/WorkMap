@@ -244,6 +244,7 @@ export class TrackingV2SyncService {
           );
           const overlapRows = await loadPotentialOverlaps(
             tx,
+            context.companyId,
             context.deviceId,
             candidateIntervals.filter(
               (candidate) => candidate.rejectionCode === null,
@@ -1125,6 +1126,7 @@ async function loadPersistedIdentities(
 
 async function loadPotentialOverlaps(
   tx: Prisma.TransactionClient,
+  companyId: string,
   deviceId: string,
   candidates: CandidateInterval[],
 ) {
@@ -1157,6 +1159,9 @@ async function loadPotentialOverlaps(
   ];
   return tx.activityInterval.findMany({
     where: {
+      // Keep the overlap lookup tenant-bounded and expose the matching
+      // company/device/lane/time indexes to PostgreSQL.
+      companyId,
       deviceId,
       source: { in: sources },
       stream: { in: streams },

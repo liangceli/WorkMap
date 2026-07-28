@@ -1,5 +1,84 @@
 # Latest Implementation Handoff
 
+## 2026-07-28 Supabase Query And Lock-Pressure Fix
+
+### Original Task Brief
+
+- Continue the Tracking v2 recovery after the user upgraded the Supabase organization to Pro and moved the production database from Nano to Micro.
+- Use the supplied Supabase PostgreSQL log to fix the remaining database bottleneck without changing Desktop Agent or Browser Extension collection/sending behavior.
+
+### Confirmed Root Cause
+
+- The supplied Supabase sample contained 21 PostgreSQL `57014` statement timeouts in 47 records.
+- Tracking v2 overlap reads took roughly 38-91 seconds. The query filtered by device/lane/time but omitted `companyId`, so it could not use the existing company-leading time index and held the serialized `ClientWriteLane` transaction lock while scanning.
+- A `ClientWriteLane` upsert waited roughly 56 seconds, consistent with overlapping sync transactions queued behind the slow overlap read.
+- The legacy `ActivityEvent` company coverage group-by used by `/reports` took roughly 102 seconds because the available user-oriented index did not lead with the requested company/date range.
+
+### Changed Files And Implementation Summary
+
+- `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`: the overlap lookup now includes the authenticated `companyId` alongside device/source/stream/time. Acceptance, duplicate and overlap semantics are unchanged; the predicate both strengthens tenant bounding and enables the intended lane/time index path.
+- `workmap/apps/api/test/tracking-v2-live-semantics.test.ts`: captures the overlap query and asserts that it is scoped to the authenticated company and device while preserving the existing same-App runtime overlap rejection test.
+- `workmap/prisma/schema.prisma`: adds an `ActivityInterval(companyId, deviceId, source, stream, endedAt)` index for recent overlap candidates and an `ActivityEvent(companyId, startedAt, userId)` covering index for company/date coverage reads.
+- `workmap/prisma/migrations/20260728130000_tracking_query_performance/migration.sql`: adds both indexes with PostgreSQL `CREATE INDEX CONCURRENTLY IF NOT EXISTS` so active tracking writes are not blocked by a normal index build.
+- The earlier uncommitted Prisma `pool_timeout=10` fail-fast hardening and its tests are preserved as part of the same recovery deployment.
+
+### Role, Collection And Data Behavior
+
+- Owner/Employee/tenant/device credential boundaries are unchanged. The overlap query now explicitly carries the already-authenticated tenant id.
+- Desktop 0.6.9 and Browser 0.5.13 source, versions, SQLite/storage queues, interval payloads, retry behavior, Focus/open-runtime rules, policy leases and privacy fields are unchanged.
+- No queued, accepted, duplicate, rejected, summary or audit row is rewritten or deleted.
+
+### Verification
+
+- Focused Tracking v2 semantics test: passed 14/14.
+- Full API test: passed 57/57.
+- API typecheck, lint and build: passed.
+- Prisma schema validation: passed with a non-secret local placeholder datasource URL; the existing Prisma 7 configuration deprecation warning is informational.
+- Production migration, Render deployment, post-deploy SQL timing and real Windows queue-drain QA were not run.
+
+### Intentionally Unchanged, Remaining Risks And Next Steps
+
+- No Web UI, Desktop Agent, Browser Extension, policy schedule, auth/RBAC or report calculation code changed.
+- The new indexes do not exist in production until `prisma migrate deploy` applies the migration. Deploy the migration before or with the API code; do not use `db push` and do not clear client queues.
+- Deploy/restart the Render API after the database is healthy. Start with one Desktop Agent and require pending to decrease, server-confirmed heartbeat/confirmed-through to advance and terminal rejected to stay unchanged. Then re-enable the second client set incrementally.
+- Recheck Supabase Query Performance after traffic resumes. The previous 38-102 second query shapes should disappear; if they remain slow after the new indexes are built, capture fresh `EXPLAIN (ANALYZE, BUFFERS)` evidence before buying Small compute.
+
+## 2026-07-28 Supabase Outage Fail-Fast / API Pool Wait Hardening
+
+### Original Task Brief
+
+- Investigate why a single installed Desktop Agent 0.6.9 continued accumulating hundreds of pending Tracking v2 rows after every other Desktop Agent and Browser Extension was stopped.
+- Correlate the supplied Render output with the local Agent diagnostics, solve the incident without changing Desktop/Browser collection semantics, and preserve queued data.
+
+### Confirmed Incident Evidence
+
+- The current Agent is 0.6.9 and its local NDJSON confirms the new 20-row batch plus 5/15/30/60-second global retry gate is active. This is not an old-client retry storm.
+- Matching Render request IDs show Prisma `P1001`: the API could not reach the configured Supabase session-pool endpoint. A 20-row request remained server-side for 66-128 seconds while the Agent correctly stopped waiting after 60 seconds and retained the rows.
+- The local queue rose from 312 to 542 during observation while terminal rejected remained 56. The new rows are pending durable SQLite data, not policy rejections or deleted usage.
+- Policy v3 remained acknowledged and the Agent continued confirming it. Policy is not the cause.
+- Supabase's public status showed the Tokyo region, database and pooler operational, and the pooler's TCP port was reachable from the test workstation. The API readiness endpoint later returned `200` / `database: ok`, but real sync transactions still timed out, which is consistent with stale in-flight API connections/transactions surviving the transient database outage.
+
+### Changed Files And Implementation Summary
+
+- `workmap/apps/api/src/modules/prisma/prisma.service.ts`: changed only the runtime fallback `pool_timeout` from 30 seconds to Prisma v6's documented 10-second default for both Supabase session and transaction pooler URLs. Explicitly configured URL values remain untouched.
+- `workmap/apps/api/test/prisma-runtime-url.test.ts`: updated both pooler-mode assertions to require the new bounded fallback.
+- Handoff: this file and `docs/ai-handoff/latest-qa.md`.
+- The shorter acquisition wait makes a saturated/unavailable database fail before Desktop 0.6.9's 60-second transport deadline, allowing its existing global backoff to operate instead of leaving disconnected requests executing and amplifying an outage.
+
+### Verification
+
+- API test: passed 57/57.
+- API typecheck, lint and build: passed.
+- `git diff --check`: passed; line-ending notices were informational only.
+- No credential or database URL was added.
+
+### Intentionally Unchanged / Manual QA / Next Step
+
+- No Desktop Agent or Browser Extension source, package, collection engine, interval schema, local queue, policy, Reports calculation, database schema or migration changed. Desktop remains 0.6.9 and Browser remains 0.5.13.
+- No local pending or historical rejected row was cleared. Re-pairing and reinstalling are not required.
+- The new API code is not yet deployed, so post-deploy queue drainage is not claimed. Deploying the API will also restart the instance and clear the currently hanging process-local connections.
+- After deployment, keep one Desktop Agent running and require pending to fall in batches, secure heartbeat/confirmed-through to advance, terminal rejected to stay at 56, and Render to stop logging long `P1001`, `P2024` or `TRACKING_SYNC_INTERNAL` transactions. If `DATABASE_URL` explicitly includes `pool_timeout=30`, change that explicit value to `10` in Render because source intentionally respects operator-supplied parameters.
+
 ## 2026-07-28 Tracking v2 Backpressure And Reconciliation Fix / Desktop 0.6.9
 
 ### Original Task Brief

@@ -779,6 +779,11 @@ test("overlapping open/runtime for the same App remains rejected", async () => {
   assert.equal(response.results[0]?.status, "ACCEPTED");
   assert.equal(response.results[1]?.status, "REJECTED");
   assert.equal(response.results[1]?.rejectionCode, "RUNTIME_OVERLAP");
+  const overlapQuery = prisma.activityIntervalFindManyInputs.find(
+    (input) => input?.where?.endedAt !== undefined,
+  );
+  assert.equal(overlapQuery?.where?.companyId, COMPANY_ID);
+  assert.equal(overlapQuery?.where?.deviceId, DEVICE_ID);
 });
 
 test("open/runtime is rejected until the active policy explicitly enables it", async () => {
@@ -1048,6 +1053,7 @@ class SyncPrisma {
   deviceHeartbeatWritten = false;
   previousHealthReceivedAt: Date | null = null;
   statusEvents: any[] = [];
+  activityIntervalFindManyInputs: any[] = [];
 
   constructor(now: number) {
     this.now = now;
@@ -1091,7 +1097,10 @@ class SyncPrisma {
     upsert: async () => ({ id: "12121212-1212-4212-8212-121212121212" }),
   };
   activityInterval = {
-    findMany: async () => this.intervals,
+    findMany: async (input?: any) => {
+      this.activityIntervalFindManyInputs.push(input);
+      return this.intervals;
+    },
     findFirst: async () => null,
     count: async () => this.intervals.length,
     createMany: async ({ data }: any) => {

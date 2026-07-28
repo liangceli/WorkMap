@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 
 const DEFAULT_SESSION_POOL_CONNECTION_LIMIT = 8;
+const DEFAULT_RUNTIME_POOL_TIMEOUT_SECONDS = 10;
 const MAX_RUNTIME_CONNECTION_LIMIT = 16;
 
 export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL) {
@@ -15,7 +16,7 @@ export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL
       // Keep enough headroom for Render's overlapping deploy instances and
       // operational connections while allowing report aggregates to run in parallel.
       applyRuntimeConnectionLimit(url, DEFAULT_SESSION_POOL_CONNECTION_LIMIT);
-      if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "30");
+      applyRuntimePoolTimeout(url);
       return url.toString();
     }
 
@@ -23,10 +24,20 @@ export function resolveRuntimeDatabaseUrl(databaseUrl = process.env.DATABASE_URL
 
     if (!url.searchParams.has("pgbouncer")) url.searchParams.set("pgbouncer", "true");
     applyRuntimeConnectionLimit(url, 2);
-    if (!url.searchParams.has("pool_timeout")) url.searchParams.set("pool_timeout", "30");
+    applyRuntimePoolTimeout(url);
     return url.toString();
   } catch {
     return databaseUrl;
+  }
+}
+
+function applyRuntimePoolTimeout(url: URL) {
+  // A sync request must fail before the Tracking v2 client's 60-second
+  // transport envelope. Keeping Prisma's v6 default prevents several queued
+  // database acquisitions from surviving a disconnected client and
+  // amplifying a transient database outage into a request backlog.
+  if (!url.searchParams.has("pool_timeout")) {
+    url.searchParams.set("pool_timeout", `${DEFAULT_RUNTIME_POOL_TIMEOUT_SECONDS}`);
   }
 }
 

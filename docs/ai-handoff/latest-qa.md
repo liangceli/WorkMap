@@ -1,5 +1,66 @@
 # Latest QA Handoff
 
+## 2026-07-28 Supabase Query And Lock-Pressure QA
+
+### Reviewed Implementation And Diff
+
+- Reviewed the Supabase PostgreSQL slow-query/timeout sample against Tracking v2 transaction ordering, `ClientWriteLane` serialization, Prisma schema indexes and the legacy Reports coverage query.
+- The implementation is additive and narrow: one tenant predicate, two indexes, one focused query assertion, and the previously verified pool fail-fast change.
+- No client collection/sending code, payload contract, acceptance policy, report totals or role behavior changed.
+
+### Findings Ordered By Severity
+
+- High, fixed in source: the serialized overlap read omitted `companyId`, preventing the company-leading lane/time index from being a usable plan and extending the write-lane lock into tens of seconds.
+- High, pending production migration: `/reports` company coverage needs a company/date-leading covering index; the supplied query took roughly 102 seconds without it.
+- High, external state: Supabase Pro/Micro is active, but compute alone cannot correct these query plans. The production indexes and API code still need deployment.
+- Medium, expected deployment risk: concurrent index creation consumes database I/O while building. It avoids the heavy write lock of ordinary `CREATE INDEX`, but production query/IO metrics must still be watched during migration.
+- No regression was found in tenant isolation, same-App overlap rejection, different-App runtime concurrency, confirmed ledger insertion or report aggregation semantics.
+
+### Test And Verification Status
+
+- `tsx --test apps/api/test/tracking-v2-live-semantics.test.ts`: passed 14/14.
+- `pnpm --filter @workmap/api test`: passed 57/57.
+- API typecheck: passed.
+- API lint: passed.
+- API build: passed.
+- `prisma validate --schema prisma/schema.prisma`: passed with a non-secret placeholder URL.
+- Production migration/deploy and real Windows queue drain: not run.
+
+### Manual QA, Risks And Recommendation
+
+- No real Windows, installed Agent, deployed Render API or production query-latency QA was performed by Codex in this round.
+- Pass for migration plus API deployment. Apply the migration once, restart/deploy the API, and keep the Agent SQLite queue intact.
+- Do not declare recovery until pending trends down to zero, heartbeat and confirmed-through advance, rejected counts stay stable, and Supabase no longer reports the prior statement-timeout query shapes.
+- The next round can proceed to controlled production migration/deployment and one-client drain observation; re-enable additional clients only after the first queue drains normally.
+
+## 2026-07-28 Supabase Outage Fail-Fast QA
+
+### Reviewed Implementation
+
+- Reviewed Desktop 0.6.9 local NDJSON, supplied Render `P1001`/Tracking v2 logs, online API readiness, Supabase/Render public status, Prisma runtime URL handling and the API sync/reconciliation transaction boundaries.
+- Reviewed the API-only fallback change from `pool_timeout=30` to `pool_timeout=10` and its pooler-mode tests.
+
+### Findings Ordered By Severity
+
+- High, infrastructure incident: Render could not reach the Supabase session pooler. This caused real sync requests to outlive the Agent's 60-second request and made pending grow even with only one client enabled.
+- High, fixed in source: the application had raised Prisma's fallback pool acquisition wait to 30 seconds. Multiple serial acquisitions could therefore keep a disconnected Tracking request alive past the client envelope and amplify a transient database outage.
+- Informational: the public readiness probe recovered before real `sync-v2`; this does not contradict the incident because `SELECT 1` does not prove that previously queued transactions and locks have cleared.
+- No evidence of a policy, credential, tenant isolation, data-collection or terminal-rejection regression was found. Terminal rejected remained 56 while only pending grew.
+
+### Test And Verification Status
+
+- `pnpm.CMD --filter @workmap/api test`: passed 57/57.
+- API typecheck, lint and production build: passed.
+- `git diff --check`: passed.
+- No migration is required.
+
+### Manual QA Status, Risks And Recommendation
+
+- Partial real-environment diagnostics were run: production readiness returned `200` / database ok, public provider status was checked, pooler TCP was reachable, and the local 0.6.9 Agent log was followed through repeated 60-second failures up to 542 pending.
+- Post-change deployment and queue-drain QA are not run and must not be represented as passed.
+- Pass for an API-only deployment. Do not rebuild/reinstall Desktop or Browser, clear SQLite, delete rejected rows, change policy, or migrate the database.
+- After deploy/restart, pass only when the single Agent becomes server-confirmed online and pending trends to zero. If not, capture the newest request ID and Render's final server result; then inspect project-specific Supabase connection/lock metrics rather than increasing Agent request rate or compute size.
+
 ## 2026-07-28 Tracking Backpressure / Desktop 0.6.9 QA
 
 ### Reviewed Implementation

@@ -592,6 +592,7 @@ model ActivityInterval {
   @@unique([deviceId, source, stream, clockEpochId, sequenceNumber])
   @@index([companyId, userId, source, startedAt])
   @@index([companyId, deviceId, source, stream, startedAt])
+  @@index([companyId, deviceId, source, stream, endedAt])
   @@index([companyId, activitySubjectId, startedAt])
   @@index([policyLeaseId])
 }
@@ -937,6 +938,7 @@ model ActivityEvent {
   @@index([companyId, userId, source, eventType, startedAt])
   @@index([companyId, source, eventType, startedAt])
   @@index([companyId, deviceId, source, eventType, endedAt])
+  @@index([companyId, startedAt, userId])
 }
 
 model DeviceStatusEvent {
