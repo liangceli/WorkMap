@@ -190,6 +190,46 @@ test("separate Browser profile starts remain distinct lifecycle events", async (
   );
 });
 
+test("separate Desktop v2 starts remain distinct while retrying one event stays idempotent", async () => {
+  const prisma = new AgentSessionPrisma();
+  const service = new DevicesService(prisma as any);
+  const firstAt = new Date(Date.now() - 1_000).toISOString();
+  const secondAt = new Date().toISOString();
+  const firstEvent = {
+    deviceId: DEVICE_ID,
+    clientEventId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    status: "RUNNING",
+    reason: "AGENT_STARTED",
+    startedAt: firstAt,
+    recordedAt: firstAt,
+    timeZone: "Australia/Adelaide",
+    metadata: { operation: "protocol-v2-start", agentVersion: "desktop-agent-windows/0.6.9" },
+  };
+
+  await service.recordDeviceStatus(context, firstEvent, DeviceClientType.DESKTOP_AGENT);
+  await service.recordDeviceStatus(context, {
+    ...firstEvent,
+    clientEventId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    startedAt: secondAt,
+    recordedAt: secondAt,
+  }, DeviceClientType.DESKTOP_AGENT);
+  await service.recordDeviceStatus(context, firstEvent, DeviceClientType.DESKTOP_AGENT);
+
+  const starts = prisma.statusEvents.filter(
+    (event) => event.source === DeviceClientType.DESKTOP_AGENT
+      && event.status === DeviceStatus.RUNNING
+      && event.reason === DeviceStatusReason.AGENT_STARTED,
+  );
+  assert.equal(starts.length, 2);
+  assert.deepEqual(
+    starts.map((event) => event.clientEventId).sort(),
+    [
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    ],
+  );
+});
+
 class AgentSessionPrisma {
   deviceRow = {
     id: DEVICE_ID,

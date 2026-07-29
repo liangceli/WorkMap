@@ -1,5 +1,12 @@
 # Frontend Skill
 
+## Reports Connection Audit Calendar Boundary
+
+- Usage totals retain their UTC report-date contract, but Connection Audit is an occurrence history and labels the viewer's IANA local calendar range explicitly.
+- When the current default UTC date differs from the viewer's local date, resolve Audit to the current local day, query only the adjacent UTC dates needed to cover it, then filter every stored and live-inferred entry back to that exact local range.
+- Never let a stale current-live Browser device create a historical heartbeat-loss row outside the displayed Audit range. Device groups with no in-range transition must be omitted.
+- A failed Audit request remains unavailable/stale-confirmed rather than becoming a false empty result; a successful empty response is the only source of `0 events`.
+
 ## Reports Browser Audit Non-Shrinking History
 
 - A height-bounded Connection Audit list with many device groups must scroll; it must never distribute/shrink all child rows to fit the cap. The Browser history container uses a vertical Flex column and each `deviceId` group is non-shrinking.

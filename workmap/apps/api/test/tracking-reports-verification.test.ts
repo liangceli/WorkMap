@@ -62,6 +62,7 @@ async function main() {
   await testBrowserExtensionCoverageLossAndRestore();
   await testBrowserCurrentDomainFailureDoesNotBreakSummary();
   await testOptionalReportSectionsDoNotBlockCoreSummary();
+  await testDedicatedAuditDoesNotClaimEmptyWhenQueryFails();
   await testActivityIngestionAndReportsLoop();
   await testLegacyActivityStopsAtProtocolActivation();
   await testBrowserUsageUpdatesReportRevision();
@@ -73,6 +74,22 @@ async function main() {
   await testPlatformAdminAggregateBoundary();
 
   console.info("api tracking/reports verification tests passed");
+}
+
+async function testDedicatedAuditDoesNotClaimEmptyWhenQueryFails() {
+  const prisma = new MockPrisma();
+  prisma.seedDevice({ id: DEVICE_ID, companyId: COMPANY_ID, userId: EMPLOYEE_ID });
+  prisma.failOptionalReportQueries = true;
+  const reports = new ReportsService(prisma as any, new MockAuditService() as any);
+
+  await assert.rejects(
+    () => reports.getTrackingAudit(employeeContext, {
+      scope: "user",
+      from: "2026-07-29",
+      to: "2026-07-29",
+    }),
+    /Simulated optional report query failure/,
+  );
 }
 
 function testControllerGuards() {

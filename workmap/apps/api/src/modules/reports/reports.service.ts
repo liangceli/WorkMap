@@ -271,9 +271,9 @@ export class ReportsService {
     const userId = await this.resolveVisibleReportUserId(context, query.userId);
     const filter = { companyId: context.companyId, userId, range };
     const [agentSessions, deviceStatusHistory, appTimeline] = await Promise.all([
-      this.optionalReportSection("desktop agent sessions", () => this.getAgentSessions(filter), []),
-      this.optionalReportSection("device status history", () => this.getDeviceStatusHistory(filter), []),
-      this.optionalReportSection("desktop app timeline", () => this.getAppTimeline(filter), []),
+      this.getAgentSessions(filter),
+      this.getDeviceStatusHistory(filter),
+      this.getAppTimeline(filter),
     ]);
 
     return { scope: "user" as const, userId, agentSessions, deviceStatusHistory, appTimeline };
@@ -814,7 +814,9 @@ export class ReportsService {
       where: {
         companyId: filter.companyId,
         userId: filter.userId,
-        recordedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+        // Connection Audit is an event-time history. A status retained offline
+        // must appear on the day it happened, not the later day it reached the API.
+        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
       },
       orderBy: { recordedAt: "desc" },
       take: 500,

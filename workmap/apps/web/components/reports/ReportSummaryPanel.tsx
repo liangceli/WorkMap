@@ -18,6 +18,10 @@ import { WorkMapButton } from "../ui/WorkMapButton";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
 import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
 import {
+  isConnectionAuditTimestampInRange,
+  resolveConnectionAuditRange,
+} from "./connectionAuditRange";
+import {
   selectTrackingV2LiveDevices,
   trackingV2ConnectionPresentation,
   trackingV2SnapshotPresentation,
@@ -42,6 +46,7 @@ type ReportState = {
 
 type AuditState = {
   audit: WorkMapApiTrackingAudit | null;
+  refreshStatus: "loading" | "ready" | "error";
 };
 
 type CurrentLiveData = {
@@ -65,7 +70,7 @@ export function ReportSummaryPanel() {
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
   const nextRevisionCheckAtRef = useRef(0);
-  const [auditState, setAuditState] = useState<AuditState>({ audit: null });
+  const [auditState, setAuditState] = useState<AuditState>({ audit: null, refreshStatus: "loading" });
   const nextAuditRefreshAtRef = useRef(0);
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
@@ -104,7 +109,7 @@ export function ReportSummaryPanel() {
       const now = Date.now();
       if (snapshot?.liveStatus) setLiveStatus(snapshot.liveStatus);
       if (snapshot?.trackingV2Live) setTrackingV2Live(snapshot.trackingV2Live);
-      if (snapshot?.audit) setAuditState({ audit: snapshot.audit });
+      if (snapshot?.audit) setAuditState({ audit: snapshot.audit, refreshStatus: "ready" });
       if (snapshot?.summary) {
         activityRevisionRef.current = currentLiveRevision({
           trackingV2: snapshot.trackingV2Live,
@@ -263,7 +268,7 @@ export function ReportSummaryPanel() {
       return;
     }
     setReportState((current) => ({ ...current, loading: true, error: null, statusText: "Refreshing report..." }));
-    setAuditState({ audit: null });
+    setAuditState({ audit: null, refreshStatus: "loading" });
     failedSummaryRevisionRef.current = undefined;
     setLiveStatus(null);
     setTrackingV2Live(null);
@@ -399,9 +404,10 @@ export function ReportSummaryPanel() {
 
       {!reportState.loading && summary?.scope === "user" ? (
         <EmployeeConnectionAudit
-          audit={auditState.audit}
+          auditState={auditState}
           rows={liveUser?.browserExtensionCoverage ?? summary.browserExtensionCoverage}
           v2Devices={trackingV2Live?.devices ?? []}
+          filters={appliedFilters}
         />
       ) : null}
 
@@ -858,21 +864,42 @@ type AuditEntry = {
 };
 
 function EmployeeConnectionAudit({
-  audit,
+  auditState,
   rows,
   v2Devices,
+  filters,
 }: {
-  audit: WorkMapApiTrackingAudit | null;
+  auditState: AuditState;
   rows: WorkMapApiUsageSummary["browserExtensionCoverage"];
   v2Devices: WorkMapApiTrackingV2LiveActivity["devices"];
+  filters: ReportFilters;
 }) {
-  const desktopEntries = audit ? buildDesktopAuditEntries(audit) : [];
+  const audit = auditState.audit;
+  const auditRange = resolveConnectionAuditRange(filters);
+  const includesTimestamp = (timestamp: string) =>
+    isConnectionAuditTimestampInRange(
+      timestamp,
+      auditRange.calendar,
+      auditRange.timeZone,
+    );
+  const desktopEntries = audit
+    ? buildDesktopAuditEntries(audit).filter((entry) => includesTimestamp(entry.timestamp))
+    : [];
   const browserGroups = audit
     ? buildBrowserAuditGroups(
         { ...audit, browserExtensionCoverage: rows },
         v2Devices,
+        includesTimestamp,
       )
     : [];
+  const emptyText = audit
+    ? "No confirmed connection events in this report range."
+    : auditState.refreshStatus === "loading"
+      ? "Loading confirmed connection history..."
+      : "Connection history is temporarily unavailable; no empty-history conclusion was made.";
+  const countLabel = audit
+    ? undefined
+    : auditState.refreshStatus === "loading" ? "Loading" : "Unavailable";
   return (
     <section className="wm-report-detail-section" style={styles.reportSection} aria-labelledby="connection-audit-heading">
       <div style={styles.sectionHeader}>
@@ -880,12 +907,22 @@ function EmployeeConnectionAudit({
           <p style={styles.panelLabel}>Connection audit</p>
           <h2 id="connection-audit-heading" style={styles.sectionTitle}>Start, stop and interruption history</h2>
           <p style={styles.panelText}>Confirmed client transitions and inferred heartbeat gaps are shown separately for the Agent and Extension.</p>
+          <p style={styles.auditRangeText}>
+            Connection dates use {auditRange.timeZone}: {auditRange.calendar.from}
+            {auditRange.calendar.to === auditRange.calendar.from ? "" : ` to ${auditRange.calendar.to}`}. Usage totals remain UTC.
+          </p>
         </div>
         <History size={22} aria-hidden />
       </div>
+      {auditState.refreshStatus === "error" ? (
+        <p role="status" style={styles.auditRefreshWarning}>
+          <AlertTriangle size={17} aria-hidden />
+          <span>{audit ? "Connection history refresh failed; showing the last confirmed history." : "Connection history could not be loaded. WorkMap is not reporting this as zero events."}</span>
+        </p>
+      ) : null}
       <div style={styles.twoColumnGrid}>
-        <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} />
-        <BrowserAuditTimeline groups={browserGroups} />
+        <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} emptyText={emptyText} countLabel={countLabel} />
+        <BrowserAuditTimeline groups={browserGroups} emptyText={emptyText} countLabel={countLabel} />
       </div>
     </section>
   );
@@ -901,32 +938,52 @@ function trackingStateLabel(state: WorkMapApiUsageSummary["browserExtensionCover
   return "Tracking unavailable";
 }
 
-export function AuditTimeline({ title, icon, entries }: { title: string; icon: React.ReactNode; entries: AuditEntry[] }) {
+export function AuditTimeline({
+  title,
+  icon,
+  entries,
+  emptyText = "No confirmed connection events in this report range.",
+  countLabel,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  entries: AuditEntry[];
+  emptyText?: string;
+  countLabel?: string;
+}) {
   return (
     <article style={styles.auditCard} aria-label={`${title} connection history`}>
       <div style={styles.auditCardHeader}>
         <span style={styles.auditIcon}>{icon}</span>
         <h3 style={styles.auditTitle}>{title}</h3>
-        <span style={styles.auditCount}>{entries.length} events</span>
+        <span style={styles.auditCount}>{countLabel ?? `${entries.length} events`}</span>
       </div>
       <div style={styles.auditRows}>
-        <AuditRows entries={entries} emptyText="No connection events in this report range." />
+        <AuditRows entries={entries} emptyText={emptyText} />
       </div>
     </article>
   );
 }
 
-export function BrowserAuditTimeline({ groups }: { groups: BrowserAuditGroup[] }) {
+export function BrowserAuditTimeline({
+  groups,
+  emptyText = "No confirmed connection events in this report range.",
+  countLabel,
+}: {
+  groups: BrowserAuditGroup[];
+  emptyText?: string;
+  countLabel?: string;
+}) {
   const eventCount = groups.reduce((total, group) => total + group.entries.length, 0);
   return (
     <article style={styles.auditCard} aria-label="Browser Extension connection history">
       <div style={styles.auditCardHeader}>
         <span style={styles.auditIcon}><Globe2 size={18} aria-hidden /></span>
         <h3 style={styles.auditTitle}>Browser Extension</h3>
-        <span style={styles.auditCount}>{eventCount} events</span>
+        <span style={styles.auditCount}>{countLabel ?? `${eventCount} events`}</span>
       </div>
       <div style={styles.browserAuditGroups}>
-        {groups.length === 0 ? <p style={styles.emptyText}>No connection events in this report range.</p> : groups.map((group) => (
+        {groups.length === 0 ? <p style={styles.emptyText}>{emptyText}</p> : groups.map((group) => (
           <section key={group.deviceId} style={styles.auditDeviceGroup} aria-label={`${group.title} connection history`}>
             <div style={styles.auditDeviceHeader}>
               <div style={styles.auditDeviceIdentity}>
@@ -1130,6 +1187,7 @@ export type BrowserAuditGroup = {
 export function buildBrowserAuditGroups(
   summary: Pick<WorkMapApiUsageSummary, "browserExtensionCoverage" | "deviceStatusHistory">,
   v2Devices: WorkMapApiTrackingV2LiveActivity["devices"] = [],
+  includesTimestamp: (timestamp: string) => boolean = () => true,
 ): BrowserAuditGroup[] {
   const devices = new Map<string, {
     browserName: "CHROME" | "EDGE" | "UNKNOWN";
@@ -1172,7 +1230,7 @@ export function buildBrowserAuditGroups(
         deviceStatusHistory: summary.deviceStatusHistory.filter((event) => event.deviceId === deviceId),
       },
       v2Devices.filter((device) => device.deviceId === deviceId),
-    );
+    ).filter((entry) => includesTimestamp(entry.timestamp));
     const identityDetail = identity.workstationName
       ? identity.workstationName
       : `Device ${deviceId.slice(0, 8)}`;
@@ -1506,24 +1564,35 @@ async function loadAudit(
   setState: React.Dispatch<React.SetStateAction<AuditState>>,
   onLoaded?: (audit: WorkMapApiTrackingAudit) => void,
 ) {
+  setState((current) => current.audit
+    ? current
+    : { ...current, refreshStatus: "loading" });
   const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
+  const auditRange = resolveConnectionAuditRange(filters);
   const result = await getTrackingAudit({
     ...auth.options,
     scope: filters.view === "company" ? "company" : "user",
     userId,
     departmentId: filters.view === "company" ? filters.departmentId || undefined : undefined,
-    from: filters.from,
-    to: filters.to,
+    from: auditRange.request.from,
+    to: auditRange.request.to,
   });
   if (isCancelled()) return;
-  if (!result.ok) return;
+  if (!result.ok) {
+    setState((current) => ({ ...current, refreshStatus: "error" }));
+    return;
+  }
   onLoaded?.(result.data);
   setState((current) => mergeAuditState(current, result.data));
 }
 
 export function mergeAuditState(current: AuditState, nextAudit: WorkMapApiTrackingAudit): AuditState {
-  if (current.audit && auditHistoryRevision(current.audit) === auditHistoryRevision(nextAudit)) return current;
-  return { audit: nextAudit };
+  if (
+    current.audit
+    && current.refreshStatus === "ready"
+    && auditHistoryRevision(current.audit) === auditHistoryRevision(nextAudit)
+  ) return current;
+  return { audit: nextAudit, refreshStatus: "ready" };
 }
 
 function auditHistoryRevision(audit: WorkMapApiTrackingAudit) {
@@ -1844,6 +1913,8 @@ const styles = {
   sectionTitle: { margin: "2px 0 6px", color: wm.colors.text, fontSize: "22px", lineHeight: 1.25 },
   liveCoverage: { display: "flex", alignItems: "center", gap: "7px", border: `1px solid ${wm.colors.infoBorder}`, borderRadius: wm.radius.full, background: wm.colors.infoBg, color: wm.colors.infoText, padding: "7px 10px", fontSize: "12px", whiteSpace: "nowrap" as const },
   liveWarning: { display: "flex", alignItems: "flex-start", gap: "9px", border: `1px solid ${wm.colors.warningBorder}`, borderRadius: wm.radius.md, background: wm.colors.warningBg, color: wm.colors.warning, padding: "11px 12px", fontSize: "12px", lineHeight: 1.45 },
+  auditRefreshWarning: { display: "flex", alignItems: "flex-start", gap: "9px", margin: 0, border: `1px solid ${wm.colors.warningBorder}`, borderRadius: wm.radius.md, background: wm.colors.warningBg, color: wm.colors.warning, padding: "11px 12px", fontSize: "12px", lineHeight: 1.45 },
+  auditRangeText: { margin: "4px 0 0", color: wm.colors.textMuted, fontSize: "12px", lineHeight: 1.45 },
   twoColumnGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: "14px", alignItems: "stretch" },
   clientCard: { ...wmStyles.card, display: "grid", alignContent: "start", gap: "14px", padding: "18px", minWidth: 0, overflow: "hidden" },
   clientConnected: { borderColor: wm.colors.successBorder },

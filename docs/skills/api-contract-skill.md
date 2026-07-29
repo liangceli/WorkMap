@@ -1,5 +1,11 @@
 # API Contract Skill
 
+## Connection Audit Event-time Contract
+
+- `GET /reports/tracking-audit` is a tenant/user-scoped lifecycle occurrence history. `DeviceStatusEvent` range selection uses `startedAt`, matching the timestamp rendered by Reports; a delayed offline upload must not be assigned to its later `recordedAt`/`receivedAt` day.
+- The Web client may request adjacent UTC dates to cover a labelled local calendar range and must filter the returned entries to that displayed range. Usage-summary totals keep their separate UTC date contract.
+- A dedicated Audit query failure must propagate as a failure. It must not be converted into successful empty arrays, because `0 events` means a confirmed empty result.
+
 ## Browser Domain Runtime And Connection Audit 0.5.8 Addendum
 
 - Browser Domain runtime is controlled only by `MonitoringPolicy.collectDomainOpenRuntime` and the matching immutable `DevicePolicyLease.collectDomainOpenRuntime`. Both default false. Never reuse Desktop `collectOpenRuntime`.

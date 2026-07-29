@@ -202,6 +202,46 @@ export class BrowserRuntimeDiagnosticError extends Error {
   }
 }
 
+type CollectorMaintenanceFailurePresentation = {
+  code: string;
+  remediation: string;
+};
+
+class BrowserCollectorMaintenanceError extends Error {
+  constructor(
+    readonly code: string,
+    readonly remediation: string,
+    cause: unknown,
+  ) {
+    super(code, { cause });
+    this.name = "BrowserCollectorMaintenanceError";
+  }
+}
+
+async function runCollectorMaintenanceStep<T>(
+  code: string,
+  remediation: string,
+  task: () => Promise<T>,
+) {
+  try {
+    return await task();
+  } catch (error) {
+    throw new BrowserCollectorMaintenanceError(code, remediation, error);
+  }
+}
+
+export function describeCollectorMaintenanceFailure(
+  error: unknown,
+): CollectorMaintenanceFailurePresentation {
+  return error instanceof BrowserCollectorMaintenanceError
+    ? { code: error.code, remediation: error.remediation }
+    : {
+        code: "COLLECTOR_MAINTENANCE_RETRY",
+        remediation:
+          "A local collector step failed without changing connection health. WorkMap will retry from durable state on the next trusted page event or maintenance cycle.",
+      };
+}
+
 export function assertBrowserDeviceIdentity(
   identity: BrowserDeviceIdentityV2,
   expected: { deviceId: string; browserName: BrowserNameV2 },
@@ -551,42 +591,17 @@ export class BrowserExtensionRuntimeV2 {
 
   async handleMessage(message: RuntimeMessage, sender: MessageSender) {
     await this.ensureInitialized();
+    const senderTab = sender.tab;
     if (
       !this.state ||
-      this.state.focusedWindowId === null ||
-      sender.tab?.id === undefined
+      senderTab?.id === undefined ||
+      senderTab.windowId === undefined
     ) return;
-    const discontinuity = await this.guardLifecycleContinuity();
-    const activeTabs = await queryTabs(this.chromeApi, {
-      active: true,
-      windowId: this.state.focusedWindowId,
-    });
-    const messageOwnsFocus = messageCanOwnFocus({
-      senderTab: sender.tab,
-      focusedWindowId: this.state.focusedWindowId,
-      activeTabs,
-    });
-    const domain = eligibleDomainForTab(
-      sender.tab,
-      this.config?.excludedHostnames,
-    );
-    if (!domain || !messageOwnsFocus || !this.captureAllowed()) return;
 
-    if (message.type === "workmap:domain-activity") {
-      const monotonicMs = this.mapPageTimeToMonotonic(message.activityAt);
-      await this.acquireMessageFocus(sender.tab, domain, monotonicMs);
-      if (!this.engine) return;
-      await this.persistUpdate(
-        this.engine.recordTrustedInteraction(monotonicMs),
-        false,
-      );
-      await this.requestSync(false);
-      return;
-    }
     if (
       message.type === "workmap:domain-blur" &&
       sender.frameId === 0 &&
-      sender.tab.id === this.state.activeTabId
+      senderTab.id === this.state.activeTabId
     ) {
       await this.clearFocus(
         true,
@@ -595,12 +610,78 @@ export class BrowserExtensionRuntimeV2 {
       return;
     }
     if (
-      message.type === "workmap:domain-checkpoint" &&
-      sender.frameId === 0
-    ) {
-      const monotonicMs = this.mapPageTimeToMonotonic(message.observedAt);
-      await this.acquireMessageFocus(sender.tab, domain, monotonicMs);
-      if (discontinuity) await this.requestSync(true);
+      message.type !== "workmap:domain-activity" &&
+      message.type !== "workmap:domain-checkpoint"
+    ) return;
+
+    const trustedActivity = message.type === "workmap:domain-activity";
+    // A passive checkpoint must never override a real OS-idle boundary. A
+    // content-script activity pulse, however, exists only for a trusted input
+    // event and is stronger recovery evidence than a delayed/missed
+    // chrome.idle "active" callback.
+    if (this.state.systemIdle && !trustedActivity) return;
+
+    try {
+      const focusedWindow = await runCollectorMaintenanceStep(
+        "FOCUS_WINDOW_QUERY_RETRY",
+        "WorkMap could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
+        () => getWindow(this.chromeApi, senderTab.windowId!),
+      );
+      if (!isUsableFocusedWindow(focusedWindow)) return;
+      const activeTabs = await runCollectorMaintenanceStep(
+        "FOCUS_TAB_QUERY_RETRY",
+        "WorkMap could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
+        () => queryTabs(this.chromeApi, {
+          active: true,
+          windowId: senderTab.windowId,
+        }),
+      );
+      if (!messageCanOwnFocus({
+        senderTab,
+        focusedWindowId: senderTab.windowId,
+        activeTabs,
+      })) return;
+      const domain = eligibleDomainForTab(
+        senderTab,
+        this.config?.excludedHostnames,
+      );
+      if (!domain || !this.focusPolicyAllowsCollection()) return;
+
+      const discontinuity = await this.guardLifecycleContinuity();
+      this.state = {
+        ...this.state,
+        focusedWindowId: senderTab.windowId,
+        ...(trustedActivity
+          ? { systemIdle: false, lastSystemState: "active" as const }
+          : {}),
+      };
+      await runCollectorMaintenanceStep(
+        "FOCUS_STATE_PERSIST_RETRY",
+        "WorkMap confirmed the foreground page but could not persist its local Focus recovery state. It will retry without backfilling unproven time.",
+        () => this.store.writeRuntimeState(this.state!),
+      );
+      await this.restoreCollectorIfAllowed();
+      if (!this.captureAllowed()) return;
+
+      if (trustedActivity) {
+        const monotonicMs = this.mapPageTimeToMonotonic(message.activityAt);
+        await this.acquireMessageFocus(senderTab, domain, monotonicMs);
+        if (!this.engine) return;
+        await this.persistUpdate(
+          this.engine.recordTrustedInteraction(monotonicMs),
+          false,
+        );
+        await this.requestSync(false);
+        return;
+      }
+      if (sender.frameId === 0) {
+        const monotonicMs = this.mapPageTimeToMonotonic(message.observedAt);
+        await this.acquireMessageFocus(senderTab, domain, monotonicMs);
+        if (discontinuity) await this.requestSync(true);
+      }
+    } catch (error) {
+      await this.recordCollectorMaintenanceFailure(error);
+      await this.requestSync(true);
     }
   }
 
@@ -1115,7 +1196,11 @@ export class BrowserExtensionRuntimeV2 {
       await this.clearOpenRuntime(atMonotonicMs, immediateSync);
       return;
     }
-    const tabs = await queryTabs(this.chromeApi, {});
+    const tabs = await runCollectorMaintenanceStep(
+      "OPEN_RUNTIME_TAB_QUERY_RETRY",
+      "WorkMap could not refresh the eligible open-tab inventory. Existing durable Domain runtime is preserved and reconciliation will retry.",
+      () => queryTabs(this.chromeApi, {}),
+    );
     const domains = tabs
       .map((tab) =>
         eligibleDomainForTab(tab, this.config?.excludedHostnames),
@@ -1676,7 +1761,11 @@ export class BrowserExtensionRuntimeV2 {
 
   private async reconcileBrowserReality(freshFocusProof: boolean) {
     if (!this.state) return;
-    const window = await getLastFocusedWindow(this.chromeApi);
+    const window = await runCollectorMaintenanceStep(
+      "FOCUS_WINDOW_QUERY_RETRY",
+      "WorkMap could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
+      () => getLastFocusedWindow(this.chromeApi),
+    );
     if (!isUsableFocusedWindow(window)) {
       if (this.state.focusedWindowId !== null || this.engine) {
         this.state = { ...this.state, focusedWindowId: null };
@@ -1691,10 +1780,14 @@ export class BrowserExtensionRuntimeV2 {
     this.state = state;
     await this.store.writeRuntimeState(state);
     if (state.systemIdle) return;
-    const activeTabs = await queryTabs(this.chromeApi, {
-      active: true,
-      windowId,
-    });
+    const activeTabs = await runCollectorMaintenanceStep(
+      "FOCUS_TAB_QUERY_RETRY",
+      "WorkMap could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
+      () => queryTabs(this.chromeApi, {
+        active: true,
+        windowId,
+      }),
+    );
     const selectedTab = chooseSingleActiveTab(
       activeTabs,
       state.activeTabId,
@@ -1798,8 +1891,8 @@ export class BrowserExtensionRuntimeV2 {
     await this.reconcileBrowserReality(true);
   }
 
-  private async recordCollectorMaintenanceFailure(_error: unknown) {
-    void _error;
+  private async recordCollectorMaintenanceFailure(error: unknown) {
+    const failure = describeCollectorMaintenanceFailure(error);
     this.collectorState = "LIMITED";
     this.errorCode = "UNKNOWN";
     if (this.state) {
@@ -1809,19 +1902,18 @@ export class BrowserExtensionRuntimeV2 {
         diagnostics: appendDiagnostic(this.state.diagnostics, {
           stage: "LIFECYCLE",
           outcome: "RETRYING",
-          code: "FOCUS_RECONCILE_RETRY",
+          code: failure.code,
           requestId: null,
           retryable: true,
           terminal: false,
           count: 1,
-          remediation:
-            "The health heartbeat continues independently. WorkMap will retry focused-window and eligible-page reconciliation on the next browser event or alarm.",
+          remediation: failure.remediation,
         }),
       };
       await this.store.writeRuntimeState(this.state);
     }
     await this.updateVisibleStatus(
-      "Browser focus evidence could not be refreshed. Heartbeats continue while WorkMap retries page reconciliation.",
+      `${failure.remediation} Health heartbeat continues independently.`,
     );
   }
 
@@ -1915,6 +2007,22 @@ export class BrowserExtensionRuntimeV2 {
         this.state.policy,
         serverNow(this.state),
       ) === "HEALTHY"
+    );
+  }
+
+  private focusPolicyAllowsCollection() {
+    const policy = this.state?.policy;
+    if (!this.state || !policy) return false;
+    return (
+      this.collectorState !== "ERROR" &&
+      this.connectionState !== "AUTH_REQUIRED" &&
+      this.connectionState !== "UPGRADE_REQUIRED" &&
+      this.state.trackingAccess.hostPermission === "GRANTED" &&
+      this.state.trackingAccess.contentRegistration === "REGISTERED" &&
+      this.errorCode !== "QUEUE_PRESSURE" &&
+      this.errorCode !== "INTERACTION_PERMISSION_REQUIRED" &&
+      this.errorCode !== "UPGRADE_REQUIRED" &&
+      collectorStateForPolicy(policy, serverNow(this.state)) === "HEALTHY"
     );
   }
 

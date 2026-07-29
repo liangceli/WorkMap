@@ -1,5 +1,124 @@
 # Latest QA Handoff
 
+## 2026-07-29 Connection Audit Local-day And Event-time QA
+
+### Findings And Diff Review
+
+- High, fixed: Connection Audit inherited UTC usage dates, so an Australian-morning page could truthfully be July 29 locally while requesting July 28 as its audit date.
+- High, fixed: stale current-live Browser devices created inferred heartbeat-loss history outside the selected audit range, which explains the July 27/28 one-event device cards shown on July 29.
+- Medium, fixed: the API selected status rows by receipt/record time but displayed occurrence time, misplacing delayed offline lifecycle uploads.
+- The fix is limited to Reports read/query/presentation. Browser Extension and Desktop Agent runtime, lifecycle generation, queues, tracking intervals, policy and upload behavior were not changed.
+- Existing concurrent Connection Audit loading/error and Desktop start de-duplication changes were preserved. No conflicting change was reverted.
+
+### Test And Verification Status
+
+- `pnpm --filter @workmap/web test`: pass, 104/104.
+- `pnpm --filter @workmap/api test`: pass, 59/59.
+- Web/API typecheck: pass.
+- Web/API lint: pass.
+- Web/API build: pass.
+- `git diff --check`: pass.
+- Repository secret scan excluded env, dependencies and generated outputs; only five existing synthetic credential/URL test-fixture files matched, with no new real secret finding.
+- New boundary coverage: Adelaide current-local-day resolution, western time zone behind UTC, historical range preservation, exact Adelaide midnight boundaries, old inferred Browser interruption suppression, current confirmed Browser start retention, and server query on `startedAt` rather than `recordedAt`.
+
+### Manual QA, Risk And Recommendation
+
+- Real deployed API/Web QA was not run. The automated result is a pass for deployment to a controlled environment.
+- After deployment, verify the current Adelaide day both before and after UTC midnight. Only stored events whose displayed occurrence time falls in the labelled local range should appear; API failure must show unavailable/stale-confirmed state, not false zero.
+- A missing client event cannot be fabricated by the frontend. If a new Browser start still does not appear after a successful audit response and upload window, inspect the stored lifecycle response rather than changing display logic.
+- Proceed to controlled API/Web deployment and real `/reports` QA. No Browser Extension or Desktop Agent package update is required for this fix.
+
+## 2026-07-29 Honest Desktop Connection Audit QA
+
+### Reviewed Implementation And Findings
+
+- High-severity defect fixed: the API coalesced separate Desktop v2 startup events with different `clientEventId` values, so a current-day startup could be absent while an older identical row remained outside the selected range.
+- High-severity honesty defect fixed: the dedicated audit endpoint used optional fallbacks and could return a successful empty history after a query failure.
+- Medium-severity presentation defect fixed: an unrequested/failed audit was rendered as `0 events` during first load or failure. Loading, unavailable, confirmed-empty and stale-confirmed states are now distinct.
+- No outstanding current-change correctness finding was found in diff review. Desktop lifecycle capture/upload and Browser Extension files are outside this implementation scope and were not modified by this fix.
+
+### Test / Verification Status
+
+- `pnpm --filter @workmap/api typecheck`: pass.
+- `pnpm --filter @workmap/api lint`: pass.
+- `pnpm --filter @workmap/api test`: pass, 59/59.
+- `pnpm --filter @workmap/api build`: pass.
+- `pnpm --filter @workmap/web typecheck`: pass on clean sequential rerun.
+- `pnpm --filter @workmap/web lint`: pass.
+- `pnpm --filter @workmap/web test`: pass, 104/104.
+- `pnpm --filter @workmap/web build`: pass.
+- Focused API lifecycle test: pass, 7/7. Focused audit render tests: pass, 13/13. `git diff --check`: pass.
+
+### Manual QA, Risks And Recommendation
+
+- Real deployed API/Web and Windows lifecycle QA was not run. Historical Desktop start rows discarded by the old API cannot be backfilled without inventing evidence.
+- After deployment, verify a new start, lock, unlock, suspend and resume on one paired Agent. Pass when each confirmed transition appears under the selected employee/day within the polling window, and an induced audit API failure displays `Unavailable` rather than `0 events`.
+- Recommendation: automated QA pass; proceed to API/Web deployment and controlled real-device audit QA. No Agent release, Browser Extension update or database migration is needed for this fix.
+
+## 2026-07-29 Browser Extension 0.5.14 Focus Recovery QA
+
+### Reviewed Implementation And Findings
+
+- High, fixed: Domain Focus could remain self-locked after MV3 restart/reconciliation failure because messages were dropped when `focusedWindowId` was null and the `PAUSED`/`LIMITED` collector gate prevented trusted input from proving recovery. This exactly explains healthy heartbeats and increasing open/runtime alongside stale snapshots and zero Focus.
+- Recovery is conservative: only a trusted content-script activity pulse from the verified OS-focused, non-minimized, non-incognito window and its eligible active HTTP(S) tab can restore Focus. Passive checkpoints, background windows, internal/protected pages, invalid policy/lease/window, missing permissions, auth/upgrade blocks and queue pressure cannot do so.
+- Maintenance errors now expose bounded safe stage codes (`FOCUS_WINDOW_QUERY_RETRY`, `FOCUS_TAB_QUERY_RETRY`, `FOCUS_STATE_PERSIST_RETRY`, `OPEN_RUNTIME_TAB_QUERY_RETRY`) without URL, page, input or credential data.
+- Historical missing Focus cannot be repaired honestly because the extension did not retain proof for those intervals. Existing `POLICY_REJECTED` dead letters remain excluded from Reports.
+
+### Verification Status
+
+- `pnpm --filter @workmap/browser-extension typecheck`: passed.
+- `pnpm --filter @workmap/browser-extension lint`: passed.
+- `pnpm --filter @workmap/browser-extension test`: passed, 77/77.
+- `pnpm --filter @workmap/browser-extension build`: passed.
+- `pnpm --filter @workmap/browser-extension release:zip`: passed.
+- ZIP inspection: 22 entries, embedded manifest 0.5.14, 51,345 bytes, SHA-256 `F47CCBB76AEA68835D034220C2379CFCCD90A7FE2B09CCF0BAA955E524B9E5AC`.
+
+### Manual QA And Recommendation
+
+- Real Chrome and Edge load-unpacked execution was not run by Codex.
+- Required pass sequence: reload the existing 0.5.14 unpacked extension without deleting/re-pairing; interact with a foreground eligible site for 3-5 minutes; confirm collector/snapshot freshness, accepted or duplicate Focus interval evidence, confirmed-through advancement and matching Reports growth; then idle past policy threshold and use trusted input to verify Focus resumes; finally send activity from a background window/tab and verify it is not counted.
+- Automated QA passes and the artifact is suitable for controlled device QA. Do not publish broadly until the real Chrome/Edge sequence passes.
+
+## 2026-07-29 Multi-monitor Focused Idle Clarification QA
+
+- Native code review confirmed Desktop Agent obtains a single OS-wide foreground window through `GetForegroundWindow()`; it does not assign an independent focused App to each monitor.
+- Runtime review confirmed every `foreground_changed` event calls `acquireFocus` for the new App, and the focus engine emits the previous App through the switch timestamp before starting the new App.
+- Existing automated coverage `starts focus immediately and switches without overlap` verifies the previous focused interval closes exactly when the next App becomes foreground.
+- Therefore Edge-visible/Codex-foreground is not an Edge Focused Idle case. It is Codex Focus plus potentially concurrent Edge Open/runtime.
+- No real multi-monitor Windows manual QA was run. Pass for the code-backed behavior clarification; device-level observation remains optional QA.
+
+## 2026-07-29 Focused Idle Review QA
+
+- Code review confirmed `FOCUS_IDLE_THRESHOLD_MS = 60_000`, Desktop and Browser focus engines emit `FOCUS_IDLE`, API summaries aggregate it separately, and Reports exposes it in expanded metric cards.
+- Verification command: `tsx --test apps/desktop-agent/test/desktop-focus-v2.test.ts apps/browser-extension/test/browser-focus-v2.test.ts apps/web/test/reports-app-metric-card.test.ts`.
+- Result: 21/21 passed, including the explicit Desktop case where 90 seconds without input becomes 60 seconds Focus active plus 30 seconds Focused idle.
+- No manual Windows/browser idle-duration test was run. Pass for the current implementation claim; real-device timing remains observational QA.
+
+## 2026-07-28 Desktop DRAINING_V1 Manual QA
+
+- Screenshot evidence confirms v2 collection is already functioning: the device is connected, the snapshot is current, v2 queue is zero, and confirmed-through/last-sync are current.
+- `DRAINING_V1` is a temporary migration state, not evidence that the Agent is collecting new activity with v1.
+- Recommendation: observe for up to 10 minutes. Pass when the pill becomes `V2`; if it persists, inspect the employee machine's legacy queue/logs without deleting or re-pairing it.
+
+## 2026-07-28 Browser Policy Refresh Manual QA
+
+- The Chrome Extension card is connected with current health/last-sync and one pending item, so the yellow lease warning does not mean the Browser connection failed.
+- `SNAPSHOT_POLICY_LEASE_INVALID` remains current until a newer valid Domain snapshot is accepted; normal recovery should update snapshot time/current Domain within the next policy-maintenance cycles.
+- Owner/Employee manual policy editing or re-acknowledgement is not part of normal lease refresh. A repeatedly advancing rejection timestamp is a fail condition if it persists beyond 5-10 minutes.
+- Chrome-only persistence with Edge healthy narrows the issue to the Chrome device/runtime rather than the shared Monitoring Policy. A code-backed candidate is repeated resend of a stale `latestSnapshot` when Chrome has no foreground focus evidence to replace it.
+- Immediate non-destructive check: foreground Chrome on a normal HTTP(S) page for 1-2 minutes. Pass if snapshot received advances and the current Domain becomes confirmed; continued new lease-invalid timestamps while Chrome is foreground require a Browser Extension fix.
+- Manual result: passed. After Chrome was foregrounded on a normal page, the `Policy lease needs refresh` warning disappeared, confirming automatic recovery and a newer accepted snapshot.
+- Live Chrome inspection was unavailable because the Codex Chrome-control integration is not installed in the selected Chrome profile; this candidate is not yet live-debugger verified.
+- The `POLICY_REJECTED` Open Runtime sequence is historical terminal evidence. It requires investigation only if newly rejected counts/timestamps continue increasing after the refreshed lease is active.
+- Recommendation: observe one focused normal HTTP(S) tab for 5-10 minutes; pass when snapshot time advances, current Domain becomes confirmed, queue stays near zero, and no new rejection appears.
+
+## 2026-07-28 Post-migration Queue Recovery Manual QA
+
+- Manual evidence: Desktop health is online/server-confirmed, secure heartbeat is current, and the latest shown batch accepted 20 intervals with no duplicate or rejection.
+- Manual evidence: pending was still `892` but reportedly decreasing; confirmed-through lagged current time by roughly one hour, consistent with backlog replay rather than full recovery.
+- The visible 12:13-12:23 HTTP/network failures are historical. Pass condition requires no newly timestamped failures while pending declines and confirmed-through advances.
+- Recommendation: partial pass. Do not add Browser traffic yet; wait for Desktop pending to reach approximately `0-5` and confirmed-through to be within approximately five minutes of current time, then enable one extension for a 10-15 minute observation.
+
 ## 2026-07-28 Production Migration P3009 Follow-up QA
 
 - Confirmed the new `P3009` is Prisma's expected guard for an unresolved failed migration record, not a second SQL/index failure.

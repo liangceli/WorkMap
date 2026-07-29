@@ -1,5 +1,184 @@
 # Latest Implementation Handoff
 
+## 2026-07-29 Connection Audit Local-day And Event-time Fix
+
+### Original Task Brief
+
+- Fix Owner `/reports` Connection Audit showing July 27/28 Browser blocks when the current Adelaide calendar date is July 29, and ensure opening the page at any time shows only the selected/current day's honestly stored starts, locks, sleeps, recoveries and other observable lifecycle transitions.
+- Keep the change minimal and do not alter Browser Extension or Desktop Agent collection, lifecycle generation, queue, upload, focus/runtime or policy behavior.
+
+### Confirmed Root Causes And Implementation
+
+- Reports usage filters intentionally default to the UTC reporting date. During the Adelaide morning, that date is still the prior day, so Connection Audit inherited the wrong calendar day. Audit now resolves the current default day in the viewer's IANA time zone, expands only its API read across adjacent UTC dates, and filters the rendered entries back to the exact local calendar range. Historical selected ranges remain selected ranges.
+- Browser audit presentation added inferred heartbeat loss from every stale live device without checking the audit range. Old Chrome/Edge device interruptions could therefore appear on a current-day audit even when no current transition existed. Stored and inferred Browser entries are now subject to the same local-range predicate; empty old device groups disappear.
+- The API filtered lifecycle history by `recordedAt` even though the audit displays `startedAt`. An offline-retained event received later could land on the receipt day instead of the day it happened. The dedicated audit query now filters `startedAt`; tenant/user/source selection and response fields are unchanged.
+- The section explicitly labels its local calendar range and time zone while preserving the existing statement that usage totals remain UTC.
+- Concurrent pre-existing work on the same Reports surface separated audit loading/ready/error and preserved distinct Desktop startup events. Those edits were retained without rollback or overwrite.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/connectionAuditRange.ts`
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/test/connection-audit-range.test.ts`
+- `workmap/apps/api/src/modules/reports/reports.service.ts`
+- `workmap/apps/api/test/tracking-audit-event-time.test.ts`
+- `docs/skills/frontend-skill.md`
+- `docs/skills/api-contract-skill.md`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Role, Verification And Manual QA
+
+- Owner/Manager/Team Lead/HR and selected-user tenant/RBAC resolution are unchanged. No new endpoint, credential, schema or migration was added.
+- Web test passed 104/104; API test passed 59/59. Web/API typecheck, lint and build passed. The new tests cover Adelaide/Los Angeles UTC boundaries, historical ranges, exact local-day filtering, suppression of old live-heartbeat inference, retention of today's confirmed Browser start, and API lifecycle event-time query shape.
+- `git diff --check` and the final secret scan are recorded in the matching QA handoff.
+- Real deployed `/reports` QA was not run. Production behavior requires deploying the existing combined API/Web changes; no Agent or Browser Extension release is required for this audit-only fix.
+
+### Remaining Risk And Next Step
+
+- The UI never invents a startup, lock, sleep or close. A transition appears only after the client has uploaded it and the API has confirmed/stored it; unavailable audit requests are shown as unavailable rather than as zero events.
+- After API/Web deployment, open `/reports` before and after Adelaide's UTC-day boundary, select the employee, and verify today shows only today's confirmed rows. Start/reload one browser profile and lock/unlock or sleep/resume once; new rows should append during silent polling without old-date device cards reappearing.
+
+## 2026-07-29 Honest Desktop Connection Audit
+
+### Original Task Brief
+
+- Make Owner `/reports` Connection Audit honestly show the selected employee's confirmed Desktop Agent lifecycle transitions for the selected day/range, including normal start, lock/unlock, sleep/resume, shutdown/stop and interruption states.
+- Keep the fix minimal and do not change Desktop Agent collection, focus/runtime accounting, queue, upload cadence, Tracking v2 payloads, policy, database schema, tenant/RBAC boundaries or Browser Extension behavior.
+
+### Root Cause And Implementation
+
+- Desktop Agent 0.6.9 already enqueues a unique confirmed `RUNNING / AGENT_STARTED` status with operation `protocol-v2-start` after each successful v2 startup. The API's consecutive-status coalescing preserved separate Browser profile starts but incorrectly returned the previous Desktop start whenever two Desktop starts had the same status/reason. If the previous row belonged to an earlier day, the new day's audit query legitimately found no stored start.
+- `DevicesService` now treats a Desktop `protocol-v2-start` carrying a different `clientEventId` as a distinct lifecycle start. Retrying the same ID remains idempotent, while unrelated repeated health/status noise retains the existing coalescing behavior.
+- The dedicated `/reports/tracking-audit` endpoint no longer converts failed session/status/timeline queries into successful empty arrays. A query failure now reaches the caller as a failure instead of becoming a false `0 events` result. Optional audit enrichments inside the main usage summary remain optional and unchanged.
+- The Reports client now tracks audit loading/ready/error separately. Before the first confirmed response it says `Loading`, not `0 events`; on failure it says `Unavailable` and explicitly refuses to conclude that the range is empty. A failed background refresh retains and labels the last confirmed history rather than clearing rows or scroll state. Only a successful empty response renders `0 events` and `No confirmed connection events`.
+- Existing Desktop wording already covers all stored v2 statuses: started, stopped by user, network offline, shutdown, sleeping, locked, crashed, terminated, service unreachable, interrupted, reconnected and restarted. That mapping was verified and not broadened with invented states.
+
+### Changed Files
+
+- `workmap/apps/api/src/modules/devices/devices.service.ts`
+- `workmap/apps/api/src/modules/reports/reports.service.ts`
+- `workmap/apps/api/test/agent-session.test.ts`
+- `workmap/apps/api/test/tracking-reports-verification.test.ts`
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/test/connection-audit-refresh.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Role / Access / Deployment Behavior
+
+- Existing user/tenant resolution and Owner/Manager/Team Lead/HR report-access checks are unchanged. The dedicated audit remains limited to the same authorised selected-user scope.
+- No migration or new Desktop Agent/Browser Extension release is required. Production behavior requires deploying the API and Web changes.
+- Previously coalesced Desktop starts were never stored and cannot be reconstructed honestly. After API deployment, each future confirmed v2 startup is retained; a start that occurred before deployment appears only if an independent stored legacy session exists.
+
+### Verification And Manual QA
+
+- API typecheck, lint, test and build passed; full API tests: 59/59.
+- Web typecheck, lint, test and build passed; full Web tests: 104/104.
+- Focused lifecycle test: 7/7. Focused Desktop/Browser audit presentation test: 13/13. Dedicated Reports verification passed, including failure propagation instead of false-empty audit history.
+- One Web typecheck attempt ran concurrently with `next build` and temporarily saw `.next/types` files being regenerated; the clean sequential rerun passed. This was a verification race, not a source failure.
+- `git diff --check` passed. Real deployed `/reports` QA was not run.
+
+### Intentionally Unchanged, Risks And Next Step
+
+- No Desktop Agent, Browser Extension, Prisma schema/migration, policy, tracking interval, live health or usage aggregation behavior changed.
+- The page polls the dedicated audit endpoint every five seconds while visible; it is honest polling, not realtime push. An event still queued locally will appear only after the API confirms and stores it.
+- Deploy API and Web, then start/restart one already-paired Desktop Agent, lock/unlock once, and sleep/resume once. The selected employee/day audit should add distinct confirmed rows without resetting the Agent or re-pairing the device.
+
+## 2026-07-29 Browser Extension 0.5.14 Focus Recovery
+
+### Original Task Brief And Evidence
+
+- Fix Browser Extension Domain Focus undercounting. Production evidence from 0.5.13 showed server-confirmed heartbeats and Domain open/runtime progressing while the current Domain snapshot was stale, the collector remained `PAUSED`, and Reports showed `0m` Focus active for every Domain.
+- Keep the existing MV3/Tracking v2 architecture and privacy boundary. Do not change Desktop Agent behavior or manufacture historical Focus for unobserved time.
+
+### Root Cause And Implementation
+
+- `backgroundV2.ts` previously discarded every content-script message whenever the durable `focusedWindowId` was `null`, and its general collection gate also rejected input while the collector was `PAUSED`/`LIMITED` or a delayed `chrome.idle` state remained idle. A missed/recycled MV3 reconciliation could therefore self-lock Domain Focus even though health and the independent open-tab runtime lane continued.
+- Trusted activity now performs a fresh proof chain before recovery: the sender window must be the real focused, non-minimized, non-incognito browser window; the sender tab must be the eligible active tab under the existing Split View rule; the top-level hostname must be HTTP(S); host permission/content registration and the acknowledged policy lease/window must be valid.
+- After that proof, trusted input can restore the durable focused-window/system-active state, recover the collector, and resume Focus from the actual input timestamp. Passive checkpoints cannot override a real system-idle boundary, and background-window messages still cannot acquire Focus.
+- Focused-window, active-tab, state-persistence and open-runtime reconciliation failures now retain stage-specific safe diagnostics instead of collapsing everything into `FOCUS_RECONCILE_RETRY`.
+- Version advanced from 0.5.13 to 0.5.14 in the package, source version constant, source manifest, generated unpacked manifest and version assertions.
+
+### Changed Files
+
+- `workmap/apps/browser-extension/src/backgroundV2.ts`
+- `workmap/apps/browser-extension/src/trackingV2Types.ts`
+- `workmap/apps/browser-extension/test/focus-recovery.test.ts`
+- `workmap/apps/browser-extension/test/service-worker.test.ts`
+- `workmap/apps/browser-extension/package.json`
+- `workmap/apps/browser-extension/manifest.json`
+- `workmap/apps/browser-extension/alpha-unpacked/manifest.json`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Verification, Artifact And Manual QA
+
+- Browser Extension typecheck, lint, test and build passed. Test result: 77/77, including recovery from null focused-window/`PAUSED`, recovery from `LIMITED`, passive-checkpoint idle protection, background-window rejection and safe window-query diagnostics.
+- Release ZIP: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.14.zip`; 22 entries; 51,345 bytes; embedded manifest 0.5.14; SHA-256 `F47CCBB76AEA68835D034220C2379CFCCD90A7FE2B09CCF0BAA955E524B9E5AC`.
+- Real Chrome/Edge load-unpacked QA was not run by Codex. Reload/upgrade the existing unpacked installation without removing or re-pairing, then verify on an eligible foreground HTTP(S) page that collector becomes healthy, snapshot confirmation advances, accepted/duplicate Focus intervals advance confirmed-through, and Reports Focus active grows after trusted input.
+- Historical unobserved time and terminal dead-letter rows are intentionally not reconstructed. This fix affects newly proven Focus after 0.5.14 runs.
+
+### Intentionally Unchanged And Remaining Risk
+
+- No Desktop Agent, API, Web, schema, tenant/RBAC, policy contract or Reports aggregation behavior changed.
+- Open/runtime remains policy-controlled and separate from Focus. It may continue while eligible tabs remain open, but it does not prove active use.
+- Release is ready for controlled Chrome/Edge load-unpacked QA, not automatic store publication or production deployment.
+
+## 2026-07-29 Multi-monitor Focused Idle Clarification
+
+### Original Task And Result
+
+- Reviewed whether an Edge window left visible on one monitor accrues Focused Idle while the employee actively works in Codex on another monitor.
+- It does not. The Windows host uses the OS-wide `GetForegroundWindow()` result, so all monitors share one foreground App. Clicking or typing in Codex switches the Focus lane from Edge to Codex and closes the Edge focused interval without overlap.
+- Edge can continue accruing the separate Open/runtime metric while its eligible window remains open/visible and that policy lane is enabled. Open/runtime does not mean Edge was focused or actively used.
+- If input stops for 60 seconds while Codex remains the foreground App, Codex—not Edge—begins accruing Focused Idle. Edge accrues Focused Idle only when Edge itself remains the global foreground App without trusted input past the threshold.
+
+### Changed / Verified / Unchanged
+
+- Documentation only; no Desktop Agent, Browser Extension, API, Web, policy, schema, collection, upload or report behavior changed.
+- Code review covered the native Windows foreground source, runtime foreground-switch handling, and the no-overlap focus-engine test.
+- No real multi-monitor Windows manual QA was run in this clarification.
+
+## 2026-07-29 Focused Idle Current-behavior Review
+
+### Original Task And Result
+
+- Reviewed whether the current project collects Focused Idle. It does for both Tracking v2 Desktop App focus and eligible Browser Domain focus.
+- The shared threshold is 60 seconds. The first 60 seconds after the latest trusted input remain `FOCUS_ACTIVE`; continued focus without trusted input becomes `FOCUS_IDLE`. New trusted input resumes active focus.
+- Desktop lock, suspend/disconnect, unavailable input desktop, foreground switch, policy pause, or collection boundary closes/pauses the focused lane instead of attributing unlimited idle. Browser focus must remain on an eligible focused HTTP(S) tab/window.
+- The API aggregates `focusedIdleMs`/`focusedIdleSeconds`, and expanded Reports App/Domain cards render `Focused idle` independently from Focus active and Open/runtime.
+
+### Changed / Verified / Unchanged
+
+- Documentation only; no Desktop, Browser, API, Web, policy, schema or data behavior changed.
+- Focused Desktop, Browser and Reports presentation tests passed 21/21.
+- Manual idle timing QA was not run in this review. Zero displayed idle can still be legitimate when no interval passes the threshold, focus is closed by lock/switch, or data is queued/rejected.
+
+## 2026-07-28 Desktop DRAINING_V1 Observation
+
+- User-provided Reports evidence for another employee shows Desktop Agent 0.6.9 connected with a current App snapshot, current heartbeat/sync, zero pending v2 uploads and confirmed-through at the current time, while the migration pill reads `DRAINING_V1`.
+- Code review confirms `DRAINING_V1` means v2 is active while the separate pre-v2 file queue is being uploaded. The displayed health queue is `trackingV2Store.stats()` and does not include that legacy `queue.json`, so `0 pending` and `DRAINING_V1` can coexist.
+- Legacy rows are sent in batches of 20; retryable failures use bounded backoff up to five minutes. Once the legacy queue reaches zero, the runtime automatically persists migration state `V2`. No code changed.
+
+## 2026-07-28 Browser Policy Refresh Observation
+
+- User-provided Reports evidence shows the re-enabled Chrome Extension is connected and syncing, but its first live Domain snapshot was rejected with `SNAPSHOT_POLICY_LEASE_INVALID` because it used an expired/replaced lease.
+- Current Browser v2 behavior intentionally resets the policy-refresh timer, pauses/clears the rejected live snapshot, fetches the current policy on maintenance, and starts a new snapshot automatically. A later accepted snapshot clears this server diagnostic.
+- A policy lease is a server-issued, device/policy/version/time-window-bound authorization that currently lasts 24 hours; lease refresh is client/server maintenance and does not require an Owner or Employee to edit policy settings.
+- If the diagnostic timestamp repeatedly advances for more than 5-10 minutes, new snapshots are still being rejected and the automatic refresh loop has not converged; that requires technical diagnostics rather than an Owner/Employee policy action.
+- Follow-up evidence shows Chrome still rejecting at 2:00 PM while Edge is healthy. The browsers are separate device identities with separate leases, so this does not indicate a tenant-wide policy failure.
+- Code review found a matching stale-snapshot path: after a lease rejection, `clearFocus` can persist a closing snapshot carrying the old lease; when Chrome has no usable foreground window, reconciliation may not create a replacement snapshot, while later health syncs continue carrying the stale `latestSnapshot`. No Browser code has been changed yet.
+- User then foregrounded Chrome on a normal HTTP(S) page and confirmed the current lease warning disappeared. This verifies that a fresh Chrome focus snapshot replaced the stale snapshot and restored live Domain confirmation without Owner/Employee policy action.
+- The shown `POLICY_REJECTED` Open Runtime interval is a terminal server tombstone and is excluded from historical totals; it is not retried. No code changed.
+
+## 2026-07-28 Post-migration Queue Recovery Observation
+
+- User-provided production Desktop Agent evidence now shows `Agent connected`, current server-confirmed health, and successful interval batches (`20 accepted / 0 duplicate / 0 rejected`).
+- The retained local queue was still large (`892 pending`) but was reported to be decreasing. `Confirmed interval through` remained behind current time, so recovery was active but not complete.
+- Historical `HTTP 500`, `TRACKING_SYNC_INTERNAL` and network diagnostics from before recovery remain visible by design; they are not current failures unless new timestamps continue appearing.
+- No code changed. Keep the Browser Extension disabled until Desktop pending is near steady state and confirmed-through catches up, then re-enable only one extension and observe incrementally.
+
 ## 2026-07-28 Production Migration P3009 Follow-up
 
 - A direct retry of `prisma migrate deploy` returned `P3009` because the failed `20260728130000_tracking_query_performance` record had not first been marked rolled back.

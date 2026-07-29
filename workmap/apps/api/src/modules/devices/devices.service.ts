@@ -343,13 +343,23 @@ export class DevicesService {
       where: { companyId: context.companyId, deviceId, source: clientType },
       orderBy: { recordedAt: "desc" },
     });
-    const isDistinctBrowserProfileStart = Boolean(
+    const isDistinctClientStart = Boolean(
       latestTransition
-      && clientType === DeviceClientType.BROWSER_EXTENSION
-      && metadata?.operation === "profile-start"
-      && (status === DeviceStatus.RUNNING || status === DeviceStatus.RESTARTED)
       && clientEventId
-      && latestTransition.clientEventId !== clientEventId,
+      && latestTransition.clientEventId !== clientEventId
+      && (
+        (
+          clientType === DeviceClientType.BROWSER_EXTENSION
+          && metadata?.operation === "profile-start"
+          && (status === DeviceStatus.RUNNING || status === DeviceStatus.RESTARTED)
+        )
+        || (
+          clientType === DeviceClientType.DESKTOP_AGENT
+          && metadata?.operation === "protocol-v2-start"
+          && status === DeviceStatus.RUNNING
+          && reason === DeviceStatusReason.AGENT_STARTED
+        )
+      ),
     );
     if (
       latestTransition
@@ -357,7 +367,7 @@ export class DevicesService {
       && latestTransition.reason === reason
       && latestTransition.agentSessionId === agentSessionId
       && hasSameTrackingState(latestTransition.metadata, metadata)
-      && !isDistinctBrowserProfileStart
+      && !isDistinctClientStart
     ) {
       return toStatusEventResponse(latestTransition);
     }

@@ -23,7 +23,7 @@ test("Connection Audit never replaces its list with a periodic loading message",
 
 test("silent audit refresh preserves identical state and adds only new transitions", () => {
   const firstAudit = audit([status("event-1", "LOCKED")]);
-  const initial = { audit: firstAudit };
+  const initial = { audit: firstAudit, refreshStatus: "ready" as const };
   const unchanged = mergeAuditState(initial, audit([status("event-1", "LOCKED")]));
   assert.equal(unchanged, initial);
 
@@ -33,6 +33,37 @@ test("silent audit refresh preserves identical state and adds only new transitio
   ]));
   assert.notEqual(refreshed, unchanged);
   assert.deepEqual(refreshed.audit?.deviceStatusHistory.map((event) => event.id), ["event-2", "event-1"]);
+  assert.equal(refreshed.refreshStatus, "ready");
+});
+
+test("Connection Audit distinguishes loading or unavailable history from a confirmed empty range", () => {
+  const loading = renderToStaticMarkup(createElement(AuditTimeline, {
+    title: "Desktop Agent",
+    icon: null,
+    entries: [],
+    emptyText: "Loading confirmed connection history...",
+    countLabel: "Loading",
+  }));
+  const unavailable = renderToStaticMarkup(createElement(AuditTimeline, {
+    title: "Desktop Agent",
+    icon: null,
+    entries: [],
+    emptyText: "Connection history is temporarily unavailable; no empty-history conclusion was made.",
+    countLabel: "Unavailable",
+  }));
+  const empty = renderToStaticMarkup(createElement(AuditTimeline, {
+    title: "Desktop Agent",
+    icon: null,
+    entries: [],
+  }));
+
+  assert.match(loading, /Loading confirmed connection history/);
+  assert.doesNotMatch(loading, /0 events/);
+  assert.match(unavailable, /temporarily unavailable/);
+  assert.doesNotMatch(unavailable, /No confirmed connection events/);
+  assert.doesNotMatch(unavailable, /0 events/);
+  assert.match(empty, /No confirmed connection events/);
+  assert.match(empty, /0 events/);
 });
 
 function audit(deviceStatusHistory: ReturnType<typeof status>[]) {

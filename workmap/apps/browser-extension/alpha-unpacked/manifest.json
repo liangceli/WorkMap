@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WorkMap Domain Tracking Alpha",
-  "version": "0.5.13",
+  "version": "0.5.14",
   "description": "Transparent domain focus, idle, and policy-controlled open/runtime tracking. Stores hostnames only, never full URLs or page content.",
   "permissions": ["storage", "tabs", "idle", "alarms", "scripting"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
