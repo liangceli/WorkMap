@@ -1,5 +1,22 @@
 # Latest QA Handoff
 
+## 2026-07-30 Desktop Agent 0.6.11 GitHub Release CI QA
+
+### Findings Ordered By Severity
+
+- High, fixed: GitHub-hosted Windows failed the only real interactive-desktop PowerShell sampler test with `Windows foreground sampling timed out`; this prevented the 0.6.11 installer/release steps even though production typecheck, lint and all other tests passed.
+- Regression risk controlled: only the CI skip predicate of the legacy adapter integration test changed. Local Windows still executes it, and the actual Tracking v2 native helper still executes during `build:native` with protocol/health assertions.
+- Scope review: no production collection, privacy minimisation, Focus/idle/Open-runtime clocks, policy validation, queue/retry, sync, API, Reports, auth, tenant isolation, Browser Extension or database behavior changed.
+
+### Verification And Recommendation
+
+- `CI=true` focused Windows-adapter test: pass, 6 passed / 1 skipped.
+- `pnpm --filter @workmap/desktop-agent test`: pass, 75/75, including the local real-Windows sampler.
+- `pnpm --filter @workmap/desktop-agent typecheck`: pass.
+- `pnpm --filter @workmap/desktop-agent lint`: pass.
+- `pnpm --filter @workmap/desktop-agent release:windows`: pass; the first attempt was blocked only by sandbox network access and the approved network retry completed.
+- Manual installed-Agent/live Reports QA was not run in this test-only round. QA recommendation: pass for committing and manually dispatching a fresh 0.6.11 Desktop release workflow from the new commit; do not rerun the old failed workflow SHA.
+
 ## 2026-07-30 Desktop Agent 0.6.11 Native-host Packaging And Recovery QA
 
 ### Findings Ordered By Severity

@@ -1,5 +1,29 @@
 # Latest Implementation Handoff
 
+## 2026-07-30 Desktop Agent 0.6.11 GitHub Release CI Fix
+
+### Original Task Brief And Root Cause
+
+- Fix the failed GitHub Actions `desktop-agent v0.6.11` release without changing Desktop Agent collection, interval construction, policy, durable queue, sync, API or Reports behavior.
+- The attached complete Actions log showed that typecheck and lint passed and 74 of 75 tests passed. The only failure was the legacy PowerShell adapter's real interactive-Windows integration test timing out after four seconds on a GitHub-hosted Windows runner.
+- That runner does not guarantee an interactive desktop, and its first PowerShell sampler launch may compile `Add-Type` and enumerate windows slowly. This test is not the Tracking v2 native helper used by the packaged 0.6.11 Agent.
+
+### Changed Files And Implementation Summary
+
+- Changed `workmap/apps/desktop-agent/test/windows-adapter.test.ts` so the environment-dependent legacy sampler smoke is skipped only when `CI=true` (or when not on Windows). It still runs on a real local Windows desktop.
+- The current Tracking v2 compiled native helper remains protected by its build-time real-process protocol smoke, which requires initial foreground, visible-App and `HEALTHY` events before packaging succeeds.
+- Updated `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`.
+- No production source, package version, installer contents, Browser Extension, API, Web, database, migration, deployment variable, policy, tenant/device credential, RBAC or Owner/Employee boundary changed.
+
+### Verification, Manual QA And Next Step
+
+- CI-mode focused test: pass, 6 passed / 1 intentionally skipped.
+- Local real-Windows Desktop suite: pass, 75/75; the legacy sampler integration test executed and returned consecutive privacy-minimised observations.
+- Desktop `typecheck` and `lint`: pass.
+- Windows NSIS `release:windows`: pass after the sandbox-only network restriction was retried with network approval; `WorkMap-Desktop-Agent-Setup-0.6.11.exe` and blockmap were produced.
+- No new installed-device or live Reports manual QA was run because this is test-only CI stabilization. The 0.6.11 installed/live smoke from the preceding handoff remains required.
+- Do not rerun the old failed Run #23 because it uses the old commit. Commit and push this test/docs fix, then manually dispatch `Publish Tracking Clients` from the new commit with target `desktop-agent`. Keep version `0.6.11`; the failed run stopped before creating its tag/release.
+
 ## 2026-07-30 Desktop Agent 0.6.11 Native-host Packaging And Recovery Fix
 
 ### Original Task Brief And Confirmed Root Cause

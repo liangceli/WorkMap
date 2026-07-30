@@ -38,7 +38,9 @@ test("focus-only observations do not invent an empty open-app scan", () => {
   assert.equal(sample.openAppNames, undefined);
 });
 
-test("persistent Windows sampler returns consecutive privacy-minimised observations", { skip: process.platform !== "win32" }, async () => {
+// GitHub-hosted Windows runners do not guarantee an interactive desktop. The
+// Tracking v2 native helper is executed and protocol-smoked during its build.
+test("persistent Windows sampler returns consecutive privacy-minimised observations", { skip: process.platform !== "win32" || process.env.CI === "true" }, async () => {
   const adapter = new WindowsForegroundAdapter();
   try {
     const first = await adapter.sample();
