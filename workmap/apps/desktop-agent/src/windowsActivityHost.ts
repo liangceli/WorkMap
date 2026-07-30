@@ -3,6 +3,17 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
+const NATIVE_HOST_RESTART_DELAYS_MS = [1_000, 3_000, 10_000, 30_000, 60_000] as const;
+
+type WindowsActivityHostAdapterOptionsV2 = {
+  platform?: NodeJS.Platform;
+  executableExists?: (path: string) => boolean;
+  spawnHost?: (path: string) => ChildProcessWithoutNullStreams;
+  restartDelaysMs?: readonly number[];
+  scheduleRestart?: (callback: () => void, delayMs: number) => NodeJS.Timeout;
+  cancelRestart?: (timer: NodeJS.Timeout) => void;
+};
+
 export type WindowsActivityAppIdentityV2 = {
   subjectKey: string;
   displayName: string;
@@ -62,19 +73,45 @@ export class WindowsActivityHostAdapterV2 {
   private stdoutBuffer = "";
   private stderrTail = "";
   private stopping = false;
+  private listener: WindowsActivityHostListenerV2 | null = null;
+  private restartTimer: NodeJS.Timeout | null = null;
+  private restartAttempt = 0;
+  private readonly platform: NodeJS.Platform;
+  private readonly executableExists: (path: string) => boolean;
+  private readonly spawnHost: (path: string) => ChildProcessWithoutNullStreams;
+  private readonly restartDelaysMs: readonly number[];
+  private readonly scheduleRestart: (
+    callback: () => void,
+    delayMs: number,
+  ) => NodeJS.Timeout;
+  private readonly cancelRestart: (timer: NodeJS.Timeout) => void;
 
   constructor(
     private readonly executablePath = resolveActivityHostExecutable(),
     private readonly diagnosticFallbackEnabled =
       process.env.WORKMAP_AGENT_DIAGNOSTIC_POWERSHELL_FALLBACK === "1",
-  ) {}
+    options: WindowsActivityHostAdapterOptionsV2 = {},
+  ) {
+    this.platform = options.platform ?? process.platform;
+    this.executableExists = options.executableExists ?? existsSync;
+    this.spawnHost = options.spawnHost ?? ((path) => spawn(path, [], {
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    }));
+    this.restartDelaysMs = options.restartDelaysMs?.length
+      ? options.restartDelaysMs
+      : NATIVE_HOST_RESTART_DELAYS_MS;
+    this.scheduleRestart = options.scheduleRestart ?? setTimeout;
+    this.cancelRestart = options.cancelRestart ?? clearTimeout;
+  }
 
   start(listener: WindowsActivityHostListenerV2) {
-    if (this.process) return;
-    if (process.platform !== "win32") {
-      throw new Error("WorkMap Desktop Agent 0.6.10 supports Windows only.");
+    this.listener = listener;
+    if (this.process || this.restartTimer) return;
+    if (this.platform !== "win32") {
+      throw new Error("WorkMap Desktop Agent 0.6.11 supports Windows only.");
     }
-    if (!existsSync(this.executablePath)) {
+    if (!this.executableExists(this.executablePath)) {
       throw new Error(
         this.diagnosticFallbackEnabled
           ? "The compiled Windows activity host is unavailable. Diagnostic PowerShell fallback must be run explicitly."
@@ -83,43 +120,79 @@ export class WindowsActivityHostAdapterV2 {
     }
 
     this.stopping = false;
-    const child = spawn(this.executablePath, [], {
-      windowsHide: true,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    this.process = child;
-    this.stdoutBuffer = "";
-    this.stderrTail = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => this.consume(chunk, listener));
-    child.stderr.on("data", (chunk: string) => {
-      this.stderrTail = `${this.stderrTail}${chunk}`.slice(-2_048);
-    });
-    child.once("error", (error) => {
-      if (this.process !== child || this.stopping) return;
-      this.process = null;
-      listener(hostFailure("HOST_PROCESS_ERROR", error.name));
-    });
-    child.once("exit", (code) => {
-      if (this.process !== child) return;
-      this.process = null;
-      if (this.stopping) return;
-      listener(hostFailure(
-        "HOST_PROCESS_EXITED",
-        this.stderrTail.trim() ? "NativeHostError" : `Exit${code ?? "Unknown"}`,
-      ));
-    });
+    this.launchHost();
   }
 
   stop() {
     this.stopping = true;
+    this.listener = null;
+    this.restartAttempt = 0;
+    if (this.restartTimer) {
+      this.cancelRestart(this.restartTimer);
+      this.restartTimer = null;
+    }
     const child = this.process;
     this.process = null;
     if (child && !child.killed) child.kill();
   }
 
-  private consume(chunk: string, listener: WindowsActivityHostListenerV2) {
+  private launchHost() {
+    if (this.stopping || this.process || !this.listener) return;
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      child = this.spawnHost(this.executablePath);
+    } catch (error) {
+      this.listener(hostFailure(
+        "HOST_PROCESS_ERROR",
+        error instanceof Error ? error.name : "SpawnFailed",
+      ));
+      this.scheduleHostRestart();
+      return;
+    }
+    this.process = child;
+    this.stdoutBuffer = "";
+    this.stderrTail = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => this.consume(child, chunk));
+    child.stderr.on("data", (chunk: string) => {
+      this.stderrTail = `${this.stderrTail}${chunk}`.slice(-2_048);
+    });
+    child.once("error", (error) => {
+      this.handleHostFailure(child, hostFailure("HOST_PROCESS_ERROR", error.name));
+    });
+    child.once("exit", (code) => {
+      this.handleHostFailure(child, hostFailure(
+        "HOST_PROCESS_EXITED",
+        nativeHostExitDetail(this.stderrTail, code),
+      ));
+    });
+  }
+
+  private handleHostFailure(
+    child: ChildProcessWithoutNullStreams,
+    event: WindowsActivityHostEventV2,
+  ) {
+    if (this.process !== child || this.stopping) return;
+    this.process = null;
+    this.listener?.(event);
+    this.scheduleHostRestart();
+  }
+
+  private scheduleHostRestart() {
+    if (this.stopping || this.restartTimer || !this.listener) return;
+    const delay = this.restartDelaysMs[
+      Math.min(this.restartAttempt, this.restartDelaysMs.length - 1)
+    ] ?? 60_000;
+    this.restartAttempt += 1;
+    this.restartTimer = this.scheduleRestart(() => {
+      this.restartTimer = null;
+      this.launchHost();
+    }, delay);
+  }
+
+  private consume(child: ChildProcessWithoutNullStreams, chunk: string) {
+    if (this.process !== child || this.stopping) return;
     this.stdoutBuffer += chunk;
     let newline = this.stdoutBuffer.indexOf("\n");
     while (newline >= 0) {
@@ -127,11 +200,24 @@ export class WindowsActivityHostAdapterV2 {
       this.stdoutBuffer = this.stdoutBuffer.slice(newline + 1);
       if (line) {
         const event = parseWindowsActivityHostLine(line);
-        listener(event ?? hostFailure("HOST_PROTOCOL_INVALID", "InvalidJsonLine"));
+        if (
+          event?.eventType === "health" &&
+          (event.state === "HEALTHY" || event.state === "LIMITED")
+        ) {
+          this.restartAttempt = 0;
+        }
+        this.listener?.(event ?? hostFailure("HOST_PROTOCOL_INVALID", "InvalidJsonLine"));
       }
       newline = this.stdoutBuffer.indexOf("\n");
     }
   }
+}
+
+function nativeHostExitDetail(stderrTail: string, code: number | null) {
+  if (/application to execute does not exist|\.dll/iu.test(stderrTail)) {
+    return "NativeHostDependencyMissing";
+  }
+  return stderrTail.trim() ? "NativeHostError" : `Exit${code ?? "Unknown"}`;
 }
 
 export function parseWindowsActivityHostLine(line: string): WindowsActivityHostEventV2 | null {

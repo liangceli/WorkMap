@@ -1,5 +1,38 @@
 # Latest QA Handoff
 
+## 2026-07-30 Desktop Agent 0.6.11 Native-host Packaging And Recovery QA
+
+### Findings Ordered By Severity
+
+- Critical, fixed: the 0.6.10 installer contained a framework-dependent 19,533,608-byte apphost but not its required managed DLL. The helper therefore exited on every start, leaving heartbeat online with no new App snapshot.
+- High, fixed: the adapter previously recorded a helper exit but never restarted it. It now maintains one supervised child with capped backoff, healthy reset, shutdown cancellation and stale-child isolation.
+- High, prevented: native builds now start from a clean publish directory and must execute successfully with initial foreground, visible-App and healthy events before packaging can continue.
+- Preserved: helper failure still seals the current timeline before recovery; no missing time is invented, no overlapping child can continue emitting, and no policy or tenant boundary is weakened.
+
+### Verification And Diff Review
+
+- `pnpm --filter @workmap/desktop-agent test`: pass, 75/75.
+- `pnpm --filter @workmap/desktop-agent typecheck`: pass.
+- `pnpm --filter @workmap/desktop-agent lint`: pass after fixing only current-change lint findings.
+- `pnpm --filter @workmap/desktop-agent build`: pass, including clean native publish and build-time real-process smoke.
+- `pnpm --filter @workmap/desktop-agent release:windows`: pass after an approved network retry for Electron Builder; final installer and blockmap were produced.
+- Final packaged helper smoke on Windows: foreground event present, visible-App event present, health `HEALTHY`, no stderr. Installer SHA-256 is `5274F29C2A48499F4B4902944231AEC78FCA4F707CD491E02D19062598D00475`; Authenticode is `NotSigned`.
+- Diff review found no API/Web/Browser/database/policy/auth/RBAC or collection-model changes. The tracked Alpha helper is intentionally larger because it now contains the .NET runtime instead of depending on an omitted DLL.
+
+### Manual QA, Risks And Recommendation
+
+- Real installed 0.6.10 failure was reproduced and the final packaged 0.6.11 helper was executed successfully, but the 0.6.11 NSIS installer has not yet been installed and observed end-to-end against live Reports.
+- Historical missing activity cannot be backfilled. Existing rejected rows remain honest historical evidence and are not deleted.
+- QA recommendation: pass for controlled installation on the test machine. The next round may proceed with in-place 0.6.11 installation and live snapshot/confirmed-interval verification; no API deployment or migration is required.
+
+## 2026-07-30 Installed Desktop Agent 0.6.10 Native-host Exit Diagnosis QA
+
+- High, confirmed from the installed Agent's redacted log: the native Windows helper exited at about 11:09:48 AM Adelaide. Heartbeat-only HTTP 200 syncs continued, while no later sync carried an App snapshot.
+- High, code-confirmed: the runtime handles the helper exit as an error/boundary but does not restart the helper. Therefore `Connected` plus `Current activity not confirmed` is an honest two-line status, but the lack of automatic recovery is an Agent defect rather than an expected delay.
+- The screenshot's earlier `POLICY_REJECTED` Open/runtime tombstone is unrelated historical evidence and was not used as the current root cause.
+- No product code or data was changed and no automated suite was rerun. Immediate manual workaround is a complete tray quit/reopen, followed by checking that snapshot time and current App advance. A permanent patch requires bounded helper restart, no duplicate child processes, safe timeline boundaries and targeted exit/recovery tests.
+- Recommendation: diagnosis passes with greater than 95% confidence. Do not change Reports freshness or relax policy to conceal the symptom; implement the recovery in a subsequent Agent-only release.
+
 ## 2026-07-30 Desktop Agent 0.6.10 Startup And Lease-recovery QA
 
 ### Findings And Diff Review

@@ -1,5 +1,60 @@
 # Latest Implementation Handoff
 
+## 2026-07-30 Desktop Agent 0.6.11 Native-host Packaging And Recovery Fix
+
+### Original Task Brief And Confirmed Root Cause
+
+- Fix the newly installed 0.6.10 Agent that kept server-confirmed heartbeat/sync online while the current App snapshot remained at 11:03/11:04 AM, including after the employee fully restarted the Agent. Preserve the accepted Focus, idle, Open/runtime, queue, policy and sync behavior.
+- Installed-machine reproduction proved this was not a Reports delay: the 0.6.10 process restarted at about 11:23 AM and its native activity helper exited again within seconds. Directly launching the installed helper returned exit code `-2147450726` and the safe .NET error that `workmap-windows-activity-host.dll` did not exist.
+- The packaged helper was a stale 19,533,608-byte framework-dependent apphost. Although the build requested `PublishSingleFile`, its output directory was not cleaned, allowing the stale executable to survive and be packaged without its managed DLL.
+
+### Implementation Summary
+
+- `build-native-host.mjs` now deletes and recreates the publish directory before every publish, requires exactly one self-contained executable, and runs that executable during the build. The build passes only after the helper emits initial `foreground_changed`, `visible_apps_changed`, and `HEALTHY` protocol events.
+- `WindowsActivityHostAdapterV2` now supervises the single helper process. Unexpected error/exit closes the existing runtime timeline through the unchanged health-error path, then restarts at 1s/3s/10s/30s/60s capped backoff. A healthy restart resets backoff; `stop()` cancels pending restart; duplicate starts and stale events from a replaced process are ignored.
+- Native failure diagnostics retain only safe classifications such as `NativeHostDependencyMissing`; raw stderr, paths, App payloads, credentials, titles and content are not persisted.
+- The native adapter marker is `1.1.1`, and Desktop/Alpha/package metadata is `0.6.11`. The tracked Alpha helper was regenerated from 19,533,608 to 70,923,615 bytes as the real self-contained binary.
+
+### Changed Files And Boundaries
+
+- Changed Desktop-only build/runtime/test/version files: `scripts/build-native-host.mjs`, `scripts/build-alpha.mjs`, `src/windowsActivityHost.ts`, `src/runtimeV2.ts`, `src/version.ts`, native `Program.cs`, package metadata, `gui-release.test.ts`, `windows-activity-host-v2.test.ts`, and the tracked Alpha native executable.
+- Updated `docs/ai-handoff/latest-implementation.md` and `docs/ai-handoff/latest-qa.md`.
+- Owner/Employee, tenant/device credential, policy, Focus/idle/Open-runtime definitions, interval construction, API payloads, durable queues and Reports rendering are unchanged. No Browser Extension, API, Web, database/schema/migration, deployment variable or policy-schedule change is required.
+
+### Verification, Artifact And Manual QA
+
+- Desktop tests: pass, 75/75, including single-instance restart, dependency-missing classification, healthy backoff reset, stop cancellation, stale-process isolation and build guard coverage.
+- Desktop `typecheck`, `lint`, and `build`: pass. The clean build produced one 70,923,615-byte helper and its build-time real-process smoke passed.
+- Windows NSIS release: pass. `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.11.exe`, 115,437,319 bytes, SHA-256 `5274F29C2A48499F4B4902944231AEC78FCA4F707CD491E02D19062598D00475`.
+- The helper from the final `win-unpacked` release was directly executed on the real Windows machine and emitted foreground, visible-App and `HEALTHY` events with no stderr. The final installer is `NotSigned`.
+- A full in-place installation of 0.6.11 and live Reports confirmation has not been run by Codex. Required manual smoke: install over 0.6.10 without deleting local data, verify current App and snapshot time advance within seconds, switch Apps, wait for a confirmed interval, and verify Reports confirmed-through advances.
+
+### Remaining Risk And Next Step
+
+- Activity not observed while the 0.6.10 helper was absent cannot be reconstructed; 0.6.11 resumes honest measurement from its first valid observation.
+- Authenticode remains unsigned, so Windows SmartScreen trust remains an existing release risk.
+- Proceed to install the 0.6.11 artifact on the test machine. No backend deployment or database migration is needed.
+
+## 2026-07-30 Installed Desktop Agent 0.6.10 Native-host Exit Diagnosis
+
+### Original Task Brief And Evidence
+
+- Investigated why the newly installed `vdesktop-agent-windows/0.6.10` remained `Connected` in Owner Reports while `Current activity not confirmed` persisted and the last App snapshot stopped at about 11:04 AM.
+- Read-only inspection of the redacted local NDJSON log showed the native Windows activity helper reported healthy at `2026-07-30T01:31:59.333Z` and then emitted `HOST_PROCESS_EXITED` at `2026-07-30T01:39:48.372Z` (about 11:09:48 AM Australia/Adelaide).
+- The last HTTP 200 sync carrying an App snapshot was at `2026-07-30T01:34:17.257Z`. From `2026-07-30T01:39:52.436Z` onward, heartbeat-only syncs continued receiving HTTP 200 responses but carried no snapshot. This exactly explains the Reports split between a fresh connection and stale current App.
+
+### Code-backed Root Cause And Scope
+
+- `WindowsActivityHostAdapterV2` clears its child-process reference and emits a health error when the helper exits. `DesktopTrackingV2Runtime.processHostEvent()` correctly closes the active timeline and preserves heartbeat operation, but neither that error path nor the regular tick restarts the native helper.
+- Waiting alone cannot self-heal this instance. Fully quitting and reopening the Desktop Agent starts a new helper and is the immediate workaround; Reports should receive a fresh App snapshot shortly afterward if policy permits collection.
+- The 10:00 AM `POLICY_REJECTED` Open/runtime warning in the screenshot is historical and separate from this incident. It is not the reason the 11:04 snapshot became stale.
+- No source, queue data, policy, API, Web/Reports, Browser Extension, database, credential or tracking interval was changed in this diagnosis. A follow-up Agent release should add a single-process native-helper watchdog with bounded backoff and regression tests while preserving the existing collection and sync model.
+
+### Verification And Remaining Risk
+
+- Verified the log sequence against `runtimeV2.ts` and `windowsActivityHost.ts`; no automated suite was run because this round was read-only diagnosis.
+- Real installed-Agent evidence confirms 0.6.10 does not recover automatically from this native-helper exit. The exact underlying native process exit cause was not persisted, so it cannot be recovered from the existing redacted log; the missing watchdog behavior is nevertheless proven.
+
 ## 2026-07-30 Desktop Agent 0.6.10 Startup And Lease-recovery Hardening
 
 ### Original Task Brief

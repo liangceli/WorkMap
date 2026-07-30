@@ -651,6 +651,7 @@ export class DesktopAgentRuntimeV2 {
         operation: "native-host",
         outcome: event.state.toLowerCase(),
         reasonCode: event.errorCode ?? null,
+        reasonMessage: event.detail ?? null,
         queuePending: this.store.stats().pending,
       });
       await this.requestSync();
@@ -2095,7 +2096,7 @@ function intervalRejectionRemediation(
 ) {
   const codes = new Set(items.map((item) => item.code));
   if (codes.has("FOCUS_OVERLAP")) {
-    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.10 serializes lifecycle boundaries and keeps each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
+    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.11 serializes lifecycle boundaries and keeps each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
   }
   if (codes.has("RUNTIME_OVERLAP")) {
     return "The overlapping runtime interval was not counted. The Agent will continue from the current visible-window observation.";

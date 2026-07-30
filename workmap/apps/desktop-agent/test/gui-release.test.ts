@@ -15,7 +15,7 @@ test("Windows release is a visual NSIS installer", async () => {
   const version = await readFile(new URL("../src/version.ts", import.meta.url), "utf8");
   const electronMain = await readFile(new URL("../src/electron/main.ts", import.meta.url), "utf8");
 
-  assert.equal(packageJson.version, "0.6.10");
+  assert.equal(packageJson.version, "0.6.11");
   assert.equal(packageJson.main, "dist/electron/main.js");
   assert.match(packageJson.scripts?.["release:windows"] ?? "", /electron-builder --win nsis --x64/);
   assert.equal(packageJson.build?.win?.target, "nsis");
@@ -39,7 +39,7 @@ test("Windows release is a visual NSIS installer", async () => {
   assert.match(renderer, /server-confirmed health/);
   assert.match(renderer, /intervalUpload\.accepted/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
-  assert.match(version, /desktop-agent-windows\/0\.6\.10/);
+  assert.match(version, /desktop-agent-windows\/0\.6\.11/);
   assert.match(electronMain, /DesktopAgentRuntimeV2/);
   assert.match(electronMain, /RuntimeStartupRetrier/);
   assert.match(electronMain, /activity is not collected until startup succeeds/);

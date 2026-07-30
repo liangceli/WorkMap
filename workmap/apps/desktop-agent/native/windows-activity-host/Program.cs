@@ -135,7 +135,7 @@ internal sealed class ActivityHost : IDisposable
             eventType = "health",
             monotonicMs = Native.GetTickCount64(),
             state = "HEALTHY",
-            adapterVersion = "1.1.0",
+            adapterVersion = "1.1.1",
             errorCode = wtsRegistered ? "NONE" : "WTS_REGISTRATION_PENDING",
         });
 
