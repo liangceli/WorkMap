@@ -1,5 +1,54 @@
 # Latest QA Handoff
 
+## 2026-07-30 Desktop Agent 0.6.10 Startup And Lease-recovery QA
+
+### Findings And Diff Review
+
+- High, fixed: one transient protected-config read no longer strands a paired Electron process with `runtime === null`. Startup uses bounded retries, and a later successful renderer/UI config read starts the same runtime without requiring a Windows restart.
+- High, fixed: the UI no longer claims `Recording locally` or shows a stale current App when no runtime exists; it explicitly states that collection is not running while startup is retried.
+- High, fixed: crash recovery no longer stamps a prior-day Focus/Open-runtime tail with the newly fetched lease. Valid tails retain their original server-issued lease and therefore remain eligible for normal API validation; unverifiable tails are not queued.
+- Regression review: foreground sampling, 60-second v2 idle behavior, multi-App Open/runtime collection, multiple-window de-duplication, interval settlement, durable queue/retry, heartbeat, lifecycle boundaries, same-lease recovery, privacy minimisation and GUI packaging tests all remain green.
+- Scope review: no Browser Extension, API, Web/Reports, policy configuration, database/schema/migration, auth/RBAC, tenant/device credential or deployment code changed.
+
+### Test And Artifact Status
+
+- Desktop tests: pass, 73/73.
+- Desktop typecheck: pass.
+- Desktop lint: pass.
+- Desktop build/native-host build: pass.
+- Windows NSIS release: pass; `WorkMap-Desktop-Agent-Setup-0.6.10.exe`, 98,747,615 bytes, SHA-256 `BEEE0916DE30E2D2282F2F8B5C57C711738B3E8BBD39D8B02C44E81BF536B7E0`.
+- Initial release attempt was blocked only by sandbox network access while Electron Builder downloaded a Windows dependency; the approved network retry completed successfully.
+- Authenticode: `NotSigned`. Treat SmartScreen/install trust as an open release risk.
+- Real installed 0.6.10 Windows QA was not run. No employee device was remotely changed and no deployed API/database smoke was claimed.
+
+### Recommendation
+
+- Automated QA recommendation: pass for this Agent-only patch. The code can proceed to a controlled 0.6.9-to-0.6.10 local upgrade smoke.
+- Release recommendation remains conditional on that manual smoke: preserve the existing local data directory, confirm automatic runtime/heartbeat/policy startup, allow pending to drain, verify Reports confirmed totals advance, and perform at least one restart/lease-boundary scenario with no new relabelled policy rejections.
+- No API/Web deployment or database migration is required. The historical rejected count remains honest and is not expected to reset.
+
+## 2026-07-30 Desktop 0.6.9 Cross-lease Open/runtime Recovery Diagnosis QA
+
+- High, confirmed from local SQLite and redacted NDJSON evidence: the five new terminal rows are all `OPEN_RUNTIME`, share a July 29 occurrence range, were enqueued during July 30 startup and carry the July 30 v3 lease. They are outside that lease's allowed UTC windows, so the API's `POLICY_REJECTED` result is correct.
+- High, code-confirmed defect: startup recovery constructs the persisted old Open/runtime checkpoint with the newly fetched policy, allowing old occurrence timestamps to be mislabeled with a new lease. This is a Desktop Agent recovery defect, not a Reports/API/policy-configuration failure.
+- The increase from 56 to 61 is therefore fully accounted for by one five-interval recovery batch. The terminal rows are excluded from confirmed totals; current Focus collection and later valid interval ingestion are not disproved by this incident.
+- No source code changed and no product automated suite was run for this read-only diagnosis. No real Windows restart regression QA was run. A future fix requires changed-lease and same-lease recovery tests for both Open/runtime and Focus before release.
+- Recommendation: diagnosis passes with greater than 95% confidence; implementation can proceed as an Agent-only 0.6.10 hardening change. Do not alter API policy enforcement or delete historical dead letters to conceal the symptom.
+
+## 2026-07-30 Desktop 0.6.9 Runtime-not-started Diagnosis QA
+
+- High, confirmed: the screenshot is not a Reports rendering defect. `Agent diagnostics are not available yet` is returned only when the Electron main-process runtime is null; the untouched Diagnostics labels are HTML defaults rather than live policy/sync values.
+- High, confirmed: when runtime is null, the UI falls back to persisted `status.json`, explaining the prior-day Teams/heartbeat/queue display. That fallback cannot prove current collection.
+- High, code-backed candidate: a transient startup config/DPAPI read failure skips runtime and auto-start initialization permanently for that process, while later UI polling can recover the paired config display without starting runtime. The `Enabling...` auto-start label is supporting evidence.
+- No code changed and no automated suite was run for this read-only diagnosis. Real employee-machine restart QA remains required. Pass when a full tray quit/reopen produces live Diagnostics, current heartbeat, loaded policy and advancing confirmed sync; fail if runtime remains unavailable.
+
+## 2026-07-29 Desktop Remote-session Attribution Review QA
+
+- Native code review confirms the Agent resolves the local `GetForegroundWindow()` process and does not inspect window titles, page contents or processes running inside an outbound remote server session.
+- Local keyboard/mouse input while the Remote Desktop client owns the foreground window refreshes its Focus-active evidence; 60 seconds without trusted input transitions that same client to Focused idle.
+- Switching to a local App, locking/disconnecting the local Windows session, or suspending the local machine closes/pauses the Remote Desktop Focus lane through existing boundaries.
+- No code changed and no automated suite was rerun for this read-only clarification. No real Remote Desktop manual QA was run. Pass for the code-backed behavior statement; exact installed-client naming remains device-level QA.
+
 ## 2026-07-29 Connection Audit Local-day And Event-time QA
 
 ### Findings And Diff Review

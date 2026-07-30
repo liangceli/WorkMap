@@ -1,5 +1,112 @@
 # Latest Implementation Handoff
 
+## 2026-07-30 Desktop Agent 0.6.10 Startup And Lease-recovery Hardening
+
+### Original Task Brief
+
+- Implement the two confirmed Desktop 0.6.9 defects as a small Agent-only release: a paired Electron process could remain alive without a Tracking v2 runtime after one transient protected-config read failure, and startup recovery could relabel an old Focus/Open-runtime tail with a newly fetched policy lease, producing terminal `POLICY_REJECTED` rows.
+- Preserve the accepted foreground-App sampler, idle threshold, visible-App/Open-runtime engine, interval settlement, durable queue, retry/backoff, sync payload, API policy enforcement and Reports behavior.
+
+### Implementation Summary
+
+- Added a bounded runtime-start coordinator with 1s/3s/10s/30s/60s retries. A later successful UI config read can also self-heal after that initial retry budget, so the employee does not need to restart Windows merely because the protected config was temporarily unavailable.
+- Electron state no longer describes a paired process with no runtime as `Recording locally`. Until runtime startup succeeds, it clears the stale fallback current-App display and explicitly says activity is not being collected while startup is retried.
+- Captures the persisted policy that originally authorised a crash-recovery tail before fetching the current policy. A recovered Focus/Open-runtime tail is queued with that original policy version/lease only when every recovered timestamp remains inside that original lease and allowed UTC window.
+- A tail that cannot be proven against its original stored lease is not relabelled or queued. Only that unconfirmed tail is cleared, and a privacy-safe diagnostic is written. Existing queued intervals, confirmed history and dead letters are not changed or deleted.
+- Normal same-lease recovery remains active. After recovery is closed, new Focus/Open-runtime epochs use the current lease exactly as before.
+- Bumped the Desktop package, native-host user-facing version and Alpha package to `0.6.10`; regenerated the tracked Windows native helper and built the NSIS installer.
+
+### Changed Files
+
+- `workmap/apps/desktop-agent/src/runtimeStartup.ts`
+- `workmap/apps/desktop-agent/src/electron/main.ts`
+- `workmap/apps/desktop-agent/src/runtimeV2.ts`
+- `workmap/apps/desktop-agent/src/version.ts`
+- `workmap/apps/desktop-agent/src/windowsActivityHost.ts`
+- `workmap/apps/desktop-agent/test/runtime-startup.test.ts`
+- `workmap/apps/desktop-agent/test/runtime-v2-boundary-serialization.test.ts`
+- `workmap/apps/desktop-agent/test/gui-release.test.ts`
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/scripts/build-alpha.mjs`
+- `workmap/apps/desktop-agent/alpha-windows/package.json`
+- `workmap/apps/desktop-agent/alpha-windows/native/windows-activity-host/publish/workmap-windows-activity-host.exe`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Verification, Artifact And Boundaries
+
+- `pnpm --filter @workmap/desktop-agent test`: pass, 73/73. New coverage proves transient config self-healing, UI-triggered recovery after the bounded budget, original-lease recovery across a lease refresh, same-lease recovery and rejection of an unverifiable out-of-window tail.
+- `pnpm --filter @workmap/desktop-agent typecheck`: pass.
+- `pnpm --filter @workmap/desktop-agent lint`: pass.
+- `pnpm --filter @workmap/desktop-agent build`: pass, including the native Windows activity host.
+- `pnpm --filter @workmap/desktop-agent release:windows`: pass. Installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.10.exe`, 98,747,615 bytes, SHA-256 `BEEE0916DE30E2D2282F2F8B5C57C711738B3E8BBD39D8B02C44E81BF536B7E0`.
+- Installer Authenticode status is `NotSigned`; this is an existing distribution risk and was not misrepresented as signed.
+- Owner/Employee, tenant/device credential, policy and privacy boundaries are unchanged. No Browser Extension, API, Web/Reports, schema, migration, database, deployment environment or policy schedule changed.
+- No real installed-Agent Windows regression was run by Codex. Required manual QA: upgrade 0.6.9 to 0.6.10 without deleting local data, verify runtime/heartbeat/policy start automatically, pending drains, confirmed-through advances, the historical rejected count remains visible, and restart across a lease change creates no newly relabelled `POLICY_REJECTED` rows.
+
+### Remaining Risk And Next Step
+
+- The existing 61 dead letters remain historical evidence; 0.6.10 prevents this startup defect from manufacturing more but does not erase them.
+- If an old unconfirmed tail references a missing/invalid original lease or lies outside its original window, it is intentionally not counted because the server cannot lawfully verify it.
+- Proceed to commit/push and distribute the 0.6.10 installer only after the stated local upgrade/restart smoke. No backend or database deployment is required for these two fixes.
+
+## 2026-07-30 Desktop 0.6.9 Cross-lease Open/runtime Recovery Diagnosis
+
+### Original Task And Exact Evidence
+
+- Investigated why one Desktop Agent's terminal rejected count increased from 56 to 61 after the current release. The new diagnostic was one HTTP 200 request at July 30, 2026 10:00:17 AM Australia/Adelaide with request ID `0a458663-f0e9-4c44-b76f-61219165f0b5`; the API accepted the sync envelope/health but terminally rejected five completed intervals as `POLICY_REJECTED`.
+- Read-only inspection of the local SQLite queue confirmed all five rows were `OPEN_RUNTIME` intervals, not Focus intervals. They shared an old occurrence range of `2026-07-29T07:30:14.347Z` through `2026-07-29T07:30:31.414Z` (about 5:00 PM Adelaide on July 29) but were created/enqueued during the July 30 10:00 AM startup.
+- The five rows used the newly fetched v3 lease issued at `2026-07-30T00:30:10.530Z`. That lease's first allowed window began at the same July 30 timestamp, so the July 29 occurrence timestamps were outside the lease. The API therefore correctly rejected the rows. No App names, credentials, tokens, window titles or content were read or recorded during inspection.
+
+### Code-backed Root Cause
+
+- Desktop Agent startup fetches and assigns the current policy before recovering persisted Focus/Open-runtime tails. `closeRecoveredV2Tail()` recreates the Open/runtime engine from the prior persisted clock/checkpoint while passing the newly fetched policy.
+- The recovered old occurrence timestamps are consequently emitted with the new lease identity. This relabeling cannot make yesterday's tail valid under today's lease and is rejected by the server's correct policy/identity validation.
+- The observed five-row count represents five retained Open/runtime checkpoint lanes. It does not mean five current Apps failed to upload, policy was disabled, or Reports lost five Focus-active intervals. These five terminal rows are excluded from confirmed report totals.
+
+### Changed / Unchanged / Required Follow-up
+
+- Documentation only in this round. No Desktop Agent, API, Web, Browser Extension, database, Reports, policy configuration, queue data or dead-letter history was changed or deleted.
+- Implemented in 0.6.10: a valid recovered checkpoint keeps its original stored lease instead of being relabelled. Only a tail that cannot be verified inside that original lease/window is discarded; the next live epoch starts under the current lease. Same-lease recovery remains covered separately.
+- Added independent 0.6.10 regression coverage for changed-lease Open/runtime/Focus recovery, same-lease valid recovery, multiple retained Open/runtime lanes and runtime-startup self-healing.
+- The existing 61 terminal rows remain honest historical evidence. After a fix, success means pending uploads drain, confirmed-through advances and this rejected count no longer grows from cross-lease startup recovery.
+
+## 2026-07-30 Desktop 0.6.9 Runtime-not-started Diagnosis
+
+### Original Task And Evidence
+
+- Investigated an employee Desktop Agent 0.6.9 that showed `Offline - retrying`, a July 29 heartbeat/current App, one pending upload, placeholder Diagnostics (`Not confirmed`, `Not loaded`, `Not synced`) and `Agent diagnostics are not available yet`, while Owner Reports received no current App activity on July 30.
+- The Diagnostics grid values are static HTML placeholders until the Electron main process exposes a live `DesktopAgentRuntimeV2`. The explicit unavailable message proves `runtime === null`; therefore the native Windows activity host and Tracking v2 runtime were not active in that application session.
+- The top-level App, heartbeat and queue values came from the persisted `status.json` fallback. They are historical fallback state, not proof of current collection or current server connectivity.
+
+### Code-backed Cause And Immediate Recovery
+
+- At application startup, one failed/transient `loadAgentConfig()` call causes the app to skip `configureAutoStart()` and `startRuntime()`. Later UI polling can successfully load the same protected config and show the paired device ID, but `getUiState()` does not start the missing runtime. The screenshot's paired device ID plus `Starts with Windows: Enabling...` and unavailable runtime diagnostics match this path.
+- Immediate non-destructive recovery is a full tray `Quit Agent` followed by reopening the installed Agent. Do not merely close the window. Pass when Diagnostics becomes live, the policy lease loads, secure heartbeat becomes current, and a request ID/sync result appears.
+- Do not re-pair or delete the local data directory as the first response. If a full restart repeats the state, capture only the visible `status.error` or a redacted diagnostic/error result; never share `config.json`, protected credentials or tokens.
+
+### Changed / Unchanged / Remaining Work
+
+- Documentation only. No Desktop Agent, API, Web, Browser Extension, policy, schema, queue or upload code changed in this diagnosis.
+- The runtime-null session did not start the native collector, so current-day App activity during that gap cannot be assumed to have been retained. Historical fallback copy should not be described as `Recording locally`.
+- A follow-up Desktop release should make runtime startup recover automatically when a later config read succeeds, use bounded retry for startup failures, and render an honest runtime-not-running diagnostic instead of static placeholders. Implementation requires explicit change authorization.
+
+## 2026-07-29 Desktop Remote-session Attribution Review
+
+### Original Task And Confirmed Behavior
+
+- Reviewed how the current Desktop Agent attributes time when an employee uses an outbound company Remote Desktop session.
+- The local Windows activity host follows the single OS-wide foreground window. While the Remote Desktop client is foreground and receives normal local keyboard/mouse input, Tracking v2 records Focus active against that client identity (for example Remote Desktop Connection, Microsoft Remote Desktop or Windows App, depending on executable product metadata).
+- The local Agent cannot see which App is foreground inside the remote server. Remote Excel, Edge and IDE work therefore remains one local Remote Desktop-client App total unless an independently authorised Agent also runs inside the remote Windows session.
+- After 60 seconds without trusted local input while the Remote Desktop client remains foreground, its lane changes from Focus active to Focused idle. Switching locally to another App closes the Remote Desktop Focus lane and starts the newly foreground local App. Local lock, disconnect or suspend closes/pauses collection at that boundary.
+- Full-screen versus windowed Remote Desktop does not change attribution. On multiple monitors, Windows still has one global foreground window, so only the App currently receiving local foreground input owns Focus.
+
+### Changed / Verified / Unchanged
+
+- Documentation only. No Desktop Agent, Browser Extension, API, Web, policy, schema, queue, upload or Reports behavior changed.
+- Review covered the native `GetForegroundWindow`/process product-name resolver, local input pulses, Windows session boundaries and the Tracking v2 Focus engine's 60-second idle transition.
+- No real company Remote Desktop session was run by Codex. A device-level check should confirm the exact displayed client name used by the installed RDP product.
+
 ## 2026-07-29 Connection Audit Local-day And Event-time Fix
 
 ### Original Task Brief

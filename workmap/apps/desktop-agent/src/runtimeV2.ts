@@ -42,6 +42,8 @@ import {
   type ActivityIntervalV2,
   type ClientHealthV2,
   type DesktopClockEpochV2,
+  type DesktopFocusCheckpointV2,
+  type DesktopOpenRuntimeCheckpointV2,
   type DesktopTrackingRuntimeStateV2,
   type DeviceTrackingPolicyV2,
   type TrackingCollectorStateV2,
@@ -120,6 +122,7 @@ export class DesktopAgentRuntimeV2 {
   private shutdownReason: ShutdownReason;
   private queuesInitialized = false;
   private legacyCheckpoint: TrackingCheckpoint | null = null;
+  private readonly recoveredPolicy: DeviceTrackingPolicyV2 | null;
 
   constructor(
     private readonly config: AgentConfig,
@@ -132,6 +135,14 @@ export class DesktopAgentRuntimeV2 {
     this.statusWriter = options.statusWriter ?? writeAgentStatus;
     this.diagnosticLog = options.diagnosticLog ?? new AgentDiagnosticLog();
     const persistedState = this.store.readRuntimeState();
+    this.recoveredPolicy = persistedState?.policy?.policyLeaseId
+      ? {
+          ...persistedState.policy,
+          allowedUtcWindows: persistedState.policy.allowedUtcWindows.map(
+            (window) => ({ ...window }),
+          ),
+        }
+      : null;
     this.state = {
       ...createInitialDesktopTrackingV2State(),
       ...persistedState,
@@ -437,47 +448,70 @@ export class DesktopAgentRuntimeV2 {
   private async closeRecoveredV2Tail() {
     const policy = this.state.policy;
     if (policy && this.state.clock && this.state.engineCheckpoint) {
-      const recoveredEngine = new DesktopFocusEngineV2(
-        this.state.clock,
-        policy,
-        this.state.engineCheckpoint,
-      );
-      const boundary = this.state.engineCheckpoint.lastObservedAtMonotonicMs;
-      const update = recoveredEngine.clearFocus(boundary);
-      this.state = {
-        ...this.state,
-        engineCheckpoint: recoveredEngine.checkpoint(),
-        focusTimelineThroughAt: latestTimelineThroughAtV2(
-          this.state.focusTimelineThroughAt,
-          update.intervals,
-          "FOCUS",
-        ),
-        latestSnapshot: update.snapshot,
-      };
-      this.store.persistEngineUpdate(update.intervals, this.state, update.snapshot);
+      const decision = recoveredTailPolicyDecisionV2({
+        recoveredPolicy: this.recoveredPolicy,
+        stream: "FOCUS",
+        clock: this.state.clock,
+        ranges: focusRecoveryRangesV2(this.state.engineCheckpoint),
+      });
+      if (decision.recover) {
+        const recoveredEngine = new DesktopFocusEngineV2(
+          this.state.clock,
+          this.recoveredPolicy!,
+          this.state.engineCheckpoint,
+        );
+        const boundary = this.state.engineCheckpoint.lastObservedAtMonotonicMs;
+        const update = recoveredEngine.clearFocus(boundary);
+        this.state = {
+          ...this.state,
+          engineCheckpoint: recoveredEngine.checkpoint(),
+          focusTimelineThroughAt: latestTimelineThroughAtV2(
+            this.state.focusTimelineThroughAt,
+            update.intervals,
+            "FOCUS",
+          ),
+          latestSnapshot: update.snapshot,
+        };
+        this.store.persistEngineUpdate(update.intervals, this.state, update.snapshot);
+      } else {
+        await this.logDiscardedRecoveredTail("FOCUS", decision.reasonCode);
+      }
     }
     if (
-      policy?.collectOpenRuntime &&
+      this.recoveredPolicy?.collectOpenRuntime &&
       this.state.openRuntimeClock &&
       this.state.openRuntimeCheckpoint
     ) {
-      const recoveredRuntime = new DesktopOpenRuntimeEngineV2(
-        this.state.openRuntimeClock,
-        policy,
-        this.state.openRuntimeCheckpoint,
-      );
-      const boundary = this.state.openRuntimeCheckpoint.lastObservedAtMonotonicMs;
-      const update = recoveredRuntime.clear(boundary);
-      this.state = {
-        ...this.state,
-        openRuntimeCheckpoint: recoveredRuntime.checkpoint(),
-        openRuntimeTimelineThroughAt: latestTimelineThroughAtV2(
-          this.state.openRuntimeTimelineThroughAt,
-          update.intervals,
+      const decision = recoveredTailPolicyDecisionV2({
+        recoveredPolicy: this.recoveredPolicy,
+        stream: "OPEN_RUNTIME",
+        clock: this.state.openRuntimeClock,
+        ranges: openRuntimeRecoveryRangesV2(this.state.openRuntimeCheckpoint),
+      });
+      if (decision.recover) {
+        const recoveredRuntime = new DesktopOpenRuntimeEngineV2(
+          this.state.openRuntimeClock,
+          this.recoveredPolicy!,
+          this.state.openRuntimeCheckpoint,
+        );
+        const boundary = this.state.openRuntimeCheckpoint.lastObservedAtMonotonicMs;
+        const update = recoveredRuntime.clear(boundary);
+        this.state = {
+          ...this.state,
+          openRuntimeCheckpoint: recoveredRuntime.checkpoint(),
+          openRuntimeTimelineThroughAt: latestTimelineThroughAtV2(
+            this.state.openRuntimeTimelineThroughAt,
+            update.intervals,
+            "OPEN_RUNTIME",
+          ),
+        };
+        this.store.persistRuntimeUpdate(update.intervals, this.state);
+      } else {
+        await this.logDiscardedRecoveredTail(
           "OPEN_RUNTIME",
-        ),
-      };
-      this.store.persistRuntimeUpdate(update.intervals, this.state);
+          decision.reasonCode,
+        );
+      }
     }
     this.state = {
       ...this.state,
@@ -488,6 +522,21 @@ export class DesktopAgentRuntimeV2 {
       latestSnapshot: null,
     };
     this.store.writeRuntimeState(this.state);
+  }
+
+  private logDiscardedRecoveredTail(
+    stream: DesktopTimelineStreamV2,
+    reasonCode: string | null,
+  ) {
+    return this.diagnosticLog.write({
+      operation: "policy",
+      outcome: "recovery-tail-discarded",
+      reasonCode,
+      reasonMessage: `An unconfirmed ${stream} recovery tail could not be verified against its original authorised policy lease and was not queued.`,
+      retryable: false,
+      policyVersion: this.state.policy?.policyVersion ?? null,
+      policyLeaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
+    });
   }
 
   private startHost() {
@@ -1739,6 +1788,81 @@ export function eventClockAnchorUtcMsV2(input: {
   );
 }
 
+type RecoveredTailRangeV2 = {
+  startsAtMonotonicMs: number;
+  endsAtMonotonicMs: number;
+};
+
+export function recoveredTailPolicyDecisionV2(input: {
+  recoveredPolicy: DeviceTrackingPolicyV2 | null;
+  stream: DesktopTimelineStreamV2;
+  clock: DesktopClockEpochV2;
+  ranges: RecoveredTailRangeV2[];
+}): { recover: true; reasonCode: null } | { recover: false; reasonCode: string } {
+  const ranges = input.ranges.filter(
+    (range) => range.endsAtMonotonicMs > range.startsAtMonotonicMs,
+  );
+  const recoveredPolicy = input.recoveredPolicy;
+  if (!recoveredPolicy?.policyLeaseId) {
+    return { recover: false, reasonCode: "RECOVERY_POLICY_IDENTITY_MISSING" };
+  }
+  if (
+    (input.stream === "FOCUS" && !recoveredPolicy.collectAppFocus) ||
+    (input.stream === "OPEN_RUNTIME" && !recoveredPolicy.collectOpenRuntime)
+  ) {
+    return { recover: false, reasonCode: "RECOVERY_STREAM_NOT_AUTHORISED" };
+  }
+  if (ranges.length === 0) return { recover: true, reasonCode: null };
+  const leaseIssuedAtMs = Date.parse(recoveredPolicy.policyLeaseIssuedAt ?? "");
+  const leaseExpiresAtMs = Date.parse(recoveredPolicy.policyLeaseExpiresAt ?? "");
+  if (!Number.isFinite(leaseIssuedAtMs) || !Number.isFinite(leaseExpiresAtMs)) {
+    return { recover: false, reasonCode: "RECOVERY_POLICY_LEASE_INVALID" };
+  }
+  const allRangesAuthorised = ranges.every((range) => {
+    const startsAtMs = projectMonotonicUtcMsV2(
+      input.clock,
+      range.startsAtMonotonicMs,
+    );
+    const endsAtMs = projectMonotonicUtcMsV2(
+      input.clock,
+      range.endsAtMonotonicMs,
+    );
+    if (
+      !Number.isFinite(startsAtMs) ||
+      !Number.isFinite(endsAtMs) ||
+      startsAtMs < leaseIssuedAtMs ||
+      endsAtMs > leaseExpiresAtMs
+    ) {
+      return false;
+    }
+    return recoveredPolicy.allowedUtcWindows.some((window) =>
+      Date.parse(window.startsAt) <= startsAtMs &&
+      endsAtMs <= Date.parse(window.endsAt));
+  });
+  return allRangesAuthorised
+    ? { recover: true, reasonCode: null }
+    : { recover: false, reasonCode: "RECOVERY_OUTSIDE_POLICY_WINDOW" };
+}
+
+function focusRecoveryRangesV2(
+  checkpoint: DesktopFocusCheckpointV2,
+): RecoveredTailRangeV2[] {
+  if (!checkpoint.current) return [];
+  return [{
+    startsAtMonotonicMs: checkpoint.current.confirmedThroughMonotonicMs,
+    endsAtMonotonicMs: checkpoint.lastObservedAtMonotonicMs,
+  }];
+}
+
+function openRuntimeRecoveryRangesV2(
+  checkpoint: DesktopOpenRuntimeCheckpointV2,
+): RecoveredTailRangeV2[] {
+  return checkpoint.current.map((current) => ({
+    startsAtMonotonicMs: current.confirmedThroughMonotonicMs,
+    endsAtMonotonicMs: checkpoint.lastObservedAtMonotonicMs,
+  }));
+}
+
 export function eventObservedUtcMsV2(input: {
   serverNowMs: number;
   currentMonotonicMs: number;
@@ -1971,7 +2095,7 @@ function intervalRejectionRemediation(
 ) {
   const codes = new Set(items.map((item) => item.code));
   if (codes.has("FOCUS_OVERLAP")) {
-    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.9 serializes lifecycle boundaries and keeps each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
+    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.10 serializes lifecycle boundaries and keeps each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
   }
   if (codes.has("RUNTIME_OVERLAP")) {
     return "The overlapping runtime interval was not counted. The Agent will continue from the current visible-window observation.";

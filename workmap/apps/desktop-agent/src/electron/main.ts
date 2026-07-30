@@ -6,7 +6,8 @@ import { loadAgentConfig } from "../credentialStore.js";
 import { getAgentDataDirectory, readJson, writeAgentStatus } from "../fileStore.js";
 import { pairDesktopAgent, safePairingError, type PairingProgress } from "../pairing.js";
 import { DesktopAgentRuntimeV2 } from "../runtimeV2.js";
-import type { AgentStatus } from "../types.js";
+import { RuntimeStartupRetrier } from "../runtimeStartup.js";
+import type { AgentConfig, AgentStatus } from "../types.js";
 import { DESKTOP_AGENT_VERSION } from "../version.js";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
@@ -20,6 +21,11 @@ let runtime: DesktopAgentRuntimeV2 | null = null;
 let runtimePromise: Promise<void> | null = null;
 let paired = false;
 let allowQuit = false;
+const runtimeStartup = new RuntimeStartupRetrier<AgentConfig>({
+  loadConfig: loadAgentConfig,
+  start: startRuntimeWithConfig,
+  isStarted: () => Boolean(runtime || runtimePromise),
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -30,16 +36,14 @@ if (!app.requestSingleInstanceLock()) {
 
 async function startApplication() {
   if (process.env.WORKMAP_AGENT_SKIP_LEGACY_MIGRATION !== "1") await removeLegacyAutoStart();
-  paired = Boolean(await loadAgentConfig());
+  const config = await safelyLoadAgentConfig();
+  paired = Boolean(config);
   createWindow();
   createTray();
   registerIpc();
   registerPowerEvents();
 
-  if (paired) {
-    configureAutoStart();
-    await startRuntime();
-  }
+  await runtimeStartup.ensure(config ?? undefined);
 
   if (!isBackgroundLaunch || !paired) showWindow();
 }
@@ -109,8 +113,7 @@ function registerIpc() {
     try {
       const result = await pairDesktopAgent(code, undefined, progress);
       paired = true;
-      configureAutoStart();
-      await startRuntime();
+      await runtimeStartup.ensure();
       return result;
     } catch (error) {
       throw new Error(safePairingError(error));
@@ -122,17 +125,30 @@ function registerIpc() {
 }
 
 async function getUiState() {
-  const config = await loadAgentConfig();
-  paired = Boolean(config);
+  const config = await safelyLoadAgentConfig();
+  if (config) {
+    paired = true;
+    if (!runtime && !runtimePromise) await runtimeStartup.ensure(config);
+  } else if (!runtime && !runtimePromise) {
+    void runtimeStartup.ensure();
+  }
   // While the runtime is active, show its in-memory server-confirmed state.
   // status.json remains a startup/failure fallback, but a delayed file write
   // must not make a healthy runtime appear disconnected.
-  const status =
+  const fallbackStatus =
     runtime?.getUiStatus() ??
     (await readJson<AgentStatus>(join(getAgentDataDirectory(), "status.json"), {
       state: paired ? "offline" : "unpaired",
       queuedEvents: 0,
     }));
+  const status = paired && !runtime && !runtimePromise
+    ? {
+        ...fallbackStatus,
+        state: "error" as const,
+        currentActivity: null,
+        error: "The Agent runtime is not running. WorkMap is retrying startup; activity is not collected until startup succeeds.",
+      }
+    : fallbackStatus;
   return {
     paired,
     status,
@@ -142,10 +158,10 @@ async function getUiState() {
   };
 }
 
-async function startRuntime() {
+async function startRuntimeWithConfig(config: AgentConfig) {
   if (runtimePromise) return;
-  const config = await loadAgentConfig();
-  if (!config) return;
+  paired = true;
+  configureAutoStart();
   runtime = new DesktopAgentRuntimeV2({
     ...config,
     agentVersion: DESKTOP_AGENT_VERSION,
@@ -165,6 +181,14 @@ async function startRuntime() {
     });
 }
 
+async function safelyLoadAgentConfig() {
+  try {
+    return await loadAgentConfig();
+  } catch {
+    return null;
+  }
+}
+
 function configureAutoStart() {
   if (!app.isPackaged) return;
   app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true, args: ["--background"] });
@@ -177,6 +201,7 @@ function showWindow() {
 }
 
 async function quitAgent() {
+  runtimeStartup.stop();
   if (runtime) await runtime.shutdown("USER_STOP");
   allowQuit = true;
   app.quit();
