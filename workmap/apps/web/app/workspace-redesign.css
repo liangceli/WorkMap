@@ -1740,33 +1740,13 @@
     display: flex !important;
     flex-direction: row !important;
     gap: 8px !important;
-    padding: 4px 48px 10px 0 !important;
+    padding: 4px 0 10px !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
     scroll-snap-type: x proximity;
     scrollbar-width: thin;
     scrollbar-color: rgba(39, 224, 162, 0.8) rgba(255, 255, 255, 0.1);
     -webkit-overflow-scrolling: touch;
-  }
-
-  .wm-app-shell .wm-app-nav-links::after,
-  .wm-app-shell-editorial .wm-app-nav-links::after {
-    position: absolute;
-    top: 50%;
-    right: 4px;
-    z-index: 1;
-    transform: translateY(-58%);
-    border: 1px solid rgba(39, 224, 162, 0.42);
-    border-radius: 999px;
-    padding: 4px 7px;
-    background: linear-gradient(90deg, rgba(8, 13, 34, 0.86), rgba(8, 13, 34, 0.98));
-    color: #baf8df;
-    font-size: 10px;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: 0;
-    pointer-events: none;
-    content: "More >";
   }
 
   .wm-app-shell .wm-app-nav-links::-webkit-scrollbar,

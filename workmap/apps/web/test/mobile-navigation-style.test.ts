@@ -6,10 +6,10 @@ import test from "node:test";
 const webRoot = join(import.meta.dirname, "..");
 const redesignStyles = readFileSync(join(webRoot, "app", "workspace-redesign.css"), "utf8");
 
-test("mobile workspace navigation has an explicit horizontal-scroll affordance", () => {
+test("mobile workspace navigation keeps a text-free horizontal-scroll affordance", () => {
   assert.match(redesignStyles, /@media \(max-width: 760px\) \{[\s\S]*?overflow-x: auto !important;/);
   assert.match(redesignStyles, /scroll-snap-type: x proximity;/);
-  assert.match(redesignStyles, /content: "More >";/);
+  assert.doesNotMatch(redesignStyles, /content: "More >";/);
   assert.match(redesignStyles, /::-webkit-scrollbar-thumb[\s\S]*?background: rgba\(39, 224, 162, 0\.8\)/);
 });
 

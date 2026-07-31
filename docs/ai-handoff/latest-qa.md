@@ -1,5 +1,40 @@
 # Latest QA Handoff
 
+## 2026-07-30 App-versus-Domain Focused-idle QA
+
+- High-confidence implementation gap: the Browser Focus engine is tested to transition to `FOCUS_IDLE` at 60 seconds, but `BrowserTrackingRuntimeV2.handleIdleState("idle")` pauses collection and clears Domain Focus at that same system-idle boundary.
+- Data integrity is currently conservative: Domain Focused Idle is undercounted rather than guessed, while Desktop Edge Focused Idle remains valid at App scope. App and Domain totals must not be added together as separate work time.
+- Reports aggregation is behaving as implemented and should not synthesize a Domain from Desktop App idle. Open/runtime remains a separate visibility measure and is not proof of active or idle focus.
+- No automated suite or real Browser idle manual QA ran in this read-only review. Recommendation: diagnosis passes; implement and test an Extension-only idle-continuity change before claiming that Domain Focused Idle reconciles with browser-App Focused Idle.
+
+## 2026-07-30 Employee Agent Intermittent Sync QA
+
+- Current status passes: server-confirmed health is online, snapshot is confirmed, the latest interval result is `1 accepted / 0 duplicate / 0 rejected`, and confirmed-through is current at 5:03 PM.
+- Historical 502, network no-response and retryable tracking transaction 500 entries remain honest failure evidence; they do not describe the current connection after the later successful sync.
+- Five pending rows are not rejected. Recommendation: observe for one to five minutes; pass if the count drains or remains small while heartbeat, snapshot and confirmed-through continue advancing. Investigate if it grows continuously, remains stuck for about ten minutes, or new 5xx/network diagnostics repeat.
+- No automated or real-device action was performed in this screenshot/code review and no product code changed.
+
+## 2026-07-30 Ten-user Capacity Readiness QA
+
+- High confidence for controlled pilot, not production proof: current request batching, per-client serialization, durable queues/backoff, bounded transactions, query indexes, 8-connection Prisma pool and quiet-period reconciliation are appropriate for approximately 20 tracking clients from 10 employees.
+- Medium risk: `/reports` live polling is every 5 seconds and changed activity revisions can trigger summary reads; many simultaneous Reports viewers can be more database-intensive than the collectors themselves.
+- Medium risk: there is no repository load/stress suite and no measured p95/p99 latency, maximum sustainable sync rate or 10-user soak evidence.
+- Scaling boundary: realtime office broadcasts are process-local. A single API instance can serve a small pilot, but multi-instance horizontal scaling needs shared pub/sub.
+- No code changed and no automated/load/manual QA ran in this read-only review. Recommendation: proceed to a monitored 10-user pilot only after defining pass/fail metrics; do not market a guaranteed concurrency level from hardware estimates alone.
+
+## 2026-07-30 Desktop Agent 0.6.11 Transient No-active-App QA
+
+- Informational, expected: Windows can briefly report no resolvable foreground App during application switching, shell/taskbar/Start transitions or secure desktop changes. Native foreground reconciliation is 1 second and renderer refresh is 2 seconds.
+- Data behavior is conservative: the old Focus interval closes at the null boundary, the next App begins only when identified, and the unconfirmed gap is assigned to neither App. No overlap or invented activity is produced.
+- No code changed and no automated or real App-switch QA ran in this read-only round. Recommendation: accept a 1-3 second transition; investigate persistence beyond approximately 5-10 seconds while a normal App remains focused.
+
+## 2026-07-30 Desktop Agent 0.6.11 Auto-start Label Diagnosis QA
+
+- Medium, confirmed: `Enabling...` is a persistent false-negative UI state, not a real asynchronous operation. Registration includes `--background`, while lookup omits the matching argument that Electron requires for an accurate `openAtLogin` result.
+- Operational evidence: the installed user's Windows Run key contains the packaged WorkMap Desktop Agent executable with `--background`; therefore this machine is currently registered to start with Windows despite the label.
+- Scope review: no evidence connects this label defect to App collection, server-confirmed heartbeat, interval ingestion or Reports. No product code changed in this read-only round.
+- Automated tests and real reboot QA were not run. Recommendation: tracking can continue, but make a small Agent-only display/query patch before relying on this field as truthful confirmation of Windows startup registration.
+
 ## 2026-07-30 Desktop Agent 0.6.11 GitHub Release CI QA
 
 ### Findings Ordered By Severity

@@ -1,5 +1,80 @@
 # Latest Implementation Handoff
 
+## 2026-07-30 App-versus-Domain Focused-idle Diagnosis
+
+### Original Task Brief And Confirmed Cause
+
+- Investigated why Reports shows roughly 48 minutes of focused idle for Microsoft Edge while the visible Browser Domain rows contain only roughly two minutes of focused idle in total.
+- Desktop and Browser metrics are independent ledgers. Desktop Agent attributes idle to Edge while Edge remains the Windows foreground App after the shared 60-second no-input threshold. Browser Extension requires a focused, non-minimized browser window, an eligible HTTP/HTTPS active tab, a visible/focused content-script proof and trusted page interaction evidence before attributing time to a hostname.
+- The Browser Focus engine itself supports `FOCUS_IDLE`, but the current v0.5.14 runtime handles Chrome's 60-second `idle` state by setting the collector to `PAUSED` and immediately calling `clearFocus()`. That ends the hostname timeline at the idle boundary instead of keeping the last proven focused hostname in the idle state. The small Domain Idle values are therefore mostly callback/checkpoint timing around that boundary, not the full period for which Edge remains foreground and the user is away.
+- Reports and API preserve the two sources separately and faithfully sum their accepted intervals; they do not copy App idle into Domain rows. The visible Domain Focus Active total is close to Edge Focus Active, which is consistent with active hostname capture working while Domain Focused Idle is systematically underrepresented by the runtime behavior.
+
+### Scope And Safe Direction
+
+- This was read-only diagnosis. No Desktop Agent, Browser Extension, API, Reports, database, policy, interval, queue or deployment code changed.
+- Do not repair this by assigning all Edge idle to the last hostname in Reports; that would fabricate Domain evidence. A future Extension-only correction should preserve the proven hostname as `FOCUS_IDLE` on Chrome `idle`, resume it on trusted interaction, and still clear it on lock, browser focus loss, minimization, tab/domain change, protected/inaccessible pages, policy boundaries or collector failure.
+
+## 2026-07-30 Employee Agent Intermittent Sync Review
+
+### Original Task Brief And Finding
+
+- Reviewed an employee Desktop Agent showing three historical failures: HTTP 502 at 2:00 PM, a no-response network error at 3:00 PM, and retryable HTTP 500 `TRACKING_SYNC_INTERNAL` at 4:02 PM.
+- The current 5:03 PM diagnostics prove recovery: connection is server-confirmed online, the App snapshot is confirmed, one interval was accepted with zero duplicate/zero rejected, confirmed-through and snapshot timestamps are current, and the latest sync succeeded.
+- `5 pending / 0 rejected` means five locally durable rows still await settlement; it is not evidence of rejection or data loss. It is acceptable as a transient queue only if it falls back toward zero and does not continuously grow.
+
+### Scope And Recommendation
+
+- No Desktop Agent, Browser Extension, API, Reports, database, policy, queue or deployment code changed in this read-only diagnosis.
+- The historical failures point to temporary API/gateway/database/network interruption rather than a current Agent collector defect. Investigate their request IDs only if new failures continue, pending remains elevated for more than several minutes, or confirmed-through stops advancing.
+
+## 2026-07-30 Ten-user Capacity Readiness Review
+
+### Original Task Brief And Current Assessment
+
+- Reviewed whether the currently deployed WorkMap architecture can perfectly handle 10 simultaneously online employees using Desktop Agent, Browser Extension and Web/Reports.
+- Code-backed assessment: a controlled 10-user pilot is reasonable on the reported Render Standard API and Supabase Pro Micro database, but production reliability cannot be called proven or perfect without a staged concurrency/load test and provider metrics.
+- Ten employees with one Desktop and one Extension represent roughly 20 tracking clients. Desktop health sync is 10 seconds, Focus/Open-runtime settlement is 15 seconds, Desktop batches are capped at 20, Browser active-session checkpointing is 20 seconds, Browser alarm maintenance is 30 seconds, and Browser batches are capped at 50. Client requests are serialized per client, persisted locally and retried with backoff.
+
+### Backend And Infrastructure Findings
+
+- The API limits a Supabase session-pooler Prisma client to 8 connections with a 10-second pool wait; sync transactions use 5-second acquisition/15-second transaction limits. Tracking writes use per-device/lane locks and indexed overlap queries.
+- Reconciliation is removed from interactive sync and report writes: a sequential worker handles 4 quiet targets every 30 seconds, while Reports can read exact ledger fragments for dirty days.
+- Visible Reports poll live state every 5 seconds and may refresh a historical summary when its revision changes. Ten collectors are lighter than ten simultaneously open, actively changing Reports pages.
+- Virtual-office realtime is still in-memory per API instance with no shared pub/sub. One instance is acceptable for a 10-person pilot, but horizontal API scaling would require shared pub/sub to keep cross-instance movement coherent.
+
+### Scope, Evidence Gap And Next Step
+
+- This was read-only capacity research. No Agent, Extension, API, Web, schema, deployment or provider setting changed and no load test ran against production.
+- Before claiming 10-user production support, run a 60-minute staging/pilot test with 10 Desktop clients, 10 Extensions and representative Reports viewers. Require queues to return to zero, no 5xx/502/P1001/pool-timeout errors, fresh heartbeats, stable Render/Supabase memory/CPU/connections, and acceptable Reports latency.
+
+## 2026-07-30 Desktop Agent 0.6.11 Transient No-active-App Review
+
+### Original Task Brief And Finding
+
+- Reviewed whether the Agent briefly showing `No active app` while switching applications is expected.
+- The native helper reconciles the Windows foreground window every 1 second and emits `app: null` when Windows temporarily has no foreground HWND or the foreground belongs only to excluded shell UI such as Explorer, Search, Start, or Lock UI. The renderer polls Agent state every 2 seconds, so a sub-second native transition can remain visible for roughly one UI refresh.
+- Runtime v2 closes the prior Focus segment at the exact null-foreground boundary and starts the next App only after its identity is confirmed. The gap is not attributed to either App, preventing overlap or fabricated work time. Open/runtime remains a separate visible-App stream.
+
+### Scope And Recommendation
+
+- This was read-only behavior review. No Agent, Browser Extension, API, Reports, database, policy, interval or queue code changed and no automated test or real App-switch manual QA was run by Codex.
+- A roughly 1-3 second transition is expected. A regular focused App remaining `No active app` for more than about 5-10 seconds should be treated as a collector/identity-resolution issue and investigated with the redacted diagnostics rather than dismissed as normal.
+
+## 2026-07-30 Desktop Agent 0.6.11 Auto-start Label Diagnosis
+
+### Original Task Brief And Finding
+
+- Investigated whether an installed 0.6.11 Agent continuously showing `Starts with Windows: Enabling...` is normal while Reports and tracking otherwise work.
+- It is not a real enabling/progress state and waiting will not change it. The renderer displays `Enabling...` whenever a paired Agent reports `startsWithWindows=false`.
+- The installed machine has a real HKCU Windows Run entry for `electron.app.WorkMap Desktop Agent` that launches the packaged executable with `--background`, so auto-start is registered and this symptom does not indicate a collection, heartbeat, interval-upload or Reports failure.
+- Root cause is code-confirmed against the repository's Electron 37.10.3 typings: `setLoginItemSettings` registers with `args: ["--background"]`, but `getLoginItemSettings()` queries without those arguments. Electron explicitly requires the same `path`/`args` for `openAtLogin` to be reported correctly.
+
+### Scope, Verification And Next Step
+
+- This round was read-only diagnosis; no Desktop Agent production code, installer, Browser Extension, API, Web, database, policy or tracking behavior changed.
+- Verification used the installed user's filtered Windows Run entry, the current Electron main/renderer paths, and the pinned Electron API contract. No automated suite or reboot manual QA was run.
+- A future minimal Agent UI fix should share the `--background` argument constant between registration and lookup, then add a regression test. It does not require an API/Web deployment or database migration.
+
 ## 2026-07-30 Desktop Agent 0.6.11 GitHub Release CI Fix
 
 ### Original Task Brief And Root Cause
