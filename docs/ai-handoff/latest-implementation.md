@@ -1,5 +1,44 @@
 # Latest Implementation Handoff
 
+## 2026-07-31 Cognito Session Exit Home Redirect
+
+### Original Task Brief And Confirmed Cause
+
+- Investigate when the current Web project exits Cognito login and prevent authenticated pages such as `/reports` from remaining mounted with `Cognito session expired. Sign in again.`. A confirmed ended login must return to the public home page `/`.
+- Keep the change strictly inside Web authentication/navigation behavior. Do not alter Reports data aggregation/fetch contracts, API endpoints, RBAC, tenant isolation, Desktop Agent, Browser Extension, tracking, or device data.
+- Confirmed screenshot cause: Reports calls the shared authentication resolver directly. A terminal refresh failure could be returned as displayable text while a warm AppShell cache skipped its older missing-session branch, leaving the protected page visible.
+
+### When WorkMap Ends A Login
+
+- Explicit user logout or removal/corruption of the stored `workmap.cognitoSession` ends the local browser login.
+- A short-lived access/ID token expiring does **not** end login while a valid refresh token or Amplify session can renew it.
+- Login ends when Cognito explicitly rejects renewal: `invalid_grant`, Cognito `401/403`, `NotAuthorizedException`, invalid/expired refresh credentials, no authenticated Cognito user, or an equivalent terminal response such as a disabled/revoked account.
+- After an API `401`, WorkMap still force-refreshes once and replays the original request once. Only a second `401` after that successful refresh is treated as a confirmed unusable WorkMap authentication session.
+- Temporary network, provider, rate-limit, or server refresh failures remain retryable, preserve the stored session, and do not redirect.
+
+### Changed Files And Implementation Summary
+
+- `workmap/apps/web/lib/auth/cognitoRedirect.ts`: both missing-session and confirmed-ended-session protected routes now use `window.location.replace("/")`; the forced ended-session path cannot be blocked by stale local session data.
+- `workmap/apps/web/lib/auth/cognitoUserPoolAuth.ts`: terminal Cognito restore outcomes trigger the home replacement inside the shared authentication layer before a page can retain the failure as its own state.
+- `workmap/apps/web/lib/api/apiClient.ts`: a second Cognito-authenticated API `401` after the existing single forced refresh clears the local session and replaces the protected route with `/`. Request payloads, response adaptation, non-401 errors, retry count, and data endpoints are unchanged.
+- `workmap/apps/web/components/auth/CognitoSessionNavigationGuard.tsx` and `app/layout.tsx`: a read-only global navigation guard catches a missing session on protected-route mount/focus/visibility and cross-tab local-storage logout. Public `/`, `/login`, `/login/callback`, and `/invite/:token` remain public.
+- `workmap/apps/web/components/office/useVirtualOfficeRealtime.ts`: replaced the obsolete expired-session display copy only; its socket URL, token restoration call, reconnect timing, movement protocol, polling fallback, and data handling are unchanged. The terminal restore now redirects centrally before this fallback copy can become a retained page state.
+- Updated `cognito-protected-redirect.test.ts`, `cognito-session-refresh.test.ts`, `docs/skills/frontend-skill.md`, this handoff, and `latest-qa.md`. Required typecheck regenerated tracked `workmap/apps/web/tsconfig.tsbuildinfo`.
+
+### Role, Access, Verification, And Manual QA
+
+- The redirect is role-neutral and applies to Owner, Manager, Employee, IT Admin, and Platform Admin only after authentication is absent or conclusively unusable. It does not change any role permission or tenant/company boundary.
+- Focused Cognito tests: pass, `9/9`.
+- Full Web tests: pass, `106/106`.
+- Web typecheck: pass. Web lint: pass. Web production build: pass; the existing non-blocking Next ESLint-plugin warning remains.
+- Manual browser QA with a real deployed Cognito account/session was not run. Automated tests cover missing session, terminal invalid refresh, retryable refresh preservation, one-refresh API recovery, second-401 termination, stale local session data, and public-route exclusions.
+
+### Intentionally Unchanged, Remaining Risk, And Next Step
+
+- No Reports component, usage/device request, backend/API service, database/schema, policy, RBAC, tenant isolation, Desktop Agent, Browser Extension, tracking runtime, deployment variable, or Cognito token lifetime changed.
+- A real deployed provider/session-expiry smoke remains the final environment-level acceptance gap. Deploy the Web-only change, invalidate one test refresh token while `/reports` is open, and confirm the browser immediately replaces Reports with `/`; also verify a temporary offline period preserves login and later recovers.
+- The implementation and automated verification pass; the project can proceed to the deployment/manual acceptance round.
+
 ## 2026-07-30 App-versus-Domain Focused-idle Diagnosis
 
 ### Original Task Brief And Confirmed Cause

@@ -1,5 +1,26 @@
 # Latest QA Handoff
 
+## 2026-07-31 Cognito Session Exit Redirect QA
+
+### Reviewed Implementation And Findings
+
+- Fixed - High: terminal Cognito restore failure could be returned to Reports as `Cognito session expired. Sign in again.` while the warm AppShell skipped its missing-session load branch. Terminal restore now initiates a forced protected-route replacement with `/` inside the shared auth layer.
+- Fixed - High: an API request that still returned `401` after the existing one forced token refresh/replay could remain on the protected page. It now clears the custom Cognito session and replaces the route with `/`.
+- Fixed - Medium: logout/session removal in another browser tab, or a protected tab returning to focus after local session removal, had no universal navigation listener. The root guard now rechecks without changing token refresh or data polling behavior.
+- Fixed - Medium: the direct Cognito restore used by Virtual Office realtime still carried the obsolete expired-session display copy. Terminal classification now performs the same central redirect, and the hook's fallback text no longer contains the screenshot message; realtime/polling behavior is unchanged.
+- Verified boundary: normal access/ID token expiry still refreshes and retries; temporary network/provider/server failures still preserve the session and do not navigate. Authenticated backend authorization/mapping failures with a stored Cognito session are not reclassified as logout, and API `403` behavior is unchanged.
+- Scope review: no Reports UI/data aggregation, API endpoint, database, RBAC, tenant isolation, Desktop Agent, Browser Extension, device/usage collection, policy, or deployment configuration changed.
+
+### Test And Diff Status
+
+- Focused auth tests: pass, `9/9`.
+- Full Web tests: pass, `106/106`.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass; only the existing non-blocking Next ESLint-plugin warning was emitted.
+- Manual deployed Cognito expiry/revocation QA: not run.
+- Recommendation: automated QA passes and the next round can proceed. Before production acceptance, invalidate a test refresh token on deployed `/reports`, verify immediate replacement with `/`, then separately interrupt network access and verify the retryable session is retained.
+
 ## 2026-07-30 App-versus-Domain Focused-idle QA
 
 - High-confidence implementation gap: the Browser Focus engine is tested to transition to `FOCUS_IDLE` at 60 seconds, but `BrowserTrackingRuntimeV2.handleIdleState("idle")` pauses collection and clears Domain Focus at that same system-idle boundary.

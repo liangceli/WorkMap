@@ -22,6 +22,7 @@ import {
   storeCognitoTokenSession,
   type StoredCognitoSession,
 } from "./cognitoSession";
+import { redirectToHomeForEndedCognitoSession } from "./cognitoRedirect";
 
 export type CognitoSignInStep =
   | "CONFIRM_SIGN_UP"
@@ -199,7 +200,8 @@ export async function getFreshCognitoApiAuthOptions(forceRefresh = false) {
   if (!restored.available) return restored;
   const refreshed = getCognitoApiAuthOptions();
   if (refreshed.available) return refreshed;
-  return { available: false as const, retryable: false, reason: "Cognito session expired. Sign in again." };
+  redirectToHomeForEndedCognitoSession();
+  return { available: false as const, retryable: false, reason: "WorkMap authentication ended." };
 }
 
 function delay(durationMs: number) {
@@ -235,7 +237,8 @@ function sessionRestoreFailure(error: unknown): Extract<CognitoSessionRestoreRes
 
   if (terminal) {
     clearCognitoSession();
-    return { available: false, retryable: false, reason: "Cognito session expired. Sign in again." };
+    redirectToHomeForEndedCognitoSession();
+    return { available: false, retryable: false, reason: "WorkMap authentication ended." };
   }
 
   return {

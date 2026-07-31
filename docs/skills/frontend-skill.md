@@ -139,7 +139,8 @@ Cognito browser session recovery:
 
 - An expired access/ID token is recoverable while a valid Cognito refresh token remains. Protected Cognito API requests refresh before sending and force-refresh plus replay the original request once after an API `401`.
 - Temporary network/provider/server refresh failures preserve `workmap.cognitoSession` and receive one bounded retry. They must not be converted into logout or a redirect to the public home page.
-- Explicit terminal failures such as `invalid_grant`, Cognito `401/403`, `NotAuthorizedException`, or an invalid/expired refresh token clear the stored session and route to `/login?next=<internal protected path>`.
+- Explicit terminal failures such as `invalid_grant`, Cognito `401/403`, `NotAuthorizedException`, an invalid/expired refresh token, or a second API `401` after one forced refresh clear the stored session and replace the protected route with the public home page `/`.
+- The root session navigation guard applies the same home redirect when another tab removes the Cognito session, or when a protected tab regains focus/visibility after its stored session has disappeared. Public root/login/callback/invitation routes are never redirected by this guard.
 - Post-login return paths must pass `getRequestedPostLoginPath`; external, protocol-relative, backslash, and public-route values are rejected.
 - Login and callback `/auth/me` mapping calls must use `authSource: "cognito"` so they receive the same refresh/retry behavior.
 

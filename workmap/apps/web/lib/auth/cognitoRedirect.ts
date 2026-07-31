@@ -7,10 +7,20 @@ const PUBLIC_PATHS = new Set(["/", "/login", "/login/callback"]);
 export function redirectToLoginForMissingCognitoSession() {
   if (typeof window === "undefined" || getCognitoSession() || hasStoredCognitoSession()) return false;
 
+  return replaceProtectedPathWithPublicHome();
+}
+
+export function redirectToHomeForEndedCognitoSession() {
+  if (typeof window === "undefined") return false;
+
+  return replaceProtectedPathWithPublicHome();
+}
+
+function replaceProtectedPathWithPublicHome() {
   const pathname = window.location.pathname;
   if (PUBLIC_PATHS.has(pathname) || pathname.startsWith("/invite/")) return false;
 
-  window.location.replace(`/login?next=${encodeURIComponent(pathname)}`);
+  window.location.replace("/");
   return true;
 }
 

@@ -248,7 +248,7 @@ test("a temporary Cognito refresh failure keeps the session and succeeds on retr
   }
 });
 
-test("an explicitly invalid refresh token clears the session and redirects to login", async () => {
+test("an explicitly invalid refresh token clears the session and redirects to the public home page", async () => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   const previousFetch = globalThis.fetch;
   const previousEnvironment = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -291,10 +291,83 @@ test("an explicitly invalid refresh token clears the session and redirects to lo
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.equal(result.status, 401);
-      assert.match(result.error, /session expired/i);
+      assert.match(result.error, /authentication ended/i);
     }
     assert.equal(hasStoredCognitoSession(), false);
-    assert.deepEqual(redirects, ["/login?next=%2Freports"]);
+    assert.deepEqual(redirects, ["/"]);
+  } finally {
+    clearCognitoSession();
+    globalThis.fetch = previousFetch;
+    restoreProperty(globalThis, "window", previousWindow);
+    for (const key of ENV_KEYS) restoreEnvironment(key, previousEnvironment[key]);
+  }
+});
+
+test("a Cognito API 401 after one successful forced refresh ends the session and redirects home", async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const previousFetch = globalThis.fetch;
+  const previousEnvironment = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+  const localStorage = new MemoryStorage();
+  const sessionStorage = new MemoryStorage();
+  const redirects: string[] = [];
+  let refreshRequests = 0;
+  let apiRequests = 0;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      atob: (value: string) => Buffer.from(value, "base64").toString("binary"),
+      btoa: (value: string) => Buffer.from(value, "binary").toString("base64"),
+      localStorage,
+      sessionStorage,
+      location: {
+        origin: "https://app.workmap.test",
+        pathname: "/reports",
+        search: "",
+        replace: (path: string) => redirects.push(path),
+      },
+    },
+  });
+
+  configureTestEnvironment();
+  const currentIdToken = createIdToken({ sub: "owner-1", exp: Math.floor(Date.now() / 1000) + 3600 });
+  const refreshedIdToken = createIdToken({ sub: "owner-1", exp: Math.floor(Date.now() / 1000) + 7200 });
+  storeCognitoTokenSession("current-access-token", currentIdToken, "stored-refresh-token");
+
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url === "https://auth.workmap.test/oauth2/token") {
+      refreshRequests += 1;
+      return Response.json({
+        access_token: "refreshed-access-token",
+        id_token: refreshedIdToken,
+        token_type: "Bearer",
+        expires_in: 7200,
+      });
+    }
+    if (url === "https://api.workmap.test/protected") {
+      apiRequests += 1;
+      return Response.json({ message: "unauthorized" }, { status: 401 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  try {
+    const result = await workMapApiGet("/protected", {
+      baseUrl: "https://api.workmap.test",
+      token: currentIdToken,
+      authSource: "cognito",
+    });
+    assert.deepEqual(result, {
+      ok: false,
+      error: "WorkMap authentication ended.",
+      status: 401,
+      source: "fallback",
+    });
+    assert.equal(refreshRequests, 1);
+    assert.equal(apiRequests, 2);
+    assert.equal(hasStoredCognitoSession(), false);
+    assert.deepEqual(redirects, ["/"]);
   } finally {
     clearCognitoSession();
     globalThis.fetch = previousFetch;

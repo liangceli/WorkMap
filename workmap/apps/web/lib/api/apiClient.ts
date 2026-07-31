@@ -1,5 +1,6 @@
 import type { ApiClientOptions, ApiResult } from "./apiTypes";
-import { redirectToLoginForMissingCognitoSession } from "../auth/cognitoRedirect";
+import { redirectToHomeForEndedCognitoSession } from "../auth/cognitoRedirect";
+import { clearCognitoSession } from "../auth/cognitoSession";
 
 const DEFAULT_DEV_API_URL = "http://localhost:3001";
 
@@ -64,7 +65,6 @@ async function workMapApiRequest<T>(
     if (authSource === "cognito") {
       const tokenResult = await resolveCognitoToken(false);
       if (!tokenResult.available) {
-        if (!tokenResult.retryable) redirectToLoginForMissingCognitoSession();
         return {
           ok: false,
           error: tokenResult.reason,
@@ -79,7 +79,6 @@ async function workMapApiRequest<T>(
     if (response.status === 401 && authSource === "cognito") {
       const refreshedToken = await resolveCognitoToken(true);
       if (!refreshedToken.available) {
-        if (!refreshedToken.retryable) redirectToLoginForMissingCognitoSession();
         return {
           ok: false,
           error: refreshedToken.reason,
@@ -88,6 +87,16 @@ async function workMapApiRequest<T>(
         };
       }
       response = await sendApiRequest(baseUrl, path, init, refreshedToken.token);
+      if (response.status === 401) {
+        clearCognitoSession();
+        redirectToHomeForEndedCognitoSession();
+        return {
+          ok: false,
+          error: "WorkMap authentication ended.",
+          status: 401,
+          source: "fallback",
+        };
+      }
     }
 
     if (!response.ok) {

@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getRequestedPostLoginPath, redirectToLoginForMissingCognitoSession } from "../lib/auth/cognitoRedirect";
+import {
+  getRequestedPostLoginPath,
+  redirectToHomeForEndedCognitoSession,
+  redirectToLoginForMissingCognitoSession,
+} from "../lib/auth/cognitoRedirect";
 
-test("a protected route with no Cognito session is sent to login with a safe return path", () => {
+test("a protected route with no Cognito session is replaced by the public home page", () => {
   const redirects: string[] = [];
 
   withBrowserPath("/reports", (location) => {
@@ -10,7 +14,19 @@ test("a protected route with no Cognito session is sent to login with a safe ret
     assert.equal(redirectToLoginForMissingCognitoSession(), true);
   });
 
-  assert.deepEqual(redirects, ["/login?next=%2Freports"]);
+  assert.deepEqual(redirects, ["/"]);
+});
+
+test("a confirmed ended session replaces a protected route even while stale session data remains", () => {
+  const redirects: string[] = [];
+
+  withBrowserPath("/reports", (location) => {
+    window.localStorage.setItem("workmap.cognitoSession", JSON.stringify({ stale: true }));
+    location.replace = (path: string) => redirects.push(path);
+    assert.equal(redirectToHomeForEndedCognitoSession(), true);
+  });
+
+  assert.deepEqual(redirects, ["/"]);
 });
 
 test("public root, login and invitation routes do not redirect", () => {

@@ -98,7 +98,7 @@ export function useVirtualOfficeRealtime({
         if (cancelled) return;
         if (!session) {
           setConnectionState("error");
-          onErrorRef.current?.("Cognito session expired. Sign in again.");
+          onErrorRef.current?.("WorkMap authentication ended.");
           return;
         }
 
