@@ -1,5 +1,34 @@
 # Latest QA Handoff
 
+## 2026-08-04 Browser Extension 0.5.15 Policy-lease Recovery QA
+
+### Findings And Diff Review
+
+- Fixed - High: recovered Focus and parallel Domain open/runtime checkpoints could be sealed only after a new lease replaced the policy stored with them, producing terminal `POLICY_REJECTED` batches. Recovery now seals at the last durable observation with the durable old policy before installing the refreshed lease.
+- Fixed - Medium: a live snapshot rejected as `SNAPSHOT_POLICY_LEASE_INVALID` could remain eligible for the next health sync. It is now removed from pending current state while the exact safe rejection code/request ID remains in bounded diagnostics.
+- Data-integrity boundary preserved: recovery still does not backfill sleep, restart or unobserved gaps; old terminal dead letters remain excluded from Reports; policy windows and lease validation are not relaxed.
+- Scope review: no Desktop Agent, API, Web/Reports, database/schema, auth, RBAC, tenant isolation, browser credential or collected privacy field changed. Existing concurrent handoff content was preserved.
+
+### Test And Release Status
+
+- Targeted policy-lease recovery tests: pass, 3/3.
+- Full Browser Extension tests: pass, 80/80.
+- Typecheck: pass. Lint: pass. Build: pass. Release ZIP: pass. `git diff --check`: pass. Bounded secret scan: pass.
+- Artifact manifest/version/contents/size/SHA-256 were checked: 0.5.15, 51,726 bytes, `5AC8017DBF9E2AE8E93F88A9878A5BB071A9B94354158D3031D2C2805F6FC0DE`.
+- Manual load-unpacked Edge/Chrome upgrade, service-worker restart and real policy-lease rollover QA: not run. Automated QA passes; proceed to that Browser-only manual acceptance before publishing.
+
+## 2026-07-31 Local Focus-idle Interval Recovery QA
+
+- Local evidence is insufficient for a complete historical list by design: accepted outbox rows are deleted and redacted logs do not contain subjects or interval boundaries.
+- Read-only checks covered the SQLite schema/current rows, runtime checkpoint, today's complete NDJSON key shapes, and SQLite recovery; no 2026-07-31 historical Focus Idle interval could be recovered locally.
+- No product or external data changed. Recommendation: do not infer exact periods from aggregate Reports totals or logs; obtain them from the backend ledger with the exact device/day/source/stream/metric filters.
+
+## 2026-07-31 Employee Desktop Agent Diagnostics QA
+
+- Current screenshot passes operational review: online server-confirmed health, fresh sync, accepted interval, current confirmed-through, active acknowledged policy lease, one pending and zero rejected.
+- The historical snapshot lease failure is self-healed and did not become a dead letter. Three no-response failures show intermittent connectivity but not confirmed data loss; durable interval retry and the later current cursor indicate recovery.
+- No automated suite or real-device action ran. Recommendation: no immediate Agent change; monitor queue/cursor progression and correlate any repeated failure timestamps with Render/API logs and other clients.
+
 ## 2026-07-31 Cognito Session Exit Redirect QA
 
 ### Reviewed Implementation And Findings

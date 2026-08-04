@@ -787,6 +787,11 @@ export class BrowserExtensionRuntimeV2 {
       const policyRequestStartedAtMs = Date.now();
       const policy = await getTrackingPolicyV2(this.config);
       this.applyServerClock(policy.serverTime, policyRequestStartedAtMs);
+      // A persisted checkpoint belongs to the policy that was durable with it.
+      // Seal that proven tail before installing a refreshed lease; otherwise
+      // old occurrence times are relabelled with the new lease and the server
+      // correctly rejects them as outside its authorised UTC windows.
+      await this.closeRecoveredV2Tail();
       this.state = { ...this.state, policy };
       await this.store.writeRuntimeState(this.state);
       const policyRequirement = describeBrowserPolicyRequirement(policy);
@@ -952,11 +957,16 @@ export class BrowserExtensionRuntimeV2 {
   }
 
   private async closeRecoveredV2Tail() {
-    if (!this.state?.policy || !this.browserName) return;
-    if (this.state.clock && this.state.engineCheckpoint) {
+    if (!this.state || !this.browserName) return;
+    const recoveryPolicy = this.state.policy;
+    if (
+      recoveryPolicy &&
+      this.state.clock &&
+      this.state.engineCheckpoint
+    ) {
       const recovered = new BrowserFocusEngineV2(
         this.state.clock,
-        this.state.policy,
+        recoveryPolicy,
         this.browserName,
         this.state.engineCheckpoint,
       );
@@ -965,11 +975,11 @@ export class BrowserExtensionRuntimeV2 {
       const recoveredState = {
         ...this.state,
         engineCheckpoint: recovered.checkpoint(),
-        latestSnapshot: update.snapshot,
+        latestSnapshot: null,
         snapshotConfirmation: {
-          state: "LOCAL_PENDING" as const,
-          snapshotSequence: update.snapshot.snapshotSequence,
-          observedAt: update.snapshot.lastObservedAt,
+          state: "NONE" as const,
+          snapshotSequence: null,
+          observedAt: null,
           confirmedAt: null,
           rejectionCode: null,
           requestId: null,
@@ -983,7 +993,7 @@ export class BrowserExtensionRuntimeV2 {
         this.state = await this.store.persistEngineUpdate(
           update.intervals,
           recoveredState,
-          update.snapshot,
+          null,
         );
       } catch (error) {
         if (error instanceof BrowserV2QueuePressureError) {
@@ -998,11 +1008,11 @@ export class BrowserExtensionRuntimeV2 {
     if (
       runtimeState.openRuntimeClock &&
       runtimeState.openRuntimeCheckpoint &&
-      runtimeState.policy?.collectDomainOpenRuntime
+      recoveryPolicy?.collectDomainOpenRuntime
     ) {
       const recoveredRuntime = new BrowserOpenRuntimeEngineV2(
         runtimeState.openRuntimeClock,
-        runtimeState.policy,
+        recoveryPolicy,
         this.browserName,
         runtimeState.openRuntimeCheckpoint,
       );
@@ -1020,6 +1030,15 @@ export class BrowserExtensionRuntimeV2 {
       engineCheckpoint: null,
       openRuntimeClock: null,
       openRuntimeCheckpoint: null,
+      latestSnapshot: null,
+      snapshotConfirmation: {
+        state: "NONE",
+        snapshotSequence: null,
+        observedAt: null,
+        confirmedAt: null,
+        rejectionCode: null,
+        requestId: null,
+      },
       activeTabId: null,
       activeDomain: null,
     };
@@ -1662,11 +1681,17 @@ export class BrowserExtensionRuntimeV2 {
       ) {
         this.lastPolicyRefreshAtMs = 0;
         this.collectorState = "PAUSED";
+        await this.closeRecoveredV2Tail();
+      } else {
+        await this.clearFocus(false);
       }
-      await this.clearFocus(false);
       if (this.state) {
         this.state = {
           ...this.state,
+          // A rejected live snapshot is terminal current-state evidence. Keep
+          // its safe diagnostic, but never resend the same stale lease on the
+          // next health request.
+          latestSnapshot: null,
           snapshotConfirmation: rejectedConfirmation,
         };
         await this.store.writeRuntimeState(this.state);
@@ -1848,8 +1873,10 @@ export class BrowserExtensionRuntimeV2 {
         this.state.policy?.policyLeaseId !== policy.policyLeaseId ||
         this.state.policy?.policyVersion !== policy.policyVersion;
       if (changed) {
-        await this.clearFocus(true);
-        await this.clearOpenRuntime(performance.now(), true);
+        // Persist the last proven observation under the old lease before the
+        // new lease becomes current. This also discards the old live snapshot,
+        // which cannot be valid current-state evidence for the replacement.
+        await this.closeRecoveredV2Tail();
       }
       this.state = { ...this.state, policy };
       this.collectorState = collectorStateForPolicy(
@@ -1859,6 +1886,7 @@ export class BrowserExtensionRuntimeV2 {
       this.errorCode = "NONE";
       this.lastPolicyRefreshAtMs = Date.now();
       await this.store.writeRuntimeState(this.state);
+      if (changed) await this.requestSync(true);
     } catch (error) {
       if (!policyLeaseValid(this.state.policy, serverNow(this.state))) {
         await this.pauseCollector(

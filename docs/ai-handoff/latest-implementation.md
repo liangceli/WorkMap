@@ -1,5 +1,56 @@
 # Latest Implementation Handoff
 
+## 2026-08-04 Browser Extension 0.5.15 Policy-lease Recovery
+
+### Original Task Brief And Confirmed Cause
+
+- Investigate local Edge 0.5.14 after a healthy recovery left 11 `POLICY_REJECTED` dead letters and repeated `SNAPSHOT_POLICY_LEASE_INVALID` diagnostics, and implement a Browser Extension-only fix if the cause could be established with at least 95% confidence.
+- The unpacked local Edge installation was identified without reading its protected credential. Its `dist/backgroundV2.js` SHA-256 and manifest SHA-256 exactly matched the workspace 0.5.14 `alpha-unpacked` files, so the local event was reproduced against the current source rather than an unknown build.
+- Confirmed cause: startup fetched and installed the refreshed policy before sealing durable Focus and Domain open/runtime checkpoints. Reconstructed old occurrence times were therefore labelled with the new lease; the API correctly rejected the batch because those times were outside that lease's authorised UTC windows. One Focus tail plus multiple concurrently open hostnames explains the single-request group of 11 rejections.
+- A rejected live snapshot could remain in `latestSnapshot` and be sent again after `SNAPSHOT_POLICY_LEASE_INVALID`, producing the repeated safe diagnostics visible in Options.
+
+### Changed Files And Implementation Summary
+
+- `workmap/apps/browser-extension/src/backgroundV2.ts`: seals the last durable Focus/open-runtime observation under the policy stored with that checkpoint before installing a replacement lease, clears obsolete live-snapshot state during recovery, applies the same ordering during periodic policy refresh, schedules prompt delivery of the sealed tail, and removes a terminally rejected snapshot from the next sync while retaining its bounded rejection diagnostic.
+- `workmap/apps/browser-extension/src/trackingV2Store.ts`: allows the atomic Focus interval/state transaction to persist an intentionally absent current snapshot.
+- `workmap/apps/browser-extension/test/policy-lease-recovery.test.ts`: adds runtime tests for old-lease Focus/open-runtime recovery, startup lease ordering, and no resend after terminal live-snapshot lease rejection.
+- Version metadata and assertions moved from 0.5.14 to 0.5.15 in `package.json`, source/generated manifests, `trackingV2Types.ts`, and `service-worker.test.ts`.
+- No Desktop Agent, API, Web/Reports behavior, schema, policy authorization, tenant/RBAC boundary, credential handling, or privacy collection field changed. Existing dead letters remain immutable evidence and are not inserted into Reports or fabricated/backfilled.
+
+### Verification, Artifact, Manual QA, And Remaining Risk
+
+- Browser Extension typecheck: pass. Lint: pass. Full tests: pass, 80/80. Build: pass. Release ZIP: pass. `git diff --check`: pass.
+- Artifact: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.15.zip`, 51,726 bytes, SHA-256 `5AC8017DBF9E2AE8E93F88A9878A5BB071A9B94354158D3031D2C2805F6FC0DE`; ZIP, alpha-unpacked and package manifests all report 0.5.15.
+- Real Edge/Chrome load-unpacked upgrade and a live lease rollover were not manually run. Required acceptance: upgrade the paired 0.5.14 profile to 0.5.15, preserve pairing, keep several different eligible domains open across a policy refresh/service-worker restart, and confirm new intervals are accepted/duplicate with no new `POLICY_REJECTED` or repeated `SNAPSHOT_POLICY_LEASE_INVALID` entries.
+- The 11 historical 0.5.14 dead letters cannot be safely relabelled or recovered because the server has already terminally rejected them; 0.5.15 prevents the same cross-lease corruption for future checkpoints. The implementation is ready for the manual Browser-only acceptance round, but not store publication without that QA.
+
+## 2026-07-31 Local Focus-idle Interval Recovery Review
+
+### Original Task Brief And Findings
+
+- Attempted to list every Focus Idle period recorded today by the current computer's Desktop Agent.
+- The local v2 SQLite store is an outbox, not a historical ledger. `acknowledge()` deletes successfully confirmed pending intervals, so the live database retains only pending/dead-letter rows plus the current runtime checkpoint. Today's accepted Focus Idle rows are no longer present locally.
+- Today's redacted NDJSON contains lifecycle/policy/sync request metadata and interval counts but deliberately omits interval metric, App identity and start/end boundaries. SQLite recovery found zero deleted 2026-07-31 Focus Idle rows. The current checkpoint was Active, so it did not expose an ongoing Idle interval either.
+- The authoritative complete intervals remain in the backend `ActivityInterval` ledger. The local device id required for a narrow read-only query was identified without exposing its protected credential, but the available controlled browser did not have an authenticated Supabase session and no local `DATABASE_URL` was present.
+
+### Scope And Next Step
+
+- No Agent, Browser Extension, API, Web, database, policy or local queue data changed. No credential, window title, page content or user input was printed.
+- To produce the exact Adelaide-time ranges, run a read-only backend query filtered to this device, `DESKTOP_APP`, `FOCUS`, `FOCUS_IDLE`, and the 2026-07-31 local-day bounds, then merge contiguous settlement chunks. Authentication or a user-run SQL result is still required.
+
+## 2026-07-31 Employee Desktop Agent Diagnostics Review
+
+### Original Task Brief And Finding
+
+- Reviewed another monitored employee's Desktop Agent screenshots after three same-day no-response `NETWORK_ERROR` entries and one HTTP 200 `SNAPSHOT_POLICY_LEASE_INVALID` entry.
+- Current state is healthy and server-confirmed: heartbeat and last sync are current at 2:20:36 PM, one interval was accepted with zero duplicate/zero rejected, confirmed-through is current at 2:20:03 PM, the queue contains only one pending row and zero rejected rows, and the refreshed v3 policy lease is active through the next day.
+- The 10:19 AM snapshot lease rejection recovered automatically; the displayed policy lease was reissued at 10:19:33 AM. The three network failures were transient and later successful synchronization proves they are not the current connection state.
+
+### Scope And Recommendation
+
+- No Desktop Agent, Browser Extension, API, Reports, database, policy or deployment code changed in this read-only review.
+- Observe that the single pending row drains and that `No active app` changes when an ordinary App is foreground. Investigate only if pending grows or remains stuck, confirmed-through stops advancing, a normal foreground App remains unresolved beyond several seconds, or new network failures repeat frequently. Compare timestamps across employees to distinguish shared API outages from the employee computer's network/VPN.
+
 ## 2026-07-31 Cognito Session Exit Home Redirect
 
 ### Original Task Brief And Confirmed Cause

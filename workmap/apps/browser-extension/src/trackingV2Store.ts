@@ -143,7 +143,7 @@ export class BrowserTrackingV2Store {
   async persistEngineUpdate(
     intervals: BrowserActivityIntervalV2[],
     state: BrowserTrackingRuntimeStateV2,
-    snapshot: BrowserLiveFocusSnapshotV2,
+    snapshot: BrowserLiveFocusSnapshotV2 | null,
   ): Promise<BrowserTrackingRuntimeStateV2> {
     const database = await this.database();
     const transaction = database.transaction(
