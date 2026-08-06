@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { BrowserFocusEngineV2 } from "../src/browserFocusEngineV2.js";
 import { BrowserOpenRuntimeEngineV2 } from "../src/browserOpenRuntimeEngineV2.js";
-import { policyBoundaryMonotonic } from "../src/backgroundV2.js";
+import {
+  authorizedPolicyCloseMonotonic,
+  policyBoundaryMonotonic,
+} from "../src/backgroundV2.js";
 import type {
   BrowserClockEpochV2,
   DeviceTrackingPolicyV2,
@@ -123,5 +127,71 @@ test("policy closure projects runtime to the authorised UTC boundary", () => {
       75_000,
     ),
     60_000,
+  );
+});
+
+test("a browser event after lease expiry cannot extend Focus or runtime past policy", () => {
+  const expiringPolicy: DeviceTrackingPolicyV2 = {
+    ...policy,
+    policyLeaseExpiresAt: "2026-07-23T00:01:00.000Z",
+    allowedUtcWindows: [{
+      startsAt: "2026-07-23T00:00:00.000Z",
+      endsAt: "2026-07-23T00:01:00.000Z",
+    }],
+  };
+  const focus = new BrowserFocusEngineV2(
+    clock,
+    expiringPolicy,
+    "EDGE",
+    null,
+    idFactory(),
+  );
+  focus.acquireFocus(
+    { subjectKey: "work.example", displayName: "work.example" },
+    0,
+  );
+  focus.settle(50_000);
+
+  const runtime = new BrowserOpenRuntimeEngineV2(
+    clock,
+    expiringPolicy,
+    "EDGE",
+    null,
+    idFactory(),
+  );
+  runtime.observeOpenDomains(["work.example", "docs.example"], 0);
+  runtime.settle(50_000);
+
+  const eventAt = 75_000;
+  const nowServerMs = Date.parse("2026-07-23T00:01:15.000Z");
+  const focusBoundary = authorizedPolicyCloseMonotonic(
+    expiringPolicy,
+    clock,
+    focus.checkpoint().lastObservedAtMonotonicMs,
+    eventAt,
+    nowServerMs,
+  );
+  const runtimeBoundary = authorizedPolicyCloseMonotonic(
+    expiringPolicy,
+    clock,
+    runtime.checkpoint().lastObservedAtMonotonicMs,
+    eventAt,
+    nowServerMs,
+  );
+  assert.equal(focusBoundary, 60_000);
+  assert.equal(runtimeBoundary, 60_000);
+
+  const focusTail = focus.clearFocus(focusBoundary).intervals;
+  const runtimeTail = runtime.clear(runtimeBoundary).intervals;
+  assert.deepEqual(
+    focusTail.map((interval) => [interval.startedAt, interval.endedAt]),
+    [["2026-07-23T00:00:50.000Z", "2026-07-23T00:01:00.000Z"]],
+  );
+  assert.deepEqual(
+    runtimeTail.map((interval) => [interval.subjectKey, interval.endedAt]),
+    [
+      ["docs.example", "2026-07-23T00:01:00.000Z"],
+      ["work.example", "2026-07-23T00:01:00.000Z"],
+    ],
   );
 });

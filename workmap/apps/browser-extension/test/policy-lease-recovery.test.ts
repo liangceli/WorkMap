@@ -4,6 +4,7 @@ import { BrowserExtensionRuntimeV2 } from "../src/backgroundV2.js";
 import { BrowserFocusEngineV2 } from "../src/browserFocusEngineV2.js";
 import { BrowserOpenRuntimeEngineV2 } from "../src/browserOpenRuntimeEngineV2.js";
 import {
+  BROWSER_V2_POLICY_REFRESH_MS,
   createInitialBrowserTrackingV2State,
   type BrowserActivityIntervalV2,
   type BrowserLiveFocusSnapshotV2,
@@ -11,6 +12,10 @@ import {
   type BrowserTrackingSyncResponseV2,
   type DeviceTrackingPolicyV2,
 } from "../src/trackingV2Types.js";
+
+test("the Browser refresh cadence is shorter than the API lease-reuse cutoff", () => {
+  assert.ok(BROWSER_V2_POLICY_REFRESH_MS < 5 * 60_000);
+});
 
 type RecoveryHarness = {
   state: BrowserTrackingRuntimeStateV2 | null;

@@ -8,7 +8,7 @@ export function PrivacyNoticeCard() {
       <div style={styles.grid}>
         <div>
           <p style={styles.subhead}>Collected</p>
-          <p style={styles.text}>App name, website domain, active/idle state, device heartbeat, work session time, and WorkMap messages or reactions.</p>
+          <p style={styles.text}>App name, website domain, active/idle state, device heartbeat, work session time, and CandidGrid messages or reactions.</p>
         </div>
         <div>
           <p style={styles.subhead}>Not collected</p>

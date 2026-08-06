@@ -13,7 +13,7 @@ export function normalizeExcludedHostnames(value: string | readonly string[]) {
         normalized.add(hostname);
       }
     } catch {
-      // Invalid entries are ignored locally and are never sent to WorkMap.
+      // Invalid entries are ignored locally and are never sent to CandidGrid.
     }
   }
   return [...normalized].sort();

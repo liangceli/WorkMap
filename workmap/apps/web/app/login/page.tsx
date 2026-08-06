@@ -6,10 +6,10 @@ export default function LoginPage() {
     <main className="wm-login-redesign" style={styles.page}>
       <section className="wm-login-shell" style={styles.shell}>
         <div className="wm-login-copy" style={styles.copy}>
-          <p style={styles.eyebrow}>WorkMap</p>
+          <p style={styles.eyebrow}>CandidGrid</p>
           <h1 style={styles.title}>Start with an Owner workspace, then invite your team</h1>
           <p style={styles.subtitle}>
-            Create, confirm, and access your Cognito account without leaving WorkMap. New teams begin with an Owner account; employees join only from an invitation link.
+            Create, confirm, and access your Cognito account without leaving CandidGrid. New teams begin with an Owner account; employees join only from an invitation link.
           </p>
           <div style={styles.privacyBox}>
             <strong>Privacy boundary</strong>

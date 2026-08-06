@@ -9,6 +9,7 @@ import type { WorkMapRole } from "../../lib/workflow/workflowState";
 import { OfficeIcon } from "./OfficeIcons";
 import { labelStatus, statusColors } from "./presence";
 import type { VirtualOfficeRealtimeState } from "./useVirtualOfficeRealtime";
+import { CandidGridMark } from "../brand/CandidGridMark";
 
 type VirtualOfficeTopBarProps = {
   status: UserPresenceStatus;
@@ -254,7 +255,7 @@ export function VirtualOfficeTopBar({
           aria-controls="virtual-office-navigation"
           onClick={() => setNavigationOpen((open) => !open)}
         >
-          <div className="wm-office-brand-logo" style={styles.logo} aria-hidden="true">WM</div>
+          <div className="wm-office-brand-logo" style={styles.logo} aria-hidden="true"><CandidGridMark size={40} /></div>
           <div className="wm-office-brand-title-wrap" style={styles.titleWrap}>
             <span className="wm-office-brand-title" style={styles.title}>Virtual Office</span>
             <span className="wm-office-brand-caption" style={styles.caption}>Live team presence</span>
@@ -375,11 +376,9 @@ const styles = {
     width: "52px",
     height: "52px",
     borderRadius: wm.radius.xl,
-    background: wm.colors.primary,
-    color: wm.colors.surface,
-    fontSize: "13px",
-    fontWeight: 900,
-    letterSpacing: 0,
+    background: wm.colors.surface,
+    border: `1px solid ${wm.colors.border}`,
+    padding: "6px",
     boxShadow: "0 12px 28px rgba(16, 35, 63, 0.18)",
   },
   titleWrap: {

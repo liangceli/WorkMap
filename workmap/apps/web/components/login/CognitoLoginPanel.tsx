@@ -52,7 +52,7 @@ export function CognitoLoginPanel() {
 
   const continueCognito = async (session: StoredCognitoSession) => {
     setContinuing(true);
-    setStatus("Checking your WorkMap access...");
+    setStatus("Checking your CandidGrid access...");
     const options = { token: session.idToken || session.accessToken, authSource: "cognito" as const };
     const inviteToken = getPendingInviteToken();
     const requestedPath = getRequestedPostLoginPath();
@@ -140,7 +140,7 @@ export function CognitoLoginPanel() {
           </div>
           <p style={styles.subtitle}>{cognitoSession.claims.email ?? cognitoSession.claims.sub}</p>
           <button type="button" onClick={() => continueCognito(cognitoSession)} disabled={continuing} style={styles.primaryAction}>
-            {continuing ? "Checking access..." : "Continue to WorkMap"}
+            {continuing ? "Checking access..." : "Continue to CandidGrid"}
           </button>
         </section>
       ) : canUseCognito ? (
@@ -156,7 +156,7 @@ export function CognitoLoginPanel() {
       {status ? <p aria-live="polite" style={styles.status}>{status}</p> : null}
 
       <p style={styles.note}>
-        WorkMap uses Cognito for account creation, email confirmation, password recovery, and sign-in. Workspace role and company access are resolved by the backend.
+        CandidGrid uses Cognito for account creation, email confirmation, password recovery, and sign-in. Workspace role and company access are resolved by the backend.
       </p>
     </section>
   );

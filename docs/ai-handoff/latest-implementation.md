@@ -1,5 +1,58 @@
 # Latest Implementation Handoff
 
+## 2026-08-06 Browser Extension 0.5.17 CandidGrid Branding
+
+### Original Task Brief
+
+- Replace the Browser Extension's old user-visible WorkMap name and logo with the new product brand `CandidGrid`, using `workmap/apps/web/public/brand/candidgrid-mark.png` as the authoritative mark.
+- Keep the work Browser-only, preserve the existing MV3 Tracking v2 architecture and the uncommitted 0.5.16 policy-boundary reliability fix, and do not touch concurrent Desktop Agent or Web implementation work.
+
+### Changed Files And Implementation Summary
+
+- `workmap/apps/browser-extension/manifest.json`, `package.json`, and `src/trackingV2Types.ts`: release identity moved to 0.5.17; the manifest name is now `CandidGrid Domain Tracking Alpha` and declares 16/32/48/128 CandidGrid icons.
+- `workmap/apps/browser-extension/icons/candidgrid-{16,32,48,128}.png`: deterministic transparent icon sizes derived from the repository's authoritative 512px CandidGrid mark. The Web source image was read but not modified.
+- `workmap/apps/browser-extension/options.html` and `options.css`: Options title/header/favicon now use the CandidGrid name and mark.
+- `src/backgroundV2.ts`, `contentRegistration.ts`, `extensionApi.ts`, `hostnameExclusions.ts`, `options.ts`, and `optionsDiagnostics.ts`: all user-visible pairing, permission, policy, retry and diagnostic copy now says CandidGrid.
+- `scripts/build-alpha.mjs` and `package-alpha.mjs`: unpacked builds include the icon directory and the release archive is named `CandidGrid-Browser-Extension-<version>.zip`.
+- `test/service-worker.test.ts` and `test/sync-diagnostics.test.ts`: version/copy assertions were updated and new regression checks verify the manifest brand, exact icon dimensions, build packaging, CandidGrid archive name and absence of the old visible brand.
+- Generated `alpha-unpacked` was rebuilt with the 0.5.17 manifest, CandidGrid Options page and icons.
+
+### Compatibility, Access, And Intentionally Unchanged Behavior
+
+- Internal upgrade identifiers deliberately remain unchanged: `@workmap/browser-extension`, lowercase `workmap:*` runtime messages, `workmapConfig`/`workmapStatus` storage fields, IndexedDB/queue identities, deployed API paths and `X-WorkMap-Request-Id`. These are protocol/storage compatibility identifiers, not visible product branding; renaming them would risk losing pairing, durable queue data or backend request correlation during upgrade.
+- No collected field, hostname-only privacy rule, credential handling, policy/lease/acknowledgement behavior, Focus/idle/open-runtime logic, API contract, Reports calculation, schema, tenant/RBAC boundary, Desktop Agent or Web source behavior changed in this branding round.
+- The uncommitted 0.5.16 event-boundary lease closure and four-minute policy refresh improvement remain included in 0.5.17.
+
+### Verification, Artifact, Manual QA, Risks, And Next Step
+
+- Browser Extension typecheck: pass. Lint: pass. Full tests: pass, 84/84. Build: pass. Release ZIP: pass. `git diff --check`: pass before the final handoff update.
+- Artifact: `workmap/artifacts/browser-extension/CandidGrid-Browser-Extension-0.5.17.zip`, 71,153 bytes, SHA-256 `4D733EFE52ED3DA7B7971C8E21B464340D4F3423C24BF8B794893B3125D3E298`; ZIP inspection found 26 entries and manifest name/version/icons all match 0.5.17 CandidGrid.
+- Real Chrome/Edge load-unpacked upgrade was not run. Required manual acceptance: load the rebuilt `alpha-unpacked`, verify the extension list/icon and Options title/logo, confirm existing pairing survives, and confirm heartbeat, snapshot, accepted intervals and Domain open/runtime continue normally.
+- No Chrome Web Store, Edge Add-ons, GitHub Release or production deployment was performed. Automated implementation is ready for the Browser-only manual acceptance round; store publication should wait for that check.
+
+## 2026-08-06 Browser Extension 0.5.16 Event-boundary Lease Closure
+
+### Original Task Brief And Confirmed Cause
+
+- Investigate a local Edge 0.5.15 batch of 15 `POLICY_REJECTED` Browser intervals shown both in Options diagnostics and the Owner Reports live card, and implement a Browser-only fix once the cause exceeded 95% confidence.
+- The local unpacked 0.5.15 background/manifest hashes matched the workspace build and its files predated the August 6 rejection, so this was not stale 0.5.14 code. All 15 interval rejections and one `SNAPSHOT_POLICY_LEASE_INVALID` occurred in one 11:38:51 request; the replacement lease was issued 14 seconds later at 11:39:05.
+- Confirmed cause: alarm/keepalive closure used the authorised policy boundary, but browser-event paths such as tab/navigation/blur/lock called `clearFocus()` or `clearOpenRuntime()` with the later event time. When one arrived just after lease expiry, every concurrently open hostname could produce a final interval crossing the old lease window, and the API correctly rejected the whole group. The client policy refresh cadence also exactly matched the API's five-minute lease-reuse cutoff, leaving no timing margin before expiry.
+
+### Changed Files And Implementation Summary
+
+- `workmap/apps/browser-extension/src/backgroundV2.ts`: all Focus and Domain open/runtime clear paths now use a shared authorised close calculation. While policy is healthy, real browser-event timing is unchanged; after a policy window/lease ends, closure is clamped to the latest authorised UTC boundary and cannot extend through the late event.
+- `workmap/apps/browser-extension/src/trackingV2Types.ts`: Browser version is 0.5.16 and policy refresh cadence is four minutes, intentionally below the API's unchanged five-minute reuse cutoff.
+- `workmap/apps/browser-extension/test/browser-open-runtime-v2.test.ts`: adds an exact lease-expiry event sequence proving Focus plus two parallel runtime hostnames all end at the authorised boundary rather than the later browser event.
+- `workmap/apps/browser-extension/test/policy-lease-recovery.test.ts`: asserts that the client refresh cadence remains shorter than the API reuse cutoff.
+- `workmap/apps/browser-extension/package.json`, `manifest.json`, generated `alpha-unpacked`, and version assertions were updated to 0.5.16. No Desktop Agent, API, shared validation, Web/Reports, schema, policy permission, tenant/RBAC or privacy collection behavior changed. Concurrent uncommitted Web changes were preserved and not edited.
+
+### Verification, Artifact, Manual QA, And Remaining Risk
+
+- Browser Extension typecheck: pass. Lint: pass. Full tests: pass, 82/82. Build: pass. Release ZIP: pass.
+- Artifact: `workmap/artifacts/browser-extension/WorkMap-Browser-Extension-0.5.16.zip`, 52,301 bytes, SHA-256 `516F7181CFB87922E8A760E5EB8DD68965C0470968D981A050D00BACE92D264C`; the ZIP contains 22 expected files and its manifest reports 0.5.16.
+- Real Edge/Chrome load-unpacked upgrade and a live lease rollover were not manually run. Required acceptance is to preserve pairing while upgrading, keep several different eligible hostnames open across a lease rollover, and confirm no new interval dead letters or snapshot-lease rejection loop appears.
+- The existing 15 terminal 0.5.15 dead letters remain immutable evidence, stay excluded from Reports, and cannot be safely reconstructed or backfilled. 0.5.16 prevents future browser-event closure from creating that cross-boundary batch; it does not erase historical diagnostics.
+
 ## 2026-08-06 Home Product Tabs Real-screen Styling
 
 ### Original Task Brief
@@ -7204,6 +7257,41 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - Focused Desktop GUI/release tests passed: 3/3.
 - NSIS Windows release build completed in 82.5 seconds and the installer/blockmap were confirmed present and non-empty.
 - No deployment, database, pairing, or runtime queue behavior was changed while producing this artifact.
+
+---
+
+## 2026-08-06 CandidGrid Web Rebrand
+
+### Original Task Brief
+- Replace user-visible WorkMap branding across the web application with CandidGrid.
+- Apply the approved four-cell CandidGrid mark and add a browser tab icon.
+
+### Changed Files
+- Updated public and authenticated route presentation under `workmap/apps/web/app/`.
+- Updated shared frontend presentation under `workmap/apps/web/components/`.
+- Added `workmap/apps/web/components/brand/CandidGridMark.tsx`.
+- Added `workmap/apps/web/public/brand/candidgrid-mark.png`, `workmap/apps/web/app/icon.png`, and `workmap/apps/web/app/apple-icon.png`.
+
+### Implementation Summary
+- Replaced user-visible WorkMap names with CandidGrid across the homepage, authentication, onboarding, reports, compliance, settings, integrations, invitations, and Virtual Office UI.
+- Replaced the former letter badge with the approved CandidGrid mark in the public header/footer, authenticated shell, and Virtual Office top bar.
+- Added Next.js app icon assets so browser tabs and supported saved-site surfaces display the CandidGrid mark.
+- Updated the Virtual Office fallback marker from `WM` to `CG` while preserving real avatar rendering.
+
+### Boundaries Preserved
+- Frontend branding only. Backend, API contracts, database, Prisma, authentication behavior, RBAC, routing behavior, Desktop Agent, and Browser Extension were not changed.
+- Internal compatibility identifiers and package names such as `@workmap/*` remain unchanged.
+
+### Verification
+- `pnpm.cmd --filter @workmap/web typecheck`: passed.
+- `pnpm.cmd --filter @workmap/web lint`: passed.
+- `pnpm.cmd --filter @workmap/web build`: passed.
+- User-visible WorkMap residual scans: passed.
+- `git diff --check`: passed; existing Windows line-ending warnings only.
+
+### Manual QA And Risk
+- Browser manual QA was not run in this task.
+- Existing browser favicon caches may require a hard refresh before the new tab icon appears.
 
 ---
 

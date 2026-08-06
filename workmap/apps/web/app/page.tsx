@@ -30,6 +30,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CandidGridMark } from "../components/brand/CandidGridMark";
 import styles from "./home.module.css";
 
 type ServiceId = "visibility" | "reports" | "office";
@@ -89,11 +90,11 @@ const frequentlyAskedQuestions = [
     answer: "It records the active website hostname and duration. It discards paths, queries, titles, and page content.",
   },
   {
-    question: "What does WorkMap collect?",
+    question: "What does CandidGrid collect?",
     answer: "App and domain duration, presence, room, device heartbeat, and policy acknowledgement.",
   },
   {
-    question: "What does WorkMap never collect?",
+    question: "What does CandidGrid never collect?",
     answer: "No screenshots, keystrokes, clipboard, full URLs, private content, camera, or microphone.",
   },
   {
@@ -117,7 +118,7 @@ const frequentlyAskedQuestions = [
     answer: "A short-lived, one-time code creates a device-scoped credential. Revoking the device stops access.",
   },
   {
-    question: "How do I start using WorkMap?",
+    question: "How do I start using CandidGrid?",
     answer: "Create an owner account, set up the workspace, invite the team, then pair the Agent and Extension.",
   },
 ];
@@ -165,9 +166,9 @@ export default function HomePage() {
 
       <header className={`${styles.header} ${headerCompact ? styles.headerCompact : ""} ${menuOpen ? styles.headerMenuOpen : ""}`}>
         <nav className={styles.nav} aria-label="Main navigation">
-          <a className={styles.brand} href="#top" aria-label="WorkMap home" onClick={closeMenu}>
-            <span className={styles.brandMark} aria-hidden="true">WM</span>
-            <span>WorkMap</span>
+          <a className={styles.brand} href="#top" aria-label="CandidGrid home" onClick={closeMenu}>
+            <span className={styles.brandMark} aria-hidden="true"><CandidGridMark size={26} priority /></span>
+            <span>CandidGrid</span>
           </a>
 
           <button
@@ -208,7 +209,7 @@ export default function HomePage() {
               <p className={styles.eyebrow}>Transparent work visibility</p>
               <h1>See the work.<span>Keep the boundary clear.</span></h1>
               <p className={styles.heroLead}>
-                WorkMap shows app and domain time, presence, and device status. Never screens, keystrokes, or private content.
+                CandidGrid shows app and domain time, presence, and device status. Never screens, keystrokes, or private content.
               </p>
               <div className={styles.heroActions}>
                 <a className={styles.primaryButtonLarge} href="/login?mode=signup">
@@ -216,7 +217,7 @@ export default function HomePage() {
                 </a>
                 <a className={styles.secondaryButtonLarge} href="#privacy">Explore privacy</a>
               </div>
-              <div className={styles.heroProof} aria-label="WorkMap principles">
+              <div className={styles.heroProof} aria-label="CandidGrid principles">
                 <Proof icon={<ShieldCheck size={21} />} label="Explainable signals" />
                 <Proof icon={<Users size={21} />} label="Employee visibility" />
                 <Proof icon={<LockKeyhole size={21} />} label="Clear limits" />
@@ -227,7 +228,7 @@ export default function HomePage() {
               <Image
                 className={styles.heroImage}
                 src="/marketing/workmap-virtual-office-panorama.png"
-                alt="WorkMap Virtual Office showing the complete office map, team presence, navigation, minimap, and visible status controls"
+                alt="CandidGrid Virtual Office showing the complete office map, team presence, navigation, minimap, and visible status controls"
                 width={1904}
                 height={949}
                 priority
@@ -239,7 +240,7 @@ export default function HomePage() {
 
         <section className={`${styles.servicesSection} ${styles.reveal}`} id="product" data-home-reveal>
           <div className={styles.sectionContainer}>
-            <div className={styles.serviceTabs} role="tablist" aria-label="WorkMap services">
+            <div className={styles.serviceTabs} role="tablist" aria-label="CandidGrid services">
               {services.map((service) => {
                 const Icon = service.icon;
                 const selected = activeService === service.id;
@@ -278,12 +279,12 @@ export default function HomePage() {
         <section className={`${styles.flowSection} ${styles.reveal}`} id="how-it-works" data-home-reveal>
           <div className={styles.sectionContainer}>
             <div className={styles.sectionIntro}>
-              <p className={styles.eyebrow}>How WorkMap works</p>
+              <p className={styles.eyebrow}>How CandidGrid works</p>
               <h2>One workspace. Two visible agents. Clear reports.</h2>
             </div>
 
-            <div className={styles.flowRail} aria-label="How WorkMap connects the web app, agents, offline recovery, and reports">
-              <FlowStage avatarIndexes={[0]} icon={<MonitorCheck size={27} />} title="WorkMap Web">
+            <div className={styles.flowRail} aria-label="How CandidGrid connects the web app, agents, offline recovery, and reports">
+              <FlowStage avatarIndexes={[0]} icon={<MonitorCheck size={27} />} title="CandidGrid Web">
                 Owners create the workspace and invite the team.
               </FlowStage>
               <FlowArrow />
@@ -336,7 +337,7 @@ export default function HomePage() {
             <div className={styles.faqIntro}>
               <p className={styles.eyebrow}>FAQ</p>
               <h2>Questions? We keep the answers clear.</h2>
-              <p>Everything you need to know about WorkMap and your privacy.</p>
+              <p>Everything you need to know about CandidGrid and your privacy.</p>
               <div className={styles.faqHelp}>
                 <MessageCircle size={25} />
                 <strong>Still have questions?</strong>
@@ -372,10 +373,10 @@ export default function HomePage() {
 
         <section className={`${styles.consentSection} ${styles.reveal}`} data-home-reveal>
           <div className={styles.consentInner}>
-            <blockquote>WorkMap works with your people, not around them.</blockquote>
+            <blockquote>CandidGrid works with your people, not around them.</blockquote>
             <p>Transparent signals.<br />Clear boundaries.<br />Fair by design.</p>
             <p>Policy first.<br />People always.</p>
-            <MarketingAvatar index={1} label="WorkMap team avatar" size="large" />
+            <MarketingAvatar index={1} label="CandidGrid team avatar" size="large" />
           </div>
           <div className={styles.ctaBar}>
             <strong>Transparency you can trust. Visibility you can explain.</strong>
@@ -390,14 +391,14 @@ export default function HomePage() {
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           <div className={styles.footerBrand}>
-            <a className={styles.brandLight} href="#top"><span className={styles.brandMark}>WM</span>WorkMap</a>
+            <a className={styles.brandLight} href="#top"><span className={styles.brandMark}><CandidGridMark size={26} /></span>CandidGrid</a>
             <p>Transparent work visibility that respects privacy and builds trust.</p>
           </div>
           <div><strong>Product</strong><a href="#product">Work visibility</a><a href="#how-it-works">How it works</a><a href="#product">Reports</a><a href="#product">Virtual Office</a></div>
           <div><strong>Privacy</strong><a href="#privacy">What we collect</a><a href="#privacy">What we never collect</a><a href="#privacy">Employee controls</a><a href="#faq">FAQ</a></div>
           <div><strong>Account</strong><a href="/login?mode=signin">Sign in</a><a href="/login?mode=signup">Create owner account</a><a href="/compliance">Review policy</a></div>
         </div>
-        <div className={styles.footerBottom}><span>WorkMap Pty Ltd</span><span>Privacy-conscious work visibility.</span></div>
+        <div className={styles.footerBottom}><span>CandidGrid</span><span>Privacy-conscious work visibility.</span></div>
       </footer>
     </div>
   );
@@ -413,14 +414,14 @@ function VisibilityService() {
       <div className={styles.serviceIntro}>
         <p className={styles.eyebrow}>Work visibility</p>
         <h2>Progress you can explain. Privacy people can see.</h2>
-        <p>WorkMap records the minimum signals needed to understand work patterns - nothing more.</p>
+        <p>CandidGrid records the minimum signals needed to understand work patterns - nothing more.</p>
         <div className={styles.featureGrid}>
           {visibilityFeatures.map(({ icon: Icon, text }) => <div key={text}><Icon size={25} /><span>{text}</span></div>)}
         </div>
       </div>
       <ProductPagePreview
         src="/marketing/workmap-dashboard-demo.png"
-        alt="WorkMap Dashboard with fictional employees Mia Manager, Ethan Engineer, and Sofia Sales"
+        alt="CandidGrid Dashboard with fictional employees Mia Manager, Ethan Engineer, and Sofia Sales"
       />
     </>
   );
@@ -437,7 +438,7 @@ function ReportsService() {
       </div>
       <ProductPagePreview
         src="/marketing/workmap-reports-demo.png"
-        alt="WorkMap company report using fictional demo workspace data"
+        alt="CandidGrid company report using fictional demo workspace data"
       />
     </>
   );
@@ -467,7 +468,7 @@ function OfficeService() {
         <a className={styles.inlineLink} href="/virtual-office">Open Virtual Office <ArrowRight size={16} /></a>
       </div>
       <div className={styles.officePreview}>
-        <Image src="/marketing/workmap-virtual-office-panorama.png" alt="Complete WorkMap Virtual Office" width={1904} height={949} sizes="(max-width: 900px) 100vw, 58vw" />
+        <Image src="/marketing/workmap-virtual-office-panorama.png" alt="Complete CandidGrid Virtual Office" width={1904} height={949} sizes="(max-width: 900px) 100vw, 58vw" />
       </div>
     </>
   );
@@ -476,7 +477,7 @@ function OfficeService() {
 function FlowStage({ icon, title, children, avatarIndexes = [] }: { icon: ReactNode; title: string; children: ReactNode; avatarIndexes?: number[] }) {
   return (
     <div className={styles.flowStage}>
-      {avatarIndexes.length ? <div className={styles.flowAvatars}>{avatarIndexes.map((index) => <MarketingAvatar key={index} index={index} label="WorkMap avatar" />)}</div> : null}
+      {avatarIndexes.length ? <div className={styles.flowAvatars}>{avatarIndexes.map((index) => <MarketingAvatar key={index} index={index} label="CandidGrid avatar" />)}</div> : null}
       <FlowNode icon={icon} title={title}>{children}</FlowNode>
     </div>
   );
@@ -500,7 +501,7 @@ function SignalList({ title, items }: { title: string; tone: "collected"; items:
 }
 
 function ControlItem({ avatarIndex, icon, text }: { avatarIndex: number; icon: ReactNode; text: string }) {
-  return <article><MarketingAvatar index={avatarIndex} label="WorkMap employee avatar" size="small" /><span className={styles.controlIcon}>{icon}</span><p>{text}</p></article>;
+  return <article><MarketingAvatar index={avatarIndex} label="CandidGrid employee avatar" size="small" /><span className={styles.controlIcon}>{icon}</span><p>{text}</p></article>;
 }
 
 function MarketingAvatar({ index, label, size = "medium" }: { index: number; label: string; size?: "small" | "medium" | "large" }) {

@@ -83,7 +83,7 @@ export function trackingV2ConnectionPresentation(
       label: "Browser heartbeat not received",
       pill: device.health ? "Stale" : "Health pending",
       detail: device.health
-        ? "WorkMap has not received a confirmed Browser Extension heartbeat within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished."
+        ? "CandidGrid has not received a confirmed Browser Extension heartbeat within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished."
         : "Waiting for the first server-confirmed health signal.",
     };
   }
@@ -95,7 +95,7 @@ export function trackingV2ConnectionPresentation(
     connected: true,
     label: "Connected",
     pill: device.health.migrationState,
-    detail: "The latest device health signal was confirmed by WorkMap.",
+    detail: "The latest device health signal was confirmed by CandidGrid.",
   };
 }
 
@@ -186,8 +186,8 @@ export function trackingV2SnapshotPresentation(
     available: false,
     label: `No current ${subject} snapshot`,
     detail: device.connectionFresh
-      ? `The connection is online; WorkMap has not confirmed a current ${subject} snapshot.`
-      : `WorkMap has not received a current ${subject} snapshot.`,
+      ? `The connection is online; CandidGrid has not confirmed a current ${subject} snapshot.`
+      : `CandidGrid has not received a current ${subject} snapshot.`,
     pill: "Not received",
   };
 }

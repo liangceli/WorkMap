@@ -30,6 +30,7 @@ import { redirectToLoginForMissingCognitoSession } from "../../lib/auth/cognitoR
 import { clearCognitoSession, getCognitoSession, type StoredCognitoSession } from "../../lib/auth/cognitoSession";
 import { getUserSetupState, resetUserSetupState, type WorkMapRole } from "../../lib/workflow/workflowState";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
+import { CandidGridMark } from "../brand/CandidGridMark";
 import { hasFreshPlatformAppShellCache, hasFreshWorkspaceAppShellCache, hasWarmAppShellCache } from "./appShellCache";
 
 type AppShellProps = {
@@ -250,9 +251,9 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     >
       <header className="wm-app-top-nav" style={styles.topNav}>
         <Link href="/" className="wm-app-brand" style={styles.brand}>
-          <span style={styles.logo}>WM</span>
+          <span style={styles.logo}><CandidGridMark size={27} priority /></span>
           <span>
-            <strong style={styles.brandTitle}>WorkMap</strong>
+            <strong style={styles.brandTitle}>CandidGrid</strong>
             <span style={styles.brandSub}>{contextLabel}</span>
           </span>
         </Link>
@@ -268,7 +269,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
           {sidebarCollapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
         </button>
 
-        <nav className="wm-app-nav-links" style={styles.navLinks} aria-label="WorkMap navigation">
+        <nav className="wm-app-nav-links" style={styles.navLinks} aria-label="CandidGrid navigation">
           {visibleItems.map((item) => {
             const Icon = getNavigationIcon(item.href);
 
@@ -442,13 +443,12 @@ const styles = {
   logo: {
     display: "grid",
     placeItems: "center",
-    width: "34px",
-    height: "34px",
-    borderRadius: "12px",
-    background: wm.colors.primary,
-    color: "#ffffff",
-    fontSize: "11px",
-    fontWeight: 900,
+    width: "38px",
+    height: "38px",
+    borderRadius: "10px",
+    background: wm.colors.surface,
+    border: `1px solid ${wm.colors.border}`,
+    padding: "5px",
     boxShadow: "0 10px 24px rgba(16, 35, 63, 0.16)",
   },
   brandTitle: {

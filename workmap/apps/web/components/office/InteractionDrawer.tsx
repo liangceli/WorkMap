@@ -84,7 +84,7 @@ export function InteractionDrawer({
       return;
     }
 
-    console.log(`WorkMap contact action: ${action}`, target);
+    console.log(`CandidGrid contact action: ${action}`, target);
   };
 
   return (
@@ -129,7 +129,7 @@ export function InteractionDrawer({
             Send
           </button>
         </div>
-        <p style={styles.integrationNote}>WorkMap messages and waves are saved in Notices. External Teams and email content is never read.</p>
+        <p style={styles.integrationNote}>CandidGrid messages and waves are saved in Notices. External Teams and email content is never read.</p>
       </div>
 
       <div style={styles.actions}>
@@ -166,7 +166,7 @@ function getGuidance(status: ContactTarget["status"], firstName: string) {
   if (status === "focus") {
     return {
       title: `${firstName} is focusing`,
-      text: "Use a quiet WorkMap message or schedule time instead of starting a call.",
+      text: "Use a quiet CandidGrid message or schedule time instead of starting a call.",
     };
   }
   if (status === "busy") {

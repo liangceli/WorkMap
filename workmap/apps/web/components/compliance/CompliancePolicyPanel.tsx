@@ -23,7 +23,7 @@ const visibleItems = [
   "Device registration and heartbeat status",
   "Last-seen timestamp",
   "Policy acknowledgement timestamp",
-  "WorkMap in-app messages, waves, reactions, and Notice read state",
+  "CandidGrid in-app messages, waves, reactions, and Notice read state",
 ];
 
 const notVisibleItems = [
@@ -258,14 +258,14 @@ export function CompliancePolicyPanel() {
   return (
     <div className="wm-compliance-policy" style={styles.stack}>
       <section className="wm-compliance-card-grid" style={styles.policyGrid}>
-        <PolicyList title="Visible in WorkMap" tone="blue" items={visibleItems} />
+        <PolicyList title="Visible in CandidGrid" tone="blue" items={visibleItems} />
         <PolicyList title="Not monitored" tone="green" items={notVisibleItems} />
       </section>
 
       <section className="wm-compliance-card-grid" style={styles.explanationGrid}>
         <TrustCard
           title="Why this data exists"
-          text="WorkMap uses presence, app/domain duration summaries, device heartbeat, and acknowledgement timestamps to help a tenant understand workspace setup and transparent activity coverage."
+          text="CandidGrid uses presence, app/domain duration summaries, device heartbeat, and acknowledgement timestamps to help a tenant understand workspace setup and transparent activity coverage."
         />
         <TrustCard
           title="Who can see what"
@@ -382,7 +382,7 @@ export function CompliancePolicyPanel() {
               {policy.collectDomainOpenRuntime ? "Enabled by the current policy" : "Not enabled"}
             </h2>
             <p style={styles.panelText}>
-              Domain open/runtime measures how long at least one eligible HTTP/HTTPS tab for a hostname remains open in Chrome or Edge. Multiple tabs for the same hostname are counted once; different hostnames may accumulate concurrently. It is context only, not Focus or work time, and WorkMap stores no path, query, page title, or content.
+              Domain open/runtime measures how long at least one eligible HTTP/HTTPS tab for a hostname remains open in Chrome or Edge. Multiple tabs for the same hostname are counted once; different hostnames may accumulate concurrently. It is context only, not Focus or work time, and CandidGrid stores no path, query, page title, or content.
             </p>
           </div>
           {canManageWorkHours && !policy.collectDomainOpenRuntime ? (

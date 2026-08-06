@@ -37,7 +37,7 @@ export default function AvatarOnboardingPage() {
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [apiAuth, setApiAuth] = useState<Extract<WorkMapApiAuthResult, { available: true }> | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
-  const [profileStatus, setProfileStatus] = useState("Enter the name teammates should see in WorkMap.");
+  const [profileStatus, setProfileStatus] = useState("Enter the name teammates should see in CandidGrid.");
   const assetsAvailable = avatarLayersByType.body.length > 0;
   const selectedNames = useMemo(() => getSelectedNames(config), [config]);
 
@@ -54,7 +54,7 @@ export default function AvatarOnboardingPage() {
       if (!auth.available) {
         if (redirectToLoginForMissingCognitoSession()) return;
         setAuthResolved(true);
-        setProfileStatus("Enter the name teammates should see in WorkMap.");
+        setProfileStatus("Enter the name teammates should see in CandidGrid.");
         return;
       }
 
@@ -73,14 +73,14 @@ export default function AvatarOnboardingPage() {
           setConfig(backendAvatar);
           saveLayeredAvatarConfig(backendAvatar);
           setDisplayName(currentUser.data.displayName);
-          setProfileStatus("This profile is loaded from your WorkMap account.");
+          setProfileStatus("This profile is loaded from your CandidGrid account.");
         } else {
           const canPrefillExistingProfileName = currentUser.data.role && currentUser.data.role !== "EMPLOYEE";
           setDisplayName(canPrefillExistingProfileName ? currentUser.data.displayName : "");
           setProfileStatus(
             canPrefillExistingProfileName
-              ? "Confirm your profile name and choose your WorkMap avatar."
-              : "Enter the name teammates should see in WorkMap.",
+              ? "Confirm your profile name and choose your CandidGrid avatar."
+              : "Enter the name teammates should see in CandidGrid.",
           );
         }
       }
@@ -115,7 +115,7 @@ export default function AvatarOnboardingPage() {
       );
 
       if (!profileResult.ok) {
-        setProfileStatus("WorkMap could not save that profile. Please try again.");
+        setProfileStatus("CandidGrid could not save that profile. Please try again.");
         return;
       }
 
@@ -136,7 +136,7 @@ export default function AvatarOnboardingPage() {
       <section className="wm-onboarding-shell" style={styles.shell}>
         <div className="wm-onboarding-header wm-avatar-studio-header" style={styles.header}>
           <p style={styles.eyebrow}>Virtual office profile</p>
-          <h1 style={styles.title}>Create your WorkMap avatar</h1>
+          <h1 style={styles.title}>Create your CandidGrid avatar</h1>
           <p style={styles.subtitle}>Build the character your teammates will see in the virtual office.</p>
         </div>
 
@@ -191,7 +191,7 @@ export default function AvatarOnboardingPage() {
               <h2 style={styles.sectionTitle}>Your character</h2>
               <p className="wm-avatar-selected-summary" style={styles.bodyText}>{selectedNames}</p>
               <p style={styles.trustNote}>
-                WorkMap uses avatars for presence and collaboration. Activity visibility remains transparent and role-based.
+                CandidGrid uses avatars for presence and collaboration. Activity visibility remains transparent and role-based.
               </p>
               <button type="button" onClick={saveAndEnterOffice} disabled={!config.bodyId} style={styles.saveButton}>
                 <Check size={18} strokeWidth={2.5} aria-hidden="true" /> Save and continue

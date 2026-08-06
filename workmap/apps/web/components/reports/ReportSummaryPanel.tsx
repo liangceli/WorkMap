@@ -917,7 +917,7 @@ function EmployeeConnectionAudit({
       {auditState.refreshStatus === "error" ? (
         <p role="status" style={styles.auditRefreshWarning}>
           <AlertTriangle size={17} aria-hidden />
-          <span>{audit ? "Connection history refresh failed; showing the last confirmed history." : "Connection history could not be loaded. WorkMap is not reporting this as zero events."}</span>
+          <span>{audit ? "Connection history refresh failed; showing the last confirmed history." : "Connection history could not be loaded. CandidGrid is not reporting this as zero events."}</span>
         </p>
       ) : null}
       <div style={styles.twoColumnGrid}>
@@ -1082,7 +1082,7 @@ function formatDesktopStatus(status: WorkMapApiUsageSummary["deviceStatusHistory
     case "LOCKED": return "Locked";
     case "AGENT_CRASHED": return "Agent crashed";
     case "AGENT_TERMINATED": return "Agent terminated";
-    case "SERVER_UNREACHABLE": return "WorkMap service unreachable";
+    case "SERVER_UNREACHABLE": return "CandidGrid service unreachable";
     case "UNKNOWN_INTERRUPTED": return "Interrupted";
     case "RECONNECTED": return "Reconnected";
     case "RESTARTED": return "Agent restarted";
@@ -1758,7 +1758,7 @@ function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
   lines.push(
     "",
     "PRIVACY BOUNDARY",
-    "WorkMap records foreground application product names and duration only. It does not collect window titles, screenshots, screen recordings, keystrokes, clipboard, camera, microphone, file contents, message/email bodies, webpage bodies, form inputs, or passwords.",
+    "CandidGrid records foreground application product names and duration only. It does not collect window titles, screenshots, screen recordings, keystrokes, clipboard, camera, microphone, file contents, message/email bodies, webpage bodies, form inputs, or passwords.",
   );
   downloadText(
     `workmap-app-usage-${safeFileName(scopeLabel)}-${summary.range.from}-${summary.range.to}.txt`,
@@ -1837,7 +1837,7 @@ function describeAgentState(state: NonNullable<WorkMapApiUsageSummary["agentStat
     case "locked": return "Device locked";
     case "agent_crashed": return "Agent crashed";
     case "agent_terminated": return "Agent terminated";
-    case "server_unreachable": return "WorkMap service unreachable";
+    case "server_unreachable": return "CandidGrid service unreachable";
     case "unknown_interrupted": return "Interrupted (reason unknown)";
     case "not_paired": return "No paired Agent";
   }
@@ -1851,7 +1851,7 @@ function formatDeviceStatus(status: WorkMapApiUsageSummary["deviceStatusHistory"
   if (status === "RUNNING") return "Extension started";
   if (status === "RESTARTED") return "Browser profile started";
   if (status === "UNKNOWN_INTERRUPTED") return "Heartbeat not received";
-  if (status === "SERVER_UNREACHABLE") return "WorkMap request unavailable";
+  if (status === "SERVER_UNREACHABLE") return "CandidGrid request unavailable";
   if (status === "RECONNECTED") return "Connection restored";
   return status.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -1864,7 +1864,7 @@ function formatDeviceStatusReason(
   reason: WorkMapApiUsageSummary["deviceStatusHistory"][number]["reason"],
   status?: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"],
 ) {
-  if (reason === "SERVER_REQUEST_FAILED") return "WorkMap request failed";
+  if (reason === "SERVER_REQUEST_FAILED") return "CandidGrid request failed";
   if (reason === "UNKNOWN" && status === "RECONNECTED") {
     return "Confirmed heartbeat received again";
   }
@@ -1872,7 +1872,7 @@ function formatDeviceStatusReason(
 }
 
 function browserHeartbeatUnavailableDetail(clientName: string) {
-  return `WorkMap did not receive a confirmed heartbeat from ${clientName} within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished`;
+  return `CandidGrid did not receive a confirmed heartbeat from ${clientName} within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished`;
 }
 
 function statusSyncWasDelayed(row: WorkMapApiUsageSummary["deviceStatusHistory"][number]) {

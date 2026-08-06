@@ -103,7 +103,7 @@ export default function OwnerInvitePage() {
         <div className="wm-invite-admin-header" style={styles.header}>
           <p style={styles.eyebrow}>Owner onboarding</p>
           <h1 style={styles.title}>Invite employees</h1>
-          <p style={styles.subtitle}>Create tenant-scoped invitation links for employees to join this WorkMap workspace.</p>
+          <p style={styles.subtitle}>Create tenant-scoped invitation links for employees to join this CandidGrid workspace.</p>
         </div>
 
         <section className="wm-invite-create-panel" style={styles.panel}>

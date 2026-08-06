@@ -42,7 +42,7 @@ export default function SettingsPage() {
         <WorkMapPageHeader
           eyebrow="Admin"
           title="Settings"
-          subtitle="Central settings entry points for the current WorkMap frontend MVP."
+          subtitle="Central settings entry points for the current CandidGrid frontend MVP."
           actions={<WorkMapButton href="/dashboard" tone="primary">Dashboard</WorkMapButton>}
         />
 

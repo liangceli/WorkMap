@@ -142,7 +142,7 @@ async function requestJson<T>(
   if (!response.ok) {
     const detail = await readSafeResponseDetail(response);
     throw new ExtensionApiError(
-      `WorkMap API ${path} returned ${response.status}${detail.message ? `: ${detail.message}` : ""}.`,
+      `CandidGrid API ${path} returned ${response.status}${detail.message ? `: ${detail.message}` : ""}.`,
       response.status,
       detail,
     );

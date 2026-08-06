@@ -238,7 +238,7 @@ export function describeCollectorMaintenanceFailure(
     : {
         code: "COLLECTOR_MAINTENANCE_RETRY",
         remediation:
-          "A local collector step failed without changing connection health. WorkMap will retry from durable state on the next trusted page event or maintenance cycle.",
+          "A local collector step failed without changing connection health. CandidGrid will retry from durable state on the next trusted page event or maintenance cycle.",
       };
 }
 
@@ -624,13 +624,13 @@ export class BrowserExtensionRuntimeV2 {
     try {
       const focusedWindow = await runCollectorMaintenanceStep(
         "FOCUS_WINDOW_QUERY_RETRY",
-        "WorkMap could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
+        "CandidGrid could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
         () => getWindow(this.chromeApi, senderTab.windowId!),
       );
       if (!isUsableFocusedWindow(focusedWindow)) return;
       const activeTabs = await runCollectorMaintenanceStep(
         "FOCUS_TAB_QUERY_RETRY",
-        "WorkMap could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
+        "CandidGrid could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
         () => queryTabs(this.chromeApi, {
           active: true,
           windowId: senderTab.windowId,
@@ -657,7 +657,7 @@ export class BrowserExtensionRuntimeV2 {
       };
       await runCollectorMaintenanceStep(
         "FOCUS_STATE_PERSIST_RETRY",
-        "WorkMap confirmed the foreground page but could not persist its local Focus recovery state. It will retry without backfilling unproven time.",
+        "CandidGrid confirmed the foreground page but could not persist its local Focus recovery state. It will retry without backfilling unproven time.",
         () => this.store.writeRuntimeState(this.state!),
       );
       await this.restoreCollectorIfAllowed();
@@ -1133,8 +1133,18 @@ export class BrowserExtensionRuntimeV2 {
     if (!this.state) return;
     const hadEngine = this.engine !== null;
     if (this.engine) {
+      const checkpoint = this.engine.checkpoint();
+      const boundary = this.state.clock
+        ? authorizedPolicyCloseMonotonic(
+            this.state.policy,
+            this.state.clock,
+            checkpoint.lastObservedAtMonotonicMs,
+            atMonotonicMs,
+            serverNow(this.state),
+          )
+        : atMonotonicMs;
       await this.persistUpdate(
-        this.engine.clearFocus(atMonotonicMs),
+        this.engine.clearFocus(boundary),
         immediateSync,
         deferSync,
       );
@@ -1217,7 +1227,7 @@ export class BrowserExtensionRuntimeV2 {
     }
     const tabs = await runCollectorMaintenanceStep(
       "OPEN_RUNTIME_TAB_QUERY_RETRY",
-      "WorkMap could not refresh the eligible open-tab inventory. Existing durable Domain runtime is preserved and reconciliation will retry.",
+      "CandidGrid could not refresh the eligible open-tab inventory. Existing durable Domain runtime is preserved and reconciliation will retry.",
       () => queryTabs(this.chromeApi, {}),
     );
     const domains = tabs
@@ -1240,8 +1250,18 @@ export class BrowserExtensionRuntimeV2 {
     if (!this.state) return;
     const hadEngine = this.openRuntimeEngine !== null;
     if (this.openRuntimeEngine) {
+      const checkpoint = this.openRuntimeEngine.checkpoint();
+      const boundary = this.state.openRuntimeClock
+        ? authorizedPolicyCloseMonotonic(
+            this.state.policy,
+            this.state.openRuntimeClock,
+            checkpoint.lastObservedAtMonotonicMs,
+            atMonotonicMs,
+            serverNow(this.state),
+          )
+        : atMonotonicMs;
       await this.persistOpenRuntimeUpdate(
-        this.openRuntimeEngine.clear(atMonotonicMs),
+        this.openRuntimeEngine.clear(boundary),
         immediateSync,
       );
     }
@@ -1353,7 +1373,7 @@ export class BrowserExtensionRuntimeV2 {
         terminal: false,
         count: 1,
         remediation:
-          "Focus was sealed at the last durable observation. WorkMap did not backfill the unobserved sleep, restart, or clock-change gap.",
+          "Focus was sealed at the last durable observation. CandidGrid did not backfill the unobserved sleep, restart, or clock-change gap.",
       }),
     };
     await this.store.writeRuntimeState(this.state);
@@ -1788,7 +1808,7 @@ export class BrowserExtensionRuntimeV2 {
     if (!this.state) return;
     const window = await runCollectorMaintenanceStep(
       "FOCUS_WINDOW_QUERY_RETRY",
-      "WorkMap could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
+      "CandidGrid could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
       () => getLastFocusedWindow(this.chromeApi),
     );
     if (!isUsableFocusedWindow(window)) {
@@ -1807,7 +1827,7 @@ export class BrowserExtensionRuntimeV2 {
     if (state.systemIdle) return;
     const activeTabs = await runCollectorMaintenanceStep(
       "FOCUS_TAB_QUERY_RETRY",
-      "WorkMap could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
+      "CandidGrid could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
       () => queryTabs(this.chromeApi, {
         active: true,
         windowId,
@@ -2284,7 +2304,7 @@ export class BrowserExtensionRuntimeV2 {
                 terminal: false,
                 count: 1,
                 remediation:
-                  "Grant WorkMap access to HTTP/HTTPS websites, then reload the Options page.",
+                  "Grant CandidGrid access to HTTP/HTTPS websites, then reload the Options page.",
               }),
         };
         await this.store.writeRuntimeState(this.state);
@@ -2310,7 +2330,7 @@ export class BrowserExtensionRuntimeV2 {
             terminal: false,
             count: 1,
             remediation:
-              "Reload the extension. WorkMap will retry content-script registration without collecting protected pages.",
+              "Reload the extension. CandidGrid will retry content-script registration without collecting protected pages.",
           }),
         };
         await this.store.writeRuntimeState(this.state);
@@ -2691,13 +2711,13 @@ export function hasLifecycleDiscontinuity(
 
 function describeBrowserPolicyRequirement(policy: DeviceTrackingPolicyV2) {
   if (policy.scheduleTimeZoneState !== "CONFIRMED") {
-    return "Tracking is waiting for the workspace Owner or Manager to confirm the policy time zone in WorkMap Compliance.";
+    return "Tracking is waiting for the workspace Owner or Manager to confirm the policy time zone in CandidGrid Compliance.";
   }
   if (policy.acknowledgementState !== "ACKNOWLEDGED") {
-    return "Tracking is waiting for this employee to review and acknowledge the current WorkMap policy.";
+    return "Tracking is waiting for this employee to review and acknowledge the current CandidGrid policy.";
   }
   if (!policy.collectDomainFocus) {
-    return "Browser domain tracking is disabled by the current WorkMap policy.";
+    return "Browser domain tracking is disabled by the current CandidGrid policy.";
   }
   if (!policy.policyLeaseId || policy.allowedUtcWindows.length === 0) {
     return "Tracking is waiting for a valid policy collection window. It will retry automatically.";
@@ -2769,6 +2789,44 @@ export function policyBoundaryMonotonic(
   );
 }
 
+/**
+ * Browser events can arrive after a policy window or lease has ended but
+ * before the next MV3 alarm refreshes policy. In that case the event is only
+ * evidence that collection has stopped; it is not authority to extend the
+ * interval through the event time. Clamp closure to the latest authorised UTC
+ * boundary while preserving monotonic engine progress.
+ */
+export function authorizedPolicyCloseMonotonic(
+  policy: DeviceTrackingPolicyV2 | null,
+  clock: NonNullable<BrowserTrackingRuntimeStateV2["clock"]>,
+  lastObservedAtMonotonicMs: number,
+  requestedAtMonotonicMs: number,
+  nowServerMs: number,
+) {
+  if (!policy) return lastObservedAtMonotonicMs;
+  if (collectorStateForPolicy(policy, nowServerMs) === "HEALTHY") {
+    return requestedAtMonotonicMs;
+  }
+  const completedBoundaries = policy.allowedUtcWindows
+    .map((window) => Date.parse(window.endsAt))
+    .filter((value) => Number.isFinite(value) && value <= nowServerMs);
+  const leaseExpiresAt = policy.policyLeaseExpiresAt
+    ? Date.parse(policy.policyLeaseExpiresAt)
+    : Number.NaN;
+  if (Number.isFinite(leaseExpiresAt) && leaseExpiresAt <= nowServerMs) {
+    completedBoundaries.push(leaseExpiresAt);
+  }
+  const latestAuthorizedBoundary = completedBoundaries.sort(
+    (left, right) => right - left,
+  )[0];
+  return policyBoundaryMonotonic(
+    clock,
+    lastObservedAtMonotonicMs,
+    latestAuthorizedBoundary,
+    requestedAtMonotonicMs,
+  );
+}
+
 export function isRetryableError(error: unknown) {
   if (error instanceof BrowserRuntimeDiagnosticError) {
     return error.retryable;
@@ -2812,7 +2870,7 @@ export function classifyRetryableConnectionFailure(input: {
   ) {
     return { connectionState: "ONLINE", statusTransition: null };
   }
-  // An online browser network interface does not prove that the WorkMap API is
+  // An online browser network interface does not prove that the CandidGrid API is
   // unreachable. Keep the request failure in bounded diagnostics and let the
   // server's heartbeat-gap lane infer one honest interruption if it persists.
   return { connectionState: "OFFLINE", statusTransition: null };

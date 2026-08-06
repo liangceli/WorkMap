@@ -62,7 +62,7 @@ function roomDescription(destination: OfficeDestination, isFocusRoom: boolean, i
   if (isMeetingRoom) {
     return "People in this room may be in a scheduled or ad-hoc meeting.";
   }
-  return destination.description ?? "A WorkMap office area for presence and collaboration.";
+  return destination.description ?? "A CandidGrid office area for presence and collaboration.";
 }
 
 const styles = {

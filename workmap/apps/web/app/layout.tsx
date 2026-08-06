@@ -5,8 +5,8 @@ import "./globals.css";
 import "./workspace-redesign.css";
 
 export const metadata: Metadata = {
-  title: "WorkMap",
-  description: "2D virtual office and compliant work visibility platform"
+  title: "CandidGrid",
+  description: "Privacy-conscious work visibility and virtual office platform"
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

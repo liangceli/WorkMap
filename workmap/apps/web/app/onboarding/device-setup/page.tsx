@@ -134,7 +134,7 @@ export default function DeviceSetupPage() {
     <main className="wm-onboarding-page wm-device-onboarding" style={styles.page}>
       <section className="wm-onboarding-shell" style={styles.shell}>
         <p style={styles.eyebrow}>Device setup</p>
-        <h1 style={styles.title}>Connect WorkMap presence tools</h1>
+        <h1 style={styles.title}>Connect CandidGrid presence tools</h1>
         <p style={styles.subtitle}>
           Review what the paired Desktop Agent and Browser Extension collect before enabling transparent activity summaries.
         </p>

@@ -95,7 +95,7 @@ test("transient request failures do not create false connection outages", () => 
       nowMs: confirmedAtMs + BROWSER_SERVER_HEARTBEAT_FRESH_MS + 1,
     }),
     { connectionState: "OFFLINE", statusTransition: null },
-    "an online network interface cannot prove WorkMap connectivity after the heartbeat expires",
+    "an online network interface cannot prove CandidGrid connectivity after the heartbeat expires",
   );
   assert.deepEqual(
     classifyRetryableConnectionFailure({

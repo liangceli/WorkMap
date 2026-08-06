@@ -38,11 +38,11 @@ test("local extension status does not preserve stale connected state", async () 
   const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
   const types = await readFile(new URL("../src/trackingV2Types.ts", import.meta.url), "utf8");
 
-  assert.equal(manifest.version, "0.5.15");
-  assert.equal(packageJson.version, "0.5.15");
+  assert.equal(manifest.version, "0.5.17");
+  assert.equal(packageJson.version, "0.5.17");
   assert.equal(manifest.incognito, "not_allowed");
   assert.equal(manifest.background.service_worker, "dist/backgroundV2.js");
-  assert.match(types, /browser-extension-mv3\/0\.5\.15/);
+  assert.match(types, /browser-extension-mv3\/0\.5\.17/);
   assert.match(api, /BROWSER_EXTENSION_VERSION/);
   assert.match(background, /connectionState === "ONLINE"/);
   assert.match(background, /connectionState === "AUTH_REQUIRED"/);
@@ -84,12 +84,61 @@ test("options page shows pairing progress and times out stuck Edge permission pr
 
   for (const marker of [
     "Requesting Edge website tracking permission",
-    "Registering WorkMap domain tracker",
-    "Pairing with WorkMap API",
+    "Registering CandidGrid domain tracker",
+    "Pairing with CandidGrid API",
     "Edge did not finish the website tracking permission request",
     "setBusy(true",
     "withTimeout",
   ]) assert(options.includes(marker), `missing ${marker}`);
+});
+
+test("release branding uses the CandidGrid name and icon set", async () => {
+  const manifest = JSON.parse(await readFile(new URL("../manifest.json", import.meta.url), "utf8"));
+  const optionsHtml = await readFile(new URL("../options.html", import.meta.url), "utf8");
+  const buildScript = await readFile(new URL("../scripts/build-alpha.mjs", import.meta.url), "utf8");
+  const packageScript = await readFile(new URL("../scripts/package-alpha.mjs", import.meta.url), "utf8");
+
+  assert.equal(manifest.name, "CandidGrid Domain Tracking Alpha");
+  assert.deepEqual(manifest.icons, {
+    16: "icons/candidgrid-16.png",
+    32: "icons/candidgrid-32.png",
+    48: "icons/candidgrid-48.png",
+    128: "icons/candidgrid-128.png",
+  });
+  assert.match(optionsHtml, /CandidGrid Domain Tracking/);
+  assert.match(optionsHtml, /icons\/candidgrid-48\.png/);
+  assert.doesNotMatch(optionsHtml, /WorkMap/);
+  assert.match(buildScript, /\.\.\/icons\//);
+  assert.match(packageScript, /CandidGrid-Browser-Extension-/);
+
+  for (const size of [16, 32, 48, 128]) {
+    const png = await readFile(new URL(`../icons/candidgrid-${size}.png`, import.meta.url));
+    assert.equal(png.subarray(1, 4).toString("ascii"), "PNG");
+    assert.equal(png.readUInt32BE(16), size);
+    assert.equal(png.readUInt32BE(20), size);
+  }
+});
+
+test("user-visible extension surfaces do not retain the old brand", async () => {
+  const files = [
+    "../manifest.json",
+    "../options.html",
+    "../src/backgroundV2.ts",
+    "../src/contentRegistration.ts",
+    "../src/extensionApi.ts",
+    "../src/hostnameExclusions.ts",
+    "../src/options.ts",
+    "../src/optionsDiagnostics.ts",
+    "../scripts/package-alpha.mjs",
+  ];
+  for (const file of files) {
+    const source = await readFile(new URL(file, import.meta.url), "utf8");
+    assert.doesNotMatch(
+      source.replaceAll("X-WorkMap-Request-Id", "X-Request-Id"),
+      /WorkMap/,
+      `${file} retains old user-visible branding`,
+    );
+  }
 });
 
 test("content script emits only trusted transient pulses and never owns the idle deadline", async () => {

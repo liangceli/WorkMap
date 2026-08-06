@@ -89,7 +89,7 @@ export default function CognitoCallbackPage() {
         hasAvatar: Boolean(backendAvatar) || defaultState.hasAvatar,
       };
       saveUserSetupState(nextState);
-      setStatus("Cognito sign-in complete. Opening WorkMap...");
+      setStatus("Cognito sign-in complete. Opening CandidGrid...");
       router.replace(contextResult.data.role === "OWNER" && !backendAvatar ? "/onboarding/avatar" : getNextRouteForUser(nextState));
     }
 

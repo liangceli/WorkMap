@@ -1500,7 +1500,7 @@ async function openContactLauncher(
 ) {
   if (!apiOptions) {
     closeReservedContactWindow(reservedWindow);
-    showToast("Contact links require an authenticated WorkMap API session.");
+    showToast("Contact links require an authenticated CandidGrid API session.");
     return;
   }
 
@@ -1522,7 +1522,7 @@ async function openContactLauncher(
 
   if (provider === "email") {
     if (!navigateReservedContactWindow(reservedWindow, href)) {
-      showToast("Outlook could not be opened. Allow pop-ups for WorkMap and try again.");
+      showToast("Outlook could not be opened. Allow pop-ups for CandidGrid and try again.");
       return;
     }
   } else {
@@ -1924,7 +1924,7 @@ function drawPlayer(
 
     context.fillStyle = local ? wm.colors.surface : wm.colors.text;
     context.font = "700 14px Arial";
-    context.fillText(seated ? "SIT" : local ? "YOU" : "WM", player.x, drawY + 5);
+    context.fillText(seated ? "SIT" : local ? "YOU" : "CG", player.x, drawY + 5);
 
     if (!seated) {
       drawDirectionCue(context, player.x, drawY, player.direction);

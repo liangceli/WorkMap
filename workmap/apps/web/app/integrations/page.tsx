@@ -24,7 +24,7 @@ export default function IntegrationsPage() {
         />
 
         <WorkMapPrivacyNotice title="Current MVP scope">
-          These are link-based integration entry points. WorkMap does not request Microsoft Graph permissions, read message
+          These are link-based integration entry points. CandidGrid does not request Microsoft Graph permissions, read message
           content, read email bodies, or record call audio.
         </WorkMapPrivacyNotice>
 

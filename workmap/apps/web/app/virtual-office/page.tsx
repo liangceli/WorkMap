@@ -63,7 +63,7 @@ export default function VirtualOfficePage() {
           <p style={styles.eyebrow}>Virtual Office</p>
           <h1 style={styles.title}>Workspace access unavailable</h1>
           <p style={styles.text}>{gate.reason}</p>
-          <a href="/" style={styles.primaryLink}>Return to WorkMap</a>
+          <a href="/" style={styles.primaryLink}>Return to CandidGrid</a>
         </section>
       </main>
     );

@@ -39,7 +39,7 @@ export async function ensureDomainContentScriptRegistered(injectExistingTabs = f
 function hasTrackingOrigins() {
   return callbackWithTimeout<boolean>(
     (resolve) => chrome.permissions.contains({ origins: TRACKED_ORIGINS }, resolve),
-    "Timed out checking WorkMap website tracking permission.",
+    "Timed out checking CandidGrid website tracking permission.",
   );
 }
 
@@ -50,15 +50,15 @@ function getRegisteredScripts() {
       if (error) reject(new Error(error.message ?? "Unable to inspect registered content scripts."));
       else resolve(scripts);
     });
-  }, "Timed out checking registered WorkMap content scripts.");
+  }, "Timed out checking registered CandidGrid content scripts.");
 }
 
 function callbackPromise(invoke: (done: () => void) => void) {
   return callbackWithTimeout<void>((resolve, reject) => invoke(() => {
     const error = chrome.runtime.lastError;
-    if (error) reject(new Error(error.message ?? "Unable to register the WorkMap content script."));
+    if (error) reject(new Error(error.message ?? "Unable to register the CandidGrid content script."));
     else resolve();
-  }), "Timed out registering the WorkMap content script.");
+  }), "Timed out registering the CandidGrid content script.");
 }
 
 async function injectCurrentWebTabs() {
@@ -73,7 +73,7 @@ async function injectCurrentWebTabs() {
         void chrome.runtime.lastError;
         resolve();
       });
-    }, "Timed out injecting WorkMap into an existing tab.", TAB_INJECTION_TIMEOUT_MS)];
+    }, "Timed out injecting CandidGrid into an existing tab.", TAB_INJECTION_TIMEOUT_MS)];
   }));
 }
 
@@ -101,7 +101,7 @@ function callbackWithTimeout<T>(
         (error) => finish(() => reject(error)),
       );
     } catch (error) {
-      finish(() => reject(error instanceof Error ? error : new Error("WorkMap browser extension API call failed.")));
+      finish(() => reject(error instanceof Error ? error : new Error("CandidGrid browser extension API call failed.")));
     }
   });
 }

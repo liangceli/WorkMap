@@ -98,7 +98,7 @@ export function useVirtualOfficeRealtime({
         if (cancelled) return;
         if (!session) {
           setConnectionState("error");
-          onErrorRef.current?.("WorkMap authentication ended.");
+          onErrorRef.current?.("CandidGrid authentication ended.");
           return;
         }
 

@@ -100,7 +100,7 @@ export function CognitoAuthForm({
 
         if (result.complete) {
           setScreen("sign_in");
-          setMessage({ tone: "success", text: "Account created. Sign in to continue to WorkMap." });
+          setMessage({ tone: "success", text: "Account created. Sign in to continue to CandidGrid." });
         } else {
           setDeliveryDestination(result.destination);
           setScreen("confirm_sign_up");
@@ -114,7 +114,7 @@ export function CognitoAuthForm({
         await confirmCognitoAccount(accountEmail, confirmationCode);
         setConfirmationCode("");
         setScreen("sign_in");
-        setMessage({ tone: "success", text: "Email confirmed. Sign in to continue to WorkMap." });
+        setMessage({ tone: "success", text: "Email confirmed. Sign in to continue to CandidGrid." });
       } else if (screen === "forgot_password") {
         const result = await requestCognitoPasswordReset(accountEmail);
 
@@ -162,7 +162,7 @@ export function CognitoAuthForm({
 
   const handleSignInResult = async (result: CognitoSignInResult) => {
     if (result.signedIn) {
-      setMessage({ tone: "success", text: "Cognito sign-in complete. Opening WorkMap..." });
+      setMessage({ tone: "success", text: "Cognito sign-in complete. Opening CandidGrid..." });
       await onAuthenticated(result.session);
       return;
     }
@@ -529,7 +529,7 @@ function screenTitle(screen: AuthScreen, context: CognitoAuthFormProps["accountC
     case "sign_in_challenge":
       return "Complete secure sign-in";
     default:
-      return "Sign in to WorkMap";
+      return "Sign in to CandidGrid";
   }
 }
 
@@ -546,7 +546,7 @@ function screenDescription(screen: AuthScreen, context: CognitoAuthFormProps["ac
     case "confirm_reset_password":
       return destination ? `Use the code sent to ${destination}.` : "Enter the reset code and choose a new password.";
     case "sign_in_challenge":
-      return "Cognito requires one more security step before WorkMap can continue.";
+      return "Cognito requires one more security step before CandidGrid can continue.";
     default:
       return context === "employee" ? "Use the Cognito account connected to your invitation." : "Use your Cognito account to open the correct workspace.";
   }

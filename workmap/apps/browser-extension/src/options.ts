@@ -60,21 +60,21 @@ async function pair() {
   const apiBaseUrl = apiInput.value.trim().replace(/\/+$/, "");
   const code = codeInput.value.trim();
   if (!isAllowedApiUrl(apiBaseUrl)) return show("Use HTTPS, or localhost for development.", true);
-  if (!code) return show("Enter the short-lived pairing code from WorkMap.", true);
+  if (!code) return show("Enter the short-lived pairing code from CandidGrid.", true);
   let paired = false;
   setBusy(true, "Requesting permission...");
   try {
     showProgress("Requesting Edge website tracking permission...");
     if (!await requestTrackingPermission(apiBaseUrl)) throw new Error("Website tracking permission was not granted.");
     setBusy(true, "Registering tracker...");
-    showProgress("Registering WorkMap domain tracker in Edge...");
+    showProgress("Registering CandidGrid domain tracker in Edge...");
     if (!await ensureDomainContentScriptRegistered(true)) {
-      throw new Error("Website tracking permission is required. Open edge://extensions, allow WorkMap website access, then try again.");
+      throw new Error("Website tracking permission is required. Open edge://extensions, allow CandidGrid website access, then try again.");
     }
     await writeStoredState({ workmapStatus: { state: "pairing", queuedEvents: 0, queuedStatusEvents: 0 } });
     await refreshStatus();
-    setBusy(true, "Pairing with WorkMap...");
-    showProgress("Pairing with WorkMap API...");
+    setBusy(true, "Pairing with CandidGrid...");
+    showProgress("Pairing with CandidGrid API...");
     const result = await exchangePairingCode(apiBaseUrl, code, browserSelect.value);
     await savePairedConfig({
       apiBaseUrl,
@@ -94,7 +94,7 @@ async function pair() {
     });
     await trackingStore.close();
     setBusy(true, "Starting tracker...");
-    showProgress("Starting WorkMap Tracking v2...");
+    showProgress("Starting CandidGrid Tracking v2...");
     await notifyBackgroundPaired();
     codeInput.value = "";
     show("Paired and initialized. Domain tracking will run while the browser is active.", false);
@@ -128,14 +128,14 @@ function notifyBackgroundPaired() {
             reject(
               new Error(
                 runtimeError.message ??
-                  "The WorkMap background worker did not receive the pairing update.",
+                  "The CandidGrid background worker did not receive the pairing update.",
               ),
             );
           } else if (!response?.ok) {
             reject(
               new Error(
                 response?.error ??
-                  "The WorkMap background worker could not initialize tracking.",
+                  "The CandidGrid background worker could not initialize tracking.",
               ),
             );
           } else {
@@ -388,7 +388,7 @@ async function requestTrackingPermission(apiBaseUrl: string) {
         else resolve(allowed);
       });
     }),
-    "Edge did not finish the website tracking permission request. Open edge://extensions, keep WorkMap enabled, allow website access, reload this Options page, and try again.",
+    "Edge did not finish the website tracking permission request. Open edge://extensions, keep CandidGrid enabled, allow website access, reload this Options page, and try again.",
     PERMISSION_TIMEOUT_MS,
   );
 }

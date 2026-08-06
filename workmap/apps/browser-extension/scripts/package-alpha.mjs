@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 
 if (platform !== "win32") {
   throw new Error(
-    "The WorkMap browser-extension release archive is generated on Windows.",
+    "The CandidGrid browser-extension release archive is generated on Windows.",
   );
 }
 
@@ -23,7 +23,7 @@ const packageJson = JSON.parse(
 );
 const archivePath = join(
   artifactDirectory,
-  `WorkMap-Browser-Extension-${packageJson.version}.zip`,
+  `CandidGrid-Browser-Extension-${packageJson.version}.zip`,
 );
 
 await mkdir(artifactDirectory, { recursive: true });

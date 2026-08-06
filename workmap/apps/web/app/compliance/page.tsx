@@ -37,7 +37,7 @@ export default function CompliancePage() {
         <WorkMapPageHeader
           eyebrow="Compliance"
           title="Transparency policy"
-          subtitle="Make WorkMap activity summaries explicit, role-based, and easy for employees to understand."
+          subtitle="Make CandidGrid activity summaries explicit, role-based, and easy for employees to understand."
           actions={
             <>
               <WorkMapButton href="/settings">Settings</WorkMapButton>
@@ -48,8 +48,8 @@ export default function CompliancePage() {
 
         <WorkMapPrivacyNotice title={onboardingMode ? "First-time transparency step" : "Workspace transparency boundary"}>
           {onboardingMode
-            ? "Review what WorkMap does and does not collect before entering the workspace."
-            : "Review what is visible in WorkMap, what is not collected, and whether the current Cognito session can record acknowledgement through the backend policy API."}
+            ? "Review what CandidGrid does and does not collect before entering the workspace."
+            : "Review what is visible in CandidGrid, what is not collected, and whether the current Cognito session can record acknowledgement through the backend policy API."}
         </WorkMapPrivacyNotice>
 
         <CompliancePolicyPanel />
@@ -59,7 +59,7 @@ export default function CompliancePage() {
             <div>
               <h2 style={styles.ackTitle}>Ready to continue?</h2>
               <p style={styles.ackText}>
-                I understand that WorkMap uses transparent, role-based visibility and does not collect private content.
+                I understand that CandidGrid uses transparent, role-based visibility and does not collect private content.
               </p>
             </div>
             <button type="button" onClick={acknowledgeAndContinue} style={styles.ackButton}>

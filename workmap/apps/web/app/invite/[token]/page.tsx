@@ -56,7 +56,7 @@ export default function InviteAcceptancePage() {
           setPreviewRouteUnavailable(true);
           setCognitoAuth({ available: false, reason: "Invitation preview API is unavailable." });
           savePendingInviteToken(token);
-          setStatus("Invitation details are temporarily unavailable. Try this link again after the WorkMap API update completes.");
+          setStatus("Invitation details are temporarily unavailable. Try this link again after the CandidGrid API update completes.");
           return;
         }
 
@@ -184,18 +184,18 @@ export default function InviteAcceptancePage() {
   return (
     <main className="wm-invitation-page" style={styles.page}>
       <section className="wm-invitation-card" style={styles.card}>
-        <p style={styles.eyebrow}>WorkMap invitation</p>
+        <p style={styles.eyebrow}>CandidGrid invitation</p>
         <h1 style={styles.title}>Join workspace</h1>
         <p style={styles.text}>{status}</p>
         <section style={styles.flowNote}>
           <strong>What happens next</strong>
-          <span>Employees must use the invited Cognito email before WorkMap takes them through compliance, avatar/profile, and device setup.</span>
+          <span>Employees must use the invited Cognito email before CandidGrid takes them through compliance, avatar/profile, and device setup.</span>
         </section>
         {invitePreview && cognitoAuth?.available && !emailMismatch ? (
           <section style={styles.lockPanel}>
             <span style={styles.lockLabel}>Invited account</span>
             <input value={invitePreview.invitedEmail} readOnly aria-label="Invited email" style={styles.readOnlyInput} />
-            <span style={styles.lockHint}>WorkMap accepts this invitation only for this verified email address.</span>
+            <span style={styles.lockHint}>CandidGrid accepts this invitation only for this verified email address.</span>
           </section>
         ) : previewRouteUnavailable ? (
           <section style={styles.lockPanel}>

@@ -22,8 +22,8 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
       <section aria-modal="true" role="dialog" aria-labelledby="policy-title" style={styles.modal}>
         <div style={styles.header}>
           <div>
-            <p style={styles.eyebrow}>WorkMap visibility policy{policyVersion ? ` / ${policyVersion}` : ""}</p>
-            <h2 id="policy-title" style={styles.title}>Acknowledge WorkMap visibility</h2>
+            <p style={styles.eyebrow}>CandidGrid visibility policy{policyVersion ? ` / ${policyVersion}` : ""}</p>
+            <h2 id="policy-title" style={styles.title}>Acknowledge CandidGrid visibility</h2>
           </div>
           <button type="button" aria-label="Close policy modal" onClick={onClose} disabled={busy} style={styles.closeButton}>
             x
@@ -31,11 +31,11 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
         </div>
 
         <p style={styles.bodyText}>
-          WorkMap may collect presence, avatar location, workspace status, desktop app name and usage duration, browser domain and
+          CandidGrid may collect presence, avatar location, workspace status, desktop app name and usage duration, browser domain and
           usage duration, device heartbeat, freshness, and last-seen context so workspace activity summaries stay transparent.
           {collectOpenRuntime ? " The current policy also measures how long an App has a user-visible Windows window open; this is separate from Focus active time." : ""}
           {collectDomainOpenRuntime ? " It also measures how long at least one eligible browser tab for a hostname remains open; this is separate from Domain Focus and may overlap across different hostnames." : ""}
-          WorkMap messages, waves, reactions, and Notice read state are stored when users intentionally send them. It does not
+          CandidGrid messages, waves, reactions, and Notice read state are stored when users intentionally send them. It does not
           collect screenshots, screen recordings, keystrokes, clipboard data, webcam or microphone data, external private
           message, Teams, or email body content, webpage body content, form inputs, or passwords.
         </p>
@@ -54,7 +54,7 @@ export function PolicyAcknowledgementModal({ open, busy = false, policyVersion, 
               <li>Workspace status and freshness</li>
               <li>Last-seen timestamp</li>
               <li>Policy acknowledgement time</li>
-              <li>WorkMap messages, waves, reactions, and Notice read state</li>
+              <li>CandidGrid messages, waves, reactions, and Notice read state</li>
             </ul>
           </div>
           <div style={styles.panel}>

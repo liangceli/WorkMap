@@ -1,11 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "WorkMap Domain Tracking Alpha",
-  "version": "0.5.15",
+  "name": "CandidGrid Domain Tracking Alpha",
+  "version": "0.5.17",
   "description": "Transparent domain focus, idle, and policy-controlled open/runtime tracking. Stores hostnames only, never full URLs or page content.",
   "permissions": ["storage", "tabs", "idle", "alarms", "scripting"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "incognito": "not_allowed",
+  "icons": {
+    "16": "icons/candidgrid-16.png",
+    "32": "icons/candidgrid-32.png",
+    "48": "icons/candidgrid-48.png",
+    "128": "icons/candidgrid-128.png"
+  },
   "background": {
     "service_worker": "dist/backgroundV2.js",
     "type": "module"

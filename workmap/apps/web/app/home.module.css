@@ -72,13 +72,13 @@
   height: 34px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  border-radius: 6px;
-  color: var(--white);
-  font-size: 12px;
-  line-height: 1;
-  font-weight: 900;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 9px;
+  background: var(--off-white);
+  padding: 4px;
 }
+
+.brandMark img { width: 100%; height: 100%; object-fit: contain; }
 
 .navLinks { display: flex; justify-content: center; align-items: center; gap: 30px; }
 .navLinks > a,

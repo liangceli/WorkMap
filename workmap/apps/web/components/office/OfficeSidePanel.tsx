@@ -197,7 +197,7 @@ export function OfficeSidePanel({
               <article key={destination.id} style={styles.roomCard}>
                 <span style={styles.roomBadge}>{destination.type.replace("_", " ")}</span>
                 <h3 style={styles.cardTitle}>{destination.name}</h3>
-                <p style={styles.cardText}>{destination.description ?? "WorkMap office area."}</p>
+                <p style={styles.cardText}>{destination.description ?? "CandidGrid office area."}</p>
                 <div style={styles.twoActions}>
                   <button type="button" onClick={() => onGoToDestination(destination)} style={styles.primaryButton}>Go to room</button>
                   <button type="button" onClick={() => onOpenPanel("people")} style={styles.secondaryButton}>View people</button>
@@ -209,7 +209,7 @@ export function OfficeSidePanel({
 
         {activePanel === "chat" ? (
           <section style={styles.stack}>
-            <p style={styles.note}>WorkMap quick messages are frontend-only notes in this MVP. They do not sync to teammates or read Teams or Outlook content.</p>
+            <p style={styles.note}>CandidGrid quick messages are frontend-only notes in this MVP. They do not sync to teammates or read Teams or Outlook content.</p>
             <select value={chatTarget} onChange={(event) => setChatTarget(event.target.value)} style={styles.input}>
               <option value="general"># general</option>
               <option value="announcements"># announcements</option>
@@ -236,7 +236,7 @@ export function OfficeSidePanel({
 
         {activePanel === "calendar" ? (
           <section style={styles.stack}>
-            <p style={styles.note}>Calendar is a schedule launcher in this MVP. WorkMap does not sync calendar content yet.</p>
+            <p style={styles.note}>Calendar is a schedule launcher in this MVP. CandidGrid does not sync calendar content yet.</p>
             <button
               type="button"
               style={{ ...styles.primaryButton, ...styles.disabledButton }}

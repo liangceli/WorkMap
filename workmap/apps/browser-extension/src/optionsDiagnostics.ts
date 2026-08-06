@@ -45,7 +45,7 @@ export function deriveStatusHealth(
   return {
     label: "Offline",
     detail:
-      "The last server-confirmed heartbeat is older than 90 seconds. The extension is retrying until WorkMap confirms a fresh heartbeat.",
+      "The last server-confirmed heartbeat is older than 90 seconds. The extension is retrying until CandidGrid confirms a fresh heartbeat.",
   };
 }
 

@@ -86,7 +86,7 @@ export default function CompanyOnboardingPage() {
     <main className="wm-onboarding-page wm-company-onboarding" style={styles.page}>
       <section className="wm-onboarding-shell" style={styles.shell}>
         <p style={styles.eyebrow}>Owner onboarding</p>
-        <h1 style={styles.title}>Create your WorkMap workspace</h1>
+        <h1 style={styles.title}>Create your CandidGrid workspace</h1>
         <p style={styles.subtitle}>Create the company workspace, confirm your profile, then invite employees into the same tenant.</p>
 
         <section className="wm-onboarding-card" style={styles.card}>
@@ -109,7 +109,7 @@ export default function CompanyOnboardingPage() {
           </label>
           <section style={styles.note}>
             <strong>Privacy-forward setup</strong>
-            <span>Tracking rules are configured before employees join. Your confirmed display name is used in WorkMap directory and office labels.</span>
+            <span>Tracking rules are configured before employees join. Your confirmed display name is used in CandidGrid directory and office labels.</span>
           </section>
           <section style={styles.ownerSteps}>
             <strong>Owner path</strong>

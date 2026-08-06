@@ -1,5 +1,40 @@
 # Latest QA Handoff
 
+## 2026-08-06 Browser Extension 0.5.17 CandidGrid Branding QA
+
+### Reviewed Implementation And Findings
+
+- Pass: manifest, Options title/header/favicon, permission/pairing/policy/retry diagnostics, generated unpacked build and release ZIP now use the CandidGrid product name.
+- Pass: 16/32/48/128 transparent icons are derived from `apps/web/public/brand/candidgrid-mark.png`; automated PNG-header checks verify every declared icon has the exact manifest dimension.
+- Pass: the build copies icons into `alpha-unpacked` and the release archive uses the CandidGrid filename. ZIP inspection confirms 26 entries, manifest 0.5.17, CandidGrid name and expected icon paths.
+- Pass: a source regression test rejects any future uppercase `WorkMap` on user-visible Extension surfaces. The sole allowed occurrence is `X-WorkMap-Request-Id`, which remains an API compatibility header.
+- Compatibility review: lowercase `workmap:*` messages, storage/IndexedDB keys, package scope and deployed request contract remain intentionally stable, so a paired 0.5.16/earlier profile can upgrade without a branding-induced reset or queue orphaning.
+- Scope review: no Desktop Agent file, Web source file, backend/shared contract, schema, policy permission, Reports aggregation, tenant/RBAC boundary, credential or privacy collection behavior was changed. Concurrent Web modifications were preserved.
+
+### Test, Artifact, Manual QA, Risks, And Recommendation
+
+- Typecheck: pass. Lint: pass. Full Browser Extension tests: pass, 84/84. Build: pass. Release ZIP: pass.
+- `git diff --check`: pass before final handoff update. Bounded secret scan and final diff check are recorded in the completion report.
+- Artifact: `CandidGrid-Browser-Extension-0.5.17.zip`, 71,153 bytes, SHA-256 `4D733EFE52ED3DA7B7971C8E21B464340D4F3423C24BF8B794893B3125D3E298`.
+- Manual Chrome/Edge load-unpacked upgrade: not run. Remaining risk is limited to browser UI icon rendering and upgrade acceptance with a real paired profile; automated checks cannot prove those environment-level details.
+- Recommendation: automated QA passes. Proceed to Chrome and Edge load-unpacked branding/pairing/tracking acceptance, then publish only with explicit authorization.
+
+## 2026-08-06 Browser Extension 0.5.16 Event-boundary Lease Closure QA
+
+### Findings And Diff Review
+
+- Fixed - High: Focus and parallel Domain open/runtime intervals could be closed at a tab/navigation/blur/lock event occurring after the old lease expired, even though alarm closure was bounded correctly. Every event-driven clear now clamps to the latest authorised policy boundary whenever the policy is no longer healthy.
+- Fixed - Medium: the Browser's five-minute policy refresh cadence equalled the API's five-minute lease-reuse threshold. It is now four minutes, leaving a renewal opportunity while preserving the API's server-side authorization and rejection rules.
+- Regression coverage proves an event 15 seconds after expiry closes one Focus lane and two simultaneous runtime hostnames at the exact expiry timestamp. Normal in-window events continue to use their actual occurrence time.
+- Data-integrity boundary preserved: no rejected interval is reclassified, relabelled, retried as valid, added to Reports, or backfilled. No API/Desktop/Web/schema/auth/RBAC/tenant/privacy behavior changed; concurrent Web work remains untouched.
+
+### Test And Release Status
+
+- Full Browser Extension tests: pass, 82/82. Typecheck: pass. Lint: pass. Build: pass. Release ZIP: pass.
+- ZIP inspection: pass, manifest 0.5.16, 22 entries, 52,301 bytes, SHA-256 `516F7181CFB87922E8A760E5EB8DD68965C0470968D981A050D00BACE92D264C`.
+- `git diff --check`: pass. Bounded secret scan excluding environment, dependency, generated, artifact and reference-only paths: pass.
+- Manual Edge/Chrome load-unpacked upgrade and real policy rollover: not run. Automated QA passes; proceed to Browser-only manual rollover acceptance before any store publication. Existing 0.5.15 dead letters will remain visible as historical terminal evidence.
+
 ## 2026-08-06 Home Product Tabs Real-screen Styling QA
 
 ### Reviewed Implementation And Findings
@@ -4898,6 +4933,36 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 
 - No live upgrade or re-pairing test was run. A normal in-place upgrade is designed to retain local pairing, but uninstalling with local-data deletion or a server-side device revoke requires a new pairing code.
 - Matching API diagnostics must be deployed with the `0.6.2` installer to correlate the Agent's local `requestId` with Render logs.
+
+---
+
+## 2026-08-06 CandidGrid Web Rebrand QA
+
+### Reviewed Implementation
+- User-visible product naming across public and authenticated web routes.
+- Shared CandidGrid mark usage and Next.js browser icon assets.
+- Frontend-only scope boundaries.
+
+### Diff Review Summary
+- No backend, API, database, Prisma, authentication, tracking-client, or deployment files were changed.
+- Internal `@workmap/*` identifiers remain in place for compatibility; only visible branding changed.
+
+### Findings
+- No blocking frontend findings.
+- Residual risk: browsers may temporarily show a cached prior or blank favicon until refreshed.
+
+### Verification Status
+- Web typecheck: passed.
+- Web lint: passed.
+- Web production build: passed.
+- User-visible WorkMap residual scans: passed.
+- `git diff --check`: passed with Windows line-ending warnings only.
+
+### Manual QA Status
+- Not run. Desktop and mobile visual review remains pending.
+
+### Recommendation
+- Pass for frontend review and deployment preparation. No migration or tracking-client release is required.
 
 ---
 

@@ -1,10 +1,13 @@
-export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.15";
+export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.17";
 export const TRACKING_PROTOCOL_VERSION_V2 = 2 as const;
 export const BROWSER_V2_QUEUE_CAPACITY = 10_000;
 export const BROWSER_V2_SYNC_BATCH_SIZE = 50;
 export const BROWSER_V2_IDLE_THRESHOLD_MS = 60_000;
 export const BROWSER_V2_MAX_INTERVAL_MS = 30 * 60_000;
-export const BROWSER_V2_POLICY_REFRESH_MS = 5 * 60_000;
+// Keep the client cadence below the API's five-minute lease-reuse cutoff. If
+// both thresholds are equal, a fetch just before the cutoff can reuse the old
+// lease and leave no second refresh opportunity before it expires.
+export const BROWSER_V2_POLICY_REFRESH_MS = 4 * 60_000;
 export const BROWSER_V2_DIAGNOSTIC_CAPACITY = 100;
 export const BROWSER_V2_DIAGNOSTIC_RETENTION_MS = 14 * 24 * 60 * 60_000;
 export const BROWSER_V2_DEAD_LETTER_CAPACITY = 1_000;

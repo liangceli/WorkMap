@@ -566,7 +566,7 @@ function getDashboardJourney(role: string | null) {
         "Company-wide reports, invites, integrations, and settings are owner/admin areas. Your dashboard focuses on your own presence, compliance status, and personal summary availability.",
       setupTitle: "Your setup checklist",
       alphaNote:
-        "Activity summaries appear only after your paired Desktop Agent or Browser Extension submits events. WorkMap does not show screenshots, keystrokes, external private messages, or webpage content.",
+        "Activity summaries appear only after your paired Desktop Agent or Browser Extension submits events. CandidGrid does not show screenshots, keystrokes, external private messages, or webpage content.",
       setupItems: ["Review compliance", "Finish profile/avatar", "Set up device", "Open office"],
       actions: [
         { label: "Open office", href: "/virtual-office", primary: true },
@@ -585,7 +585,7 @@ function getDashboardJourney(role: string | null) {
       "Use the office and directory for day-to-day presence. Reports and admin actions appear only when the signed-in role can use them.",
     setupTitle: "Resolve workspace context",
     alphaNote:
-        "Sign in with Cognito to see API-backed workspace data. WorkMap no longer displays placeholder rows as tenant metrics.",
+        "Sign in with Cognito to see API-backed workspace data. CandidGrid no longer displays placeholder rows as tenant metrics.",
     setupItems: ["Sign in", "Resolve role", "Load policy", "Load summaries"],
     actions: [
       { label: "Open office", href: "/virtual-office", primary: true },
