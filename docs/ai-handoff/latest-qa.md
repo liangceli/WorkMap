@@ -4966,6 +4966,26 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 
 ---
 
+## 2026-08-06 CandidGrid Logo Contrast Refinement QA
+
+### Reviewed Implementation
+- Dark-surface logo contrast and removal of enclosing logo boxes across public and authenticated frontend chrome.
+
+### Findings
+- No blocking findings. The mark remains readable on both dark and light surfaces through explicit SVG color variants.
+- No functional, backend, database, authentication, Desktop Agent, or Browser Extension files were changed.
+
+### Verification Status
+- Web typecheck: passed.
+- Web lint: passed.
+- `git diff --check`: passed with Windows line-ending warnings only.
+- Browser manual QA and production build: not run for this narrow style-only change.
+
+### Recommendation
+- Pass for frontend visual review.
+
+---
+
 ## 2026-07-20 Tracking V2 Monday Policy-Window Recovery QA
 
 ### Reviewed Implementation

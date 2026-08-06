@@ -375,11 +375,7 @@ const styles = {
     placeItems: "center",
     width: "52px",
     height: "52px",
-    borderRadius: wm.radius.xl,
-    background: wm.colors.surface,
-    border: `1px solid ${wm.colors.border}`,
-    padding: "6px",
-    boxShadow: "0 12px 28px rgba(16, 35, 63, 0.18)",
+    flex: "0 0 52px",
   },
   titleWrap: {
     display: "grid",

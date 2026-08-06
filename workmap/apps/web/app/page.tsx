@@ -167,7 +167,7 @@ export default function HomePage() {
       <header className={`${styles.header} ${headerCompact ? styles.headerCompact : ""} ${menuOpen ? styles.headerMenuOpen : ""}`}>
         <nav className={styles.nav} aria-label="Main navigation">
           <a className={styles.brand} href="#top" aria-label="CandidGrid home" onClick={closeMenu}>
-            <span className={styles.brandMark} aria-hidden="true"><CandidGridMark size={26} priority /></span>
+            <span className={styles.brandMark} aria-hidden="true"><CandidGridMark size={30} tone="dark" priority /></span>
             <span>CandidGrid</span>
           </a>
 
@@ -391,7 +391,7 @@ export default function HomePage() {
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           <div className={styles.footerBrand}>
-            <a className={styles.brandLight} href="#top"><span className={styles.brandMark}><CandidGridMark size={26} /></span>CandidGrid</a>
+            <a className={styles.brandLight} href="#top"><span className={styles.brandMark}><CandidGridMark size={30} tone="dark" /></span>CandidGrid</a>
             <p>Transparent work visibility that respects privacy and builds trust.</p>
           </div>
           <div><strong>Product</strong><a href="#product">Work visibility</a><a href="#how-it-works">How it works</a><a href="#product">Reports</a><a href="#product">Virtual Office</a></div>

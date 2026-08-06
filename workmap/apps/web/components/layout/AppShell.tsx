@@ -251,7 +251,7 @@ export function AppShell({ children, variant = "default" }: AppShellProps) {
     >
       <header className="wm-app-top-nav" style={styles.topNav}>
         <Link href="/" className="wm-app-brand" style={styles.brand}>
-          <span style={styles.logo}><CandidGridMark size={27} priority /></span>
+          <span style={styles.logo}><CandidGridMark size={31} tone="dark" priority /></span>
           <span>
             <strong style={styles.brandTitle}>CandidGrid</strong>
             <span style={styles.brandSub}>{contextLabel}</span>
@@ -445,11 +445,7 @@ const styles = {
     placeItems: "center",
     width: "38px",
     height: "38px",
-    borderRadius: "10px",
-    background: wm.colors.surface,
-    border: `1px solid ${wm.colors.border}`,
-    padding: "5px",
-    boxShadow: "0 10px 24px rgba(16, 35, 63, 0.16)",
+    flex: "0 0 38px",
   },
   brandTitle: {
     display: "block",

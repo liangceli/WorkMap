@@ -7295,6 +7295,32 @@ Correct the password visibility eye button so it aligns inside the right edge of
 
 ---
 
+## 2026-08-06 CandidGrid Logo Contrast Refinement
+
+### Original Task Brief
+- Remove the white logo container and use the approved three-white, one-mint CandidGrid mark on dark backgrounds.
+
+### Changed Files
+- `workmap/apps/web/components/brand/CandidGridMark.tsx`
+- `workmap/apps/web/app/page.tsx`
+- `workmap/apps/web/app/home.module.css`
+- `workmap/apps/web/components/layout/AppShell.tsx`
+- `workmap/apps/web/components/office/VirtualOfficeTopBar.tsx`
+
+### Implementation Summary
+- Replaced the bitmap-backed mark with a crisp inline four-cell SVG that supports light and dark surface variants.
+- Removed the enclosing white/outlined square from the public header/footer, authenticated shell, and Virtual Office top bar.
+- Dark navigation surfaces now use three off-white cells and one mint cell; light surfaces retain the navy-and-mint variant.
+- No routes, handlers, backend, database, authentication, tracking clients, or deployment configuration were changed.
+
+### Verification
+- `pnpm.cmd --filter @workmap/web typecheck`: passed.
+- `pnpm.cmd --filter @workmap/web lint`: passed.
+- `git diff --check`: passed with Windows line-ending warnings only.
+- Browser manual QA and a production build were not run for this narrow style-only refinement.
+
+---
+
 ## 2026-07-20 Tracking V2 Monday Policy-Window Recovery
 
 ### Original Task Brief
