@@ -1,5 +1,23 @@
 # Latest QA Handoff
 
+## 2026-08-06 Home Product Tabs Real-screen Styling QA
+
+### Reviewed Implementation And Findings
+
+- Pass: Work visibility now shows a real WorkMap Dashboard composition with fictional employee names and project-native pixel avatars instead of the abstract signal ledger.
+- Pass: Reports now shows a real WorkMap Reports composition with Demo Workspace aggregate values instead of the abstract capabilities list.
+- Pass: the existing left copy, service tabs, active-state underline, Virtual Office tab, panorama, routes, and CTAs remain unchanged.
+- Pass: desktop keeps the intended two-column hierarchy; mobile stacks copy/features and the full-width screenshot without page overflow. The existing horizontally scrollable service-tab rail remains usable.
+- Privacy/scope review: public assets contain only fictional identities and labeled demo/development data. No real tenant screenshot was committed. No auth/data/API/RBAC/tenant/Agent/Extension code changed.
+
+### Test, Diff, And Manual QA Status
+
+- Web typecheck: pass. Web lint: pass. Web production build: pass.
+- Manual in-app Browser QA: pass at 1600 x 900 and 390 x 844; Work visibility and Reports tab selection, image load/crop, responsive stacking, and console errors were checked. No console errors were found.
+- Normalized source/implementation comparison: pass. Evidence and fidelity review are in `design-qa.md` and `.codex_previews/home-product-screenshots/`.
+- Remaining non-blocking output: existing Next ESLint-plugin warning, webpack cache snapshot warnings, and dev-only LCP priority warning when navigating directly to `#product`.
+- Recommendation: pass. The next round can proceed to deployment or stakeholder visual review.
+
 ## 2026-08-04 Browser Extension 0.5.15 Policy-lease Recovery QA
 
 ### Findings And Diff Review

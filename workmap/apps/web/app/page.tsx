@@ -8,7 +8,6 @@ import {
   BarChart3,
   BookOpenCheck,
   Building2,
-  ChevronRight,
   CircleStop,
   Clock3,
   Eye,
@@ -61,13 +60,6 @@ const visibilityFeatures = [
   { icon: Globe2, text: "Browser hostname + duration" },
   { icon: Clock3, text: "Idle and locked time stop counting" },
   { icon: UserCheck, text: "Employees can review their own summary" },
-];
-
-const signals = [
-  { icon: AppWindow, name: "App", included: "App name", discarded: "No window title" },
-  { icon: Globe2, name: "Domain", included: "Hostname", discarded: "No URL path, query or title" },
-  { icon: Users, name: "Presence", included: "Status + room", discarded: "No private content" },
-  { icon: Laptop, name: "Device", included: "Heartbeat", discarded: "No screens or keystrokes" },
 ];
 
 const collectedSignals = [
@@ -426,32 +418,15 @@ function VisibilityService() {
           {visibilityFeatures.map(({ icon: Icon, text }) => <div key={text}><Icon size={25} /><span>{text}</span></div>)}
         </div>
       </div>
-      <SignalLedger />
+      <ProductPagePreview
+        src="/marketing/workmap-dashboard-demo.png"
+        alt="WorkMap Dashboard with fictional employees Mia Manager, Ethan Engineer, and Sofia Sales"
+      />
     </>
   );
 }
 
-function SignalLedger() {
-  return (
-    <div className={styles.signalLedger}>
-      <div className={styles.ledgerHeader}><span>Signal view</span><span>What is discarded</span></div>
-      {signals.map(({ icon: Icon, name, included, discarded }) => (
-        <div className={styles.ledgerRow} key={name}>
-          <div><Icon size={23} /><strong>{name}</strong><span>{included}</span></div>
-          <p>{discarded}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function ReportsService() {
-  const facts = [
-    ["Apps and domains", "Names and active duration remain separate."],
-    ["Focus-active time", "Idle and open/runtime context stays explicit."],
-    ["Device coverage", "Agent and Extension signal health is visible."],
-    ["Exports", "Authorized report views support CSV and text export."],
-  ];
   return (
     <>
       <div className={styles.serviceIntro}>
@@ -460,12 +435,19 @@ function ReportsService() {
         <p>Employees see their own activity. Owners see company summaries and role-allowed detail.</p>
         <a className={styles.inlineLink} href="/reports">View reports <ArrowRight size={16} /></a>
       </div>
-      <div className={styles.capabilityPanel}>
-        <div className={styles.capabilityHeader}><FileBarChart size={24} /><span>Real report capabilities</span></div>
-        {facts.map(([title, copy]) => <div key={title}><strong>{title}</strong><p>{copy}</p><ChevronRight size={18} /></div>)}
-        <p className={styles.dataNote}>No sample values are shown. Signed-in reports use the current tenant and role.</p>
-      </div>
+      <ProductPagePreview
+        src="/marketing/workmap-reports-demo.png"
+        alt="WorkMap company report using fictional demo workspace data"
+      />
     </>
+  );
+}
+
+function ProductPagePreview({ src, alt }: { src: string; alt: string }) {
+  return (
+    <div className={styles.productPreview}>
+      <Image src={src} alt={alt} width={1600} height={1000} sizes="(max-width: 900px) 100vw, 58vw" />
+    </div>
   );
 }
 

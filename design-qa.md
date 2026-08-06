@@ -1,5 +1,27 @@
 # Design QA
 
+## 2026-08-06 Home Product Tabs With Real WorkMap Screens
+
+- Source visual truth: user-provided home product-tab captures at `C:/Users/liangceli/AppData/Local/Temp/codex-clipboard-f11356f2-9a3e-4cce-bab4-bc1ea2ece51f.png` (Work visibility, 1212 x 641) and `C:/Users/liangceli/AppData/Local/Temp/codex-clipboard-2d550ed6-b043-47a3-91e6-d678142ad49e.png` (Reports, 1215 x 544), plus the approved real project route captures under `docs/designs/workmap-product-pages-v1/dashboard.png` and `reports.png`.
+- Rendered implementation: `C:/Users/liangceli/WorkMap/.codex_previews/home-product-screenshots/visibility-desktop-final.jpg` and `reports-desktop-correct2.jpg` at a 1600 x 900 CSS viewport (captured as 1585 x 892), plus `visibility-mobile.png` and `reports-mobile.png` at a 390 x 844 CSS viewport (captured as 375 x 812).
+- Normalized full-view comparisons: `comparison-visibility-desktop-final.png` (2424 x 641) and `comparison-reports-desktop-correct2.png` (2430 x 544). The implementation crops were normalized to the source aspect and pixel size before horizontal source/implementation composition.
+- State: public homepage at `/#product`; Work visibility and Reports selected independently. The Report comparison retains the visible keyboard-focus outline created by the automated tab selection; this is an expected accessible interaction state, not a persistent resting-state border.
+
+### Findings And Fidelity Review
+
+- No actionable P0/P1/P2 mismatch remains. The left copy, tab structure, typography, spacing system, Ink/Jade/Paper palette, and service-panel proportions remain consistent with the supplied source.
+- Image fidelity: both abstract right-hand illustrations are replaced by 1600 x 1000 repository project-page captures. Images render at their intrinsic aspect ratio with no stretching, use the real WorkMap shell/components/pixel avatars, and contain only explicitly fictional `Demo workspace` identities such as Mia Manager, Ethan Engineer, and Sofia Sales.
+- Responsive layout: desktop retains the existing text/image split. At 390 px the existing tab rail remains intentionally horizontally scrollable, text and features stack above a full-width screenshot, the screenshot stays inside its bordered surface, and no page-level horizontal overflow or clipped CTA was observed.
+- Typography and copy: existing font family, optical weights, line heights, headings, service copy, and CTA copy are unchanged. Only image alternative text was added.
+- Colors and tokens: no new brand token or gradient was introduced. The screenshot frame uses the existing Ink, border, radius, and elevation language.
+- Focused-region comparison was not required because the screenshot panels occupy the majority of the right column in the normalized full-view evidence and their borders, crop, labels, and fictional identities remain readable there.
+- Primary interactions tested: Work visibility and Reports tab switching on desktop and mobile. Browser console errors: none. Development-only Next image LCP priority warnings can appear when opening directly at `#product`; they do not affect rendering or production build output.
+- Comparison history: the first evidence capture included an inconsistent scroll crop; it was recaptured at the same product-section alignment before comparison. No product P0/P1/P2 fix iteration was required after normalized comparison.
+
+### Final Result
+
+final result: passed
+
 ## 2026-07-09 Virtual Office Mobile Chrome Cleanup
 
 - Source visual truth: user-provided `/virtual-office` mobile screenshot showing the top chrome stacked awkwardly, bottom dock wrapping into multiple rows, duplicate controls, and the current-user/status block taking too much vertical space.
