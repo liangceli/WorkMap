@@ -47,6 +47,7 @@ import {
   type TrackingSyncRequestV2,
 } from "@workmap/shared-types";
 import { createHash, randomUUID } from "node:crypto";
+import { splitIntervalByReportingDay } from "../common/reporting-calendar.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { DeviceRequestContext } from "./device-context.js";
 import { TrackingV2PolicyService } from "./tracking-v2-policy.service.js";
@@ -67,6 +68,7 @@ type StoredPolicyLease = {
   policyVersion: string;
   issuedAt: Date;
   expiresAt: Date;
+  scheduleTimeZone: string;
   allowedUtcWindows: unknown;
   collectDomainOpenRuntime: boolean;
   monitoringPolicy: {
@@ -376,6 +378,7 @@ export class TrackingV2SyncService {
             context,
             identity.workstationId,
             accepted,
+            leaseById,
           );
           const cursorKeys = uniqueCursorKeys(candidateIntervals);
           const cursors = await refreshCursors(tx, context, cursorKeys);
@@ -1216,6 +1219,7 @@ async function insertAcceptedIntervals(
   context: DeviceRequestContext,
   workstationId: string | null,
   accepted: CandidateInterval[],
+  leaseById: Map<string, StoredPolicyLease>,
 ) {
   if (accepted.length === 0) {
     return {
@@ -1325,9 +1329,16 @@ async function insertAcceptedIntervals(
   });
   await tx.activityInterval.createMany({ data: inserted });
 
-  const fragments = inserted.flatMap((interval) =>
-    splitIntervalByUtcDay(interval),
-  );
+  const fragments = inserted.flatMap((interval) => {
+    const lease = leaseById.get(interval.policyLeaseId);
+    if (!lease) {
+      throw new Error("Accepted interval policy lease resolution failed.");
+    }
+    return splitAcceptedIntervalByReportingDay(
+      interval,
+      lease.scheduleTimeZone,
+    );
+  });
   if (fragments.length > 0) {
     await tx.activityIntervalDayFragment.createMany({
       data: fragments,
@@ -2414,7 +2425,7 @@ function sameCursorKey(
   );
 }
 
-function splitIntervalByUtcDay(interval: {
+function splitAcceptedIntervalByReportingDay(interval: {
   id: string;
   companyId: string;
   userId: string;
@@ -2425,20 +2436,12 @@ function splitIntervalByUtcDay(interval: {
   metric: TrackingActivityMetric;
   startedAt: Date;
   endedAt: Date;
-}) {
-  const fragments = [];
-  let cursor = interval.startedAt;
-  let fragmentIndex = 0;
-  while (cursor < interval.endedAt) {
-    const nextDay = new Date(
-      Date.UTC(
-        cursor.getUTCFullYear(),
-        cursor.getUTCMonth(),
-        cursor.getUTCDate() + 1,
-      ),
-    );
-    const endedAt = interval.endedAt < nextDay ? interval.endedAt : nextDay;
-    fragments.push({
+}, scheduleTimeZone: string) {
+  return splitIntervalByReportingDay(
+    interval.startedAt,
+    interval.endedAt,
+    scheduleTimeZone,
+  ).map((fragment) => ({
       id: randomUUID(),
       activityIntervalId: interval.id,
       companyId: interval.companyId,
@@ -2448,22 +2451,14 @@ function splitIntervalByUtcDay(interval: {
       source: interval.source,
       stream: interval.stream,
       metric: interval.metric,
-      utcDate: new Date(
-        Date.UTC(
-          cursor.getUTCFullYear(),
-          cursor.getUTCMonth(),
-          cursor.getUTCDate(),
-        ),
-      ),
-      fragmentIndex,
-      startedAt: cursor,
-      endedAt,
-      durationMs: BigInt(endedAt.getTime() - cursor.getTime()),
-    });
-    cursor = endedAt;
-    fragmentIndex += 1;
-  }
-  return fragments;
+      // The physical column retains its legacy name for a schema-compatible
+      // rollout; its value is the policy/workspace reporting date.
+      utcDate: fragment.reportDate,
+      fragmentIndex: fragment.fragmentIndex,
+      startedAt: fragment.startedAt,
+      endedAt: fragment.endedAt,
+      durationMs: fragment.durationMs,
+    }));
 }
 
 function readPolicyWindows(value: unknown) {

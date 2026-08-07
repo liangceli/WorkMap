@@ -1,5 +1,52 @@
 # Latest QA Handoff
 
+## 2026-08-07 Workspace-calendar Reports QA
+
+### Reviewed Implementation And Findings
+
+- Fixed - High: Reports no longer treats the UTC date as the user's selectable work date. The active monitoring policy `scheduleTimeZone` is now the server authority and the Web uses the same zone for default date, maximum date, presets, labels, cache isolation, and Connection Audit.
+- Fixed - High: Tracking v2 derived interval fragments no longer split at UTC midnight. New intervals split at IANA workspace midnight using the immutable lease time zone; a migration reconstructs existing fragments from the raw UTC ledger, so Adelaide 09:00-09:29 is assigned to the correct local date rather than discarded or relabelled only in the UI.
+- Pass - Data integrity: raw `ActivityInterval` rows, timestamps, sequence/cursor semantics, accepted/rejected status, policy lease validation, work-hour authorization, retry queues, and tenant/device identities are unchanged. The migration deletes and reconstructs only rows in derived cache tables.
+- Pass - Date correctness: automated tests cover Adelaide morning selection, local future-date validation, standard Adelaide midnight, DST spring 23-hour day, DST autumn 25-hour day, and a confirmed interval crossing local midnight.
+- Pass - Audit consistency: Connection Audit requests exactly the selected workspace dates and filters displayed events in the same policy time zone as Usage Summary.
+- No client regression scope: no Desktop Agent or Browser Extension file changed; no new client artifact or release is needed.
+
+### Test And Verification Status
+
+- `pnpm.cmd --filter @workmap/api typecheck`: pass.
+- `pnpm.cmd --filter @workmap/api lint`: pass.
+- `pnpm.cmd --filter @workmap/api test`: pass, 62/62.
+- `pnpm.cmd --filter @workmap/api build`: pass.
+- `pnpm.cmd --filter @workmap/web typecheck`: pass.
+- `pnpm.cmd --filter @workmap/web lint`: pass.
+- Focused Web workspace-date/Connection Audit tests: pass, 10/10.
+- `pnpm.cmd --filter @workmap/web build`: pass, 21 routes; existing non-blocking Next ESLint-plugin and webpack cache-snapshot warnings remain.
+- Full Web test suite: 105/106. The sole failure is an unrelated existing brand-copy mismatch between `desktop-connection-audit.test.ts` (`WorkMap`) and current `ReportSummaryPanel.tsx` (`CandidGrid`); this round changed neither line and did not broaden scope to branding.
+- Prisma schema validation: pass using a non-secret placeholder URL. The migration SQL was reviewed but not run against production or a production-sized clone.
+
+### Manual QA, Risks, And Recommendation
+
+- Manual deployed QA: not run. No production database migration, Render API deployment, Web deployment, real Windows Agent test, or real Browser Extension test is claimed.
+- Deployment risk is concentrated in the one-time derived-cache rebuild and transient reconciliation load. Raw source intervals remain recoverable; monitor database locks/duration, dirty-target drain, report latency, and client pending queues during rollout.
+- Historical V1-only daily summaries retain their old physical date semantics. Current activated Tracking v2 Desktop/Browser paths and their immutable raw ledger are covered by this implementation.
+- Final `git diff --check`: pass. Bounded tracked/untracked secret scan: pass with zero matches. Recommendation is pass for a controlled maintenance migration/deployment; do not call the production incident resolved until the local-date acceptance checks pass after rollout.
+
+## 2026-08-07 Reports UTC-Date Boundary And Desktop Retry QA
+
+### Reviewed Evidence And Findings
+
+- High / confirmed UX mismatch: Usage Summary defaults, presets, and the date input maximum use the current UTC date. In Adelaide, local dates from midnight until 09:29:59 are therefore one day ahead of the selectable reporting day. The API independently enforces the same UTC future-date boundary and reports the range time zone as UTC, so this is consistent end to end rather than a browser-only calendar malfunction.
+- Pass / no rejected intervals in the incident: the local retry timeline contained five HTTP 500 `TRACKING_SYNC_INTERNAL`, four HTTP 502, and one no-response failure between 09:14 and 09:28 Adelaide. Every failure was retryable; later HTTP 200 batches reported zero interval rejections and drained the pending queue repeatedly.
+- Pass / current queue health: read-only SQLite counts changed from seven pending rows to one newly generated, zero-attempt row during observation. Historical dead letters stayed at 61. The screenshot's one pending item is therefore normal active batching, not a stuck backlog.
+- Important date interpretation: Adelaide 2026-08-07 09:00-09:29 maps to UTC 2026-08-06 23:30-23:59, so those accepted intervals appear under the August 6 UTC usage report. Live activity can already show August 7 because it is not the historical UTC-date filter.
+- Remaining infrastructure uncertainty: local evidence proves recovery but cannot name the server-side cause of the 500/502 episode. Render/API logs must be searched by the displayed request IDs if the operator needs the exact database, process restart, timeout, or proxy failure.
+
+### Verification Status And Recommendation
+
+- Git status before diagnosis: clean. Product diff: none. Manual production Reports refresh: not run. Local client log and queue inspection: completed read-only.
+- Package checks were not run because this round made no product changes. Final `git diff --check` and bounded secret scan cover the documentation-only diff.
+- Recommendation: pass for Desktop data durability in this observed incident; no evidence of new rejected intervals or lost queued data. Do not change the Agent. A future local-calendar report feature must change Web validation, API range semantics, aggregation buckets, labels/exports, caching, and tests together; a UI-only date override is not recommended.
+
 ## 2026-08-06 Browser Extension 0.5.17 CandidGrid Branding QA
 
 ### Reviewed Implementation And Findings

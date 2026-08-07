@@ -239,7 +239,7 @@ export type WorkMapApiUsageSummary = {
   range: {
     from: string;
     to: string;
-    timeZone: "UTC";
+    timeZone: string;
   };
   apps: Array<{
     appName: string;

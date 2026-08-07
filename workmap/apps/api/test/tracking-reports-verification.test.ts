@@ -927,6 +927,7 @@ class MockPrisma {
 
   monitoringPolicy = {
     count: async () => 1,
+    findFirst: async () => ({ scheduleTimeZone: "UTC" }),
   };
 
   integrationAccount = {

@@ -6,6 +6,9 @@ import { ReportsService } from "../src/modules/reports/reports.service.js";
 test("Connection Audit queries lifecycle event time instead of delayed receipt time", async () => {
   let deviceStatusWhere: Record<string, unknown> | null = null;
   const prisma = {
+    monitoringPolicy: {
+      findFirst: async () => ({ scheduleTimeZone: "UTC" }),
+    },
     agentSession: {
       findMany: async () => [],
     },

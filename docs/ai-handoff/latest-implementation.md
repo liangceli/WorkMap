@@ -1,5 +1,62 @@
 # Latest Implementation Handoff
 
+## 2026-08-07 Workspace-calendar Reports Implementation
+
+### Original Task Brief
+
+- Replace the UTC-calendar behavior that made the Adelaide morning of August 7 appear as August 6 and prevented selecting August 7 until 09:30 local time.
+- Keep collection authorization and policy enforcement unchanged; do not alter or release the Desktop Agent or Browser Extension.
+- Implement only with high confidence and preserve the immutable Tracking v2 ledger, tenant isolation, role boundaries, and privacy-minimised payloads.
+
+### Changed Files And Implementation Summary
+
+- `workmap/apps/api/src/modules/common/reporting-calendar.ts`: added dependency-free IANA calendar helpers for local date resolution, local-midnight UTC boundaries, DST-safe calendar arithmetic, and interval splitting at workspace midnight.
+- `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`: accepted Tracking v2 intervals still retain UTC instants in the immutable ledger, but their derived day fragments are now split using the immutable policy lease `scheduleTimeZone`. Client requests, captured fields, interval acceptance rules, policy windows, lease validation, queue behavior, and retry semantics are unchanged.
+- `workmap/apps/api/src/modules/reports/reports.service.ts`: report date validation, raw event/session/audit ranges, live provisional segments, and response labels now use the active workspace policy time zone. A requested `2026-08-07` therefore means local workspace midnight through the next local midnight, while database instants remain UTC.
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`, `reportFilters.ts`, and `connectionAuditRange.ts`: Reports reads the active policy time zone before choosing the default/max date, presets and cache key. Usage totals and Connection Audit now use the same selected workspace calendar dates; the prior adjacent-UTC-day audit workaround and UTC-only label were removed.
+- `workmap/apps/web/lib/api/apiTypes.ts`: report range time zone is now an IANA string rather than the literal `UTC`.
+- `workmap/prisma/migrations/20260807093000_workspace_reporting_calendar/migration.sql`: leaves every raw `ActivityInterval` untouched, rebuilds derived day fragments from the ledger and each interval's immutable lease time zone, rebuilds device/day totals, and marks user/day reconciliation targets dirty so the existing exact overlap-aware worker/read fallback regenerates report caches. Physical `utcDate` column names remain for schema compatibility, but their documented value becomes the policy/workspace reporting date.
+- API and Web regression tests cover Adelaide morning boundaries, invalid future local dates, 23-hour and 25-hour DST days, intervals crossing Adelaide midnight, current-day filter defaults, exact Connection Audit requests, and existing UTC test fixtures through explicit mock policy zones.
+
+### Role, Data, And Deployment Behavior
+
+- No Desktop Agent or Browser Extension source/version/artifact changed. No client reinstall or client release is required for this round.
+- Owner/Employee/Platform Admin permissions, tenant/device credential boundaries, policy acknowledgement, work hours, allowed UTC windows, and collection enablement are unchanged. UTC remains the transport/storage representation for timestamps; only the reporting-day boundary changes.
+- Existing accepted 09:00-09:29 Adelaide intervals are not lost. After the migration rebuild they move from the apparent August 6 UTC bucket into the August 7 workspace-calendar report.
+- The migration has not been applied to production and no Render/Vercel deployment was performed. Recommended zero-mixed-state rollout: pause the API during a short maintenance window so clients queue safely, apply the migration, deploy the API and Web from the same commit, then resume the API and watch pending queues drain. If pausing is unavailable, deploy API/Web and apply the migration immediately afterward; expect a brief transitional report mismatch only.
+
+### Verification, Manual QA, Risks, And Next Step
+
+- API typecheck, lint, build and full tests: pass; 62/62 tests.
+- Web typecheck, lint, production build and focused date/audit tests: pass; focused tests 10/10. Full Web suite is 105/106 because an unrelated pre-existing branding assertion expects `WorkMap service unreachable` while current source already says `CandidGrid service unreachable`; neither file is touched by this round.
+- Prisma schema validation: pass with a non-secret placeholder URL. Final `git diff --check` and bounded secret scan: pass with zero secret-pattern matches.
+- Real deployed Reports, production migration, real Adelaide browser date selection, and physical Desktop/Browser tracking were not manually tested. Do not claim production completion until deployment and the migration are complete.
+- Remaining risk: the data migration rebuilds a large derived cache inside one database transaction and has not been executed against a production-sized clone. The immutable ledger is preserved, and dirty targets use the existing exact read fallback, but deployment should monitor migration duration, reconciliation backlog, API latency, and queue drain. Historical V1-only summary rows are not re-keyed; all currently activated Desktop/Browser clients use Tracking v2.
+- Recommendation: source implementation is ready for a controlled migration/deployment round. After deployment, verify at Adelaide 00:00-09:29 that today is selectable, create activity across local midnight, and compare Reports with the accepted Tracking v2 ledger.
+
+## 2026-08-07 Reports UTC-Date Boundary And Desktop Retry Diagnosis
+
+### Original Task Brief
+
+- Investigate why the Owner Reports page opened on the Adelaide morning of August 7 with August 6 selected and would not allow August 7 in the calendar.
+- Determine whether the local Desktop Agent's retryable HTTP 500/502/network diagnostics meant that August 7 App activity was rejected or lost.
+
+### Changed Files And Implementation Summary
+
+- Documentation only: this handoff and `docs/ai-handoff/latest-qa.md` record the evidence-backed diagnosis. No product source, schema, policy, collection, queue, API contract, deployment configuration, or client release was changed.
+- Confirmed in `workmap/apps/web/components/reports/reportFilters.ts` that the Reports default day and maximum selectable day use `new Date().toISOString().slice(0, 10)`, and in `ReportSummaryPanel.tsx` that the UI labels usage totals as UTC. The API also rejects a requested report day later than the current UTC date and returns `timeZone: "UTC"`.
+- At 09:26 Adelaide on 2026-08-07, UTC was still 2026-08-06 23:56. Therefore August 7 was intentionally unavailable until 09:30 Adelaide, when the UTC calendar day advanced. Live signals are independent of the selected historical summary range, explaining why August 7 live timestamps appeared above an August 6 usage summary.
+- Usage recorded from 09:00 through 09:29:59 Adelaide belongs to the August 6 UTC report under the current model; activity from 09:30 onward belongs to the August 7 UTC report. This is a reporting-day/UX mismatch for Adelaide, not evidence of collection loss.
+- Read-only inspection of the local August 6 and August 7 NDJSON files reconstructed the Adelaide 09:00-09:31 timeline. Between 09:14 and 09:28 there were five retryable `TRACKING_SYNC_INTERNAL` HTTP 500 responses, four retryable HTTP 502 responses, and one no-response `NETWORK_ERROR`. Subsequent HTTP 200 responses accepted the queued interval batches with zero rejections and repeatedly drained the queue to zero.
+- Read-only SQLite inspection later showed 61 unchanged historical dead letters and one newly generated pending row with zero attempts; eight seconds earlier there had been seven pending rows. This confirms the active queue continued draining rather than remaining stuck. Exact upstream causes of the 500/502 responses require deployed Render/API logs correlated by request ID; the local client evidence alone cannot distinguish an API transaction/database interruption from a gateway restart.
+
+### Verification, Manual QA, Risks, And Next Step
+
+- Repository started clean. Source review confirmed the same UTC-day rule on both Web and API; local log and SQLite inspection were read-only and excluded credentials, URLs, window titles, and content.
+- No package typecheck, lint, test, or build was required because no product code changed. Real Reports refresh after 09:30 was not controlled in this task; code and current system time predict that August 7 becomes selectable after that boundary.
+- Remaining product decision: retain UTC summaries and make the boundary more prominent, or implement tenant/viewer-time-zone report-day semantics end to end. Changing only the HTML date maximum would be incorrect because it would label a UTC bucket as a local calendar day and would split Adelaide's 09:00-09:29 work across the wrong apparent date.
+- Recommendation: the Agent recovery path passes this incident review. Treat local-calendar reporting as a separate scoped Web/API aggregation change with boundary tests; do not alter Desktop collection or retry behavior to address it.
+
 ## 2026-08-06 Browser Extension 0.5.17 CandidGrid Branding
 
 ### Original Task Brief

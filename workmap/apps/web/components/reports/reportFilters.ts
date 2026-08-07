@@ -5,7 +5,10 @@ export type ReportFilters = { view: ViewFilter; departmentId: string; from: stri
 
 const REPORT_FILTER_STORAGE_PREFIX = "workmap.reportFilters";
 
-export function defaultReportFilters(view: ViewFilter, today = utcToday()): ReportFilters {
+export function defaultReportFilters(
+  view: ViewFilter,
+  today = calendarToday(new Date(), resolveViewerTimeZone()),
+): ReportFilters {
   return { view, departmentId: "", from: today, to: today };
 }
 
@@ -28,7 +31,7 @@ export function restoreReportFilters(
 
     return {
       ...parsed,
-      // A new Reports page always opens on the current UTC reporting day. Persisted
+      // A new Reports page always opens on the current workspace reporting day. Persisted
       // scope and department preferences remain useful, but a historical range is not.
       from: fallback.from,
       to: fallback.to,
@@ -52,8 +55,37 @@ export function persistReportFilters(userId: string, filters: ReportFilters) {
   }
 }
 
-export function utcToday(now = new Date()) {
-  return now.toISOString().slice(0, 10);
+export function calendarToday(
+  now = new Date(),
+  requestedTimeZone = resolveViewerTimeZone(),
+) {
+  const timeZone = normalizeTimeZone(requestedTimeZone);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = new Map(parts.map((part) => [part.type, part.value]));
+  return `${values.get("year")}-${values.get("month")}-${values.get("day")}`;
+}
+
+export function normalizeTimeZone(value: string | null | undefined) {
+  if (!value) return "UTC";
+  try {
+    Intl.DateTimeFormat("en-CA", { timeZone: value }).format();
+    return value;
+  } catch {
+    return "UTC";
+  }
+}
+
+export function resolveViewerTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
 }
 
 function reportFilterStorageKey(userId: string) {

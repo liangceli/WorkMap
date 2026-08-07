@@ -6,10 +6,9 @@ import {
 } from "../components/reports/connectionAuditRange.js";
 import { buildBrowserAuditGroups } from "../components/reports/ReportSummaryPanel.js";
 
-test("Connection Audit resolves the Australian morning to the current local calendar day", () => {
+test("Connection Audit uses the already-selected workspace calendar day", () => {
   const resolved = resolveConnectionAuditRange(
-    { from: "2026-07-28", to: "2026-07-28" },
-    new Date("2026-07-28T23:45:00.000Z"),
+    { from: "2026-07-29", to: "2026-07-29" },
     "Australia/Adelaide",
   );
 
@@ -18,15 +17,14 @@ test("Connection Audit resolves the Australian morning to the current local cale
     to: "2026-07-29",
   });
   assert.deepEqual(resolved.request, {
-    from: "2026-07-28",
-    to: "2026-07-28",
+    from: "2026-07-29",
+    to: "2026-07-29",
   });
 });
 
-test("Connection Audit resolves a western time zone behind UTC without losing its local day", () => {
+test("Connection Audit does not rewrite a western workspace date", () => {
   const resolved = resolveConnectionAuditRange(
-    { from: "2026-07-29", to: "2026-07-29" },
-    new Date("2026-07-29T02:00:00.000Z"),
+    { from: "2026-07-28", to: "2026-07-28" },
     "America/Los_Angeles",
   );
 
@@ -35,15 +33,14 @@ test("Connection Audit resolves a western time zone behind UTC without losing it
     to: "2026-07-28",
   });
   assert.deepEqual(resolved.request, {
-    from: "2026-07-27",
-    to: "2026-07-29",
+    from: "2026-07-28",
+    to: "2026-07-28",
   });
 });
 
-test("historical Connection Audit ranges retain the selected dates and query adjacent UTC days", () => {
+test("historical Connection Audit requests exactly the selected workspace dates", () => {
   const resolved = resolveConnectionAuditRange(
     { from: "2026-07-23", to: "2026-07-24" },
-    new Date("2026-07-29T02:00:00.000Z"),
     "Australia/Adelaide",
   );
 
@@ -52,8 +49,8 @@ test("historical Connection Audit ranges retain the selected dates and query adj
     to: "2026-07-24",
   });
   assert.deepEqual(resolved.request, {
-    from: "2026-07-22",
-    to: "2026-07-25",
+    from: "2026-07-23",
+    to: "2026-07-24",
   });
 });
 

@@ -11,6 +11,13 @@ import {
 import { canViewEmployeeActivity, canViewOwnReports, canViewTeamReports, type RequestContext } from "@workmap/auth";
 import { AuditService } from "../audit/audit.service.js";
 import { BROWSER_EXTENSION_SIGNAL_LOST_AFTER_MS } from "../devices/devices.service.js";
+import {
+  addCalendarDays,
+  calendarDateForInstant,
+  calendarDateToken,
+  normalizeReportingTimeZone,
+  reportingDayStart,
+} from "../common/reporting-calendar.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { TrackingV2ReportsService } from "./tracking-v2-reports.service.js";
 
@@ -26,7 +33,15 @@ type SummaryQuery = {
 };
 
 type ReportScope = "user" | "company";
-type ReportRange = { from: Date; to: Date; fromDate: string; toDate: string };
+type ReportRange = {
+  from: Date;
+  to: Date;
+  fromDate: string;
+  toDate: string;
+  startsAt: Date;
+  endsAtExclusive: Date;
+  timeZone: string;
+};
 type UsageFilter = { companyId: string; userId?: string; userIds?: string[]; range: ReportRange };
 type LiveAppSegment = { userId: string; displayName: string; appName: string; activeSeconds: number; focusedIdleSeconds: number };
 type UsageInterval = { startedAt: Date; endedAt: Date };
@@ -144,7 +159,8 @@ export class ReportsService {
 
   async getUsageSummary(context: RequestContext, query: SummaryQuery) {
     const scope = normalizeReportScope(query.scope);
-    const range = parseReportRange(query.from, query.to);
+    const reportingTimeZone = await this.getReportingTimeZone(context.companyId);
+    const range = parseReportRange(query.from, query.to, new Date(), reportingTimeZone);
     const includeAudit = query.includeAudit !== "false";
     const includeLive = query.includeLive !== "false";
 
@@ -215,7 +231,8 @@ export class ReportsService {
 
   async getAgentLiveStatus(context: RequestContext, query: SummaryQuery) {
     const scope = normalizeReportScope(query.scope);
-    const range = parseReportRange(query.from, query.to);
+    const reportingTimeZone = await this.getReportingTimeZone(context.companyId);
+    const range = parseReportRange(query.from, query.to, new Date(), reportingTimeZone);
     const includeRevision = query.includeRevision !== "false";
     if (scope === "company") {
       if (query.userId) throw new BadRequestException("userId cannot be combined with company scope.");
@@ -260,7 +277,8 @@ export class ReportsService {
 
   async getTrackingAudit(context: RequestContext, query: SummaryQuery) {
     const scope = normalizeReportScope(query.scope);
-    const range = parseReportRange(query.from, query.to);
+    const reportingTimeZone = await this.getReportingTimeZone(context.companyId);
+    const range = parseReportRange(query.from, query.to, new Date(), reportingTimeZone);
 
     if (scope === "company") {
       if (!canViewTeamReports(context)) throw new ForbiddenException("Company reports are not visible to this role.");
@@ -507,7 +525,10 @@ export class ReportsService {
         eventType: ActivityEventType.BROWSER,
         domain: { not: null },
         endedAt: { not: null },
-        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+        startedAt: {
+          gte: filter.range.startsAt,
+          lt: filter.range.endsAtExclusive,
+        },
       },
       select: {
         domain: true,
@@ -537,7 +558,10 @@ export class ReportsService {
         appName: { not: null },
         isActiveWindow: false,
         isIdle: false,
-        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+        startedAt: {
+          gte: filter.range.startsAt,
+          lt: filter.range.endsAtExclusive,
+        },
       },
       _sum: { durationSeconds: true },
       orderBy: { _sum: { durationSeconds: "desc" } },
@@ -551,7 +575,7 @@ export class ReportsService {
   private async getDeviceCoverage(filter: UsageFilter) {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const identityWhere = identityFilter(filter);
-    const eventEndExclusive = addUtcDays(filter.range.to, 1);
+    const eventEndExclusive = filter.range.endsAtExclusive;
     const [devices, usersWithActivity] = await Promise.all([
       this.prisma.device.findMany({
         where: { companyId: filter.companyId, ...identityWhere, revokedAt: null },
@@ -562,7 +586,7 @@ export class ReportsService {
         where: {
           companyId: filter.companyId,
           ...identityWhere,
-          startedAt: { gte: filter.range.from, lt: eventEndExclusive },
+          startedAt: { gte: filter.range.startsAt, lt: eventEndExclusive },
         },
       }),
     ]);
@@ -676,7 +700,7 @@ export class ReportsService {
     }
   }
 
-  private async getAgentStatus(filter: Pick<UsageFilter, "companyId" | "userId">) {
+  private async getAgentStatus(filter: UsageFilter) {
     if (!filter.userId) return null;
     const session = await this.prisma.agentSession.findFirst({
       where: { companyId: filter.companyId, userId: filter.userId },
@@ -688,7 +712,9 @@ export class ReportsService {
     const now = Date.now();
     const heartbeatAgeMs = now - session.lastHeartbeatAt.getTime();
     const isFresh = !session.endedAt && heartbeatAgeMs <= AGENT_HEARTBEAT_FRESH_MS;
-    const today = utcDateOnly(new Date());
+    const today = calendarDateToken(
+      calendarDateForInstant(new Date(), filter.range.timeZone),
+    );
     const [latestStatusEvent, todaySummary] = await Promise.all([
       this.prisma.deviceStatusEvent.findFirst({
         where: {
@@ -735,8 +761,8 @@ export class ReportsService {
 
   private async getLiveAppSegments(filter: UsageFilter): Promise<LiveAppSegment[]> {
     const now = Date.now();
-    const rangeEndExclusive = addUtcDays(filter.range.to, 1).getTime();
-    if (now < filter.range.from.getTime() || now >= rangeEndExclusive) return [];
+    const rangeEndExclusive = filter.range.endsAtExclusive.getTime();
+    if (now < filter.range.startsAt.getTime() || now >= rangeEndExclusive) return [];
 
     const sessions = await this.prisma.agentSession.findMany({
       where: {
@@ -752,7 +778,7 @@ export class ReportsService {
 
     return sessions.flatMap((session) => {
       if (!session.currentAppName || !session.currentAppStartedAt) return [];
-      const segmentStart = Math.max(session.currentAppStartedAt.getTime(), filter.range.from.getTime());
+      const segmentStart = Math.max(session.currentAppStartedAt.getTime(), filter.range.startsAt.getTime());
       const segmentEnd = Math.min(now, session.lastHeartbeatAt.getTime() + 15_000, rangeEndExclusive);
       const durationSeconds = Math.max(0, Math.round((segmentEnd - segmentStart) / 1000));
       if (durationSeconds < 5) return [];
@@ -784,13 +810,13 @@ export class ReportsService {
 
   private async getAgentSessions(filter: UsageFilter) {
     if (!filter.userId) return [];
-    const endExclusive = addUtcDays(filter.range.to, 1);
+    const endExclusive = filter.range.endsAtExclusive;
     const sessions = await this.prisma.agentSession.findMany({
       where: {
         companyId: filter.companyId,
         userId: filter.userId,
         startedAt: { lt: endExclusive },
-        OR: [{ endedAt: null }, { endedAt: { gte: filter.range.from } }],
+        OR: [{ endedAt: null }, { endedAt: { gte: filter.range.startsAt } }],
       },
       orderBy: { startedAt: "desc" },
       take: 500,
@@ -816,7 +842,10 @@ export class ReportsService {
         userId: filter.userId,
         // Connection Audit is an event-time history. A status retained offline
         // must appear on the day it happened, not the later day it reached the API.
-        startedAt: { gte: filter.range.from, lt: addUtcDays(filter.range.to, 1) },
+        startedAt: {
+          gte: filter.range.startsAt,
+          lt: filter.range.endsAtExclusive,
+        },
       },
       orderBy: { recordedAt: "desc" },
       take: 500,
@@ -904,14 +933,14 @@ export class ReportsService {
 
   private async getAppTimeline(filter: UsageFilter) {
     if (!filter.userId) return [];
-    const endExclusive = addUtcDays(filter.range.to, 1);
+    const endExclusive = filter.range.endsAtExclusive;
     const events = await this.prisma.activityEvent.findMany({
       where: {
         companyId: filter.companyId,
         userId: filter.userId,
         source: ActivityEventSource.DESKTOP_AGENT,
         eventType: ActivityEventType.APP,
-        startedAt: { gte: filter.range.from, lt: endExclusive },
+        startedAt: { gte: filter.range.startsAt, lt: endExclusive },
       },
       select: { appName: true, startedAt: true, endedAt: true, durationSeconds: true },
       orderBy: { startedAt: "asc" },
@@ -954,6 +983,18 @@ export class ReportsService {
     });
     if (!target) throw new NotFoundException("Report target not found.");
     return target.id;
+  }
+
+  private async getReportingTimeZone(companyId: string) {
+    const policy = await this.prisma.monitoringPolicy.findFirst({
+      where: {
+        companyId,
+        activeFrom: { lte: new Date() },
+      },
+      orderBy: [{ activeFrom: "desc" }, { id: "desc" }],
+      select: { scheduleTimeZone: true },
+    });
+    return normalizeReportingTimeZone(policy?.scheduleTimeZone);
   }
 }
 
@@ -1006,22 +1047,47 @@ function normalizeReportScope(scope: string | undefined): ReportScope {
   return scope === "company" ? "company" : "user";
 }
 
-export function parseReportRange(fromInput?: string, toInput?: string, now = new Date()): ReportRange {
-  const today = utcDateOnly(now);
-  const to = toInput ? parseDateOnly(toInput, "to") : today;
-  if (to > today) throw new BadRequestException("Report to date cannot be in the future.");
-  const from = fromInput ? parseDateOnly(fromInput, "from") : addUtcDays(to, -(DEFAULT_REPORT_DAYS - 1));
-  if (from > to) throw new BadRequestException("Report from date must be on or before to date.");
+export function parseReportRange(
+  fromInput?: string,
+  toInput?: string,
+  now = new Date(),
+  requestedTimeZone = "UTC",
+): ReportRange {
+  const timeZone = normalizeReportingTimeZone(requestedTimeZone);
+  const todayDate = calendarDateForInstant(now, timeZone);
+  const toDate = toInput ? parseDateOnly(toInput, "to") : todayDate;
+  if (toDate > todayDate) {
+    throw new BadRequestException("Report to date cannot be in the future.");
+  }
+  const fromDate = fromInput
+    ? parseDateOnly(fromInput, "from")
+    : addCalendarDays(toDate, -(DEFAULT_REPORT_DAYS - 1));
+  if (fromDate > toDate) {
+    throw new BadRequestException("Report from date must be on or before to date.");
+  }
+  const from = calendarDateToken(fromDate);
+  const to = calendarDateToken(toDate);
   const days = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
   if (days > MAX_REPORT_DAYS) throw new BadRequestException(`Report range cannot exceed ${MAX_REPORT_DAYS} days.`);
-  return { from, to, fromDate: toDateOnly(from), toDate: toDateOnly(to) };
+  return {
+    from,
+    to,
+    fromDate,
+    toDate,
+    startsAt: reportingDayStart(fromDate, timeZone),
+    endsAtExclusive: reportingDayStart(addCalendarDays(toDate, 1), timeZone),
+    timeZone,
+  };
 }
 
 function parseDateOnly(value: string, label: string) {
   if (!DATE_ONLY_PATTERN.test(value)) throw new BadRequestException(`${label} must use YYYY-MM-DD.`);
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime()) || toDateOnly(date) !== value) throw new BadRequestException(`${label} must be a valid date.`);
-  return date;
+  try {
+    calendarDateToken(value);
+  } catch {
+    throw new BadRequestException(`${label} must be a valid date.`);
+  }
+  return value;
 }
 
 function summaryWhere(filter: UsageFilter) {
@@ -1115,7 +1181,11 @@ function identityFilter(filter: Pick<UsageFilter, "userId" | "userIds">) {
 }
 
 function reportRangeResponse(range: ReportRange) {
-  return { from: range.fromDate, to: range.toDate, timeZone: "UTC" as const };
+  return {
+    from: range.fromDate,
+    to: range.toDate,
+    timeZone: range.timeZone,
+  };
 }
 
 function effectiveProductivityLabel(label: string, category: string | null) {
@@ -1271,14 +1341,6 @@ function firstMetricByUser<T extends { userId: string; _sum: { activeSeconds: nu
     }
   }
   return result;
-}
-
-function utcDateOnly(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function addUtcDays(date: Date, days: number) {
-  return new Date(date.getTime() + days * 86_400_000);
 }
 
 function toDateOnly(date: Date) {

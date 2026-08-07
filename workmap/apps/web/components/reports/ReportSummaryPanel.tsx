@@ -12,6 +12,7 @@ import type {
   WorkMapApiUser,
 } from "../../lib/api/apiTypes";
 import { getAgentLiveStatus, getTrackingAudit, getTrackingV2LiveActivity, getUsageSummary } from "../../lib/api/reportsApi";
+import { getCompliancePolicy } from "../../lib/api/complianceApi";
 import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
@@ -29,7 +30,9 @@ import {
 } from "./trackingV2LivePresentation";
 import {
   defaultReportFilters,
-  utcToday,
+  calendarToday,
+  normalizeTimeZone,
+  resolveViewerTimeZone,
   persistReportFilters,
   restoreReportFilters,
   type ReportFilters,
@@ -61,6 +64,7 @@ const AUDIT_REFRESH_MS = 5_000;
 
 export function ReportSummaryPanel() {
   const [auth, setAuth] = useState<AuthContext | null>(null);
+  const [reportTimeZone, setReportTimeZone] = useState("UTC");
   const [users, setUsers] = useState<WorkMapApiUser[]>([]);
   const [filters, setFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
@@ -96,7 +100,18 @@ export function ReportSummaryPanel() {
         source: authResult.source,
       };
       const canViewCompany = canRequestCompanySummary(context.role);
-      const fallbackFilters = defaultReportFilters(canViewCompany ? "company" : "me");
+      const policyResult = await getCompliancePolicy(context.options);
+      if (cancelled) return;
+      const timeZone = normalizeTimeZone(
+        policyResult.ok
+          ? policyResult.data.scheduleTimeZone
+          : resolveViewerTimeZone(),
+      );
+      setReportTimeZone(timeZone);
+      const fallbackFilters = defaultReportFilters(
+        canViewCompany ? "company" : "me",
+        calendarToday(new Date(), timeZone),
+      );
       const initialFilters = restoreReportFilters(context.userId, fallbackFilters, {
         canViewCompany,
       });
@@ -104,7 +119,7 @@ export function ReportSummaryPanel() {
       setFilters(initialFilters);
       setAppliedFilters(initialFilters);
 
-      const snapshotKey = reportSnapshotKey(context, initialFilters);
+      const snapshotKey = reportSnapshotKey(context, initialFilters, timeZone);
       const snapshot = readReportSnapshot(snapshotKey);
       const now = Date.now();
       if (snapshot?.liveStatus) setLiveStatus(snapshot.liveStatus);
@@ -165,7 +180,7 @@ export function ReportSummaryPanel() {
         : (snapshot?.summaryCachedAt ?? Date.now()) + SUMMARY_REVISION_CHECK_MS;
 
       if (loadedSummary?.scope === "user" && (!snapshot?.audit || now - snapshot.auditCachedAt >= AUDIT_REFRESH_MS)) {
-        void loadAudit(context, initialFilters, () => cancelled, setAuditState, (audit) => {
+        void loadAudit(context, initialFilters, timeZone, () => cancelled, setAuditState, (audit) => {
           updateReportSnapshot(snapshotKey, { audit });
         });
         nextAuditRefreshAtRef.current = now + AUDIT_REFRESH_MS;
@@ -196,7 +211,7 @@ export function ReportSummaryPanel() {
       if (cancelled || !result.ok) return;
       setLiveStatus(result.data.legacy);
       setTrackingV2Live(result.data.trackingV2);
-      const snapshotKey = reportSnapshotKey(auth, appliedFilters);
+      const snapshotKey = reportSnapshotKey(auth, appliedFilters, reportTimeZone);
       updateReportSnapshot(snapshotKey, {
         liveStatus: result.data.legacy,
         trackingV2Live: result.data.trackingV2,
@@ -206,7 +221,7 @@ export function ReportSummaryPanel() {
         Date.now() >= nextAuditRefreshAtRef.current
       ) {
         nextAuditRefreshAtRef.current = Date.now() + AUDIT_REFRESH_MS;
-        void loadAudit(auth, appliedFilters, () => cancelled, setAuditState, (audit) => {
+        void loadAudit(auth, appliedFilters, reportTimeZone, () => cancelled, setAuditState, (audit) => {
           updateReportSnapshot(snapshotKey, { audit });
         });
       }
@@ -241,7 +256,7 @@ export function ReportSummaryPanel() {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [auth, appliedFilters, livePollingReady]);
+  }, [auth, appliedFilters, livePollingReady, reportTimeZone]);
 
   const departments = useMemo(() => {
     const values = new Map<string, string>();
@@ -276,18 +291,18 @@ export function ReportSummaryPanel() {
     const result = await requestSummary(auth, filters);
     persistReportFilters(auth.userId, filters);
     applyResult(result, setReportState);
-    const snapshotKey = reportSnapshotKey(auth, filters);
+    const snapshotKey = reportSnapshotKey(auth, filters, reportTimeZone);
     if (result.ok) updateReportSnapshot(snapshotKey, { summary: result.data });
     nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
     if (result.ok && result.data.scope === "user") {
-      void loadAudit(auth, filters, () => false, setAuditState, (audit) => {
+      void loadAudit(auth, filters, reportTimeZone, () => false, setAuditState, (audit) => {
         updateReportSnapshot(snapshotKey, { audit });
       });
     }
   }
 
   function applyPreset(days: number) {
-    const to = utcToday();
+    const to = calendarToday(new Date(), reportTimeZone);
     setFilters((current) => ({ ...current, from: addUtcDays(to, -(days - 1)), to }));
   }
 
@@ -359,7 +374,7 @@ export function ReportSummaryPanel() {
           </label>
           <label style={styles.field}>
             <span style={styles.fieldLabel}>To</span>
-            <input required type="date" value={filters.to} min={filters.from} max={utcToday()} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} style={styles.input} />
+            <input required type="date" value={filters.to} min={filters.from} max={calendarToday(new Date(), reportTimeZone)} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} style={styles.input} />
           </label>
         </div>
 
@@ -373,7 +388,7 @@ export function ReportSummaryPanel() {
           <WorkMapButton type="button" onClick={() => summary && exportSummaryTxt(summary, scopeLabel)} disabled={!summary || reportState.loading}>
             <FileText size={16} aria-hidden /> Download TXT
           </WorkMapButton>
-          <span style={styles.rangeText}>{reportState.loading ? "Loading selected reporting dates" : summary ? `${summary.range.from} to ${summary.range.to} (${summary.range.timeZone})` : "UTC reporting dates"}</span>
+          <span style={styles.rangeText}>{reportState.loading ? "Loading selected reporting dates" : summary ? `${summary.range.from} to ${summary.range.to} (${summary.range.timeZone})` : `Workspace reporting dates (${reportTimeZone})`}</span>
         </div>
       </section>
 
@@ -408,6 +423,7 @@ export function ReportSummaryPanel() {
           rows={liveUser?.browserExtensionCoverage ?? summary.browserExtensionCoverage}
           v2Devices={trackingV2Live?.devices ?? []}
           filters={appliedFilters}
+          timeZone={reportTimeZone}
         />
       ) : null}
 
@@ -868,14 +884,16 @@ function EmployeeConnectionAudit({
   rows,
   v2Devices,
   filters,
+  timeZone,
 }: {
   auditState: AuditState;
   rows: WorkMapApiUsageSummary["browserExtensionCoverage"];
   v2Devices: WorkMapApiTrackingV2LiveActivity["devices"];
   filters: ReportFilters;
+  timeZone: string;
 }) {
   const audit = auditState.audit;
-  const auditRange = resolveConnectionAuditRange(filters);
+  const auditRange = resolveConnectionAuditRange(filters, timeZone);
   const includesTimestamp = (timestamp: string) =>
     isConnectionAuditTimestampInRange(
       timestamp,
@@ -908,8 +926,8 @@ function EmployeeConnectionAudit({
           <h2 id="connection-audit-heading" style={styles.sectionTitle}>Start, stop and interruption history</h2>
           <p style={styles.panelText}>Confirmed client transitions and inferred heartbeat gaps are shown separately for the Agent and Extension.</p>
           <p style={styles.auditRangeText}>
-            Connection dates use {auditRange.timeZone}: {auditRange.calendar.from}
-            {auditRange.calendar.to === auditRange.calendar.from ? "" : ` to ${auditRange.calendar.to}`}. Usage totals remain UTC.
+            Connection history and usage totals use {auditRange.timeZone}: {auditRange.calendar.from}
+            {auditRange.calendar.to === auditRange.calendar.from ? "" : ` to ${auditRange.calendar.to}`}.
           </p>
         </div>
         <History size={22} aria-hidden />
@@ -1470,9 +1488,9 @@ async function requestSummary(auth: AuthContext, filters: ReportFilters) {
   });
 }
 
-function reportSnapshotKey(auth: AuthContext, filters: ReportFilters) {
+function reportSnapshotKey(auth: AuthContext, filters: ReportFilters, timeZone: string) {
   return JSON.stringify([
-    "report-snapshot-v1",
+    "report-snapshot-v2-workspace-calendar",
     auth.userId,
     auth.role,
     auth.source,
@@ -1480,6 +1498,7 @@ function reportSnapshotKey(auth: AuthContext, filters: ReportFilters) {
     filters.departmentId,
     filters.from,
     filters.to,
+    timeZone,
   ]);
 }
 
@@ -1560,6 +1579,7 @@ function trackingV2Revision(live: WorkMapApiTrackingV2LiveActivity) {
 async function loadAudit(
   auth: AuthContext,
   filters: ReportFilters,
+  timeZone: string,
   isCancelled: () => boolean,
   setState: React.Dispatch<React.SetStateAction<AuditState>>,
   onLoaded?: (audit: WorkMapApiTrackingAudit) => void,
@@ -1568,7 +1588,7 @@ async function loadAudit(
     ? current
     : { ...current, refreshStatus: "loading" });
   const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
-  const auditRange = resolveConnectionAuditRange(filters);
+  const auditRange = resolveConnectionAuditRange(filters, timeZone);
   const result = await getTrackingAudit({
     ...auth.options,
     scope: filters.view === "company" ? "company" : "user",

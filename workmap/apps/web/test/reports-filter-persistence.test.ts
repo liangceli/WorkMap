@@ -2,13 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   defaultReportFilters,
+  calendarToday,
   persistReportFilters,
   restoreReportFilters,
-  utcToday,
 } from "../components/reports/reportFilters";
 
-test("new company reports default to the UTC reporting day and all departments", () => {
-  assert.equal(utcToday(new Date("2026-07-13T23:30:00.000Z")), "2026-07-13");
+test("new company reports default to the workspace reporting day and all departments", () => {
+  assert.equal(
+    calendarToday(
+      new Date("2026-07-13T23:30:00.000Z"),
+      "Australia/Adelaide",
+    ),
+    "2026-07-14",
+  );
   assert.deepEqual(defaultReportFilters("company", "2026-07-07"), {
     view: "company",
     departmentId: "",
