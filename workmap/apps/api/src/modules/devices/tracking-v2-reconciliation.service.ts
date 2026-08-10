@@ -32,10 +32,31 @@ type MetricTotals = {
 };
 
 export const TRACKING_RECONCILIATION_QUIET_PERIOD_MS = 60_000;
+export const TRACKING_RECONCILIATION_INGESTION_QUIET_PERIOD_MS =
+  2 * 60_000;
 
 @Injectable()
 export class TrackingV2ReconciliationService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async hasRecentTrackingActivity(
+    quietPeriodMs = TRACKING_RECONCILIATION_INGESTION_QUIET_PERIOD_MS,
+    now = new Date(),
+  ) {
+    const recentDevice = await this.prisma.device.findFirst({
+      where: {
+        protocolActivatedAt: { not: null },
+        revokedAt: null,
+        lastSeenAt: {
+          gte: new Date(
+            now.getTime() - Math.max(0, quietPeriodMs),
+          ),
+        },
+      },
+      select: { id: true },
+    });
+    return recentDevice !== null;
+  }
 
   async reconcileTargets(keys: TrackingReconciliationTargetKey[]) {
     const unique = [

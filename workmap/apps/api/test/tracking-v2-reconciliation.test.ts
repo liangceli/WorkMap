@@ -3,9 +3,11 @@ import test from "node:test";
 import { TrackingActivityMetric } from "@prisma/client";
 import {
   computeTarget,
+  TRACKING_RECONCILIATION_INGESTION_QUIET_PERIOD_MS,
   TRACKING_RECONCILIATION_QUIET_PERIOD_MS,
   TrackingV2ReconciliationService,
 } from "../src/modules/devices/tracking-v2-reconciliation.service.js";
+import { TrackingV2ReconciliationWorker } from "../src/modules/devices/tracking-v2-reconciliation.worker.js";
 import { advanceTrackingCursorCoverageV2 } from "../src/modules/devices/tracking-v2-sync.service.js";
 
 const BASE = Date.parse("2026-07-17T09:00:00.000Z");
@@ -164,4 +166,77 @@ test("background reconciliation waits for a quiet target instead of racing activ
   assert.ok(
     cutoff.getTime() >= before - TRACKING_RECONCILIATION_QUIET_PERIOD_MS - 100,
   );
+});
+
+test("recent Tracking v2 traffic is detected without changing ingestion state", async () => {
+  type DeviceQuery = {
+    where: {
+      protocolActivatedAt: { not: null };
+      revokedAt: null;
+      lastSeenAt: { gte: Date };
+    };
+    select: { id: true };
+  };
+  let query: DeviceQuery | null = null;
+  const service = new TrackingV2ReconciliationService({
+    device: {
+      findFirst: async (input: DeviceQuery) => {
+        query = input;
+        return { id: "recent-tracking-device" };
+      },
+    },
+  } as never);
+  const now = new Date("2026-08-10T02:00:00.000Z");
+
+  const result = await service.hasRecentTrackingActivity(
+    TRACKING_RECONCILIATION_INGESTION_QUIET_PERIOD_MS,
+    now,
+  );
+  const observedQuery = query as DeviceQuery | null;
+
+  assert.equal(result, true);
+  assert(observedQuery);
+  assert.equal(
+    observedQuery.where.lastSeenAt.gte.toISOString(),
+    "2026-08-10T01:58:00.000Z",
+  );
+  assert.deepEqual(observedQuery.where.protocolActivatedAt, {
+    not: null,
+  });
+  assert.equal(observedQuery.where.revokedAt, null);
+  assert.deepEqual(observedQuery.select, { id: true });
+});
+
+test("background reconciliation defers while tracking clients are active", async () => {
+  let reconcileCalls = 0;
+  const worker = new TrackingV2ReconciliationWorker({
+    hasRecentTrackingActivity: async () => true,
+    reconcileDirtyTargets: async () => {
+      reconcileCalls += 1;
+      return { reconciled: 1 };
+    },
+  } as never);
+
+  const result = await worker.runOnce();
+
+  assert.deepEqual(result, { deferred: true, reconciled: 0 });
+  assert.equal(reconcileCalls, 0);
+  worker.onModuleDestroy();
+});
+
+test("background reconciliation resumes one target after tracking is quiet", async () => {
+  let requestedLimit: number | null = null;
+  const worker = new TrackingV2ReconciliationWorker({
+    hasRecentTrackingActivity: async () => false,
+    reconcileDirtyTargets: async (limit: number) => {
+      requestedLimit = limit;
+      return { reconciled: 1 };
+    },
+  } as never);
+
+  const result = await worker.runOnce();
+
+  assert.deepEqual(result, { deferred: false, reconciled: 1 });
+  assert.equal(requestedLimit, 1);
+  worker.onModuleDestroy();
 });

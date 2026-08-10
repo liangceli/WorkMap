@@ -1,5 +1,30 @@
 # Latest QA Handoff
 
+## 2026-08-10 Tracking v2 Reconciliation Load-shedding QA
+
+### Reviewed Implementation And Findings
+
+- High, fixed in source: the in-process reconciliation worker could begin two seconds after deployment and continuously materialize four historical targets per 30-second cycle while Desktop/Browser Tracking v2 requests were active. The target-level quiet rule did not protect unrelated ingestion transactions from shared database/pool pressure.
+- High, evidence-backed data assessment: retryable `TRACKING_SYNC_INTERNAL` requests remained in the local SQLite queue; successful HTTP 200 batches appeared between failures, confirmed-through advanced, and historical rejected/dead-letter totals did not rise. The incident delayed current Reports visibility but did not demonstrate terminal interval loss. Unconfirmed rows still require normal post-deployment queue drain.
+- Fix scope is limited to reconciliation scheduling and a read-only recent-device lookup. No client, protocol, policy, acceptance rule, ledger write, fragment split, summary calculation, report scope, tenant/RBAC or privacy behavior changed.
+- Active clients now receive a 60-second post-boot recovery window. Background reconciliation defers while an activated, non-revoked v2 device has a server-confirmed `lastSeenAt` within two minutes; when quiet, one target rather than four is materialized per cycle.
+
+### Verification Status
+
+- Focused `tracking-v2-reconciliation.test.ts`: pass, 10/10.
+- `pnpm --filter @workmap/api typecheck`: pass.
+- `pnpm --filter @workmap/api lint`: pass.
+- `pnpm --filter @workmap/api test`: pass, 65/65.
+- `pnpm --filter @workmap/api build`: pass.
+- Full tests retain accepted Desktop Focus/idle/Open-runtime, Browser Domain Focus/idle/Open-runtime, policy rejection, snapshot/heartbeat isolation, cursor coverage and confirmed Reports behavior.
+
+### Manual QA, Risks, And Recommendation
+
+- Real Render API deployment, Supabase metrics, live queue drain and `/reports` confirmation were not run. No Windows Agent or Chrome/Edge Extension package was rebuilt or changed.
+- Cache materialization is intentionally slower during active Tracking traffic. Dirty Reports use the existing exact ledger fallback, so this is a cache-latency/cost trade-off rather than a data-contract change. A very large backlog should be drained in a quiet window; future horizontal scale should use a dedicated singleton/background job.
+- QA recommendation: pass for an API-only controlled deployment. No migration is required. After deploy, fail acceptance if retryable transaction 500s continue with reconciliation deferred, pending grows monotonically, rejected/dead-letter counts rise, or confirmed-through stops advancing; in that case correlate request IDs with Render and Supabase before broadening the change.
+- The next round can proceed to API-only deployment and monitored real-client acceptance. Do not reinstall, re-pair or clear Desktop/Browser local storage.
+
 ## 2026-08-07 Workspace-calendar Reports QA
 
 ### Reviewed Implementation And Findings

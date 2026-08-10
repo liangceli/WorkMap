@@ -1,5 +1,36 @@
 # Latest Implementation Handoff
 
+## 2026-08-10 Tracking v2 Reconciliation Load-shedding Fix
+
+### Original Task Brief
+
+- Fix the recurring local Desktop Agent `HTTP 500 / TRACKING_SYNC_INTERNAL / transaction` uploads observed after the workspace-calendar reporting rollout.
+- Proceed only with greater than 95% confidence, preserve queued activity, and do not change Desktop Agent or Browser Extension collection, interval creation, retry, policy, privacy, tenant or reporting semantics.
+- Keep the implementation isolated from unrelated services and avoid masking errors by weakening validation or dropping data.
+
+### Confirmed Cause And Changed Files
+
+- Read-only local NDJSON and SQLite evidence showed failed requests lasting roughly 16-30 seconds at the API transaction stage, retryable queue retention, unchanged dead-letter totals, successful accepted batches between failures, and later cursor advancement. This is delayed ingestion rather than a terminal client rejection or evidence that the Agent stopped collecting.
+- The existing API reconciliation worker started two seconds after every API boot and attempted four dirty historical targets every 30 seconds. Its per-target quiet period prevented same-target races but did not yield to unrelated active Tracking v2 ingestion. The workspace-calendar migration intentionally marked the rebuilt historical targets dirty, creating sustained background database work while clients were uploading. Prior deployed reconciliation logs also recorded expired Prisma transactions, consistent with the observed sync transaction timeouts.
+- `workmap/apps/api/src/modules/devices/tracking-v2-reconciliation.service.ts`: added a read-only recent-Tracking-activity check using activated, non-revoked `Device.lastSeenAt`. The check neither writes device state nor changes interval acceptance.
+- `workmap/apps/api/src/modules/devices/tracking-v2-reconciliation.worker.ts`: gives clients a 60-second recovery window after API startup, defers background materialization while any activated Tracking v2 device has been server-confirmed within two minutes, and processes one dirty target per quiet cycle instead of four.
+- `workmap/apps/api/test/tracking-v2-reconciliation.test.ts`: added regressions proving the activity check is read-only, active Tracking traffic prevents a reconciliation write transaction, and reconciliation resumes with a one-target batch after the database becomes quiet.
+
+### Behavior, Boundaries, And Deployment
+
+- Desktop Agent and Browser Extension source, versions, packages, interval generation, queues, retry/backoff, heartbeat, snapshot, Focus/idle/Open-runtime clocks and request payloads are unchanged.
+- `/device-client/sync-v2`, policy/lease validation, device credentials, tenant/RBAC boundaries, immutable `ActivityInterval` rows, calendar-day fragments and exact overlap-aware report totals are unchanged.
+- Dirty summary targets remain durable. During active uploads, Reports continues using the existing exact ledger-fragment fallback; after two minutes without server-confirmed Tracking v2 activity, the worker resumes one target every 30-second cycle. This favors durable ingestion over cache freshness without omitting accepted data.
+- No Prisma schema or migration changed. Deployment requires only the API build; no database migration, Web deployment, Agent release, Extension release, re-pairing or local-data reset is required.
+
+### Verification, Manual QA, Risks, And Next Step
+
+- Focused reconciliation test: pass, 10/10.
+- API typecheck: pass. API lint: pass. API full test suite: pass, 65/65. API build: pass.
+- Real Render/Supabase deployment and live two-client queue-drain QA were not run in this implementation round. Do not claim the production 500 cluster is resolved until the API is deployed and observed.
+- Remaining trade-off: one active Tracking v2 tenant currently defers background cache materialization globally on the shared API/database. Exact Reports remain available through the raw-fragment fallback, but a large historical rebuild may take longer and should be allowed to drain during a quiet/off-hours window. At future multi-instance scale, move reconciliation to a separately controlled worker rather than restoring aggressive in-process batches.
+- Recommended acceptance: deploy API only, keep the Agent/Extension installations and local stores intact, observe that heartbeat remains confirmed, pending returns to its normal 0/1 cycle, dead-letter totals do not increase, accepted/duplicate results advance confirmed-through, and Render no longer logs reconciliation/sync transaction expiry during active uploads.
+
 ## 2026-08-07 Workspace-calendar Reports Implementation
 
 ### Original Task Brief

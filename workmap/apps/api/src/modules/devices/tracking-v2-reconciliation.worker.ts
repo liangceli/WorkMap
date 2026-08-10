@@ -6,12 +6,13 @@ import {
 } from "@nestjs/common";
 import {
   describeTrackingV2Error,
+  TRACKING_RECONCILIATION_INGESTION_QUIET_PERIOD_MS,
   TrackingV2ReconciliationService,
 } from "./tracking-v2-reconciliation.service.js";
 
-const INITIAL_RECONCILIATION_DELAY_MS = 2_000;
+const INITIAL_RECONCILIATION_DELAY_MS = 60_000;
 const RECONCILIATION_INTERVAL_MS = 30_000;
-const RECONCILIATION_BATCH_SIZE = 4;
+const RECONCILIATION_BATCH_SIZE = 1;
 
 @Injectable()
 export class TrackingV2ReconciliationWorker
@@ -45,11 +46,23 @@ export class TrackingV2ReconciliationWorker
     this.timer.unref();
   }
 
+  async runOnce() {
+    const hasRecentTrackingActivity =
+      await this.reconciliation.hasRecentTrackingActivity(
+        TRACKING_RECONCILIATION_INGESTION_QUIET_PERIOD_MS,
+      );
+    if (hasRecentTrackingActivity) {
+      return { deferred: true, reconciled: 0 };
+    }
+    const result = await this.reconciliation.reconcileDirtyTargets(
+      RECONCILIATION_BATCH_SIZE,
+    );
+    return { deferred: false, reconciled: result.reconciled };
+  }
+
   private async run() {
     try {
-      await this.reconciliation.reconcileDirtyTargets(
-        RECONCILIATION_BATCH_SIZE,
-      );
+      await this.runOnce();
     } catch (error) {
       this.logger.warn(
         `Tracking v2 reconciliation retry failed; database targets remain retryable. ${describeTrackingV2Error(error)}`,
