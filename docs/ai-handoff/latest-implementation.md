@@ -7442,3 +7442,26 @@ Correct the password visibility eye button so it aligns inside the right edge of
 ### Manual QA And Remaining Risk
 
 - Production deployment and Monday-window live validation have not been run in this task. After deployment, verify that a live Desktop Agent snapshot during a configured work window no longer reports `SNAPSHOT_OUTSIDE_POLICY_WINDOW`, while an interval spanning outside the window remains excluded from confirmed totals.
+
+---
+
+## 2026-08-10 Dashboard Virtual Office Preview
+
+### Original Task Brief
+- Replace the dashboard banner's four summary tiles with the real Virtual Office panorama, preserving all dashboard behavior and adding responsive presentation.
+
+### Changed Files
+- `workmap/apps/web/components/dashboard/ManagerOverviewPanel.tsx`
+- `workmap/apps/web/app/workspace-redesign.css`
+
+### Implementation Summary
+- Replaced only the banner's visual summary grid with the existing real product asset at `/marketing/workmap-virtual-office-panorama.png`.
+- Preserved the dashboard copy, buttons, data loading, navigation, and all component interfaces.
+- The panorama keeps its full aspect ratio without cropping, uses a restrained dark product frame, and stacks below the copy on tablet and mobile layouts.
+
+### Verification And Boundaries
+- `pnpm.cmd --filter @workmap/web typecheck`: passed.
+- `pnpm.cmd --filter @workmap/web lint`: passed.
+- `git diff --check`: passed with Windows line-ending warnings only.
+- Authenticated browser visual QA was not run.
+- No backend, API, database, Prisma, authentication, deployment, Desktop Agent, or Browser Extension code changed.

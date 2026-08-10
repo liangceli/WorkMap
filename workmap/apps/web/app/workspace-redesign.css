@@ -497,7 +497,7 @@
 }
 
 .wm-dashboard-hero-copy,
-.wm-dashboard-hero-signals {
+.wm-dashboard-hero-map {
   position: relative;
   z-index: 1;
   min-width: 0;
@@ -558,90 +558,22 @@
   background: rgba(39, 224, 162, 0.1) !important;
 }
 
-.wm-dashboard-hero-signals {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: clamp(18px, 2.4vw, 28px);
-  border: 1px solid rgba(16, 143, 112, 0.28);
+.wm-dashboard-hero-map {
+  margin: 0;
+  padding: clamp(10px, 1.2vw, 16px);
+  border: 1px solid rgba(7, 17, 35, 0.16);
   border-radius: 8px;
-  background: #eef8f3;
-  box-shadow: inset 0 0 0 7px rgba(255, 253, 248, 0.88);
+  background: var(--wm-primary);
+  box-shadow: 0 16px 30px rgba(7, 17, 35, 0.14);
 }
 
-.wm-dashboard-hero-signals::before,
-.wm-dashboard-hero-signals::after {
-  position: absolute;
-  z-index: 0;
-  border: 1px dashed rgba(16, 143, 112, 0.28);
-  border-radius: 0;
-  content: "";
-  pointer-events: none;
-}
-
-.wm-dashboard-hero-signals::before {
-  top: 18px;
-  right: 18px;
-  width: 132px;
-  height: 84px;
-  border-bottom: 0;
-  border-left: 0;
-  transform: rotate(-10deg);
-}
-
-.wm-dashboard-hero-signals::after {
-  bottom: 18px;
-  left: 18px;
-  width: 104px;
-  height: 66px;
-  border-top: 0;
-  border-right: 0;
-  transform: rotate(-10deg);
-}
-
-.wm-dashboard-hero-signal {
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-  min-height: 114px;
-  display: grid;
-  align-content: start;
-  gap: 6px;
-  padding: 16px;
-  border: 1px solid rgba(7, 17, 35, 0.13);
-  border-radius: 6px;
-  background: #fffdf8;
-  box-shadow: 0 6px 16px rgba(7, 17, 35, 0.04);
-  transition: transform 160ms ease, border-color 160ms ease;
-}
-
-.wm-dashboard-hero-signal:hover {
-  border-color: rgba(16, 143, 112, 0.55);
-  transform: translateY(-2px);
-}
-
-.wm-dashboard-hero-signal span {
-  color: var(--wm-secondary);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.wm-dashboard-hero-signal strong {
-  color: var(--wm-primary);
-  font-size: clamp(16px, 1.8vw, 22px);
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.wm-dashboard-hero-signal small {
-  color: var(--wm-text-secondary);
-  font-size: 11px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
+.wm-dashboard-hero-map img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1904 / 949;
+  object-fit: contain;
+  border-radius: 4px;
 }
 
 @media (max-width: 1024px) {
@@ -652,6 +584,10 @@
 
   .wm-dashboard-hero .wm-dashboard-hero-copy > p:not(:first-child) {
     max-width: 700px;
+  }
+
+  .wm-dashboard-hero-map {
+    width: 100%;
   }
 }
 
@@ -1856,8 +1792,9 @@
     width: 100%;
   }
 
-  .wm-dashboard-hero-signals {
+  .wm-dashboard-hero-map {
     width: 100%;
+    padding: 9px;
   }
 
   .wm-settings-grid,
@@ -1982,8 +1919,8 @@
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
-  .wm-dashboard-hero-signals {
-    grid-template-columns: 1fr;
+  .wm-dashboard-hero-map {
+    padding: 7px;
   }
 }
 

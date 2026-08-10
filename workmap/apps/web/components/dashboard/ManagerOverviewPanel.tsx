@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { EmployeeCard } from "./EmployeeCard";
 import { AppUsageTable } from "./AppUsageTable";
@@ -245,38 +246,6 @@ export function ManagerOverviewPanel() {
     ],
     [dashboardState, presenceCounts],
   );
-  const heroSignals = useMemo(
-    () => [
-      {
-        label: "Session",
-        value: dashboardState.loading
-          ? "Checking"
-          : dashboardState.authSource
-            ? formatAuthSource(dashboardState.authSource)
-            : "Sign in required",
-        detail: dashboardState.role ? `${dashboardState.role.replace(/_/g, " ")} workspace` : "Workspace access pending",
-      },
-      {
-        label: "Presence",
-        value: dashboardState.positions.length > 0 ? `${presenceCounts.active} active` : "No team rows",
-        detail: dashboardState.positions.length > 0 ? `${presenceCounts.idle} idle · ${presenceCounts.offline} offline` : "Office presence is not available yet",
-      },
-      {
-        label: "Device coverage",
-        value: dashboardState.usageSummary?.deviceCoverage
-          ? `${dashboardState.usageSummary.deviceCoverage.activeDevices24h}/${dashboardState.usageSummary.deviceCoverage.registeredDevices}`
-          : "No device rows",
-        detail: "Active / registered in the current report scope",
-      },
-      {
-        label: "Policy",
-        value: dashboardState.policyVersion ? `v${dashboardState.policyVersion}` : "Checking",
-        detail: dashboardState.policyVersion ? "Transparency policy available" : "Policy status is loading",
-      },
-    ],
-    [dashboardState, presenceCounts],
-  );
-
   return (
     <div className="wm-redesign-page wm-dashboard-page" style={styles.stack}>
       <section className="wm-dashboard-hero" style={styles.hero}>
@@ -297,15 +266,15 @@ export function ManagerOverviewPanel() {
             ))}
           </div>
         </div>
-        <div className="wm-dashboard-hero-signals" aria-label="Workspace signal overview">
-          {heroSignals.map((signal) => (
-            <article key={signal.label} className="wm-dashboard-hero-signal">
-              <span>{signal.label}</span>
-              <strong>{signal.value}</strong>
-              <small>{signal.detail}</small>
-            </article>
-          ))}
-        </div>
+        <figure className="wm-dashboard-hero-map">
+          <Image
+            src="/marketing/workmap-virtual-office-panorama.png"
+            alt="CandidGrid Virtual Office showing the complete office map, team presence, rooms, navigation, minimap, and status controls"
+            width={1904}
+            height={949}
+            sizes="(max-width: 720px) calc(100vw - 48px), (max-width: 1024px) calc(100vw - 96px), 52vw"
+          />
+        </figure>
       </section>
 
       <section style={styles.guidancePanel}>
