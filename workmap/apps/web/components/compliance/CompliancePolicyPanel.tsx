@@ -15,26 +15,25 @@ import type { WorkMapApiCompliancePolicy } from "../../lib/api/apiTypes";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 const visibleItems = [
-  "Presence in the virtual office",
-  "Avatar location and room/area",
-  "Workspace status and freshness",
-  "Desktop app name and usage duration",
-  "Browser domain name and usage duration",
-  "Device registration and heartbeat status",
-  "Last-seen timestamp",
-  "Policy acknowledgement timestamp",
-  "CandidGrid in-app messages, waves, reactions, and Notice read state",
+  "Foreground App name and Focus active/focused idle duration",
+  "Focused HTTP/HTTPS hostname and Focus active/focused idle duration",
+  "Policy-enabled App open/runtime for user-visible Windows windows, including covered or minimised windows",
+  "Policy-enabled Browser Domain open/runtime, de-duplicated per hostname",
+  "Device or browser identity, client version, time zone, heartbeat, connection and interruption events",
+  "Virtual-office presence, avatar room or area, workspace status, freshness and last-seen time",
+  "Employee monitoring notice version and confirmation timestamp",
+  "Messages, waves, reactions and Notice read state when a user intentionally sends or interacts with them",
 ];
 
 const notVisibleItems = [
   "Screenshots are not collected",
   "Screen recordings are not collected",
-  "Keystrokes are not collected",
+  "Key values, typed text, pointer coordinates, scroll direction and target elements are not collected",
   "Clipboard contents are not collected",
   "Webcam or microphone data is not collected",
   "External private message, Teams, or email body content is not collected",
-  "Webpage body, form inputs, and passwords are not collected",
-  "Full URL paths, query strings, and fragments are not collected",
+  "Webpage body, form inputs and passwords are not collected",
+  "Window or page titles, files, full URL paths, query strings and fragments are not collected",
 ];
 
 export function CompliancePolicyPanel() {
@@ -66,7 +65,7 @@ export function CompliancePolicyPanel() {
       if (!auth.available) {
         setLoading(false);
         setAuthSource(null);
-        setStatusText("Sign in with Cognito to load and record backend policy acknowledgement. Safe transparency copy is shown below.");
+        setStatusText("Sign in to load the current workspace policy and record that you have read its notice. The general technical notice remains available below.");
         return;
       }
 
@@ -82,7 +81,7 @@ export function CompliancePolicyPanel() {
 
       if (!policyResult.ok) {
         setPolicy(null);
-        setStatusText("Backend policy could not be loaded. Safe transparency copy is shown, and no acknowledgement is recorded.");
+        setStatusText("The current workspace policy could not be loaded. The general technical notice is shown, and no confirmation has been recorded.");
         return;
       }
 
@@ -93,8 +92,8 @@ export function CompliancePolicyPanel() {
       setAcknowledgedAt(storedAcknowledgement);
       setStatusText(
         storedAcknowledgement
-          ? `Policy ${policyResult.data.policyVersion} was acknowledged from this browser at ${storedAcknowledgement}.`
-          : `Backend policy ${policyResult.data.policyVersion} loaded for this Cognito session.`,
+          ? `Receipt and review of notice ${policyResult.data.policyVersion} were confirmed from this browser at ${storedAcknowledgement}.`
+          : `Current workspace notice ${policyResult.data.policyVersion} is ready to review.`,
       );
     }
 
@@ -107,7 +106,7 @@ export function CompliancePolicyPanel() {
 
   const acknowledgePolicy = async () => {
     if (!policy) {
-      setStatusText("Policy acknowledgement needs a loaded backend policy. The transparency notice remains available for review.");
+      setStatusText("A current workspace notice must be loaded before a confirmation can be recorded. The general technical notice remains available for review.");
       setModalOpen(false);
       return;
     }
@@ -117,7 +116,7 @@ export function CompliancePolicyPanel() {
 
     if (!auth.available) {
       setAcknowledging(false);
-      setStatusText("No active API session is available. Sign in with Cognito before recording acknowledgement.");
+      setStatusText("No signed-in session is available. Sign in before recording that you have read the notice.");
       setModalOpen(false);
       return;
     }
@@ -126,7 +125,7 @@ export function CompliancePolicyPanel() {
     setAcknowledging(false);
 
     if (!result.ok) {
-      setStatusText("Backend acknowledgement failed. No local-only policy acknowledgement was recorded.");
+      setStatusText("The confirmation could not be recorded. No browser-only confirmation was saved.");
       setModalOpen(false);
       return;
     }
@@ -134,7 +133,7 @@ export function CompliancePolicyPanel() {
     const acknowledged = new Date(result.data.acknowledgedAt).toLocaleString();
     setAcknowledgedAt(acknowledged);
     writeAcknowledgement(auth, policy.id, acknowledged);
-    setStatusText(`Policy ${policy.policyVersion} acknowledged at ${acknowledged}.`);
+    setStatusText(`Receipt and review of notice ${policy.policyVersion} confirmed at ${acknowledged}. This is not consent or a waiver of rights.`);
     setModalOpen(false);
   };
 
@@ -225,7 +224,7 @@ export function CompliancePolicyPanel() {
     setPolicy(result.data);
     setAcknowledgedAt(null);
     setStatusText(
-      `Policy ${result.data.policyVersion} now includes App open/runtime collection. Review and acknowledge this new version before the Agent receives an authorised runtime lease.`,
+      `Notice ${result.data.policyVersion} now includes App open/runtime collection. Employees must review and confirm receipt of this version before the Agent receives an authorised runtime lease.`,
     );
   };
 
@@ -251,38 +250,38 @@ export function CompliancePolicyPanel() {
     setPolicy(result.data);
     setAcknowledgedAt(null);
     setStatusText(
-      `Policy ${result.data.policyVersion} now includes Browser Domain open/runtime collection. Review and acknowledge this new version before Browser Extensions receive an authorised runtime lease.`,
+      `Notice ${result.data.policyVersion} now includes Browser Domain open/runtime collection. Employees must review and confirm receipt of this version before Browser Extensions receive an authorised runtime lease.`,
     );
   };
 
   return (
     <div className="wm-compliance-policy" style={styles.stack}>
       <section className="wm-compliance-card-grid" style={styles.policyGrid}>
-        <PolicyList title="Visible in CandidGrid" tone="blue" items={visibleItems} />
+        <PolicyList title="Recorded or stored by CandidGrid" tone="blue" items={visibleItems} />
         <PolicyList title="Not monitored" tone="green" items={notVisibleItems} />
       </section>
 
       <section className="wm-compliance-card-grid" style={styles.explanationGrid}>
         <TrustCard
-          title="Why this data exists"
-          text="CandidGrid uses presence, app/domain duration summaries, device heartbeat, and acknowledgement timestamps to help a tenant understand workspace setup and transparent activity coverage."
+          title="CandidGrid's technical purpose"
+          text="CandidGrid uses the stated activity, presence, device-health and notice-confirmation data to produce role-permitted work summaries, show virtual-office presence, operate tracking clients and document current policy coverage. Your organisation must state its own lawful and specific purposes."
         />
         <TrustCard
-          title="Who can see what"
-          text="Employees can review their own summaries and compliance state. Owners and allowed manager roles can review company aggregate summaries, not private content or raw cross-tenant rows."
+          title="Who can view reports"
+          text="An Employee's report scope is limited to their own activity, where an own-summary surface is available. Team Leads, Managers, HR Admins and Owners can view role-permitted team or employee activity within their organisation. IT Admins cannot view another employee's activity by role. Platform Admin does not receive tenant employee activity views."
         />
         <TrustCard
-          title="Alpha client limitation"
-          text="The Windows Desktop Agent and MV3 Browser Extension use short-lived pairing codes, device-scoped credentials, bounded offline queues, retry backoff, and revocation. Final consolidated manual installation and runtime QA remains pending."
+          title="Your organisation's notice"
+          text="This product notice does not replace your organisation's workplace monitoring or privacy notice. Your organisation must provide its identity and contact, purposes, devices and scope, timing and ongoing nature, uses and disclosures, storage and any overseas handling, retention or deletion, consequences, and a privacy or HR contact for access, correction and complaints, as required by applicable law."
         />
       </section>
 
       <section style={styles.boundaryPanel}>
         <p style={styles.panelLabel}>Role visibility boundary</p>
         <p style={styles.panelText}>
-          Employees can understand their own presence and activity summaries. Owner and manager views may show role-allowed aggregate
-          app/domain summaries for the tenant, while employee-level activity detail remains guarded by backend RBAC and tenant scope.
-          Platform Admin views are separate and should remain limited to privacy-safe tenant metadata and health/audit summaries.
+          An Employee&apos;s report scope is limited to their own activity, where an own-summary surface is available. Team Leads, Managers, HR Admins and Owners may view role-permitted team or employee
+          activity inside their organisation. IT Admins do not receive another employee&apos;s activity access through their role. Platform Admin
+          is limited to privacy-safe tenant metadata, service health and audit information, not tenant employee activity.
         </p>
       </section>
 
@@ -314,7 +313,7 @@ export function CompliancePolicyPanel() {
               {policy.workdayStart}-{policy.workdayEnd} {policy.scheduleTimeZone ?? "time zone pending"}
             </h2>
             <p style={styles.panelText}>
-              Foreground App collection runs only inside this local workspace window. Secure heartbeats continue outside it. This control extends an active schedule; narrowing it requires a new policy version so existing leases cannot keep a broader window.
+              App Focus, Browser Focus and any policy-enabled open/runtime collection run only inside this local workspace window. Device health and secure heartbeats may continue outside it. This control extends an active schedule; narrowing it requires a new policy version so existing leases cannot keep a broader window.
             </p>
           </div>
           {canManageWorkHours ? (
@@ -400,22 +399,22 @@ export function CompliancePolicyPanel() {
 
       <section style={styles.ackPanel}>
         <div>
-          <p style={styles.panelLabel}>Policy acknowledgement</p>
-          <h2 style={styles.panelTitle}>{acknowledgedAt ? "Acknowledged" : policy ? "Backend policy ready" : "Transparency notice"}</h2>
+          <p style={styles.panelLabel}>Notice receipt and review</p>
+          <h2 style={styles.panelTitle}>{acknowledgedAt ? "Receipt confirmed" : policy ? "Current notice ready" : "General technical notice"}</h2>
           <p style={styles.panelText}>
             {loading
               ? "Checking the current API session..."
               : statusText}
           </p>
-          {authSource ? <p style={styles.sessionText}>API context: {authSource}</p> : null}
+          {authSource ? <p style={styles.sessionText}>Signed-in session source: {authSource}</p> : null}
           {policy ? (
             <p style={styles.sessionText}>
-              {policy.name} / version {policy.policyVersion} / retention {policy.retentionDays} days
+              {policy.name} / version {policy.policyVersion} / current policy retention setting {policy.retentionDays} days
             </p>
           ) : null}
         </div>
         <button type="button" onClick={() => setModalOpen(true)} style={styles.primaryButton}>
-          {policy ? "Review and acknowledge" : "Review notice"}
+          {policy ? "Review and confirm receipt" : "Review notice"}
         </button>
       </section>
 

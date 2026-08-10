@@ -61,7 +61,7 @@ export function EmployeeProfile({ employee, teammates }: EmployeeProfileProps) {
           </div>
           <p style={styles.modeText}>
             {mode === "manager"
-              ? "Manager summaries require backend RBAC and real report rows."
+              ? "This summary is available only to Team Leads, Managers, HR Admins or Owners with role-permitted report access."
               : "Employee view only shows contact, role, status, and local time."}
           </p>
         </div>
@@ -122,8 +122,8 @@ export function EmployeeProfile({ employee, teammates }: EmployeeProfileProps) {
                 <p style={styles.bodyText}>Name, role, department, presence status, local time, and contact actions.</p>
               </div>
               <div>
-                <h3 style={styles.smallTitle}>Manager-only summary</h3>
-                <p style={styles.bodyText}>Active time, idle time, app summary, and domain summary require backend RBAC and real activity rows.</p>
+                <h3 style={styles.smallTitle}>Authorised work summary</h3>
+                <p style={styles.bodyText}>Focus active time, focused idle time, App and hostname summaries require role-permitted access for a Team Lead, Manager, HR Admin or Owner. IT Admin and Platform Admin roles do not receive employee activity views.</p>
               </div>
             </div>
           </section>

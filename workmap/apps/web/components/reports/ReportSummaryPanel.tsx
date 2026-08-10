@@ -1778,7 +1778,7 @@ function exportSummaryTxt(summary: WorkMapApiUsageSummary, scopeLabel: string) {
   lines.push(
     "",
     "PRIVACY BOUNDARY",
-    "CandidGrid records foreground application product names and duration only. It does not collect window titles, screenshots, screen recordings, keystrokes, clipboard, camera, microphone, file contents, message/email bodies, webpage bodies, form inputs, or passwords.",
+    "CandidGrid reports foreground App and focused HTTP/HTTPS hostname with Focus active/focused idle time, plus separately labelled App or Domain open/runtime when enabled by policy. It does not collect window or page titles, files, URL paths, queries or fragments, screenshots or recordings, key values or typed text, pointer details, clipboard, camera, microphone, external private message/Teams/email body content, webpage or form content, or passwords.",
   );
   downloadText(
     `workmap-app-usage-${safeFileName(scopeLabel)}-${summary.range.from}-${summary.range.to}.txt`,

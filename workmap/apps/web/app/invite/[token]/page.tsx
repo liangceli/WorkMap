@@ -189,7 +189,7 @@ export default function InviteAcceptancePage() {
         <p style={styles.text}>{status}</p>
         <section style={styles.flowNote}>
           <strong>What happens next</strong>
-          <span>Employees must use the invited Cognito email before CandidGrid takes them through compliance, avatar/profile, and device setup.</span>
+          <span>Employees must use the invited account email, review CandidGrid&apos;s product notice together with their organisation&apos;s workplace monitoring or privacy notice, complete avatar/profile setup, and then pair any required client.</span>
         </section>
         {invitePreview && cognitoAuth?.available && !emailMismatch ? (
           <section style={styles.lockPanel}>

@@ -127,9 +127,9 @@ export function OfficeSidePanel({
 
             <p style={styles.presenceNote}>{presenceNote(presenceSource, people.length)}</p>
             <section style={styles.privacyBoundary}>
-              <strong>Presence is visible in the office</strong>
-              <span>Teammates can see avatar location, workspace status, and last-seen freshness.</span>
-              <span>No screen recording, keystroke logging, hidden webcam, microphone, or message content is shown here.</span>
+              <strong>Virtual-office presence is visible</strong>
+              <span>Workspace members can see avatar location, workspace status and last-seen freshness. These presence fields are stored by CandidGrid.</span>
+              <span>No screenshots or recordings, key values or typed text, clipboard, camera, microphone, or external private-message content is collected for this view.</span>
             </section>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search team..." style={styles.input} />
             <div style={styles.filterRow}>
@@ -290,7 +290,7 @@ export function OfficeSidePanel({
             <p style={styles.note}>Office preferences and shortcuts only. Admin settings stay outside the map.</p>
             <a href="/settings" style={styles.linkButton}>Open settings</a>
             <a href="/onboarding/avatar" style={styles.linkButton}>Edit avatar</a>
-            <a href="/compliance" style={styles.linkButton}>Review privacy policy</a>
+            <a href="/compliance" style={styles.linkButton}>Review employee monitoring notice</a>
             <button type="button" onClick={() => onOpenPanel("people")} style={styles.primaryButton}>Back to people</button>
           </section>
         ) : null}

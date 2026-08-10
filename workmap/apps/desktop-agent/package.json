@@ -1,7 +1,7 @@
 {
   "name": "@workmap/desktop-agent",
   "version": "0.6.11",
-  "description": "Privacy-minimized foreground application usage agent for WorkMap employees.",
+  "description": "CandidGrid employee monitoring client for policy-controlled App Focus and optional App open/runtime collection.",
   "author": "WorkMap",
   "private": true,
   "type": "module",

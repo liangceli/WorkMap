@@ -12,8 +12,8 @@ export default function LoginPage() {
             Create, confirm, and access your Cognito account without leaving CandidGrid. New teams begin with an Owner account; employees join only from an invitation link.
           </p>
           <div style={styles.privacyBox}>
-            <strong>Privacy boundary</strong>
-            <span>No keystrokes, screenshots, recordings, camera, microphone, external private message, Teams or email body, webpage body, form inputs, passwords, or full URL paths.</span>
+            <strong>Monitoring boundary</strong>
+            <span>CandidGrid does not collect screenshots or recordings; window or page titles or files; URL paths, queries or fragments; webpage, form or password content; key values or typed text; pointer details; clipboard; camera or microphone; or external private message, Teams or email body content. Employees should review the full product notice and their organisation&apos;s workplace monitoring notice before clients are paired.</span>
           </div>
         </div>
         <CognitoLoginPanel />

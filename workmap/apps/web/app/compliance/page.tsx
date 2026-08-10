@@ -35,9 +35,9 @@ export default function CompliancePage() {
     <AppShell variant="editorial">
       <section className="wm-redesign-page wm-compliance-page" style={styles.shell}>
         <WorkMapPageHeader
-          eyebrow="Compliance"
-          title="Transparency policy"
-          subtitle="Make CandidGrid activity summaries explicit, role-based, and easy for employees to understand."
+          eyebrow="Employee privacy"
+          title="Employee monitoring and privacy notice"
+          subtitle="Review CandidGrid's technical data boundary and the current workspace policy before pairing or using tracking clients."
           actions={
             <>
               <WorkMapButton href="/settings">Settings</WorkMapButton>
@@ -46,10 +46,10 @@ export default function CompliancePage() {
           }
         />
 
-        <WorkMapPrivacyNotice title={onboardingMode ? "First-time transparency step" : "Workspace transparency boundary"}>
+        <WorkMapPrivacyNotice title={onboardingMode ? "Before CandidGrid monitoring starts" : "Product notice and employer notice"}>
           {onboardingMode
-            ? "Review what CandidGrid does and does not collect before entering the workspace."
-            : "Review what is visible in CandidGrid, what is not collected, and whether the current Cognito session can record acknowledgement through the backend policy API."}
+            ? "Review what CandidGrid does and does not collect, who can view reports, and your organisation's own workplace monitoring or privacy notice before pairing a client."
+            : "Review CandidGrid's technical data boundary, current collection schedule and notice-confirmation status. Your organisation must separately provide the employer-specific information required by applicable law."}
         </WorkMapPrivacyNotice>
 
         <CompliancePolicyPanel />
@@ -57,13 +57,13 @@ export default function CompliancePage() {
         {onboardingMode ? (
           <section style={styles.ackCta}>
             <div>
-              <h2 style={styles.ackTitle}>Ready to continue?</h2>
+              <h2 style={styles.ackTitle}>Finished reviewing?</h2>
               <p style={styles.ackText}>
-                I understand that CandidGrid uses transparent, role-based visibility and does not collect private content.
+                Continue only after reading this notice together with your organisation&apos;s workplace monitoring or privacy notice. The official receipt confirmation is recorded separately above; continuing here is not consent or a waiver of rights.
               </p>
             </div>
             <button type="button" onClick={acknowledgeAndContinue} style={styles.ackButton}>
-              I understand and agree
+              Continue after review
             </button>
           </section>
         ) : null}

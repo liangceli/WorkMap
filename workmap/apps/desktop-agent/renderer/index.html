@@ -4,23 +4,23 @@
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WorkMap Desktop Agent</title>
+    <title>CandidGrid Desktop Agent</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="app-header">
       <div class="brand">
         <img src="workmap-mark.svg" alt="" width="38" height="38" />
-        <div><strong>WorkMap</strong><span>Desktop Agent</span></div>
+        <div><strong>CandidGrid</strong><span>Desktop Agent</span></div>
       </div>
       <div id="status-chip" class="status-chip status-neutral"><span></span><b>Checking</b></div>
     </header>
 
     <main>
       <section class="intro">
-        <p class="eyebrow">PRIVATE BY DESIGN</p>
+        <p class="eyebrow">EMPLOYEE MONITORING CLIENT</p>
         <h1 id="page-title">Connect this computer</h1>
-        <p id="page-subtitle">Enter the one-time code shown in your WorkMap device setup page.</p>
+        <p id="page-subtitle">Enter the one-time code shown on your CandidGrid device setup page after reviewing the required monitoring notices.</p>
       </section>
 
       <div class="content-grid">
@@ -35,7 +35,7 @@
             <div id="pair-progress" class="progress" hidden>
               <div class="progress-track"><span></span></div>
               <strong id="progress-title">Preparing secure connection...</strong>
-              <p id="progress-detail">This can take up to a minute while the WorkMap service wakes up.</p>
+              <p id="progress-detail">This can take up to a minute while the CandidGrid service connects.</p>
             </div>
             <div id="pair-error" class="error" role="alert" hidden></div>
           </div>
@@ -43,7 +43,7 @@
           <div id="connected-view" hidden>
             <div class="success-heading">
               <div class="success-icon">&#10003;</div>
-              <div><h2 id="agent-health-title">Agent starting</h2><p id="agent-health-detail">Preparing privacy-minimized activity tracking.</p></div>
+              <div><h2 id="agent-health-title">Agent starting</h2><p id="agent-health-detail">Preparing policy-controlled activity collection.</p></div>
             </div>
             <dl class="metrics">
               <div><dt>Current foreground app</dt><dd id="current-app">Waiting for activity</dd></div>
@@ -55,7 +55,7 @@
             <div id="agent-error" class="error" role="status" hidden></div>
             <div class="connected-actions">
               <button id="hide-button" class="primary" type="button">Continue in background</button>
-              <button id="open-workmap-button" class="secondary" type="button">Open WorkMap</button>
+              <button id="open-workmap-button" class="secondary" type="button">Open CandidGrid</button>
             </div>
             <p class="background-note">Closing this window keeps the Agent running in the system tray.</p>
             <details id="diagnostics-panel" class="diagnostics-panel">
@@ -92,20 +92,20 @@
         </section>
 
         <aside class="privacy-panel">
-          <h2>What WorkMap records</h2>
+          <h2>What CandidGrid records</h2>
           <ul class="collected">
-            <li>Foreground application name</li>
-            <li>Active start, end, and duration</li>
-            <li>Agent connection and interruption</li>
+            <li>Foreground App name and Focus active/focused idle time</li>
+            <li>Policy-enabled App open/runtime for user-visible windows, including covered or minimised windows</li>
+            <li>Device and Agent identity, version, time zone, timestamps, heartbeat, start/stop, connection and interruption events</li>
           </ul>
           <h3>Never collected</h3>
           <ul class="not-collected">
             <li>Screenshots or screen recordings</li>
-            <li>Keystrokes or clipboard</li>
-            <li>Files, window titles, or messages</li>
+            <li>Key values, typed text or clipboard contents</li>
+            <li>Files, window titles or external message content</li>
             <li>Camera or microphone</li>
           </ul>
-          <p>Background and minimized apps do not count. Activity under five seconds is discarded.</p>
+          <p>Focus measures only the foreground App. If the current policy enables App open/runtime, covered or minimised user-visible windows are measured separately; runtime may overlap and is not Focus, active time or work time.</p>
         </aside>
       </div>
     </main>

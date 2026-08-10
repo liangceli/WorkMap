@@ -3,16 +3,16 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 export function PrivacyNoticeCard() {
   return (
     <section style={styles.card}>
-      <p style={styles.label}>Privacy posture</p>
-      <h2 style={styles.title}>Transparent, role-based visibility</h2>
+      <p style={styles.label}>Employee monitoring boundary</p>
+      <h2 style={styles.title}>What CandidGrid records—and what it does not</h2>
       <div style={styles.grid}>
         <div>
           <p style={styles.subhead}>Collected</p>
-          <p style={styles.text}>App name, website domain, active/idle state, device heartbeat, work session time, and CandidGrid messages or reactions.</p>
+          <p style={styles.text}>Foreground App and focused HTTP/HTTPS hostname with Focus active/focused idle time; policy-enabled App or Domain open/runtime; device health; virtual-office presence; notice confirmation; and in-app content a user intentionally sends or interacts with.</p>
         </div>
         <div>
           <p style={styles.subhead}>Not collected</p>
-          <p style={styles.text}>Keystrokes, screenshots, camera, microphone, external private messages, Teams or email body, passwords.</p>
+          <p style={styles.text}>Screenshots or recordings; window/page titles or files; URL paths, queries or fragments; page/form/password content; key values or typed text; pointer details; clipboard; camera/microphone; or external private message, Teams or email body content. Read this with your organisation&apos;s own monitoring notice.</p>
         </div>
       </div>
     </section>

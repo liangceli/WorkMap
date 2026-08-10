@@ -112,7 +112,7 @@ export function trackingV2SnapshotPresentation(
       available: false,
       label: `${subject} collection policy paused`,
       detail: device.connectionFresh
-        ? `The connection is online, but ${subject} collection is paused by acknowledgement, timezone, schedule, or lease state.`
+        ? `The connection is online, but ${subject} collection is paused by notice-confirmation, time zone, schedule, or lease state.`
         : `${subject} collection is policy-paused and the connection is not currently confirmed.`,
       pill: "Policy paused",
     };

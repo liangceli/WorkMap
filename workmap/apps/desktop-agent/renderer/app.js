@@ -18,8 +18,8 @@ const STALE_HEARTBEAT_MS = 120_000;
 let lastDiagnosticsRefreshAt = 0;
 
 const progressCopy = {
-  waking: ["Connecting to WorkMap...", "The service may need up to a minute to wake securely."],
-  validating: ["Validating your one-time code...", "Binding this Windows account to your WorkMap employee profile."],
+  waking: ["Connecting to CandidGrid...", "The service may need up to a minute to connect securely."],
+  validating: ["Validating your one-time code...", "Binding this Windows account to your CandidGrid employee profile."],
   securing: ["Securing this device...", "Encrypting the device credential with Windows protection."],
 };
 
@@ -86,10 +86,10 @@ async function refreshState() {
   const state = await api.getState();
   pairView.hidden = state.paired;
   connectedView.hidden = !state.paired;
-  document.querySelector("#page-title").textContent = state.paired ? "This computer is protected" : "Connect this computer";
+  document.querySelector("#page-title").textContent = state.paired ? "This computer is connected" : "Connect this computer";
   document.querySelector("#page-subtitle").textContent = state.paired
-    ? "WorkMap is recording privacy-minimized foreground app duration for your own workspace account."
-    : "Enter the one-time code shown in your WorkMap device setup page.";
+    ? "CandidGrid is collecting the App activity authorised by this workspace's current policy. Your own reports and role-permitted organisation reports may show the resulting summaries."
+    : "Enter the one-time code shown on your CandidGrid device setup page after reviewing the required monitoring notices.";
   document.querySelector("#device-label").textContent = state.deviceId ? `Device ${state.deviceId.slice(0, 8)}` : "Not paired";
   document.querySelector("#version-label").textContent = `Version ${state.version}`;
 
@@ -212,8 +212,8 @@ function setLegacyBacklog(status) {
   }
 
   const migration = status.trackingMigrationState === "DRAINING_V1"
-    ? "WorkMap is preserving and retrying these historical records through the v1 compatibility path."
-    : "WorkMap is retaining these historical records until their compatibility migration is complete.";
+    ? "CandidGrid is preserving and retrying these historical records through the v1 compatibility path."
+    : "CandidGrid is retaining these historical records until their compatibility migration is complete.";
   element.textContent = `Legacy compatibility backlog: ${count.toLocaleString()} historical record${count === 1 ? "" : "s"}. ${migration}`;
   element.hidden = false;
 }
@@ -238,14 +238,14 @@ function setStatusChip(status) {
 function setAgentHealthCopy(status) {
   const health = deriveStatusHealth(status);
   const copy = {
-    connected: ["Agent connected", "Foreground app activity is being summarized securely."],
-    policy_required: ["Waiting for policy setup", "This paired device will begin tracking automatically after the workspace policy is ready."],
-    stale: ["Recording locally", "The server signal is delayed. Activity remains on this computer and will sync automatically."],
-    offline: ["Recording locally", "WorkMap cannot confirm the server connection. Activity is queued safely and will retry."],
-    server_unreachable: ["Recording locally", "The WorkMap service is unavailable. Activity is queued safely and will retry."],
+    connected: ["Agent connected", "Policy-authorised App activity is being summarised."],
+    policy_required: ["Waiting for policy setup", "This paired device will begin collecting automatically only after the current policy, notice confirmation and schedule authorise it."],
+    stale: ["Queueing authorised events", "The server signal is delayed. Policy-authorised events may remain on this computer and will sync automatically."],
+    offline: ["Queueing authorised events", "CandidGrid cannot confirm the server connection. Policy-authorised events may be queued locally and will retry."],
+    server_unreachable: ["Queueing authorised events", "The CandidGrid service is unavailable. Policy-authorised events may be queued locally and will retry."],
     auth_required: ["Pairing required", "The device credential is no longer accepted. Pair this computer again to resume sync."],
     error: ["Sync needs attention", "Local tracking is still visible below. Review the sync message before continuing."],
-  }[health.state] ?? ["Agent starting", "Preparing privacy-minimized activity tracking."];
+  }[health.state] ?? ["Agent starting", "Preparing policy-controlled activity collection."];
   document.querySelector("#agent-health-title").textContent = copy[0];
   document.querySelector("#agent-health-detail").textContent = copy[1];
 }
@@ -264,7 +264,7 @@ function deriveStatusHealth(status) {
     return { state: "connected" };
   }
 
-  const detail = `Last server-confirmed heartbeat was ${formatTime(status.lastHeartbeatAt)}. The Agent is retrying until WorkMap confirms a fresh heartbeat.`;
+  const detail = `Last server-confirmed heartbeat was ${formatTime(status.lastHeartbeatAt)}. The Agent is retrying until CandidGrid confirms a fresh heartbeat.`;
   return { state: heartbeatAge <= STALE_HEARTBEAT_MS ? "stale" : "offline", detail };
 }
 

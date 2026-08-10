@@ -57,49 +57,49 @@ const services = [
 ];
 
 const visibilityFeatures = [
-  { icon: AppWindow, text: "Foreground app name + duration" },
-  { icon: Globe2, text: "Browser hostname + duration" },
-  { icon: Clock3, text: "Idle and locked time stop counting" },
-  { icon: UserCheck, text: "Employees can review their own summary" },
+  { icon: AppWindow, text: "Foreground App + Focus active/focused idle time" },
+  { icon: Globe2, text: "Focused HTTP/HTTPS hostname + Focus time" },
+  { icon: Clock3, text: "Focused idle and Windows lock boundaries are reported separately" },
+  { icon: UserCheck, text: "Employee report scope is limited to their own activity" },
 ];
 
 const collectedSignals = [
-  { icon: AppWindow, text: "App name + duration" },
-  { icon: Globe2, text: "Domain hostname + duration" },
+  { icon: AppWindow, text: "App Focus and policy-enabled open/runtime" },
+  { icon: Globe2, text: "Hostname Focus and policy-enabled open/runtime" },
   { icon: Users, text: "Presence status + room" },
-  { icon: HeartPulse, text: "Device heartbeat + coverage" },
-  { icon: BookOpenCheck, text: "Policy acknowledgement" },
+  { icon: HeartPulse, text: "Device identity, heartbeat + coverage" },
+  { icon: BookOpenCheck, text: "Notice version + receipt confirmation" },
 ];
 
 const excludedSignals = [
   "Screenshots or recordings",
-  "Keystrokes or clipboard",
+  "Key values, typed text, pointer details or clipboard",
   "Window or page titles",
   "Full URLs, paths or queries",
-  "Page, form, email or message content",
+  "Page, form, password, external email or private-message content",
   "Camera or microphone",
 ];
 
 const frequentlyAskedQuestions = [
   {
     question: "What does the Desktop Agent do?",
-    answer: "It records the foreground app name and active duration. It stops when Windows is idle or locked.",
+    answer: "It records the foreground App name and classifies Focus as active when recent input is present or focused idle after 60 seconds without input. Windows lock closes the Focus interval. If enabled by policy, App open/runtime for user-visible windows is measured separately and is not Focus or work time.",
   },
   {
     question: "What does the Browser Extension do?",
-    answer: "It records the active website hostname and duration. It discards paths, queries, titles, and page content.",
+    answer: "It records the focused HTTP/HTTPS hostname and Focus active/focused idle time. If enabled by policy, Domain open/runtime is measured separately and de-duplicated per hostname. It does not record URL paths, queries, fragments, titles or page content.",
   },
   {
     question: "What does CandidGrid collect?",
-    answer: "App and domain duration, presence, room, device heartbeat, and policy acknowledgement.",
+    answer: "App and hostname Focus time; policy-enabled open/runtime; device or browser identity, version, time zone and heartbeat; virtual-office presence and room; and notice confirmation. Messages, waves, reactions and Notice read state are stored only when a user intentionally sends or interacts with them.",
   },
   {
     question: "What does CandidGrid never collect?",
-    answer: "No screenshots, keystrokes, clipboard, full URLs, private content, camera, or microphone.",
+    answer: "No screenshots or recordings; window/page titles or files; URL paths, queries or fragments; webpage, form or password content; key values or typed text; pointer details; clipboard; camera or microphone; or external private message, Teams or email body content.",
   },
   {
     question: "Can employees stop tracking?",
-    answer: "Yes. They can stop the Desktop Agent or disable the Browser Extension.",
+    answer: "The Desktop Agent can be stopped and the Browser Extension can be disabled, which stops their collection and makes the connection interruption visible. Your organisation's policy determines whether use is required and any employment consequences; CandidGrid does not decide that.",
   },
   {
     question: "What happens when a device is offline?",
@@ -107,11 +107,11 @@ const frequentlyAskedQuestions = [
   },
   {
     question: "What can employees see?",
-    answer: "Their own activity summary, device status, and compliance state.",
+    answer: "Their virtual-office presence, device status and notice-confirmation state. Employee report data is limited to their own activity where an own-summary surface is available; the current Reports page is not exposed to the Employee role.",
   },
   {
     question: "What can owners see?",
-    answer: "Company summaries and role-allowed employee views inside the same tenant.",
+    answer: "Owners can view company summaries and role-permitted employee activity inside their organisation. Team Leads, Managers and HR Admins also have role-permitted report access; IT Admins and Platform Admin do not receive employee activity views through those roles.",
   },
   {
     question: "How does secure pairing work?",
@@ -209,7 +209,7 @@ export default function HomePage() {
               <p className={styles.eyebrow}>Transparent work visibility</p>
               <h1>See the work.<span>Keep the boundary clear.</span></h1>
               <p className={styles.heroLead}>
-                CandidGrid shows app and domain time, presence, and device status. Never screens, keystrokes, or private content.
+                CandidGrid shows policy-authorised App and hostname time, presence and device status. It does not collect screenshots or recordings, key values or typed text, clipboard, webpage or form content, camera, microphone, or external private-message content.
               </p>
               <div className={styles.heroActions}>
                 <a className={styles.primaryButtonLarge} href="/login?mode=signup">
@@ -293,8 +293,8 @@ export default function HomePage() {
               </FlowStage>
               <FlowArrow />
               <div className={styles.agentBranch}>
-                <FlowNode icon={<Laptop size={24} />} title="Desktop Agent">App name + duration; idle and locked time stops.</FlowNode>
-                <FlowNode icon={<Globe2 size={24} />} title="Browser Extension">Hostname + duration; path, title and content are discarded.</FlowNode>
+                <FlowNode icon={<Laptop size={24} />} title="Desktop Agent">App Focus active/focused idle; Windows lock closes Focus; optional open/runtime is separate.</FlowNode>
+                <FlowNode icon={<Globe2 size={24} />} title="Browser Extension">Hostname Focus and optional open/runtime; URL parts, titles and content are not recorded.</FlowNode>
               </div>
               <FlowArrow />
               <FlowStage icon={<RefreshCw size={27} />} title="Offline recovery">
@@ -302,7 +302,7 @@ export default function HomePage() {
               </FlowStage>
               <FlowArrow />
               <FlowStage avatarIndexes={[2, 3]} icon={<FileBarChart size={27} />} title="Role-aware reports">
-                Employees see their own summary. Owners see aggregate and allowed views.
+                Employee report scope is limited to their own activity. Team Leads, Managers, HR Admins and Owners see role-permitted reports.
               </FlowStage>
             </div>
           </div>
@@ -312,7 +312,7 @@ export default function HomePage() {
           <div className={styles.sectionContainer}>
             <div className={styles.privacyHeading}>
               <p className={styles.eyebrowLight}>Employee privacy</p>
-              <h2>Always visible. Always limited. Always under your control.</h2>
+              <h2>Visible before collection. Limited to the stated categories.</h2>
             </div>
 
             <div className={styles.privacyDiagram}>
@@ -324,10 +324,10 @@ export default function HomePage() {
             </div>
 
             <div className={styles.controlStrip}>
-              <ControlItem avatarIndex={4} icon={<Eye size={24} />} text="Agent and Extension status stays visible" />
-              <ControlItem avatarIndex={5} icon={<PauseCircle size={24} />} text="Pause or stop at any time" />
-              <ControlItem avatarIndex={6} icon={<FileBarChart size={24} />} text="Review your own summary" />
-              <ControlItem avatarIndex={7} icon={<BookOpenCheck size={24} />} text="Review and acknowledge policy" />
+              <ControlItem avatarIndex={4} icon={<Eye size={24} />} text="View client status and the current policy schedule" />
+              <ControlItem avatarIndex={5} icon={<PauseCircle size={24} />} text="Stop or disable a client; the interruption is visible" />
+              <ControlItem avatarIndex={6} icon={<FileBarChart size={24} />} text="Own-account activity remains limited to your report scope" />
+              <ControlItem avatarIndex={7} icon={<BookOpenCheck size={24} />} text="Review and confirm receipt of the current notice" />
             </div>
           </div>
         </section>
@@ -341,7 +341,7 @@ export default function HomePage() {
               <div className={styles.faqHelp}>
                 <MessageCircle size={25} />
                 <strong>Still have questions?</strong>
-                <span>Start with a workspace and review the policy before pairing a device.</span>
+                <span>Start with a workspace and review the product notice together with the organisation's workplace monitoring notice before pairing a device.</span>
                 <a href="/login?mode=signup">Create an account <ArrowRight size={15} /></a>
               </div>
             </div>
@@ -373,13 +373,13 @@ export default function HomePage() {
 
         <section className={`${styles.consentSection} ${styles.reveal}`} data-home-reveal>
           <div className={styles.consentInner}>
-            <blockquote>CandidGrid works with your people, not around them.</blockquote>
-            <p>Transparent signals.<br />Clear boundaries.<br />Fair by design.</p>
-            <p>Policy first.<br />People always.</p>
+            <blockquote>CandidGrid shows employees the technical monitoring boundary before clients are paired.</blockquote>
+            <p>Stated signals.<br />Explicit exclusions.<br />Role-permitted reports.</p>
+            <p>Product notice.<br />Employer notice.<br />Receipt confirmation.</p>
             <MarketingAvatar index={1} label="CandidGrid team avatar" size="large" />
           </div>
           <div className={styles.ctaBar}>
-            <strong>Transparency you can trust. Visibility you can explain.</strong>
+            <strong>Review the collection boundary before monitoring starts.</strong>
             <div>
               <a className={styles.primaryButtonLarge} href="/login?mode=signup">Create owner account <ArrowRight size={17} /></a>
               <a className={styles.darkSecondaryButton} href="/login?mode=signin">Sign in</a>
@@ -396,7 +396,7 @@ export default function HomePage() {
           </div>
           <div><strong>Product</strong><a href="#product">Work visibility</a><a href="#how-it-works">How it works</a><a href="#product">Reports</a><a href="#product">Virtual Office</a></div>
           <div><strong>Privacy</strong><a href="#privacy">What we collect</a><a href="#privacy">What we never collect</a><a href="#privacy">Employee controls</a><a href="#faq">FAQ</a></div>
-          <div><strong>Account</strong><a href="/login?mode=signin">Sign in</a><a href="/login?mode=signup">Create owner account</a><a href="/compliance">Review policy</a></div>
+          <div><strong>Account</strong><a href="/login?mode=signin">Sign in</a><a href="/login?mode=signup">Create owner account</a><a href="/compliance">Review monitoring notice</a></div>
         </div>
         <div className={styles.footerBottom}><span>CandidGrid</span><span>Privacy-conscious work visibility.</span></div>
       </footer>
@@ -414,7 +414,7 @@ function VisibilityService() {
       <div className={styles.serviceIntro}>
         <p className={styles.eyebrow}>Work visibility</p>
         <h2>Progress you can explain. Privacy people can see.</h2>
-        <p>CandidGrid records the minimum signals needed to understand work patterns - nothing more.</p>
+        <p>CandidGrid records the stated work-visibility signals under the current workspace policy and excludes the content categories listed below.</p>
         <div className={styles.featureGrid}>
           {visibilityFeatures.map(({ icon: Icon, text }) => <div key={text}><Icon size={25} /><span>{text}</span></div>)}
         </div>
@@ -433,7 +433,7 @@ function ReportsService() {
       <div className={styles.serviceIntro}>
         <p className={styles.eyebrow}>Reports</p>
         <h2>Patterns you can review. Boundaries you can explain.</h2>
-        <p>Employees see their own activity. Owners see company summaries and role-allowed detail.</p>
+        <p>Employee report data is limited to their own activity. Team Leads, Managers, HR Admins and Owners see role-permitted reports within their organisation.</p>
         <a className={styles.inlineLink} href="/reports">View reports <ArrowRight size={16} /></a>
       </div>
       <ProductPagePreview

@@ -2711,10 +2711,10 @@ export function hasLifecycleDiscontinuity(
 
 function describeBrowserPolicyRequirement(policy: DeviceTrackingPolicyV2) {
   if (policy.scheduleTimeZoneState !== "CONFIRMED") {
-    return "Tracking is waiting for the workspace Owner or Manager to confirm the policy time zone in CandidGrid Compliance.";
+    return "Tracking is waiting for the workspace Owner or HR Admin to confirm the policy time zone in CandidGrid's employee monitoring notice.";
   }
   if (policy.acknowledgementState !== "ACKNOWLEDGED") {
-    return "Tracking is waiting for this employee to review and acknowledge the current CandidGrid policy.";
+    return "Tracking is waiting for this employee to review and confirm receipt of the current CandidGrid employee monitoring notice.";
   }
   if (!policy.collectDomainFocus) {
     return "Browser domain tracking is disabled by the current CandidGrid policy.";

@@ -108,12 +108,12 @@ export default function CompanyOnboardingPage() {
             />
           </label>
           <section style={styles.note}>
-            <strong>Privacy-forward setup</strong>
-            <span>Tracking rules are configured before employees join. Your confirmed display name is used in CandidGrid directory and office labels.</span>
+            <strong>Monitoring notice responsibility</strong>
+            <span>Before monitoring starts, your organisation must give affected workers any workplace monitoring and privacy notice required by applicable Commonwealth, state or territory law. CandidGrid&apos;s product notice does not replace that employer-specific notice. Your confirmed display name is used in the CandidGrid directory and office labels.</span>
           </section>
           <section style={styles.ownerSteps}>
             <strong>Owner path</strong>
-            <span>After workspace creation you will finish avatar/profile setup, review compliance, create employee invites, and then open the virtual office.</span>
+            <span>After workspace creation you will finish avatar/profile setup, review the employee monitoring notice, create employee invites and then open the virtual office.</span>
           </section>
           <button
             type="button"

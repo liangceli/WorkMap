@@ -10,10 +10,10 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 
 const settingsSections = [
   {
-    title: "Compliance",
-    description: "Review monitoring transparency, collected metadata, and acknowledgement copy.",
+    title: "Employee monitoring notice",
+    description: "Review recorded and excluded data categories, role access, collection schedule and receipt-confirmation wording.",
     href: "/compliance",
-    status: "Policy",
+    status: "Notice",
   },
   {
     title: "Integrations",

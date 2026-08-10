@@ -1,5 +1,37 @@
 # Latest Implementation Handoff
 
+## 2026-08-10 Australian Employee Monitoring Notice Copy Refresh
+
+### Original Task Brief
+
+- Replace rough or internal-facing employee privacy and monitoring wording with professional copy aligned to applicable Australian employment/privacy expectations and CandidGrid's real implemented responsibilities.
+- Change text only. Do not alter UI layout/styles, components, handlers, tracking logic, API, authentication, RBAC, database, policy controls or deployment configuration.
+- Do not claim legal compliance, consent, collection limits or employee controls that the product cannot prove.
+
+### Changed Files And Implementation Summary
+
+- Web employee-facing copy was updated across the public home/FAQ, login, invitation acceptance, company onboarding, first monitoring-notice review, device setup, Reports, Settings, dashboard privacy cards, employee profile, virtual-office privacy boundary and report export text.
+- The main notice surfaces are `workmap/apps/web/app/compliance/page.tsx`, `workmap/apps/web/components/compliance/CompliancePolicyPanel.tsx` and `workmap/apps/web/components/compliance/PolicyAcknowledgementModal.tsx`. They now distinguish product notice from the employer's legally required workplace notice, disclose collection/exclusions and schedule/runtime semantics, and describe confirmation as receipt/review rather than consent or waiver.
+- Desktop employee-facing text was updated in `workmap/apps/desktop-agent/renderer/index.html`, `renderer/app.js`, `src/runtimeV2.ts` and the package description. Browser employee-facing text was updated in `workmap/apps/browser-extension/manifest.json`, `options.html`, `src/options.ts`, `src/backgroundV2.ts`, the generated `alpha-unpacked` text copies and the matching branding assertion.
+- Copy now accurately distinguishes foreground App/hostname Focus active and focused idle from optional App/Domain open/runtime; discloses device/browser identity, version, time zone, heartbeat, connection/interruption, virtual-office presence and intentional CandidGrid interactions; and lists excluded content without the former ambiguous “by default” wording.
+- The current policy retention value is labelled as a setting rather than a promise of automatic deletion because no automatic retention-deletion job was confirmed in this repository.
+
+### Role, Legal And Product Boundaries
+
+- Employee-role report requests are own-scope only where an own-summary surface exists; the current Reports page is not exposed to the Employee role. Team Leads, Managers, HR Admins and Owners can view role-permitted team/employee activity. IT Admins do not receive another employee's activity through that role. Platform Admin remains limited to privacy-safe tenant metadata, service health and audit information.
+- The receipt button still invokes the existing acknowledgement endpoint; only its displayed wording changed. It now expressly says receipt/review is not consent, a waiver or proof that the employer met legal obligations.
+- The copy follows the OAIC APP 1/APP 5 notification model, Fair Work workplace-privacy guidance and the need to consider separate state/territory workplace-surveillance rules. It does not claim that every employer is an APP entity or that the private-sector employee-record exemption always applies; OAIC confirms contractors/service providers may still be subject to the APPs.
+- No employer legal name/contact, actual processing/storage region, overseas-recipient countries, employer-specific purposes, consequences, retention/deletion procedure or complaint contact exists in configurable product data. The UI therefore requires the organisation to provide those facts separately instead of inventing them. This product notice is not a complete employer APP Privacy Policy or state/territory surveillance notice.
+
+### Verification, Manual QA, Risks And Next Step
+
+- Web typecheck, lint and production build: pass. Full Web tests: 103/106; the three failures are confirmed pre-existing stale source assertions (two expect a `heroSignals` fixture absent in `HEAD`; one expects `WorkMap service unreachable` while `HEAD` already returns `CandidGrid service unreachable`). The changed open/runtime notice regression passes.
+- Desktop Agent typecheck and lint: pass; full tests pass 75/75; TypeScript emit and text-package build pass.
+- Browser Extension typecheck and lint: pass; full tests pass 84/84; TypeScript emit and unpacked-package text build pass. The display-name assertion was updated from the removed Alpha label.
+- Manual signed-in browser/Windows/Chrome/Edge UI QA was not run. No production deployment or external legal sign-off was performed.
+- Intentionally unchanged: all component structure/styles, event handlers, acknowledgement behavior, collection/idle/runtime logic, payloads, permissions, APIs, authentication, RBAC, database/schema, policy values and deployment configuration.
+- Remaining go-live work is organisation-specific rather than safe to infer in source: supply the real controller/employer identity and privacy/HR contact, exact purposes and consequences, storage/processor/overseas disclosures, retention/deletion practice and applicable jurisdictional notice timing; obtain Australian employment/privacy counsel review; then manually QA long copy at desktop/mobile widths and in packaged clients. The next round can proceed to that employer-specific legal completion and manual acceptance, but the product must not yet be advertised as universally “compliant”.
+
 ## 2026-08-10 Tracking v2 Reconciliation Load-shedding Fix
 
 ### Original Task Brief

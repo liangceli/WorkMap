@@ -54,7 +54,7 @@ const initialDashboardState: DashboardState = {
   positions: [],
   roomNames: {},
   policyVersion: null,
-  complianceText: "Checking policy status...",
+  complianceText: "Checking monitoring notice status...",
   usageSummary: null,
   liveStatus: null,
   devices: [],
@@ -87,7 +87,7 @@ export function ManagerOverviewPanel() {
       let positions: WorkMapApiPlayerPosition[] = [];
       let roomNames: Record<string, string> = {};
       let policyVersion: string | null = null;
-      let complianceText = "Sign in with Cognito to load backend policy status.";
+      let complianceText = "Sign in to load the current monitoring notice status.";
       let usageSummary: WorkMapApiUsageSummary | null = null;
       let liveStatus: Extract<WorkMapApiReportLiveStatus, { scope: "company" }> | null = null;
       let devices: WorkMapApiDevice[] = [];
@@ -124,10 +124,10 @@ export function ManagerOverviewPanel() {
 
         if (policyResult.ok) {
           policyVersion = policyResult.data.policyVersion;
-          complianceText = `Policy ${policyResult.data.policyVersion} is available for acknowledgement.`;
+          complianceText = `Notice ${policyResult.data.policyVersion} is available to review and confirm receipt.`;
         } else {
           errors.push(`Compliance policy: ${policyResult.error}`);
-          complianceText = "Compliance policy could not be loaded; the compliance page still shows safe transparency copy.";
+          complianceText = "The current workspace notice could not be loaded; the monitoring notice page still shows the general technical data boundary.";
         }
 
         if (usageResult.ok) {
@@ -228,8 +228,8 @@ export function ManagerOverviewPanel() {
         tone: dashboardState.positions.length > 0 ? "green" : "slate",
       },
       {
-        label: "Compliance",
-        value: dashboardState.policyVersion ? `Policy ${dashboardState.policyVersion}` : "Check page",
+        label: "Monitoring notice",
+        value: dashboardState.policyVersion ? `Notice ${dashboardState.policyVersion}` : "Check page",
         detail: dashboardState.complianceText,
         tone: dashboardState.policyVersion ? "green" : "amber",
       },
@@ -306,9 +306,8 @@ export function ManagerOverviewPanel() {
           <p style={styles.panelLabel}>Live workspace status</p>
           <h2 style={styles.panelTitle}>{dashboardState.loading ? "Checking setup" : dashboardState.statusText}</h2>
           <p style={styles.panelText}>
-            This dashboard combines session health, office presence, compliance policy, setup coverage, and role-appropriate usage
-            summaries. It shows availability and aggregate signals only; it does not expose screenshots, keystrokes, external private messages,
-            full URLs, webpage content, or hidden monitoring data.
+            This dashboard combines session health, virtual-office presence, notice status, setup coverage and role-permitted usage
+            summaries. It can show team or employee activity to Team Leads, Managers, HR Admins and Owners as permitted by role; IT Admins and Platform Admin do not receive employee activity views through those roles. CandidGrid does not collect screenshots or recordings, key values or typed text, clipboard, URL paths, queries or fragments, webpage or form content, camera, microphone, or external private message, Teams or email body content.
           </p>
         </div>
         {dashboardState.errors.length > 0 ? (
@@ -508,19 +507,19 @@ function getDashboardJourney(role: string | null) {
     return {
       eyebrow: "Owner workspace",
       title: "Workspace management overview",
-      subtitle: "Track team presence, setup coverage, compliance readiness, and aggregate activity summaries as data becomes available.",
+      subtitle: "Review team presence, setup coverage, monitoring-notice status and role-permitted activity summaries as data becomes available.",
       guidanceLabel: "Owner next steps",
       guidance:
-        "Start with employee invites, then ask the team to complete compliance, avatar, and device setup. Reports stay sparse until a paired Desktop Agent or Browser Extension submits app/domain summary data.",
+        "Before pairing clients, give employees your organisation's workplace monitoring or privacy notice and ask them to review CandidGrid's technical notice. Reports stay sparse until a paired Desktop Agent or Browser Extension submits App or hostname summary data.",
       setupTitle: "Bring the workspace online",
       alphaNote:
-        "The current alpha includes Windows active-app tracking, MV3 active-domain tracking, secure device pairing, bounded offline queues, retry backoff, revocation, and local Alpha packages.",
-      setupItems: ["Invite employees", "Complete compliance", "Finish avatar/profile", "Register devices"],
+        "Current clients support Windows App Focus, optional App open/runtime, browser Domain Focus, optional Domain open/runtime, device pairing, bounded offline queues, retry backoff and revocation.",
+      setupItems: ["Invite employees", "Provide and review monitoring notices", "Finish avatar/profile", "Register devices"],
       actions: [
         { label: "Invite employees", href: "/onboarding/invite", primary: true },
         { label: "Open office", href: "/virtual-office" },
         { label: "View reports", href: "/reports" },
-        { label: "Review compliance", href: "/compliance" },
+        { label: "Review monitoring notice", href: "/compliance" },
       ],
     };
   }
@@ -529,18 +528,18 @@ function getDashboardJourney(role: string | null) {
     return {
       eyebrow: "Employee workspace",
       title: "Your workspace view",
-      subtitle: "See your office presence, teammate directory, compliance policy, and your own work summaries when data exists.",
+      subtitle: "See your office presence, teammate directory, current monitoring notice and your own work summaries when data exists.",
       guidanceLabel: "Employee access",
       guidance:
-        "Company-wide reports, invites, integrations, and settings are owner/admin areas. Your dashboard focuses on your own presence, compliance status, and personal summary availability.",
+        "Company-wide reports, invites, integrations and settings are owner/admin areas. Your dashboard focuses on your own presence, notice-confirmation status and personal summary availability.",
       setupTitle: "Your setup checklist",
       alphaNote:
-        "Activity summaries appear only after your paired Desktop Agent or Browser Extension submits events. CandidGrid does not show screenshots, keystrokes, external private messages, or webpage content.",
-      setupItems: ["Review compliance", "Finish profile/avatar", "Set up device", "Open office"],
+        "Activity summaries appear only after an authorised paired client submits events. CandidGrid does not collect screenshots or recordings, key values or typed text, clipboard, webpage or form content, or external private-message content.",
+      setupItems: ["Review monitoring notice", "Finish profile/avatar", "Set up device", "Open office"],
       actions: [
         { label: "Open office", href: "/virtual-office", primary: true },
         { label: "People directory", href: "/employees" },
-        { label: "Review compliance", href: "/compliance" },
+        { label: "Review monitoring notice", href: "/compliance" },
       ],
     };
   }
@@ -559,7 +558,7 @@ function getDashboardJourney(role: string | null) {
     actions: [
       { label: "Open office", href: "/virtual-office", primary: true },
       { label: "View reports", href: "/reports" },
-      { label: "Review compliance", href: "/compliance" },
+      { label: "Review monitoring notice", href: "/compliance" },
       { label: "Settings", href: "/settings" },
     ],
   };

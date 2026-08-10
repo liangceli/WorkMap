@@ -1,5 +1,29 @@
 # Latest QA Handoff
 
+## 2026-08-10 Australian Employee Monitoring Notice Copy QA
+
+### Reviewed Implementation And Findings
+
+- High, fixed: onboarding and policy actions used “agree/acknowledge” language even though the existing endpoint records acknowledgement and the onboarding continue button only advances frontend workflow state. Employee-facing text now describes receipt/review and explicitly says it is not consent, a waiver or proof of employer compliance.
+- High, fixed: former copy said Desktop tracking stopped when idle and that covered/minimised Apps did not count. Real Tracking v2 records focused idle after the input threshold and can separately record policy-enabled App open/runtime for covered/minimised user-visible windows. Browser Focus and optional Domain runtime are now described with the same separation.
+- High, fixed: former role copy implied owners/managers saw aggregate data only. Current RBAC permits Team Lead, Manager, HR Admin and Owner employee/team activity; IT Admin is own-report only and Platform Admin has no tenant employee-activity view. Copy now matches those boundaries and notes that the current Reports page is not exposed to Employee role.
+- Medium, fixed: collected/excluded lists omitted device/browser identity, version, time zone, trusted-input occurrence, virtual-office fields and intentional in-app content, and used ambiguous “full URLs by default”. All principal employee-visible surfaces now use the implemented categories and absolute exclusions supported by source.
+- Medium, fixed: internal Alpha/Cognito/backend/QA language appeared in employee-facing notice/setup surfaces. It was replaced with employee-readable wording. The Extension display name no longer says Alpha; current manual Developer-mode installation remains disclosed accurately.
+- Legal-boundary finding: the repository does not contain enough organisation-specific facts to generate a complete APP Privacy Policy or jurisdiction-specific workplace surveillance notice. The new text identifies the missing employer duties instead of fabricating identity/contact, purpose, consequences, retention/deletion, processor/storage or overseas-disclosure facts.
+
+### Test And Verification Status
+
+- Web: typecheck pass; lint pass; production build pass. Full tests 103/106. The three failures are unrelated stale `HEAD` expectations: two dashboard layout tests require absent `const heroSignals`; one Desktop audit test expects old `WorkMap` wording although `HEAD` already returns `CandidGrid`.
+- Desktop Agent: typecheck pass; lint pass; full tests pass 75/75; TypeScript emit and text-package build pass.
+- Browser Extension: typecheck pass; lint pass; full tests pass 84/84; TypeScript emit and unpacked-package text build pass.
+- `git diff --check`: pass before handoff update. Generated native binary and TypeScript cache changes were removed; generated Extension `alpha-unpacked` manifest/options text remains synchronised intentionally.
+
+### Manual QA, Risks And Recommendation
+
+- Manual signed-in Web, Windows Agent, Chrome and Edge visual QA was not run. No live tracking, policy rollover, deployment, legal advice or regulator confirmation was performed because functionality was intentionally out of scope.
+- Remaining high go-live risk is employer-specific notice completeness. Before monitoring starts, each deploying organisation still needs to provide the actual employer/controller identity and contact, purposes, start/timing and continuous/intermittent/ongoing scope where applicable, devices, uses/disclosures, processor/storage and overseas handling, retention/deletion, consequences, access/correction and complaint route, plus any jurisdiction-specific notice period or policy required by Commonwealth/state/territory law.
+- Recommendation: pass the source-level text-only refresh. Proceed to organisation-specific legal completion and manual responsive/packaged-client copy QA. Do not claim universal Australian compliance and do not activate monitoring for workers until the employer's applicable notice process is complete.
+
 ## 2026-08-10 Tracking v2 Reconciliation Load-shedding QA
 
 ### Reviewed Implementation And Findings

@@ -1941,13 +1941,13 @@ export function latestTimelineThroughAtV2(
 
 function describeDesktopPolicyRequirement(policy: DeviceTrackingPolicyV2) {
   if (policy.scheduleTimeZoneState !== "CONFIRMED") {
-    return "Tracking is waiting for the workspace Owner or Manager to confirm the policy time zone in WorkMap Compliance.";
+    return "Tracking is waiting for the workspace Owner or HR Admin to confirm the policy time zone in CandidGrid's employee monitoring notice.";
   }
   if (policy.acknowledgementState !== "ACKNOWLEDGED") {
-    return "Tracking is waiting for this employee to review and acknowledge the current WorkMap policy.";
+    return "Tracking is waiting for this employee to review and confirm receipt of the current CandidGrid employee monitoring notice.";
   }
   if (!policy.collectAppFocus) {
-    return "Desktop app tracking is disabled by the current WorkMap policy.";
+    return "Desktop App tracking is disabled by the current CandidGrid policy.";
   }
   if (!policy.policyLeaseId || policy.allowedUtcWindows.length === 0) {
     return "Tracking is waiting for a valid policy collection window. It will retry automatically.";
@@ -2102,7 +2102,7 @@ function intervalRejectionRemediation(
     return "The overlapping runtime interval was not counted. The Agent will continue from the current visible-window observation.";
   }
   if (codes.has("OPEN_RUNTIME_NOT_ENABLED")) {
-    return "Open/runtime remains paused until the current policy version enables it and the employee acknowledges that version.";
+    return "Open/runtime remains paused until the current policy version enables it and the employee confirms receipt and review of that notice version.";
   }
   if (codes.has("POLICY_REJECTED")) {
     return "The Agent will refresh its policy lease; data outside the authorised window is not counted.";

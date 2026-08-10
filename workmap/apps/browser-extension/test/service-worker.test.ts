@@ -98,7 +98,7 @@ test("release branding uses the CandidGrid name and icon set", async () => {
   const buildScript = await readFile(new URL("../scripts/build-alpha.mjs", import.meta.url), "utf8");
   const packageScript = await readFile(new URL("../scripts/package-alpha.mjs", import.meta.url), "utf8");
 
-  assert.equal(manifest.name, "CandidGrid Domain Tracking Alpha");
+  assert.equal(manifest.name, "CandidGrid Domain Tracking");
   assert.deepEqual(manifest.icons, {
     16: "icons/candidgrid-16.png",
     32: "icons/candidgrid-32.png",

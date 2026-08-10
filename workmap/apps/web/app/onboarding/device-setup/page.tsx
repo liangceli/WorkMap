@@ -10,16 +10,25 @@ import type { WorkMapApiPairingCode, WorkMapApiPairingStatus } from "../../../li
 import { wm, wmStyles } from "../../../lib/theme/workmapTheme";
 import { getNextRouteForUser, updateUserSetupState } from "../../../lib/workflow/workflowState";
 
-const desktopItems = ["Foreground application product name", "Usage start/end and active duration", "Agent start, stop, and connection health"];
-const extensionItems = ["Active website domain only"];
+const desktopItems = [
+  "Foreground App product name and Focus active/focused idle duration",
+  "Policy-enabled App open/runtime for user-visible windows, including covered or minimised windows",
+  "Device identity, Agent version, time zone, start/stop, heartbeat and connection events",
+];
+const extensionItems = [
+  "Focused HTTP/HTTPS hostname and Focus active/focused idle duration",
+  "Recent trusted input occurrence only—not the key, text, coordinates, direction or target",
+  "Policy-enabled Domain open/runtime, de-duplicated per hostname",
+  "Browser/device identity, version, time zone, heartbeat and connection events",
+];
 const notCollectedItems = [
-  "Full URLs by default",
-  "Passwords",
-  "Form inputs",
-  "Screenshots",
-  "Keystrokes",
-  "Message/email content",
-  "Camera/microphone",
+  "Screenshots or screen recordings",
+  "Window or page titles, files, full URL paths, queries or fragments",
+  "Webpage body, form inputs or passwords",
+  "Key values, typed text, pointer coordinates, scroll direction or target elements",
+  "Clipboard contents",
+  "External private messages, Teams or email body content",
+  "Camera or microphone data",
 ];
 
 export default function DeviceSetupPage() {
@@ -134,9 +143,9 @@ export default function DeviceSetupPage() {
     <main className="wm-onboarding-page wm-device-onboarding" style={styles.page}>
       <section className="wm-onboarding-shell" style={styles.shell}>
         <p style={styles.eyebrow}>Device setup</p>
-        <h1 style={styles.title}>Connect CandidGrid presence tools</h1>
+        <h1 style={styles.title}>Connect CandidGrid monitoring clients</h1>
         <p style={styles.subtitle}>
-          Review what the paired Desktop Agent and Browser Extension collect before enabling transparent activity summaries.
+          Review the current workspace policy and your organisation&apos;s workplace monitoring or privacy notice before pairing either client.
         </p>
 
         <div className="wm-device-boundary-grid" style={styles.grid}>
@@ -146,8 +155,8 @@ export default function DeviceSetupPage() {
         </div>
 
         <section style={styles.notice}>
-          <strong>Transparent setup</strong>
-          <span>Employees should see these boundaries before device metadata collection is enabled.</span>
+          <strong>Before monitoring starts</strong>
+          <span>Your organisation is responsible for giving affected workers any notice required by applicable Commonwealth, state or territory law, including its identity, purposes, scope, timing, uses, disclosures, retention and contact for questions, access, correction or complaints. CandidGrid&apos;s product notice does not replace that notice.</span>
         </section>
 
         <div className="wm-device-pairing-grid">
@@ -181,15 +190,15 @@ export default function DeviceSetupPage() {
 
           <section className="wm-device-pairing-panel" style={styles.pairingPanel}>
             <div>
-              <p style={styles.panelEyebrow}>Browser domain monitoring - Alpha</p>
+              <p style={styles.panelEyebrow}>Browser domain monitoring</p>
               <h2 style={styles.cardTitle}>Browser Extension manual setup</h2>
-              <p style={styles.subtitle}>Use this Developer mode installation only for the current controlled Chrome or Edge test.</p>
+              <p style={styles.subtitle}>The current Chrome or Edge build is installed manually through Developer mode.</p>
             </div>
             <ol style={styles.setupSteps}>
               <li>Download the ZIP, extract it to a permanent folder, and do not move or delete that folder.</li>
               <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code>, enable Developer mode, then choose Load unpacked and select the extracted folder.</li>
               <li>Open the extension details and allow site access, then generate a code below and enter it on the extension Options page.</li>
-              <li>Keep the extension enabled. Future Alpha updates require replacing the files and selecting Reload on the extensions page.</li>
+              <li>Keep the extension enabled when required by your organisation. Future manual updates require replacing the files and selecting Reload on the extensions page.</li>
             </ol>
             <div style={styles.actions}>
               {browserExtensionDownloadUrl ? (
@@ -203,8 +212,8 @@ export default function DeviceSetupPage() {
             </div>
             <p style={hasPairedBrowserExtension ? styles.readyMessage : styles.requirementMessage}>
               {hasPairedBrowserExtension
-                ? "Browser Extension paired. Keep Developer mode and the extension enabled during the Alpha test."
-                : "The Browser Extension is optional for continuing, but it must be paired before domain monitoring starts."}
+                ? "Browser Extension paired. Collection starts only when the current policy, notice confirmation, permission and schedule authorise it."
+                : "The Browser Extension is optional for continuing, but it must be paired, permitted and authorised by the current policy before hostname collection starts."}
             </p>
           </section>
         </div>

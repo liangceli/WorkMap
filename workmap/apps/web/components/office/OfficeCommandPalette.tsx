@@ -26,8 +26,8 @@ const actions: Array<{ id: string; title: string; subtitle: string; href: string
   { id: "dashboard", title: "Open dashboard", subtitle: "Review team visibility", href: "/dashboard", roles: ["MANAGER", "OWNER"] },
   {
     id: "compliance",
-    title: "Review compliance",
-    subtitle: "Collected and not collected policy",
+    title: "Review monitoring notice",
+    subtitle: "Employee monitoring data boundaries",
     href: "/compliance",
     roles: ["EMPLOYEE", "MANAGER", "OWNER", "IT_ADMIN"],
   },
