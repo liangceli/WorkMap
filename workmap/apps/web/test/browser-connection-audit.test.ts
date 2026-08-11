@@ -9,7 +9,7 @@ import {
   type BrowserAuditGroup,
 } from "../components/reports/ReportSummaryPanel.js";
 
-test("Browser Connection Audit separates confirmed transitions from inferred heartbeat loss", () => {
+test("Browser Connection Audit exposes only user-facing Extension start records from status history", () => {
   const base = "2026-07-23T01:00:00.000Z";
   const entries = buildBrowserAuditEntries(
     {
@@ -32,18 +32,13 @@ test("Browser Connection Audit separates confirmed transitions from inferred hea
 
   assert.deepEqual(
     entries.map((entry) => entry.title),
-    [
-      "Connection restored",
-      "Heartbeat not received",
-      "Locked",
-      "Browser profile started",
-    ],
+    ["Extension started"],
   );
-  assert.match(entries[1]!.detail, /inferred/);
-  assert.match(entries[2]!.detail, /System Lock/);
+  assert.equal(entries[0]?.detail, undefined);
+  assert.equal(entries[0]?.timestamp, base);
 });
 
-test("a stale confirmed Browser heartbeat becomes an honest current interruption", () => {
+test("a stale confirmed Browser heartbeat becomes one simplified inferred stop record", () => {
   const entries = buildBrowserAuditEntries(
     {
       browserExtensionCoverage: [],
@@ -61,9 +56,10 @@ test("a stale confirmed Browser heartbeat becomes an honest current interruption
     ] as never,
   );
 
-  assert.equal(entries[0]?.title, "Heartbeat not received");
+  assert.equal(entries[0]?.title, "Extension stopped reporting");
   assert.equal(entries[0]?.timestamp, "2026-07-23T01:01:30.000Z");
-  assert.match(entries[0]?.detail ?? "", /cannot be distinguished/);
+  assert.equal(entries[0]?.detail, undefined);
+  assert.equal(entries[0]?.tone, "neutral");
 });
 
 test("coverage and live-heartbeat views do not duplicate the same inferred interruption", () => {
@@ -92,13 +88,13 @@ test("coverage and live-heartbeat views do not duplicate the same inferred inter
   );
 
   assert.equal(entries.length, 1);
-  assert.equal(entries[0]?.title, "Heartbeat not received");
+  assert.equal(entries[0]?.title, "Extension stopped reporting");
 });
 
 test("Browser Connection Audit keeps Chrome, Edge and same-browser profiles strictly separate", () => {
-  const chrome = status("chrome-event", "LOCKED", "SYSTEM_LOCK", "2026-07-23T01:00:00.000Z");
+  const chrome = status("chrome-event", "RESTARTED", "AGENT_RESTART", "2026-07-23T01:00:00.000Z");
   const chromeProfile = {
-    ...status("chrome-profile-event", "RECONNECTED", "SYSTEM_UNLOCK", "2026-07-23T01:00:30.000Z"),
+    ...status("chrome-profile-event", "RUNNING", "AGENT_STARTED", "2026-07-23T01:00:30.000Z"),
     deviceId: "chrome-profile-device",
   };
   const edge = {
@@ -134,20 +130,22 @@ test("Browser Connection Audit renders many device histories without shrinking t
     detail: `Device ${index} · browser-extension-mv3/0.5.9`,
     entries: [{
       id: `event-${index}`,
-      title: index % 2 === 0 ? "Browser profile started" : "Reconnected",
-      detail: index % 2 === 0 ? "Google Chrome Extension - Agent Restart" : "Microsoft Edge Extension - System Unlock",
+      title: index % 2 === 0 ? "Extension started" : "Extension stopped reporting",
       timestamp: `2026-07-24T01:${String(index).padStart(2, "0")}:00.000Z`,
-      tone: "positive",
+      tone: index % 2 === 0 ? "positive" : "neutral",
     }],
   }));
 
   const html = renderToStaticMarkup(createElement(BrowserAuditTimeline, { groups }));
 
-  assert.match(html, /16 events/);
+  assert.match(html, /16 records/);
   assert.match(html, /Google Chrome Extension 0/);
   assert.match(html, /Microsoft Edge Extension 15/);
-  assert.match(html, /Google Chrome Extension - Agent Restart/);
-  assert.match(html, /Microsoft Edge Extension - System Unlock/);
+  assert.match(html, /Extension started/);
+  assert.match(html, /Extension stopped reporting/);
+  assert.match(html, /exact browser close time or cause is not available/);
+  assert.doesNotMatch(html, /Heartbeat not received/);
+  assert.doesNotMatch(html, /System Unlock/);
   assert.match(html, /display:flex;flex-direction:column/);
   assert.equal((html.match(/flex:0 0 auto/g) ?? []).length, 16);
   assert.doesNotMatch(html, /Loading connection history/);

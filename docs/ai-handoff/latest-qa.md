@@ -5123,3 +5123,30 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 ### Manual QA And Recommendation
 - Authenticated desktop/mobile browser QA was not run.
 - Pass for frontend visual review. No backend, database, deployment, or tracking-client action is required.
+
+---
+
+## 2026-08-11 Reports Browser Extension Start/Stop Presentation QA
+
+### Reviewed Implementation
+- Reviewed the user-facing Browser Extension audit projection, device grouping, stale-signal fallback, and static rendering.
+
+### Findings Ordered By Severity
+- No blocking finding in the scoped implementation.
+- Confirmed: raw Browser lock/reconnect/request/heartbeat-gap history no longer appears in `/reports`.
+- Confirmed: current unresolved signal loss produces one neutral `Extension stopped reporting` record without claiming an exact browser close time or cause.
+- Confirmed: Chrome, Edge, and distinct profiles remain separated by device ID.
+- Confirmed: Desktop Agent audit behavior and the stored Browser audit evidence were not changed.
+
+### Test And Verification Status
+- Focused Browser audit tests: 6/6 passed.
+- Web typecheck: passed.
+- Web lint: passed.
+- Web build: passed with existing Next.js/webpack cache warnings.
+- Full Web tests: 103/106 passed. The 3 failures are outside this diff: two Dashboard hero source/style expectations and one Desktop wording assertion that still expects the former WorkMap brand.
+- `git diff --check`: passed with Windows line-ending warnings only.
+
+### Manual QA, Risks, And Recommendation
+- Authenticated `/reports` manual QA was not run.
+- Remaining product limitation: MV3 cannot emit a final event after the browser has already closed, so the stop timestamp is the server detection boundary rather than an exact close timestamp.
+- Pass for an authenticated `/reports` visual check; no Browser Extension release, API deployment, Desktop Agent change, or data migration is required for this presentation-only update.

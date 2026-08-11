@@ -7497,3 +7497,49 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - `git diff --check`: passed with Windows line-ending warnings only.
 - Authenticated browser visual QA was not run.
 - No backend, API, database, Prisma, authentication, deployment, Desktop Agent, or Browser Extension code changed.
+
+## Reports App And Domain Category Label Removal
+
+### Original Task Brief
+- Remove the `uncategorised` subtitle shown below every App and Domain name in the `/reports` API Summary.
+- Keep the change frontend-only.
+
+### Changed Files
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+
+### Implementation Summary
+- Removed the category subtitle from the shared App/Domain summary card presentation.
+- Preserved names, durations, expand controls, report data, and component interfaces.
+
+### Verification And Boundaries
+- `pnpm.cmd --filter @workmap/web lint`: passed.
+- Manual browser QA was not run.
+- No backend, API, database, Prisma, deployment, Desktop Agent, or Browser Extension code changed.
+
+## Reports Browser Extension Start/Stop Presentation
+
+### Original Task Brief
+- Simplify the user-facing `/reports` Browser Extension status history so it shows useful start/stop timing instead of raw heartbeat and recovery diagnostics.
+- Keep technical diagnostics available in the Browser Extension Options page.
+- Do not change Browser Extension tracking or Desktop Agent behavior.
+
+### Changed Files
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/test/browser-connection-audit.test.ts`
+
+### Implementation Summary
+- Browser audit history now exposes confirmed `RUNNING`/`RESTARTED` transitions as `Extension started`.
+- Historical lock, reconnect, request failure, and recovered heartbeat-gap rows are hidden from the user-facing report while remaining stored server-side and available through technical diagnostics.
+- A currently unresolved stale connection is presented once as `Extension stopped reporting`, using the server-detected coverage-loss time.
+- The UI explicitly states that the exact browser close time and cause cannot be determined.
+- Chrome, Edge, and separate browser profiles remain grouped by their own device identity.
+- Desktop Agent audit rendering and all Browser Extension collection, queue, policy, Focus, runtime, and upload behavior were intentionally unchanged.
+
+### Verification And Boundaries
+- Focused Browser audit tests: 6/6 passed.
+- `pnpm.cmd --filter @workmap/web typecheck`: passed.
+- `pnpm.cmd --filter @workmap/web lint`: passed.
+- `pnpm.cmd --filter @workmap/web build`: passed, with existing Next.js/webpack cache warnings.
+- Full Web test suite: 103/106 passed; the 3 failures are pre-existing/concurrent frontend expectations in the Dashboard hero tests (2) and old `WorkMap service unreachable` Desktop wording assertion (1), outside this scoped change.
+- `git diff --check`: passed with Windows line-ending warnings only.
+- Authenticated manual `/reports` browser QA was not run.

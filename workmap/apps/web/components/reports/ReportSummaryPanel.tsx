@@ -874,7 +874,7 @@ function EmployeeUsageChart({ rows }: { rows: WorkMapApiUsageSummary["employeeUs
 type AuditEntry = {
   id: string;
   title: string;
-  detail: string;
+  detail?: string;
   timestamp: string;
   tone: "positive" | "attention" | "neutral";
 };
@@ -915,6 +915,9 @@ function EmployeeConnectionAudit({
     : auditState.refreshStatus === "loading"
       ? "Loading confirmed connection history..."
       : "Connection history is temporarily unavailable; no empty-history conclusion was made.";
+  const browserEmptyText = audit
+    ? "No Extension start or stop was detected in this report range."
+    : emptyText;
   const countLabel = audit
     ? undefined
     : auditState.refreshStatus === "loading" ? "Loading" : "Unavailable";
@@ -924,7 +927,7 @@ function EmployeeConnectionAudit({
         <div>
           <p style={styles.panelLabel}>Connection audit</p>
           <h2 id="connection-audit-heading" style={styles.sectionTitle}>Start, stop and interruption history</h2>
-          <p style={styles.panelText}>Confirmed client transitions and inferred heartbeat gaps are shown separately for the Agent and Extension.</p>
+          <p style={styles.panelText}>Desktop Agent transitions and simplified Browser Extension start/stop records are shown separately.</p>
           <p style={styles.auditRangeText}>
             Connection history and usage totals use {auditRange.timeZone}: {auditRange.calendar.from}
             {auditRange.calendar.to === auditRange.calendar.from ? "" : ` to ${auditRange.calendar.to}`}.
@@ -940,7 +943,7 @@ function EmployeeConnectionAudit({
       ) : null}
       <div style={styles.twoColumnGrid}>
         <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} emptyText={emptyText} countLabel={countLabel} />
-        <BrowserAuditTimeline groups={browserGroups} emptyText={emptyText} countLabel={countLabel} />
+        <BrowserAuditTimeline groups={browserGroups} emptyText={browserEmptyText} countLabel={countLabel} />
       </div>
     </section>
   );
@@ -985,7 +988,7 @@ export function AuditTimeline({
 
 export function BrowserAuditTimeline({
   groups,
-  emptyText = "No confirmed connection events in this report range.",
+  emptyText = "No Extension start or stop was detected in this report range.",
   countLabel,
 }: {
   groups: BrowserAuditGroup[];
@@ -998,9 +1001,12 @@ export function BrowserAuditTimeline({
       <div style={styles.auditCardHeader}>
         <span style={styles.auditIcon}><Globe2 size={18} aria-hidden /></span>
         <h3 style={styles.auditTitle}>Browser Extension</h3>
-        <span style={styles.auditCount}>{countLabel ?? `${eventCount} events`}</span>
+        <span style={styles.auditCount}>{countLabel ?? `${eventCount} records`}</span>
       </div>
       <div style={styles.browserAuditGroups}>
+        <p style={styles.browserAuditNote}>
+          Start times are confirmed by the Extension. Stop times show when CandidGrid detected that reporting had ceased; an exact browser close time or cause is not available.
+        </p>
         {groups.length === 0 ? <p style={styles.emptyText}>{emptyText}</p> : groups.map((group) => (
           <section key={group.deviceId} style={styles.auditDeviceGroup} aria-label={`${group.title} connection history`}>
             <div style={styles.auditDeviceHeader}>
@@ -1008,7 +1014,7 @@ export function BrowserAuditTimeline({
                 <strong>{group.title}</strong>
                 <span>{group.detail}</span>
               </div>
-              <span style={styles.auditCount}>{group.entries.length} events</span>
+              <span style={styles.auditCount}>{group.entries.length} records</span>
             </div>
             <div style={styles.auditDeviceRows}>
               <AuditRows entries={group.entries} emptyText="No connection events for this browser in the report range." />
@@ -1030,7 +1036,7 @@ function AuditRows({ entries, emptyText }: { entries: AuditEntry[]; emptyText: s
           <strong style={styles.auditEventTitle}>{entry.title}</strong>
           <time style={styles.auditTime}>{formatDateTime(entry.timestamp)}</time>
         </div>
-        <span style={styles.auditDetail}>{entry.detail}</span>
+        {entry.detail ? <span style={styles.auditDetail}>{entry.detail}</span> : null}
       </div>
     </div>
   ));
@@ -1130,33 +1136,37 @@ export function buildBrowserAuditEntries(
   v2Devices: WorkMapApiTrackingV2LiveActivity["devices"] = [],
 ): AuditEntry[] {
   const entries: AuditEntry[] = [];
-  const coverageByDevice = new Map(summary.browserExtensionCoverage.map((row) => [row.deviceId, row]));
+  const startKeys = new Set<string>();
   for (const event of summary.deviceStatusHistory) {
-    if (event.source !== "BROWSER_EXTENSION") continue;
-    const browser = coverageByDevice.get(event.deviceId);
-    const browserName = event.browserName ?? browser?.browserName ?? "UNKNOWN";
-    entries.push(
-      statusToAuditEntry(
-        event,
-        browserName === "UNKNOWN"
-          ? "Browser Extension"
-          : `${formatBrowserName(browserName)} Extension`,
-      ),
-    );
+    if (
+      event.source !== "BROWSER_EXTENSION" ||
+      (event.status !== "RUNNING" && event.status !== "RESTARTED")
+    ) {
+      continue;
+    }
+    const startKey = `${event.deviceId}:${event.startedAt}`;
+    if (startKeys.has(startKey)) continue;
+    startKeys.add(startKey);
+    entries.push({
+      id: `${event.deviceId}:status:${event.id}`,
+      title: "Extension started",
+      timestamp: event.startedAt,
+      tone: "positive",
+    });
   }
   for (const row of summary.browserExtensionCoverage) {
     if (row.state !== "signal_lost" || !row.coverageLostDetectedAt) continue;
     const hasMatchingInterruption = entries.some((entry) =>
-      entry.id.startsWith(`${row.deviceId}:status:`)
+      entry.id.startsWith(`${row.deviceId}:`)
+      && entry.title === "Extension stopped reporting"
       && Math.abs(Date.parse(entry.timestamp) - Date.parse(row.coverageLostDetectedAt!)) <= 90_000,
     );
     if (!hasMatchingInterruption) {
       entries.push({
         id: `${row.deviceId}:coverage-lost`,
-        title: "Heartbeat not received",
-        detail: browserHeartbeatUnavailableDetail(`${formatBrowserName(row.browserName)} Extension`),
+        title: "Extension stopped reporting",
         timestamp: row.coverageLostDetectedAt,
-        tone: "attention",
+        tone: "neutral",
       });
     }
   }
@@ -1175,7 +1185,7 @@ export function buildBrowserAuditEntries(
     const hasMatchingInterruption = entries.some(
       (entry) =>
         entry.id.startsWith(`${device.deviceId}:`) &&
-        entry.title === "Heartbeat not received" &&
+        entry.title === "Extension stopped reporting" &&
         Math.abs(
           Date.parse(entry.timestamp) -
             Date.parse(coverageLostDetectedAt),
@@ -1184,10 +1194,9 @@ export function buildBrowserAuditEntries(
     if (!hasMatchingInterruption) {
       entries.push({
         id: `${device.deviceId}:v2-coverage-lost`,
-        title: "Heartbeat not received",
-        detail: browserHeartbeatUnavailableDetail(`${formatBrowserName(device.browserName ?? "UNKNOWN")} Extension`),
+        title: "Extension stopped reporting",
         timestamp: coverageLostDetectedAt,
-        tone: "attention",
+        tone: "neutral",
       });
     }
   }
@@ -1267,21 +1276,6 @@ export function buildBrowserAuditGroups(
       ? left.title.localeCompare(right.title) || left.deviceId.localeCompare(right.deviceId)
       : newestDifference;
   });
-}
-
-function statusToAuditEntry(
-  event: WorkMapApiUsageSummary["deviceStatusHistory"][number],
-  clientName: string,
-): AuditEntry {
-  return {
-    id: `${event.deviceId}:status:${event.id}`,
-    title: formatDeviceStatus(event.status),
-    detail: event.status === "UNKNOWN_INTERRUPTED"
-      ? `${browserHeartbeatUnavailableDetail(clientName)} (inferred)${statusSyncWasDelayed(event) ? ` - synced ${formatDateTime(event.receivedAt)}` : ""}`
-      : `${clientName} - ${formatDeviceStatusReason(event.reason, event.status)}${event.confidence === "INFERRED" ? " (inferred)" : ""}${statusSyncWasDelayed(event) ? ` - synced ${formatDateTime(event.receivedAt)}` : ""}`,
-    timestamp: event.startedAt,
-    tone: isAttentionDeviceStatus(event.status) ? "attention" : event.status === "RECONNECTED" || event.status === "RUNNING" ? "positive" : "neutral",
-  };
 }
 
 function sortAuditEntries(entries: AuditEntry[]) {
@@ -1425,7 +1419,6 @@ function UsageMetricCard({
       >
         <span style={styles.nameCell}>
           <span style={styles.summaryName}>{row.name}</span>
-          <span style={styles.summaryCategory}>{row.category ?? formatProductivity(row.productivityLabel)}</span>
         </span>
         <span style={styles.appPrimaryMetric}>
           <MetricChip
@@ -1814,10 +1807,6 @@ function sum(rows: Array<{ activeSeconds: number; idleSeconds: number }>, key: "
   return rows.reduce((total, row) => total + row[key], 0);
 }
 
-function formatProductivity(value: string | null) {
-  return value ? value.toLowerCase().replace(/_/g, " ") : "Uncategorised";
-}
-
 function formatBrowserName(value: "CHROME" | "EDGE" | "UNKNOWN") {
   return value === "EDGE" ? "Microsoft Edge" : value === "CHROME" ? "Google Chrome" : "Browser extension";
 }
@@ -1865,34 +1854,6 @@ function describeAgentState(state: NonNullable<WorkMapApiUsageSummary["agentStat
 
 function isAttentionAgentState(state: NonNullable<WorkMapApiUsageSummary["agentStatus"]>["state"]) {
   return ["network_offline", "agent_crashed", "agent_terminated", "server_unreachable", "unknown_interrupted"].includes(state);
-}
-
-function formatDeviceStatus(status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"]) {
-  if (status === "RUNNING") return "Extension started";
-  if (status === "RESTARTED") return "Browser profile started";
-  if (status === "UNKNOWN_INTERRUPTED") return "Heartbeat not received";
-  if (status === "SERVER_UNREACHABLE") return "CandidGrid request unavailable";
-  if (status === "RECONNECTED") return "Connection restored";
-  return status.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function isAttentionDeviceStatus(status: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"]) {
-  return ["NETWORK_OFFLINE", "AGENT_CRASHED", "AGENT_TERMINATED", "SERVER_UNREACHABLE", "UNKNOWN_INTERRUPTED"].includes(status);
-}
-
-function formatDeviceStatusReason(
-  reason: WorkMapApiUsageSummary["deviceStatusHistory"][number]["reason"],
-  status?: WorkMapApiUsageSummary["deviceStatusHistory"][number]["status"],
-) {
-  if (reason === "SERVER_REQUEST_FAILED") return "CandidGrid request failed";
-  if (reason === "UNKNOWN" && status === "RECONNECTED") {
-    return "Confirmed heartbeat received again";
-  }
-  return reason.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function browserHeartbeatUnavailableDetail(clientName: string) {
-  return `CandidGrid did not receive a confirmed heartbeat from ${clientName} within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished`;
 }
 
 function statusSyncWasDelayed(row: WorkMapApiUsageSummary["deviceStatusHistory"][number]) {
@@ -1969,6 +1930,7 @@ const styles = {
   auditCount: { color: wm.colors.textMuted, fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" as const },
   auditRows: { display: "grid", alignContent: "start", maxHeight: "420px", overflowY: "auto" as const, padding: "0 16px" },
   browserAuditGroups: { display: "flex", flexDirection: "column" as const, alignItems: "stretch", gap: "12px", maxHeight: "420px", overflowY: "auto" as const, padding: "12px" },
+  browserAuditNote: { margin: 0, color: wm.colors.textMuted, fontSize: "11px", lineHeight: 1.45 },
   auditDeviceGroup: { flex: "0 0 auto", border: `1px solid ${wm.colors.borderSubtle}`, borderRadius: wm.radius.md, overflow: "hidden", background: wm.colors.surface },
   auditDeviceHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "11px 12px", borderBottom: `1px solid ${wm.colors.borderSubtle}`, background: wm.colors.surfaceLow },
   auditDeviceIdentity: { display: "grid", gap: "2px", minWidth: 0, color: wm.colors.text, fontSize: "13px", overflowWrap: "anywhere" as const },
@@ -2041,7 +2003,6 @@ const styles = {
   appSecondaryMetrics: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", borderTop: `1px solid ${wm.colors.borderSubtle}`, background: wm.colors.surfaceLow, padding: "10px" },
   nameCell: { display: "grid", gap: "3px", minWidth: 0 },
   summaryName: { display: "block", margin: "0 0 3px", color: wm.colors.text, fontSize: "13px", fontWeight: 800, overflowWrap: "anywhere" as const },
-  summaryCategory: { display: "block", margin: 0, color: wm.colors.textMuted, fontSize: "12px" },
   summaryTime: { color: wm.colors.textSecondary, fontSize: "12px", fontWeight: 800, whiteSpace: "nowrap" as const },
   domainMetricChips: { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" as const },
   metricChip: { display: "grid", gap: "2px", borderWidth: "1px", borderStyle: "solid", borderColor: wm.colors.borderSubtle, borderRadius: wm.radius.md, padding: "8px 9px", minWidth: 0 },
