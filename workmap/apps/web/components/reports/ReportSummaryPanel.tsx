@@ -16,9 +16,9 @@ import { getCompliancePolicy } from "../../lib/api/complianceApi";
 import { listUsers } from "../../lib/api/usersApi";
 import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
-import { WorkMapLoader } from "../ui/WorkMapLoader";
 import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
 import { startCompletionPoller } from "./completionPoller";
+import { refreshReportSelection } from "./reportSelectionRefresh";
 import {
   isConnectionAuditTimestampInRange,
   resolveConnectionAuditRange,
@@ -59,6 +59,11 @@ type CurrentLiveData = {
   revision: string | null;
 };
 
+type SelectionRefreshState = {
+  live: boolean;
+  summary: boolean;
+};
+
 const LIVE_REFRESH_MS = 15_000;
 const SUMMARY_REVISION_CHECK_MS = 60_000;
 const AUDIT_REFRESH_MS = 60_000;
@@ -74,6 +79,7 @@ export function ReportSummaryPanel() {
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [liveStatus, setLiveStatus] = useState<WorkMapApiReportLiveStatus | null>(null);
   const [trackingV2Live, setTrackingV2Live] = useState<WorkMapApiTrackingV2LiveActivity | null>(null);
+  const [selectionRefresh, setSelectionRefresh] = useState<SelectionRefreshState>({ live: false, summary: false });
   const [livePollingReady, setLivePollingReady] = useState(false);
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
   const [auditState, setAuditState] = useState<AuditState>({ audit: null, refreshStatus: "loading" });
@@ -309,30 +315,61 @@ export function ReportSummaryPanel() {
     filterRequestAbortRef.current?.abort();
     const requestAbort = new AbortController();
     filterRequestAbortRef.current = requestAbort;
+    const nextFilters = { ...filters };
+    const selectionChanged = !sameReportSelection(nextFilters, appliedFilters);
+    const snapshotKey = reportSnapshotKey(auth, nextFilters, reportTimeZone);
+
+    setSelectionRefresh({ live: true, summary: true });
+    setLiveStatus(null);
+    setTrackingV2Live(null);
+    activityRevisionRef.current = undefined;
     setReportState((current) => ({
       ...current,
-      loading: current.summary === null,
+      loading: false,
+      summary: selectionChanged ? null : current.summary,
       error: null,
       statusText: "Refreshing report...",
     }));
-    setAuditState((current) => current.audit ? current : { audit: null, refreshStatus: "loading" });
-    const result = await requestSummary(auth, filters, requestAbort.signal);
-    if (requestAbort.signal.aborted) return;
-    applyResult(result, setReportState, true);
-    const snapshotKey = reportSnapshotKey(auth, filters, reportTimeZone);
-    if (result.ok) {
-      const auditSelectionChanged = filters.view !== appliedFilters.view
-        || filters.from !== appliedFilters.from
-        || filters.to !== appliedFilters.to;
-      if (auditSelectionChanged) setAuditState({ audit: null, refreshStatus: "loading" });
-      setAppliedFilters(filters);
-      persistReportFilters(auth.userId, filters);
-      updateReportSnapshot(snapshotKey, { summary: result.data });
-    }
-    if (result.ok && result.data.scope === "user") {
-      void loadAudit(auth, filters, reportTimeZone, () => false, setAuditState, (audit) => {
-        updateReportSnapshot(snapshotKey, { audit });
-      }, requestAbort.signal);
+    if (selectionChanged) setAuditState({ audit: null, refreshStatus: "loading" });
+    setAppliedFilters(nextFilters);
+    persistReportFilters(auth.userId, nextFilters);
+
+    try {
+      await refreshReportSelection({
+        requestLive: () => requestCurrentLive(auth, nextFilters, false, requestAbort.signal),
+        requestSummary: () => requestSummary(auth, nextFilters, requestAbort.signal),
+        applyLive: (result) => {
+          if (requestAbort.signal.aborted || filterRequestAbortRef.current !== requestAbort) return;
+          if (result.ok) {
+            setLiveStatus(result.data.legacy);
+            setTrackingV2Live(result.data.trackingV2);
+            activityRevisionRef.current = result.data.revision;
+            updateReportSnapshot(snapshotKey, {
+              liveStatus: result.data.legacy,
+              trackingV2Live: result.data.trackingV2,
+            });
+          }
+          if (result.ok) setSelectionRefresh((current) => ({ ...current, live: false }));
+        },
+        applySummary: (result) => {
+          if (requestAbort.signal.aborted || filterRequestAbortRef.current !== requestAbort) return;
+          applyResult(result, setReportState, !selectionChanged);
+          if (result.ok) {
+            updateReportSnapshot(snapshotKey, { summary: result.data });
+            if (result.data.scope === "user") {
+              void loadAudit(auth, nextFilters, reportTimeZone, () => requestAbort.signal.aborted, setAuditState, (audit) => {
+                updateReportSnapshot(snapshotKey, { audit });
+              }, requestAbort.signal);
+            }
+          }
+          setSelectionRefresh((current) => ({ ...current, summary: false }));
+        },
+      });
+    } finally {
+      if (filterRequestAbortRef.current === requestAbort) {
+        setSelectionRefresh({ live: false, summary: false });
+        filterRequestAbortRef.current = null;
+      }
     }
   }
 
@@ -351,6 +388,11 @@ export function ReportSummaryPanel() {
     ?? false;
   const domainOpenRuntimeEnabled =
     summary?.trackingV2Coverage?.domainOpenRuntimeEnabled === true;
+  const liveSelectionLoading = selectionRefresh.live
+    || (reportState.loading && liveStatus === null && trackingV2Live === null);
+  const summarySelectionLoading = reportState.loading || selectionRefresh.summary;
+  const filterApplyLoading = selectionRefresh.live || selectionRefresh.summary;
+  const filterSelectionLoading = reportState.loading || filterApplyLoading;
 
   return (
     <div className="wm-report-summary" style={styles.stack}>
@@ -414,32 +456,32 @@ export function ReportSummaryPanel() {
         </div>
 
         <div style={styles.filterActions}>
-          <WorkMapButton type="button" tone="primary" onClick={() => void applyFilters()} disabled={!auth || reportState.loading}>
-            <RefreshCw size={16} aria-hidden /> {reportState.loading ? "Loading" : "Apply filters"}
+          <WorkMapButton type="button" tone="primary" onClick={() => void applyFilters()} disabled={!auth || filterSelectionLoading}>
+            <RefreshCw className={filterSelectionLoading ? "wm-report-loading-spinner" : undefined} size={16} aria-hidden /> {filterApplyLoading ? "Applying filters" : reportState.loading ? "Loading" : "Apply filters"}
           </WorkMapButton>
-          <WorkMapButton type="button" onClick={() => summary && exportSummaryCsv(summary, scopeLabel)} disabled={!summary || reportState.loading}>
+          <WorkMapButton type="button" onClick={() => summary && exportSummaryCsv(summary, scopeLabel)} disabled={!summary || summarySelectionLoading}>
             <Download size={16} aria-hidden /> Export CSV
           </WorkMapButton>
-          <WorkMapButton type="button" onClick={() => summary && exportSummaryTxt(summary, scopeLabel)} disabled={!summary || reportState.loading}>
+          <WorkMapButton type="button" onClick={() => summary && exportSummaryTxt(summary, scopeLabel)} disabled={!summary || summarySelectionLoading}>
             <FileText size={16} aria-hidden /> Download TXT
           </WorkMapButton>
-          <span style={styles.rangeText}>{reportState.loading ? "Loading selected reporting dates" : summary ? `${summary.range.from} to ${summary.range.to} (${summary.range.timeZone})` : `Workspace reporting dates (${reportTimeZone})`}</span>
+          <span style={styles.rangeText}>{summarySelectionLoading ? "Loading selected reporting dates" : summary ? `${summary.range.from} to ${summary.range.to} (${summary.range.timeZone})` : `Workspace reporting dates (${reportTimeZone})`}</span>
         </div>
       </section>
 
-      {trackingV2Live && trackingV2Live.devices.length > 0 && appliedFilters.view !== "company" ? (
+      {liveSelectionLoading ? (
+        <ReportSectionLoader section="live" />
+      ) : trackingV2Live && trackingV2Live.devices.length > 0 && appliedFilters.view !== "company" ? (
         <TrackingV2LiveOverview live={trackingV2Live} />
-      ) : liveUser || (!reportState.loading && summary?.scope === "user") ? (
+      ) : liveUser || (!summarySelectionLoading && summary?.scope === "user") ? (
         <EmployeeLiveOverview
           agentStatus={liveUser?.agentStatus ?? summary?.agentStatus ?? null}
           rows={liveUser?.browserExtensionCoverage ?? summary?.browserExtensionCoverage ?? []}
         />
       ) : null}
 
-      {reportState.loading ? (
-        <section style={styles.loadingPanel} aria-label="Loading selected report">
-          <WorkMapLoader label="Loading selected report" />
-        </section>
+      {summarySelectionLoading ? (
+        <ReportSectionLoader section="summary" />
       ) : reportState.error || !summary ? (
         <section style={styles.statusPanel}>
           <div>
@@ -452,7 +494,7 @@ export function ReportSummaryPanel() {
         </section>
       ) : null}
 
-      {!reportState.loading && summary?.scope === "user" ? (
+      {!summarySelectionLoading && summary?.scope === "user" ? (
         <EmployeeConnectionAudit
           auditState={auditState}
           rows={liveUser?.browserExtensionCoverage ?? summary.browserExtensionCoverage}
@@ -462,15 +504,15 @@ export function ReportSummaryPanel() {
         />
       ) : null}
 
-      {!reportState.loading && summary?.scope === "company" && summary.browserExtensionCoverage.length > 0 ? <BrowserExtensionCoveragePanel rows={summary.browserExtensionCoverage} /> : null}
+      {!summarySelectionLoading && summary?.scope === "company" && summary.browserExtensionCoverage.length > 0 ? <BrowserExtensionCoveragePanel rows={summary.browserExtensionCoverage} /> : null}
 
-      {!reportState.loading && summary?.scope === "company" ? <MetricGrid summary={summary} /> : null}
+      {!summarySelectionLoading && summary?.scope === "company" ? <MetricGrid summary={summary} /> : null}
 
-      {!reportState.loading && summary && summary.daily.length > 0 ? <DailyTrend rows={summary.daily} /> : null}
+      {!summarySelectionLoading && summary && summary.daily.length > 0 ? <DailyTrend rows={summary.daily} /> : null}
 
-      {!reportState.loading && summary?.scope === "company" && summary.employeeUsage.length > 0 ? <EmployeeUsageChart rows={summary.employeeUsage} /> : null}
+      {!summarySelectionLoading && summary?.scope === "company" && summary.employeeUsage.length > 0 ? <EmployeeUsageChart rows={summary.employeeUsage} /> : null}
 
-      {!reportState.loading && summary ? (
+      {!summarySelectionLoading && summary ? (
         <section style={styles.apiPanel}>
           <div style={styles.apiHeader}>
             <div>
@@ -979,6 +1021,38 @@ function EmployeeConnectionAudit({
       <div style={styles.twoColumnGrid}>
         <AuditTimeline title="Desktop Agent" icon={<Monitor size={18} aria-hidden />} entries={desktopEntries} emptyText={emptyText} countLabel={countLabel} />
         <BrowserAuditTimeline groups={browserGroups} emptyText={browserEmptyText} countLabel={countLabel} />
+      </div>
+    </section>
+  );
+}
+
+function ReportSectionLoader({ section }: { section: "live" | "summary" }) {
+  const live = section === "live";
+  const title = live ? "Updating live signals" : "Loading confirmed activity";
+  const detail = live
+    ? "Checking the selected employee's current connections and focus."
+    : "Loading the selected employee's confirmed App and Domain totals.";
+  return (
+    <section
+      className="wm-report-detail-section wm-report-section-loader"
+      style={styles.reportSection}
+      aria-label={title}
+      aria-busy="true"
+      role="status"
+    >
+      <div style={styles.sectionLoaderHeader}>
+        <span style={styles.sectionLoaderIcon}>
+          <RefreshCw className="wm-report-loading-spinner" size={20} aria-hidden />
+        </span>
+        <div>
+          <p style={styles.panelLabel}>{live ? "Live signals" : "API summary"}</p>
+          <h2 style={styles.sectionTitle}>{title}</h2>
+          <p style={styles.panelText}>{detail}</p>
+        </div>
+      </div>
+      <div className="wm-report-loading-grid" aria-hidden="true">
+        <span className="wm-report-loading-card" />
+        <span className="wm-report-loading-card" />
       </div>
     </section>
   );
@@ -1643,6 +1717,13 @@ async function loadAudit(
   setState((current) => mergeAuditState(current, result.data));
 }
 
+function sameReportSelection(left: ReportFilters, right: ReportFilters) {
+  return left.view === right.view
+    && left.departmentId === right.departmentId
+    && left.from === right.from
+    && left.to === right.to;
+}
+
 export function mergeAuditState(current: AuditState, nextAudit: WorkMapApiTrackingAudit): AuditState {
   if (
     current.audit
@@ -1938,8 +2019,9 @@ const styles = {
   filterActions: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" as const },
   rangeText: { color: wm.colors.textMuted, fontSize: "12px", fontWeight: 700 },
   statusPanel: { ...wmStyles.infoNotice, display: "flex", justifyContent: "space-between", alignItems: "start", gap: "16px", flexWrap: "wrap" as const, padding: "16px" },
-  loadingPanel: { ...wmStyles.card, minHeight: "280px", display: "grid", placeItems: "center", padding: "24px" },
   reportSection: { display: "grid", gap: "14px", padding: "6px 0" },
+  sectionLoaderHeader: { display: "flex", alignItems: "flex-start", gap: "12px" },
+  sectionLoaderIcon: { display: "grid", placeItems: "center", width: "40px", height: "40px", flex: "0 0 auto", border: `1px solid ${wm.colors.infoBorder}`, borderRadius: wm.radius.full, background: wm.colors.infoBg, color: wm.colors.infoText },
   sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", color: wm.colors.infoText },
   sectionTitle: { margin: "2px 0 6px", color: wm.colors.text, fontSize: "22px", lineHeight: 1.25 },
   liveCoverage: { display: "flex", alignItems: "center", gap: "7px", border: `1px solid ${wm.colors.infoBorder}`, borderRadius: wm.radius.full, background: wm.colors.infoBg, color: wm.colors.infoText, padding: "7px 10px", fontSize: "12px", whiteSpace: "nowrap" as const },

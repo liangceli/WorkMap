@@ -614,11 +614,47 @@
   padding: 24px !important;
 }
 
-.wm-report-summary > section[aria-label="Loading selected report"] .wm-loader-section {
-  min-height: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+.wm-report-summary .wm-report-section-loader {
+  overflow: hidden;
+  border: 1px solid var(--wm-border) !important;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.wm-report-loading-spinner {
+  animation: wm-report-loading-spin 760ms linear infinite;
+}
+
+.wm-report-loading-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 14px;
+}
+
+.wm-report-loading-card {
+  position: relative;
+  display: block;
+  min-height: 112px;
+  overflow: hidden;
+  border: 1px solid var(--wm-border);
+  border-radius: 6px;
+  background: var(--wm-surface-low);
+}
+
+.wm-report-loading-card::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.78), transparent);
+  animation: wm-report-loading-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes wm-report-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes wm-report-loading-shimmer {
+  to { transform: translateX(100%); }
 }
 
 .wm-usage-table-toggle {

@@ -36,15 +36,15 @@ test("live, audit and summary revision use independent completion-scheduled poll
   assert.doesNotMatch(reportSource, /setInterval\(\(\) => void refresh/);
 });
 
-test("initial report uses the loader while filter refresh preserves confirmed content", () => {
-  assert.match(reportSource, /import \{ WorkMapLoader \} from "\.\.\/ui\/WorkMapLoader"/);
-  assert.match(reportSource, /\{reportState\.loading \? \(/);
-  assert.match(reportSource, /<section style=\{styles\.loadingPanel\} aria-label="Loading selected report">/);
-  assert.match(reportSource, /<WorkMapLoader label="Loading selected report" \/>/);
-  assert.match(reportSource, /loading: current\.summary === null/);
-  assert.match(reportSource, /applyResult\(result, setReportState, true\)/);
-  assert.match(reportSource, /!reportState\.loading && summary\?\.scope === "user"/);
-  assert.match(reportSource, /disabled=\{!summary \|\| reportState\.loading\}/);
+test("filter refresh gives Live and confirmed summary independent lightweight feedback", () => {
+  assert.doesNotMatch(reportSource, /import \{ WorkMapLoader \}/);
+  assert.match(reportSource, /refreshReportSelection\(\{/);
+  assert.match(reportSource, /requestLive: \(\) => requestCurrentLive/);
+  assert.match(reportSource, /requestSummary: \(\) => requestSummary/);
+  assert.match(reportSource, /<ReportSectionLoader section="live" \/>/);
+  assert.match(reportSource, /<ReportSectionLoader section="summary" \/>/);
+  assert.match(reportSource, /summary: selectionChanged \? null : current\.summary/);
+  assert.match(reportSource, /disabled=\{!summary \|\| summarySelectionLoading\}/);
 });
 
 test("the cold initial report starts live and summary together after timezone resolution", () => {
@@ -60,11 +60,13 @@ test("the cold initial report starts live and summary together after timezone re
   assert.match(reportSource, /includeTimeline: false/);
 });
 
-test("report filter loader leaves the pixel avatar unframed", () => {
+test("report filter loader uses a compact spinner and skeleton cards", () => {
   assert.match(
     redesignStyles,
-    /\.wm-report-summary > section\[aria-label="Loading selected report"\] \.wm-loader-section \{\s*min-height: 0;\s*border: 0;\s*border-radius: 0;\s*background: transparent;/,
+    /\.wm-report-loading-spinner \{\s*animation: wm-report-loading-spin/,
   );
+  assert.match(redesignStyles, /\.wm-report-loading-card::after/);
+  assert.doesNotMatch(redesignStyles, /section\[aria-label="Loading selected report"\] \.wm-loader-section/);
 });
 
 test("live signals and connection audit retain comfortable responsive section padding", () => {

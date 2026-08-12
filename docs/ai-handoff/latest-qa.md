@@ -1,5 +1,22 @@
 # Latest QA Handoff
 
+## 2026-08-12 Reports Employee-Switch Refresh QA
+
+### Findings
+
+- High, fixed: filter Apply serialized confirmed Summary before changing the applied employee, so Live signals continued presenting the previous employee for the full Summary request and only then started the new Live request.
+- Pass: the selected scope now becomes active immediately; former Live and Summary content is hidden behind separate lightweight section loaders, and Live/Summary requests start together and settle independently.
+- Pass: aborted or superseded requests cannot apply their result. A late response from an older employee selection cannot overwrite the newest selection.
+- Pass: no API contract, report aggregation, employee/tenant authorization, tracking data, Desktop Agent or Browser Extension behavior changed.
+
+### Verification And Recommendation
+
+- Focused Reports tests: 16/16 pass, including a behavior test with independently controlled Live and Summary promises.
+- Web typecheck and lint: pass. Web production build: pass.
+- Full Web suite: 107/110. The three failures are unrelated stale Dashboard/old-brand expectations; every affected Reports test passes.
+- Authenticated browser visual QA: not run because available browser sessions were not signed in. No production deployment was performed.
+- Recommendation: pass for a Web-only deployment, followed by Owner `/reports` QA that switches Mia -> SWE LEO and back, verifies immediate loaders, no stale identity flash, independent section completion, responsive layout, and rapid repeated Apply behavior.
+
 ## 2026-08-12 Authenticated Reports `Illegal invocation` QA
 
 ### Findings

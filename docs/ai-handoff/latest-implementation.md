@@ -1,5 +1,37 @@
 # Latest Implementation Handoff
 
+## 2026-08-12 Reports Employee-Switch Feedback And Live Refresh
+
+### Original Task Brief
+
+- Fix the Owner `/reports` filter transition where changing from one employee to another left the former employee's Live signals visible for approximately seven to eight seconds.
+- Give Live signals and confirmed App/Domain totals immediate, polished loading feedback without using the full pixel-avatar loader.
+
+### Root Cause And Implementation
+
+- The filter handler previously awaited the confirmed usage-summary request before updating `appliedFilters`. Only after that request succeeded did the Live polling effect begin requesting the newly selected employee, so the former employee's Live cards remained on screen throughout two sequential waits.
+- A valid Apply now commits the selected filter identity immediately, clears the former employee's Live data, and starts Live and Summary requests together. Their response handlers are independent: whichever finishes first updates its own section without waiting for the other.
+- Live signals and confirmed App/Domain content have separate lightweight CandidGrid-styled spinner/skeleton states. They replace stale cross-employee content immediately. The full pixel-avatar loader is no longer used by Reports filter refreshes; removing it improves presentation weight but the former delay was caused by request ordering, not its animation.
+- Superseded filter requests are aborted and guarded by the active request identity, so a late response from a prior employee cannot overwrite the newest selection. Connection Audit remains independently loaded and scoped to the applied selection.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/components/reports/reportSelectionRefresh.ts`
+- `workmap/apps/web/app/workspace-redesign.css`
+- `workmap/apps/web/test/reports-selection-refresh.test.ts`
+- `workmap/apps/web/test/reports-information-order.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Verification And Boundaries
+
+- Focused Reports tests: pass, 16/16. The new deferred-request test proves Live and Summary start together and independently apply in either completion order.
+- Web typecheck: pass. Web lint: pass. Web production build: pass, including `/reports`.
+- Full Web suite: 107/110. All changed Reports tests pass. The three unrelated failures are two stale Dashboard visual/source assertions and one old `WorkMap` Desktop-audit wording expectation.
+- Authenticated visual QA was not run because neither the in-app nor connected external browser had a signed-in Reports tab. The in-app production `/reports` route redirected to the public page as expected for an unauthenticated session. No deployment was performed.
+- API, database, report calculations, authentication, RBAC, Browser Extension, Desktop Agent, tracking policy, ledger and collected data were intentionally unchanged. Next step is deploy Web and perform a signed-in Owner test switching rapidly between an offline employee and a currently connected employee.
+
 ## 2026-08-12 Authenticated Reports `Illegal invocation` Hotfix
 
 ### Original Task Brief
