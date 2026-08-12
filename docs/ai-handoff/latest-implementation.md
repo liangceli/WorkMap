@@ -1,5 +1,49 @@
 # Latest Implementation Handoff
 
+## 2026-08-12 Tracking v2 Ingestion, Reports Polling And Browser Focus Recovery
+
+### Original Task Brief
+
+- Investigate the recurring Browser Extension and Desktop Agent retry clusters, Render `TRACKING_SYNC_INTERNAL` transaction failures, `/reports` 500/CORS console errors, roughly ten-second report loads, and suspected Browser Domain Focus undercount.
+- Use parallel specialists, proceed only after reaching greater than 95% confidence in the identified failure chains, preserve durable queued activity, and fix the shared system without modifying Desktop Agent behavior.
+- Keep Browser Focus conservative: never invent time across an unproved foreground-window gap, and never weaken policy, acknowledgement, lease, schedule, tenant, credential or privacy enforcement.
+
+### Confirmed Root Causes
+
+- Render records showed concurrent Tracking v2 requests failing at `stage=transaction` after approximately 15-30 seconds and across batch sizes from zero to 50 intervals. This matches the API's Prisma interactive-transaction wait/timeout envelope and confirms a database transaction/pool contention class of failure, rather than client policy rejection. The former generic error mapping did not expose the safe Prisma category or the transaction phase, so the narrower distinction between pool acquisition, transaction expiry, retryable conflict and database connectivity could not be made from old logs alone.
+- `/reports` independently started async Live, Audit and Summary refreshes every five seconds with no in-flight guard. Slow calls overlapped indefinitely, generated more API/database work, and produced a feedback loop. Live failure also returned before Audit refresh, leaving Connection Audit stale. The Audit endpoint queried an unused, unbounded App timeline, and the initial page path loaded major sections serially.
+- The browser's IndexedDB queue and normal network retry did not stop new collection. The actionable undercount path was repeated `FOCUS_WINDOW_QUERY_RETRY` / `FOCUS_TAB_QUERY_RETRY`: a transient Chrome/Edge window-query exception marked the entire collector `LIMITED`, while Focus capture required `HEALTHY`. Trusted input could therefore remain conservatively uncounted until a later maintenance pass restored the collector.
+- Browser `UNOBSERVED_GAP` remains an intentional honesty boundary: after service-worker suspension, browser restart, sleep or a clock discontinuity, the Extension seals Focus at the last durable observation and does not backfill time that it cannot prove.
+
+### Changed Files And Implementation Summary
+
+- API ingestion/config: `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`, `tracking-v2-reconciliation.service.ts`, `tracking-v2-reconciliation.worker.ts`, `src/config/allowed-origins.ts`, `src/main.ts`, and their focused tests.
+  - Tracking sync now records a safe Prisma category and named transaction-step timings server-side, including pool acquisition, lane lock, identity/overlap checks, tombstones, intervals/summaries, cursor, snapshot, health and commit. It never logs raw SQL, credentials or activity payloads, and the client still receives the existing generic retryable error.
+  - Repeated reconciliation-target and device/day-summary writes are batched into parameterized PostgreSQL upserts inside the same authoritative transaction. Tenant isolation, immutable ledger insertion, idempotency, cursor ordering and report semantics remain atomic.
+  - The reconciliation worker no longer blocks every quiet target merely because any v2 device in the deployment was recently active. It retains the per-target 60-second quiet boundary and conservative one-target batch.
+  - CORS preflight caching is ten minutes. The observed console CORS errors were secondary gateway/500 responses that did not pass through normal application CORS handling; this change reduces preflight noise but does not mask server failure.
+- Reports: `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`, new `completionPoller.ts`, report API/client types and focused tests; `workmap/apps/api/src/modules/reports/reports.controller.ts`, `reports.service.ts` and audit tests.
+  - Live refresh is 15 seconds, Connection Audit 60 seconds, and Summary revision refresh 60 seconds. Each is a completion-based single-flight loop, so a slow request can never overlap itself.
+  - Live, Audit and Summary are independent. One failure keeps the last confirmed UI data and cannot block the other sections or replace content with a recurring loading state.
+  - Initial Live and Summary loads run in parallel after the policy time zone is known; Audit starts independently. Stale filter requests are aborted and a filter becomes applied only after its Summary succeeds.
+  - Report GETs have bounded 10/15/20-second timeouts. The Web requests Connection Audit with `includeTimeline=false`; the API default remains `true` for backward compatibility, but this Reports screen no longer queries an App timeline it does not render.
+- Browser Extension: `workmap/apps/browser-extension/src/backgroundV2.ts`, version constants/manifests, generated unpacked manifest and Focus/service-worker tests.
+  - A transient focused-window or active-tab proof-query failure now seals current Focus at the last durable observation and clears only the unproved Focus identity. It records the bounded retry diagnostic but leaves connection health, IndexedDB interval collection and Domain open/runtime independent and healthy.
+  - A later successful visible/focused page proof or trusted event immediately resumes Focus and records `FOCUS_QUERY_RECOVERED`. Unknown time is not backfilled.
+  - Persistence/storage failure still uses the existing global `LIMITED` safety state. Network upload retry still retains stable event IDs in IndexedDB and does not pause collection.
+  - Honest release version is `0.5.18` because this is a Browser Focus reliability patch, not a new protocol or policy contract.
+
+### Verification, Artifact And Deployment Boundary
+
+- Browser Extension typecheck and lint: pass; full tests pass 84/84; build and `release:zip`: pass.
+- API typecheck and lint: pass; full tests pass 68/68; production build: pass.
+- Web typecheck and lint: pass; focused Reports tests pass 20/20; production build: pass. Full Web tests pass 105/108. The three failures are unrelated stale Dashboard/branding source assertions already present in the concurrent workspace; the changed Reports tests all pass.
+- Final Browser ZIP: `workmap/artifacts/browser-extension/CandidGrid-Browser-Extension-0.5.18.zip`, 72,459 bytes, SHA-256 `9426985D6428EB536F61DDE1EA6DD6D8CCE64528AAE9034F4D9C2EB0B9F06EF0`, 26 entries, manifest/package/runtime version `0.5.18`.
+- Read-only production probes confirmed the configured Web origin currently receives correct application CORS headers, while API readiness under concurrent probing varied from roughly two to seven seconds. Authenticated Render/Supabase dashboards were not available in the in-app browser, so the production database connection mode, total connection budget and instance count still require operator verification.
+- No Desktop Agent source, package, behavior or artifact changed. No database schema/migration, policy semantics, credential behavior, RBAC, tenant isolation or payload privacy boundary changed. No production deployment, store publication, database mutation, pairing reset or local queue deletion was performed.
+- Manual signed-in `/reports`, real Chrome/Edge load-unpacked, offline/reconnect queue drain, MV3 suspend/restart and multi-client load QA were not run. Deploy API first, then Web, then load Extension 0.5.18 without re-pairing. Acceptance requires 30 minutes with Desktop + Edge + Chrome: no recurring sync 500/502 cluster, pending drains to the normal active 0/1 level, dead-letter counts do not rise, confirmed-through advances, report refresh remains non-overlapping, and Browser Focus resumes on the first fresh proof after an injected window-query failure.
+- Remaining risk: the new parameterized batch upserts have full unit/type/build coverage but have not been exercised against the real Supabase PostgreSQL instance. The new safe diagnostics are deliberately needed to distinguish any residual `P2024`, `P2028`, retryable conflict or named slow transaction step after deployment. Do not declare the production incident resolved before that monitored acceptance passes.
+
 ## 2026-08-10 Australian Employee Monitoring Notice Copy Refresh
 
 ### Original Task Brief
@@ -7543,3 +7587,50 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - Full Web test suite: 103/106 passed; the 3 failures are pre-existing/concurrent frontend expectations in the Dashboard hero tests (2) and old `WorkMap service unreachable` Desktop wording assertion (1), outside this scoped change.
 - `git diff --check`: passed with Windows line-ending warnings only.
 - Authenticated manual `/reports` browser QA was not run.
+
+---
+
+## 2026-08-12 Desktop Agent 0.6.12 Capture/Upload Decoupling
+
+### Original Task Brief
+- Fully investigate whether the Desktop Agent also needs changes for the same sustained Tracking v2 retry/HTTP 500/502 incident affecting Browser Extension and `/reports`.
+- Optimise the Desktop Agent only if there is high-confidence evidence of a client reliability issue; preserve its Focus, idle, open/runtime, privacy, policy and ledger semantics.
+
+### Evidence And Root Cause
+- Local safe diagnostics contained 38 same-day retryable sync failures (31 `HTTP 500 / TRACKING_SYNC_INTERNAL`, 7 `HTTP 502`). All 38 were followed by a confirmed sync; pending peaked at 115 and later drained to zero. No same-day terminal rejection or queue-pressure loss was found.
+- The SQLite outbox already uses WAL, `synchronous=FULL`, stable event IDs and acknowledgement-before-delete semantics. Normal retry/backoff therefore did not delete durable intervals.
+- The structural Desktop risk was different: native Windows events, SQLite persistence and up-to-60-second sync HTTP waits shared one `eventChain`. Later foreground/input/lock/suspend events remained only in the in-memory promise queue until the request returned. Local evidence showed interval-end-to-SQLite-create delays of roughly 40–59 seconds during the incident; a crash or power loss in that window could lose the unprocessed tail.
+- Periodic policy refresh also awaited remote I/O in the capture lane and had the same risk.
+
+### Changed Files
+- `workmap/apps/desktop-agent/src/runtimeV2.ts`
+- `workmap/apps/desktop-agent/test/runtime-v2-boundary-serialization.test.ts`
+- `workmap/apps/desktop-agent/package.json`
+- `workmap/apps/desktop-agent/alpha-windows/package.json`
+- `workmap/apps/desktop-agent/scripts/build-alpha.mjs`
+- `workmap/apps/desktop-agent/src/version.ts`
+- `workmap/apps/desktop-agent/src/windowsActivityHost.ts`
+- `workmap/apps/desktop-agent/test/gui-release.test.ts`
+- `workmap/apps/desktop-agent/alpha-windows/native/windows-activity-host/publish/workmap-windows-activity-host.exe` (regenerated by the normal build)
+
+### Implementation Summary
+- Updated the Desktop Agent to `desktop-agent-windows/0.6.12`.
+- Tracking sync is now an independent single-flight network pump. Capture operations finish their local mutation/SQLite commit without awaiting HTTP.
+- Sync success, rejection, retry, queue acknowledgement/dead-letter and UI status updates are applied only after re-entering the same serialized mutation lane; store/engine state is not mutated concurrently.
+- Policy fetch is also single-flight outside the capture lane. The returned lease or failure is applied as a short serialized mutation and policy-change boundaries remain durable and non-overlapping.
+- Existing bounded global backoff, 60-second request timeout, batch size, stable client event IDs, tenant/device identity, policy lease, acknowledgement, allowed windows and durable queue behaviour are preserved.
+- Graceful shutdown now drains any prior response application, seals the final local boundary, records lifecycle status, makes one final sync attempt even during normal backoff, waits for its serialized application, and only then closes SQLite.
+- No Desktop Focus/idle threshold, App identity, open/runtime definition, privacy boundary or Reports aggregation rule changed.
+
+### Verification
+- Desktop Agent tests: 77/77 passed, including real fake-host sequences proving that foreground, trusted input and lock boundaries persist while sync transport is deliberately unresolved, plus a slow-policy non-blocking test.
+- Desktop Agent typecheck: passed.
+- Desktop Agent lint: passed.
+- Desktop Agent build (native Windows host, TypeScript and alpha package): passed.
+- Repository `git diff --check`: passed; Windows line-ending warnings only.
+
+### Manual QA, Boundaries And Next Steps
+- The new 0.6.12 executable was built but not installed over the currently running 0.6.11 Agent, and no production deployment or real Windows slow-network/crash QA was performed.
+- No installer was generated or published in this round. The existing alpha package was regenerated only by the normal build.
+- API transaction pressure remains the primary source of the observed 500/502 responses and must still be deployed/verified separately. The Desktop fix prevents that server latency from blocking local durability; it does not conceal or locally manufacture a successful server result.
+- Normal network failure can still delay Reports until the durable queue drains. An abrupt OS/process loss can never prove time after the last local observation, but this patch removes the avoidable HTTP-sized in-memory capture backlog.

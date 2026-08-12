@@ -158,11 +158,13 @@ test("tracking audit is requested separately from the report summary", async () 
       userId: "11111111-1111-4111-8111-111111111111",
       from: "2026-06-01",
       to: "2026-06-21",
+      includeTimeline: false,
     });
     assert.equal(result.ok, true);
     assert.match(requestedUrl, /\/reports\/tracking-audit/);
     assert.match(requestedUrl, /scope=user/);
     assert.match(requestedUrl, /userId=11111111/);
+    assert.match(requestedUrl, /includeTimeline=false/);
   } finally {
     globalThis.fetch = originalFetch;
   }

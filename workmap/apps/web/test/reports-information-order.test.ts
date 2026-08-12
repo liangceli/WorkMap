@@ -29,32 +29,35 @@ test("live and audit sections use the responsive two-column grid and real curren
   assert.match(apiTypesSource, /currentDomainObservedAt: string \| null/);
 });
 
-test("a failed summary revision is not retried on every live poll", () => {
-  assert.match(reportSource, /failedSummaryRevisionRef/);
-  assert.match(reportSource, /result\.data\.revision !== failedSummaryRevisionRef\.current/);
-  assert.match(reportSource, /failedSummaryRevisionRef\.current = result\.data\.revision/);
+test("live, audit and summary revision use independent completion-scheduled polling", () => {
+  assert.match(reportSource, /startCompletionPoller\(refresh, LIVE_REFRESH_MS/);
+  assert.match(reportSource, /startCompletionPoller\(refreshAudit, AUDIT_REFRESH_MS/);
+  assert.match(reportSource, /startCompletionPoller\(refreshSummaryRevision, SUMMARY_REVISION_CHECK_MS/);
+  assert.doesNotMatch(reportSource, /setInterval\(\(\) => void refresh/);
 });
 
-test("filter refresh replaces previous report content with the WorkMap pixel loader", () => {
+test("initial report uses the loader while filter refresh preserves confirmed content", () => {
   assert.match(reportSource, /import \{ WorkMapLoader \} from "\.\.\/ui\/WorkMapLoader"/);
   assert.match(reportSource, /\{reportState\.loading \? \(/);
   assert.match(reportSource, /<section style=\{styles\.loadingPanel\} aria-label="Loading selected report">/);
   assert.match(reportSource, /<WorkMapLoader label="Loading selected report" \/>/);
+  assert.match(reportSource, /loading: current\.summary === null/);
+  assert.match(reportSource, /applyResult\(result, setReportState, true\)/);
   assert.match(reportSource, /!reportState\.loading && summary\?\.scope === "user"/);
   assert.match(reportSource, /disabled=\{!summary \|\| reportState\.loading\}/);
 });
 
-test("the initial report loads current status first, then summary and non-blocking audit", () => {
-  assert.match(reportSource, /const initialLiveResult = await requestCurrentLive\(context, initialFilters, summaryRevisionDue\);/);
-  assert.match(reportSource, /const result = await requestSummary\(context, initialFilters\);/);
-  assert.match(reportSource, /applyResult\(result, setReportState\);\s*\n\s*loadedSummary = result\.data/);
+test("the cold initial report starts live and summary together after timezone resolution", () => {
+  assert.match(reportSource, /const initialLivePromise = requestCurrentLive/);
+  assert.match(reportSource, /const coldSummaryPromise = snapshot\?\.summary/);
+  assert.match(reportSource, /Promise\.all\(\[initialLivePromise, coldSummaryPromise\]\)/);
   assert.match(reportSource, /void loadAudit\(context, initialFilters/);
   assert.match(reportSource, /void loadDirectory\(context\.options/);
   assert.match(reportSource, /if \(!auth \|\| !livePollingReady\) return;/);
   assert.match(reportSource, /includeAudit: false/);
   assert.match(reportSource, /includeLive: false/);
   assert.match(reportSource, /includeRevision,\s*\n/);
-  assert.match(reportSource, /const revisionDue = Date\.now\(\) >= nextRevisionCheckAtRef\.current/);
+  assert.match(reportSource, /includeTimeline: false/);
 });
 
 test("report filter loader leaves the pixel avatar unframed", () => {

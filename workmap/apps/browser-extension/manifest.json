@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CandidGrid Domain Tracking",
-  "version": "0.5.17",
+  "version": "0.5.18",
   "description": "Policy-controlled hostname Focus and optional Domain open/runtime collection. Does not record URL paths, queries, fragments, titles or page content.",
   "permissions": ["storage", "tabs", "idle", "alarms", "scripting"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],

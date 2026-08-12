@@ -109,7 +109,7 @@ export class WindowsActivityHostAdapterV2 {
     this.listener = listener;
     if (this.process || this.restartTimer) return;
     if (this.platform !== "win32") {
-      throw new Error("WorkMap Desktop Agent 0.6.11 supports Windows only.");
+      throw new Error("WorkMap Desktop Agent 0.6.12 supports Windows only.");
     }
     if (!this.executableExists(this.executablePath)) {
       throw new Error(

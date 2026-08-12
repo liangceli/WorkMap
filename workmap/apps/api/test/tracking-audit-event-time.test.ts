@@ -5,6 +5,7 @@ import { ReportsService } from "../src/modules/reports/reports.service.js";
 
 test("Connection Audit queries lifecycle event time instead of delayed receipt time", async () => {
   let deviceStatusWhere: Record<string, unknown> | null = null;
+  let timelineQueries = 0;
   const prisma = {
     monitoringPolicy: {
       findFirst: async () => ({ scheduleTimeZone: "UTC" }),
@@ -19,7 +20,10 @@ test("Connection Audit queries lifecycle event time instead of delayed receipt t
       },
     },
     activityEvent: {
-      findMany: async () => [],
+      findMany: async () => {
+        timelineQueries += 1;
+        return [];
+      },
     },
   };
   const context: RequestContext = {
@@ -33,6 +37,7 @@ test("Connection Audit queries lifecycle event time instead of delayed receipt t
     scope: "user",
     from: "2026-07-01",
     to: "2026-07-02",
+    includeTimeline: "false",
   });
 
   assert(deviceStatusWhere);
@@ -41,4 +46,5 @@ test("Connection Audit queries lifecycle event time instead of delayed receipt t
     lt: new Date("2026-07-03T00:00:00.000Z"),
   });
   assert.equal(deviceStatusWhere.recordedAt, undefined);
+  assert.equal(timelineQueries, 0);
 });

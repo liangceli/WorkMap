@@ -1,5 +1,32 @@
 # Latest QA Handoff
 
+## 2026-08-12 Tracking v2 Reliability And Reports Load QA
+
+### Reviewed Implementation And Findings
+
+- Critical, fixed in source: API ingestion and Reports refreshes formed a load-amplifying loop. Tracking v2 held substantial sequential work inside a Prisma interactive transaction while three Web channels launched new requests every five seconds even when earlier calls were still running. Server logs showed transaction-stage 500s at the expected wait/timeout duration, and browser console CORS errors accompanied those 500/502 responses rather than proving a static origin-list defect.
+- High, fixed in source: Connection Audit depended on a successful Live request and queried an App timeline that the component discarded. Audit now refreshes independently, preserves its existing list while refreshing, and requests only the session/status data it renders.
+- High, fixed in source: Browser window/tab query exceptions globally paused Focus capture. The Extension now closes only unproved Focus at the last durable checkpoint, leaves health/queue/runtime collection operational, and resumes only from fresh focused-page evidence. This reduces artificial long gaps without fabricating unknown time.
+- Pass, data durability: Browser HTTP retry remains outside the collector operation. Stable IDs and queued intervals stay in IndexedDB; a `pending/ready` backlog with zero dead letters is delayed data, not discarded data. Accepted/duplicate results remove queue rows only after server evidence. Terminal rejected rows remain excluded from Reports and retained as bounded diagnostics.
+- Pass, privacy/security: no URL path, query, fragment, title, page content, input value, key value, coordinates, credentials or raw database errors were added. Policy lease, acknowledgement, allowed windows, device/browser identity, tenant/RBAC and source/stream checks remain enforced.
+- Scope isolation: `workmap/apps/desktop-agent` has no diff. No existing concurrent Desktop work was overwritten or mixed into this change.
+
+### Test And Verification Status
+
+- Browser Extension: typecheck pass; lint pass; full tests 84/84 pass; build pass; release ZIP pass. New recovery coverage proves repeated query failures do not acquire false Focus, do not pause runtime/heartbeat, and the first fresh proof resumes Focus.
+- API: typecheck pass; lint pass; full tests 68/68 pass; build pass. Added diagnostics tests prove safe error categorisation without leaking raw errors, reconciliation tests cover per-target progress, and CORS config tests cover the ten-minute preflight cache.
+- Web: typecheck pass; lint pass; focused Reports tests 20/20 pass; build pass. Completion-poller tests prove long requests remain single-flight and report API tests cover timeouts, cancellation and the timeline-free Audit request.
+- Full Web suite: 105/108. The three failures are unrelated stale Dashboard/old-brand source assertions present outside this task; no changed Reports test fails.
+- Browser artifact: `workmap/artifacts/browser-extension/CandidGrid-Browser-Extension-0.5.18.zip`; 72,459 bytes; SHA-256 `9426985D6428EB536F61DDE1EA6DD6D8CCE64528AAE9034F4D9C2EB0B9F06EF0`; 26 entries; manifest version `0.5.18`.
+
+### Manual QA, Risks And Recommendation
+
+- Manual authenticated production QA was not run. The in-app browser did not have signed-in Render/Supabase sessions, so pool mode, explicit `connection_limit`/`pool_timeout`, database capacity, API instance count and live query/transaction metrics remain unverified. No deployment or publication was performed.
+- Release recommendation is conditional pass for controlled API -> Web -> Extension deployment. Keep all client stores and pairing credentials. Fail acceptance if transaction 500/502s recur, new safe logs identify a persistent pool/transaction category, pending grows monotonically, dead letters increase, confirmed-through stalls, `/reports` creates overlapping calls, or a foreground eligible page fails to resume after fresh proof.
+- The Browser patch intentionally does not count an interval that cannot be proved during sleep, service-worker suspension, browser restart, protected/internal pages, missing host permission or window-query failure. `UNOBSERVED_GAP` can therefore remain and is an honest coverage limitation, not a retry bug.
+- After deployment, run a 30-minute Desktop + Edge + Chrome soak, then inspect Render by request ID and named transaction step, Supabase connection/pool saturation, Options queue/dead-letter/confirmed-through, and `/reports` accepted Domain Focus/Open-runtime. Real Chrome/Edge load-unpacked tests for minimize, lock/unlock, sleep/wake, offline/reconnect and service-worker recycle remain required.
+- The next round may proceed to controlled deployment and real-client acceptance. Production resolution must not be claimed until those checks pass.
+
 ## 2026-08-10 Australian Employee Monitoring Notice Copy QA
 
 ### Reviewed Implementation And Findings
@@ -5150,3 +5177,33 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 - Authenticated `/reports` manual QA was not run.
 - Remaining product limitation: MV3 cannot emit a final event after the browser has already closed, so the stop timestamp is the server detection boundary rather than an exact close timestamp.
 - Pass for an authenticated `/reports` visual check; no Browser Extension release, API deployment, Desktop Agent change, or data migration is required for this presentation-only update.
+
+---
+
+## 2026-08-12 Desktop Agent 0.6.12 Capture/Upload Decoupling QA
+
+### Reviewed Implementation
+- Reviewed local Desktop diagnostics/SQLite evidence, capture serialization, sync/backoff, policy refresh, shutdown ordering, durable queue semantics and the complete scoped diff.
+- Confirmed the change is restricted to Desktop Agent source/tests/versioned alpha output plus this handoff; concurrent API, Web and Browser Extension modifications were not reverted or overwritten.
+
+### Findings Ordered By Severity
+- Fixed - High: slow sync HTTP previously occupied the local capture mutation lane, leaving later Windows events only in memory until the response completed. A crash during that backlog could lose the unprocessed tail.
+- Fixed - High: periodic policy HTTP previously had the same capture-lane blocking behaviour.
+- Fixed - High: network results now re-enter the mutation lane before acknowledging SQLite rows or changing policy/runtime/UI state, preventing concurrent store/engine mutation.
+- Fixed - High: shutdown ordering prevents late network result application from touching SQLite after it closes and performs a final attempt even while normal retry backoff is active.
+- Preserved: retryable 500/502 responses retain stable pending rows; accepted/duplicate rows alone are acknowledged, terminal rejections remain explicit, and Focus/open-runtime clocks and policy windows are unchanged.
+- Evidence note: the inspected same-day 38 retryable failures all later confirmed and the queue drained; this is evidence of delayed delivery, not proof that every unobserved wall-clock instant was captured.
+
+### Test And Verification Status
+- Desktop full tests: 77/77 passed.
+- New controlled tests use a fake native host and unresolved transports; foreground/input/lock persistence completes before the sync response, and slow policy fetch does not block capture.
+- Desktop typecheck: passed.
+- Desktop lint: passed.
+- Desktop native/alpha build: passed.
+- Repository `git diff --check`: passed with line-ending warnings only.
+
+### Manual QA, Risks And Recommendation
+- Real installed 0.6.12 Windows QA was not run; the running local Agent was deliberately not replaced.
+- Production API deployment/load verification was not run. Current API transaction 500/502 pressure is a separate server-side root cause and should be verified before broad client rollout.
+- Recommend proceeding to a controlled 0.6.12 install on one device after API deployment, then validate a 30-minute slow/offline/reconnect/lock/sleep cycle: local queue remains bounded, no new dead-letter, pending drains, and Reports catches up without interval overlap.
+- Pass for controlled QA; not yet a claim of production rollout completion.

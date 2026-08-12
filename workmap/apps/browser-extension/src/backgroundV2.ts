@@ -207,6 +207,11 @@ type CollectorMaintenanceFailurePresentation = {
   remediation: string;
 };
 
+const FOCUS_PROOF_RETRY_CODES = new Set([
+  "FOCUS_WINDOW_QUERY_RETRY",
+  "FOCUS_TAB_QUERY_RETRY",
+]);
+
 class BrowserCollectorMaintenanceError extends Error {
   constructor(
     readonly code: string,
@@ -240,6 +245,13 @@ export function describeCollectorMaintenanceFailure(
         remediation:
           "A local collector step failed without changing connection health. CandidGrid will retry from durable state on the next trusted page event or maintenance cycle.",
       };
+}
+
+function isFocusProofMaintenanceFailure(error: unknown) {
+  return (
+    error instanceof BrowserCollectorMaintenanceError &&
+    FOCUS_PROOF_RETRY_CODES.has(error.code)
+  );
 }
 
 export function assertBrowserDeviceIdentity(
@@ -435,10 +447,20 @@ export class BrowserExtensionRuntimeV2 {
     await this.ensureInitialized();
     if (!this.state || this.state.systemIdle) return;
     if (this.state.focusedWindowId !== windowId) return;
-    const tabs = await queryTabs(this.chromeApi, {
-      active: true,
-      windowId,
-    });
+    let tabs: ChromeTab[];
+    try {
+      tabs = await runCollectorMaintenanceStep(
+        "FOCUS_TAB_QUERY_RETRY",
+        "CandidGrid could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
+        () => queryTabs(this.chromeApi, {
+          active: true,
+          windowId,
+        }),
+      );
+    } catch (error) {
+      await this.recordFocusProofFailure(error);
+      return;
+    }
     const tab = tabs.find((candidate) => candidate.id === tabId);
     if (!tab) return;
     await this.prepareTab(tab, true);
@@ -492,10 +514,20 @@ export class BrowserExtensionRuntimeV2 {
       await this.requestSync(true);
       return;
     }
-    const tabs = await queryTabs(this.chromeApi, {
-      active: true,
-      windowId: this.state.focusedWindowId,
-    });
+    let tabs: ChromeTab[];
+    try {
+      tabs = await runCollectorMaintenanceStep(
+        "FOCUS_TAB_QUERY_RETRY",
+        "CandidGrid could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
+        () => queryTabs(this.chromeApi, {
+          active: true,
+          windowId: this.state!.focusedWindowId!,
+        }),
+      );
+    } catch (error) {
+      await this.recordFocusProofFailure(error);
+      return;
+    }
     const tab = tabs.find((candidate) => candidate.id === addedTabId);
     if (tab?.id === addedTabId) await this.prepareTab(tab, true);
     else await this.requestSync(true);
@@ -515,7 +547,17 @@ export class BrowserExtensionRuntimeV2 {
       await this.clearFocus(true);
       return;
     }
-    const focusedWindow = await getWindow(this.chromeApi, windowId);
+    let focusedWindow: ChromeWindow;
+    try {
+      focusedWindow = await runCollectorMaintenanceStep(
+        "FOCUS_WINDOW_QUERY_RETRY",
+        "CandidGrid could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
+        () => getWindow(this.chromeApi, windowId),
+      );
+    } catch (error) {
+      await this.recordFocusProofFailure(error);
+      return;
+    }
     if (!isUsableFocusedWindow(focusedWindow)) {
       this.state = { ...this.state, focusedWindowId: null };
       await this.clearFocus(true);
@@ -524,10 +566,20 @@ export class BrowserExtensionRuntimeV2 {
     this.state = { ...this.state, focusedWindowId: windowId };
     await this.store.writeRuntimeState(this.state);
     if (this.state.systemIdle) return;
-    const activeTabs = await queryTabs(this.chromeApi, {
-      active: true,
-      windowId,
-    });
+    let activeTabs: ChromeTab[];
+    try {
+      activeTabs = await runCollectorMaintenanceStep(
+        "FOCUS_TAB_QUERY_RETRY",
+        "CandidGrid could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
+        () => queryTabs(this.chromeApi, {
+          active: true,
+          windowId,
+        }),
+      );
+    } catch (error) {
+      await this.recordFocusProofFailure(error);
+      return;
+    }
     const tab = chooseSingleActiveTab(activeTabs, this.state.activeTabId);
     if (tab) await this.prepareTab(tab, true);
     else await this.clearFocus(true);
@@ -646,6 +698,7 @@ export class BrowserExtensionRuntimeV2 {
         this.config?.excludedHostnames,
       );
       if (!domain || !this.focusPolicyAllowsCollection()) return;
+      await this.recordFocusProofRecovered();
 
       const discontinuity = await this.guardLifecycleContinuity();
       this.state = {
@@ -680,7 +733,11 @@ export class BrowserExtensionRuntimeV2 {
         if (discontinuity) await this.requestSync(true);
       }
     } catch (error) {
-      await this.recordCollectorMaintenanceFailure(error);
+      if (isFocusProofMaintenanceFailure(error)) {
+        await this.recordFocusProofFailure(error);
+      } else {
+        await this.recordCollectorMaintenanceFailure(error);
+      }
       await this.requestSync(true);
     }
   }
@@ -1090,6 +1147,7 @@ export class BrowserExtensionRuntimeV2 {
     // pages and inaccessible browser PDF viewers therefore remain NONE.
     const proof = await probeTab(this.chromeApi, tab.id);
     if (proof?.visible && proof.focused) {
+      await this.recordFocusProofRecovered();
       await this.acquireMessageFocus(tab, domain, performance.now());
       if (immediateSync) await this.requestSync(true);
     } else {
@@ -1806,11 +1864,17 @@ export class BrowserExtensionRuntimeV2 {
 
   private async reconcileBrowserReality(freshFocusProof: boolean) {
     if (!this.state) return;
-    const window = await runCollectorMaintenanceStep(
-      "FOCUS_WINDOW_QUERY_RETRY",
-      "CandidGrid could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
-      () => getLastFocusedWindow(this.chromeApi),
-    );
+    let window: ChromeWindow;
+    try {
+      window = await runCollectorMaintenanceStep(
+        "FOCUS_WINDOW_QUERY_RETRY",
+        "CandidGrid could not confirm the foreground browser window. Focus remains uncounted until a later trusted page event or browser focus event succeeds.",
+        () => getLastFocusedWindow(this.chromeApi),
+      );
+    } catch (error) {
+      await this.recordFocusProofFailure(error);
+      return;
+    }
     if (!isUsableFocusedWindow(window)) {
       if (this.state.focusedWindowId !== null || this.engine) {
         this.state = { ...this.state, focusedWindowId: null };
@@ -1825,14 +1889,20 @@ export class BrowserExtensionRuntimeV2 {
     this.state = state;
     await this.store.writeRuntimeState(state);
     if (state.systemIdle) return;
-    const activeTabs = await runCollectorMaintenanceStep(
-      "FOCUS_TAB_QUERY_RETRY",
-      "CandidGrid could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
-      () => queryTabs(this.chromeApi, {
-        active: true,
-        windowId,
-      }),
-    );
+    let activeTabs: ChromeTab[];
+    try {
+      activeTabs = await runCollectorMaintenanceStep(
+        "FOCUS_TAB_QUERY_RETRY",
+        "CandidGrid could not confirm the active page in the foreground window. Focus remains uncounted until a later trusted page event or tab event succeeds.",
+        () => queryTabs(this.chromeApi, {
+          active: true,
+          windowId,
+        }),
+      );
+    } catch (error) {
+      await this.recordFocusProofFailure(error);
+      return;
+    }
     const selectedTab = chooseSingleActiveTab(
       activeTabs,
       state.activeTabId,
@@ -1963,6 +2033,99 @@ export class BrowserExtensionRuntimeV2 {
     await this.updateVisibleStatus(
       `${failure.remediation} Health heartbeat continues independently.`,
     );
+  }
+
+  /**
+   * A failed Chrome window/tab lookup removes the proof required to attribute
+   * Domain Focus, but it does not make policy, durable storage, heartbeat, or
+   * Domain open/runtime unhealthy. Seal only the proven Focus tail and leave
+   * the collector available for an immediate recovery event.
+   */
+  private async recordFocusProofFailure(error: unknown) {
+    const failure = describeCollectorMaintenanceFailure(error);
+    if (!FOCUS_PROOF_RETRY_CODES.has(failure.code)) {
+      await this.recordCollectorMaintenanceFailure(error);
+      return;
+    }
+    const detectedAt = new Date().toISOString();
+    const checkpoint = this.engine?.checkpoint() ?? null;
+    const lastDurableAt =
+      checkpoint && this.state?.clock
+        ? projectBrowserMonotonicAt(
+            this.state.clock,
+            checkpoint.lastObservedAtMonotonicMs,
+          )
+        : null;
+    try {
+      await this.clearFocus(
+        false,
+        checkpoint?.lastObservedAtMonotonicMs ?? performance.now(),
+        true,
+      );
+    } catch (persistenceError) {
+      await this.recordCollectorMaintenanceFailure(persistenceError);
+      return;
+    }
+    if (this.state) {
+      this.state = {
+        ...this.state,
+        diagnostics: appendDiagnostic(this.state.diagnostics, {
+          occurredAt: detectedAt,
+          stage: "LIFECYCLE",
+          outcome: "RETRYING",
+          code: failure.code,
+          requestId: null,
+          retryable: true,
+          terminal: false,
+          count: 1,
+          remediation: lastDurableAt
+            ? `${failure.remediation} The prior Focus was sealed through ${lastDurableAt}; no unproven time was backfilled.`
+            : failure.remediation,
+        }),
+      };
+      await this.store.writeRuntimeState(this.state);
+    }
+    await this.updateVisibleStatus(
+      `${failure.remediation} Connection health and Domain open/runtime continue independently.`,
+    );
+    await this.requestSync(true);
+  }
+
+  private async recordFocusProofRecovered() {
+    if (!this.state) return;
+    const reversedDiagnostics = [...this.state.diagnostics].reverse();
+    const failureOffset = reversedDiagnostics.findIndex(
+      (item) =>
+        item.outcome === "RETRYING" &&
+        FOCUS_PROOF_RETRY_CODES.has(item.code),
+    );
+    if (failureOffset < 0) return;
+    const latestFailureIndex =
+      this.state.diagnostics.length - failureOffset - 1;
+    const recoveryOffset = reversedDiagnostics.findIndex(
+      (item) =>
+        item.outcome === "CONFIRMED" &&
+        item.code === "FOCUS_QUERY_RECOVERED",
+    );
+    const latestRecoveryIndex = recoveryOffset < 0
+      ? -1
+      : this.state.diagnostics.length - recoveryOffset - 1;
+    if (latestRecoveryIndex > latestFailureIndex) return;
+    const failure = this.state.diagnostics[latestFailureIndex]!;
+    this.state = {
+      ...this.state,
+      diagnostics: appendDiagnostic(this.state.diagnostics, {
+        stage: "LIFECYCLE",
+        outcome: "CONFIRMED",
+        code: "FOCUS_QUERY_RECOVERED",
+        requestId: null,
+        retryable: false,
+        terminal: false,
+        count: 1,
+        remediation: `Foreground Browser Focus proof recovered after the query failure detected at ${failure.occurredAt}. Collection resumes from this fresh proof without backfilling the unknown gap.`,
+      }),
+    };
+    await this.store.writeRuntimeState(this.state);
   }
 
   private async pauseCollector(
@@ -2825,6 +2988,20 @@ export function authorizedPolicyCloseMonotonic(
     latestAuthorizedBoundary,
     requestedAtMonotonicMs,
   );
+}
+
+function projectBrowserMonotonicAt(
+  clock: NonNullable<BrowserTrackingRuntimeStateV2["clock"]>,
+  monotonicMs: number,
+) {
+  const epochStartedAtMs = Date.parse(clock.clockEpochStartedAt);
+  if (!Number.isFinite(epochStartedAtMs) || !Number.isFinite(monotonicMs)) {
+    return null;
+  }
+  return new Date(
+    epochStartedAtMs +
+      (monotonicMs - clock.clockEpochStartedMonotonicMs),
+  ).toISOString();
 }
 
 export function isRetryableError(error: unknown) {

@@ -8,6 +8,8 @@ export type ApiClientOptions = {
   token?: string;
   baseUrl?: string;
   authSource?: "cognito";
+  signal?: AbortSignal;
+  timeoutMs?: number;
 };
 
 export type WorkMapApiHealth = {

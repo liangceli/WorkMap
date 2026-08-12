@@ -28,7 +28,7 @@ await writeFile(
   JSON.stringify(
     {
       name: "workmap-desktop-agent-alpha",
-      version: "0.6.11",
+      version: "0.6.12",
       private: true,
       type: "module",
     },

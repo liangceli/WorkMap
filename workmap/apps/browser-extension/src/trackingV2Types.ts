@@ -1,4 +1,4 @@
-export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.17";
+export const BROWSER_EXTENSION_VERSION = "browser-extension-mv3/0.5.18";
 export const TRACKING_PROTOCOL_VERSION_V2 = 2 as const;
 export const BROWSER_V2_QUEUE_CAPACITY = 10_000;
 export const BROWSER_V2_SYNC_BATCH_SIZE = 50;

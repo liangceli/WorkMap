@@ -1,6 +1,6 @@
 {
   "name": "@workmap/desktop-agent",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "CandidGrid employee monitoring client for policy-controlled App Focus and optional App open/runtime collection.",
   "author": "WorkMap",
   "private": true,

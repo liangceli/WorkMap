@@ -32,8 +32,9 @@ export class ReportsController {
     @Query("scope") scope?: string,
     @Query("from") from?: string,
     @Query("to") to?: string,
+    @Query("includeTimeline") includeTimeline?: string,
   ) {
-    return this.reports.getTrackingAudit(context, { userId, departmentId, scope, from, to });
+    return this.reports.getTrackingAudit(context, { userId, departmentId, scope, from, to, includeTimeline });
   }
 
   @Get("agent-status")

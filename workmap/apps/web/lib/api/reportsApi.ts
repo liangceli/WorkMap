@@ -67,6 +67,7 @@ export function getTrackingAudit(options?: ApiClientOptions & {
   scope?: "user" | "company";
   from?: string;
   to?: string;
+  includeTimeline?: boolean;
 }) {
   const params = new URLSearchParams();
   if (options?.userId) params.set("userId", options.userId);
@@ -74,6 +75,7 @@ export function getTrackingAudit(options?: ApiClientOptions & {
   if (options?.scope) params.set("scope", options.scope);
   if (options?.from) params.set("from", options.from);
   if (options?.to) params.set("to", options.to);
+  if (options?.includeTimeline === false) params.set("includeTimeline", "false");
   const query = params.size > 0 ? `?${params.toString()}` : "";
   return workMapApiGet<WorkMapApiTrackingAudit>(`/reports/tracking-audit${query}`, options);
 }

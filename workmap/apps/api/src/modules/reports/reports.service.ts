@@ -30,6 +30,7 @@ type SummaryQuery = {
   includeAudit?: string;
   includeLive?: string;
   includeRevision?: string;
+  includeTimeline?: string;
 };
 
 type ReportScope = "user" | "company";
@@ -288,10 +289,11 @@ export class ReportsService {
     if (query.departmentId) throw new BadRequestException("departmentId is available only for company scope.");
     const userId = await this.resolveVisibleReportUserId(context, query.userId);
     const filter = { companyId: context.companyId, userId, range };
+    const includeTimeline = query.includeTimeline !== "false";
     const [agentSessions, deviceStatusHistory, appTimeline] = await Promise.all([
       this.getAgentSessions(filter),
       this.getDeviceStatusHistory(filter),
-      this.getAppTimeline(filter),
+      includeTimeline ? this.getAppTimeline(filter) : Promise.resolve([]),
     ]);
 
     return { scope: "user" as const, userId, agentSessions, deviceStatusHistory, appTimeline };

@@ -19,8 +19,10 @@ type HarnessRuntime = {
     hasCapacity(): Promise<boolean>;
     writeRuntimeState(state: BrowserTrackingRuntimeStateV2): Promise<void>;
   };
+  openRuntimeEngine: unknown;
   ensureInitialized(): Promise<void>;
   guardLifecycleContinuity(): Promise<boolean>;
+  refreshCollectorKeepAlive(): void;
   updateVisibleStatus(): Promise<void>;
   acquireMessageFocus(
     tab: { id?: number; windowId?: number; url?: string },
@@ -92,6 +94,7 @@ function createHarness(options?: {
   focusedWindow?: boolean;
 }) {
   const runtimeApi: { lastError?: { message?: string } } = {};
+  let failWindowQuery = options?.failWindowQuery ?? false;
   const tab = {
     id: 7,
     windowId: 3,
@@ -106,7 +109,7 @@ function createHarness(options?: {
         _query: { populate: false },
         callback: (window: Record<string, unknown>) => void,
       ) {
-        runtimeApi.lastError = options?.failWindowQuery
+        runtimeApi.lastError = failWindowQuery
           ? { message: "window query unavailable" }
           : undefined;
         callback({
@@ -135,13 +138,20 @@ function createHarness(options?: {
   runtime.browserName = "EDGE";
   runtime.ensureInitialized = async () => undefined;
   runtime.guardLifecycleContinuity = async () => false;
+  runtime.refreshCollectorKeepAlive = () => undefined;
   runtime.updateVisibleStatus = async () => undefined;
   runtime.requestSync = async () => undefined;
   runtime.store = {
     hasCapacity: async () => true,
     writeRuntimeState: async () => undefined,
   };
-  return { runtime, tab };
+  return {
+    runtime,
+    tab,
+    setWindowQueryFailure(fail: boolean) {
+      failWindowQuery = fail;
+    },
+  };
 }
 
 test("trusted foreground activity recovers a stale idle/paused Focus lane", async () => {
@@ -226,23 +236,48 @@ test("trusted activity cannot recover Focus from a non-foreground window", async
   assert.equal(runtime.state?.focusedWindowId, null);
 });
 
-test("a failed foreground-window query retains a specific safe retry code", async () => {
-  const { runtime, tab } = createHarness({ failWindowQuery: true });
+test("consecutive foreground-window query failures seal Focus without degrading independent collectors", async () => {
+  const { runtime, tab, setWindowQueryFailure } = createHarness({
+    failWindowQuery: true,
+  });
   runtime.state = state(false);
   runtime.collectorState = "HEALTHY";
   runtime.errorCode = "NONE";
+  const runtimeEngine = { checkpoint: () => ({ current: [{}] }) };
+  runtime.openRuntimeEngine = runtimeEngine;
   runtime.acquireMessageFocus = async () => {
     assert.fail("Focus must not start without confirmed window ownership");
   };
 
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await runtime.handleMessage(
+      { type: "workmap:domain-activity", activityAt: Date.now() },
+      { tab, frameId: 0 },
+    );
+  }
+
+  assert.equal(runtime.collectorState, "HEALTHY");
+  assert.equal(runtime.errorCode, "NONE");
+  assert.equal(runtime.openRuntimeEngine, runtimeEngine);
+  const diagnostic = runtime.state?.diagnostics.at(-1);
+  assert.equal(diagnostic?.code, "FOCUS_WINDOW_QUERY_RETRY");
+  assert.equal(diagnostic?.count, 3);
+  assert.equal(diagnostic?.retryable, true);
+  assert.equal(diagnostic?.requestId, null);
+
+  let acquired = false;
+  setWindowQueryFailure(false);
+  runtime.acquireMessageFocus = async () => {
+    acquired = true;
+  };
   await runtime.handleMessage(
     { type: "workmap:domain-activity", activityAt: Date.now() },
     { tab, frameId: 0 },
   );
 
-  assert.equal(runtime.collectorState, "LIMITED");
-  const diagnostic = runtime.state?.diagnostics.at(-1);
-  assert.equal(diagnostic?.code, "FOCUS_WINDOW_QUERY_RETRY");
-  assert.equal(diagnostic?.retryable, true);
-  assert.equal(diagnostic?.requestId, null);
+  assert.equal(acquired, true, "the first fresh proof resumes Focus immediately");
+  assert.equal(runtime.collectorState, "HEALTHY");
+  assert.equal(runtime.openRuntimeEngine, runtimeEngine);
+  assert.equal(runtime.state?.diagnostics.at(-1)?.code, "FOCUS_QUERY_RECOVERED");
+  assert.equal(runtime.state?.diagnostics.at(-1)?.outcome, "CONFIRMED");
 });

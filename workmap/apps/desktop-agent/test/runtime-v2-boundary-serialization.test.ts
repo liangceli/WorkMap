@@ -13,6 +13,10 @@ import type {
   DeviceTrackingPolicyV2,
 } from "../src/trackingV2Types.js";
 import { createInitialDesktopTrackingV2State } from "../src/trackingV2Store.js";
+import type {
+  WindowsActivityHostEventV2,
+  WindowsActivityHostListenerV2,
+} from "../src/windowsActivityHost.js";
 
 test("0.6.7 runtime state upgrades with empty non-regressing watermarks", () => {
   const legacyState = createInitialDesktopTrackingV2State() as Partial<
@@ -140,6 +144,107 @@ test("retryable sync failures use bounded global backoff instead of one request 
   await new Promise((resolve) => setTimeout(resolve, 60));
   assert.equal(syncCalls, 1);
   if (internals.syncRetryTimer) clearTimeout(internals.syncRetryTimer);
+});
+
+test("a slow tracking sync never blocks later capture mutations or durable boundaries", async () => {
+  let releaseSync!: () => void;
+  const syncPending = new Promise<void>((resolve) => { releaseSync = resolve; });
+  const persisted: Array<{ kind: string; currentSubject: string | null }> = [];
+  const host = new TestActivityHost();
+  const initialState = captureReadyRuntimeState();
+  const runtime = new DesktopAgentRuntimeV2(testConfig(), {
+    host: host as never,
+    store: runtimeStore(initialState, persisted) as never,
+    syncTransport: async (_config, _request, requestId) => {
+      await syncPending;
+      return emptySyncResponse(requestId);
+    },
+    diagnosticLog: quietDiagnosticLog() as never,
+    statusWriter: async () => true,
+  });
+  const internals = runtime as unknown as {
+    startHost: () => void;
+    eventChain: Promise<void>;
+    syncInFlight: Promise<void> | null;
+    waitForNetworkDrain: () => Promise<void>;
+    collectorState: string;
+  };
+  internals.collectorState = "HEALTHY";
+  internals.startHost();
+
+  host.emit(foregroundEvent(1_000, "app:first"));
+  await internals.eventChain;
+  assert.notEqual(internals.syncInFlight, null);
+
+  host.emit({
+    protocolVersion: 1,
+    eventType: "interaction_pulse",
+    monotonicMs: 1_100,
+    evidence: "WINDOWS_SESSION_INPUT_WHILE_FOREGROUND",
+  });
+  host.emit(foregroundEvent(1_200, "app:second"));
+  host.emit({
+    protocolVersion: 1,
+    eventType: "session_locked",
+    monotonicMs: 1_300,
+    sessionLocked: true,
+  });
+  await internals.eventChain;
+
+  assert.equal(persisted.length >= 4, true);
+  assert.equal(persisted.some((item) => item.currentSubject === "app:second"), true);
+  assert.equal(persisted.at(-1)?.currentSubject, null);
+  assert.notEqual(internals.syncInFlight, null, "network must still be unresolved");
+  releaseSync();
+  await internals.waitForNetworkDrain();
+});
+
+test("a slow policy request never enters or blocks the capture mutation lane", async () => {
+  let releasePolicy!: (policy: DeviceTrackingPolicyV2) => void;
+  const policyPending = new Promise<DeviceTrackingPolicyV2>((resolve) => {
+    releasePolicy = resolve;
+  });
+  const persisted: Array<{ kind: string; currentSubject: string | null }> = [];
+  const host = new TestActivityHost();
+  const initialState = captureReadyRuntimeState(false);
+  const runtime = new DesktopAgentRuntimeV2(testConfig(), {
+    host: host as never,
+    store: runtimeStore(initialState, persisted) as never,
+    policyTransport: async () => policyPending,
+    syncTransport: async (_config, _request, requestId) =>
+      emptySyncResponse(requestId),
+    diagnosticLog: quietDiagnosticLog() as never,
+    statusWriter: async () => true,
+  });
+  const internals = runtime as unknown as {
+    requestPolicyRefresh: (deferSync?: boolean) => void;
+    startHost: () => void;
+    eventChain: Promise<void>;
+    policyRefreshInFlight: Promise<void> | null;
+    collectorState: string;
+    state: DesktopTrackingRuntimeStateV2;
+  };
+  internals.collectorState = "HEALTHY";
+  internals.startHost();
+
+  internals.requestPolicyRefresh();
+  host.emit(foregroundEvent(2_000, "app:during-policy"));
+  host.emit({
+    protocolVersion: 1,
+    eventType: "interaction_pulse",
+    monotonicMs: 2_100,
+    evidence: "WINDOWS_SESSION_INPUT_WHILE_FOREGROUND",
+  });
+  await internals.eventChain;
+
+  assert.equal(persisted.length >= 2, true);
+  assert.equal(persisted.at(-1)?.currentSubject, "app:during-policy");
+  assert.notEqual(internals.policyRefreshInFlight, null);
+
+  releasePolicy({ ...initialState.policy!, serverTime: new Date().toISOString() });
+  await internals.policyRefreshInFlight;
+  await internals.eventChain;
+  assert.equal(internals.state.policy?.policyLeaseId, initialState.policy?.policyLeaseId);
 });
 
 test("startup keeps the original lease on recovered Focus and open/runtime tails after a lease refresh", async () => {
@@ -349,5 +454,105 @@ function quietDiagnosticLog() {
   return {
     write: async () => undefined,
     getDirectory: () => "test-only",
+  };
+}
+
+class TestActivityHost {
+  private listener: WindowsActivityHostListenerV2 | null = null;
+
+  start(listener: WindowsActivityHostListenerV2) {
+    this.listener = listener;
+  }
+
+  stop() {
+    this.listener = null;
+  }
+
+  emit(event: WindowsActivityHostEventV2) {
+    assert.ok(this.listener, "test host must be started");
+    this.listener(event);
+  }
+}
+
+function foregroundEvent(
+  monotonicMs: number,
+  subjectKey: string,
+): WindowsActivityHostEventV2 {
+  return {
+    protocolVersion: 1,
+    eventType: "foreground_changed",
+    monotonicMs,
+    app: { subjectKey, displayName: subjectKey },
+  };
+}
+
+function captureReadyRuntimeState(
+  includeOpenRuntime = true,
+): DesktopTrackingRuntimeStateV2 {
+  const now = Date.now();
+  const policy: DeviceTrackingPolicyV2 = {
+    ...OLD_POLICY,
+    effectiveAt: new Date(now - 60_000).toISOString(),
+    policyLeaseId: "lease-capture-test",
+    policyLeaseIssuedAt: new Date(now - 60_000).toISOString(),
+    policyLeaseExpiresAt: new Date(now + 3_600_000).toISOString(),
+    serverTime: new Date(now).toISOString(),
+    allowedUtcWindows: [{
+      startsAt: new Date(now - 60_000).toISOString(),
+      endsAt: new Date(now + 3_600_000).toISOString(),
+    }],
+    collectOpenRuntime: includeOpenRuntime,
+  };
+  return {
+    ...createInitialDesktopTrackingV2State(),
+    protocolActivatedAt: new Date(now - 60_000).toISOString(),
+    policy,
+  };
+}
+
+function runtimeStore(
+  initialState: DesktopTrackingRuntimeStateV2,
+  persisted: Array<{ kind: string; currentSubject: string | null }>,
+) {
+  let state = initialState;
+  const record = (kind: string, next: DesktopTrackingRuntimeStateV2) => {
+    state = next;
+    persisted.push({
+      kind,
+      currentSubject: next.engineCheckpoint?.current?.subject.subjectKey ?? null,
+    });
+  };
+  return {
+    readRuntimeState: () => state,
+    persistEngineUpdate: (
+      _items: ActivityIntervalV2[],
+      next: DesktopTrackingRuntimeStateV2,
+    ) => record("focus", next),
+    persistRuntimeUpdate: (
+      _items: ActivityIntervalV2[],
+      next: DesktopTrackingRuntimeStateV2,
+    ) => record("runtime", next),
+    writeRuntimeState: (next: DesktopTrackingRuntimeStateV2) =>
+      record("state", next),
+    listReady: () => [],
+    stats: () => ({ pending: 0, ready: 0, deadLetter: 0, nextRetryAt: null }),
+    deadLetterSummary: () => [],
+    acknowledge: () => undefined,
+    deadLetter: () => undefined,
+    retry: () => undefined,
+    hasCapacity: () => true,
+  };
+}
+
+function emptySyncResponse(requestId: string) {
+  return {
+    results: [],
+    cursors: [],
+    acceptedSnapshotSequence: null,
+    focusSnapshotResult: null,
+    serverTime: new Date().toISOString(),
+    activePolicyVersion: "v3",
+    activePolicyLeaseId: "lease-capture-test",
+    requestId,
   };
 }

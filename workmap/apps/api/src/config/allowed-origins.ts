@@ -5,6 +5,8 @@ const LOCAL_WEB_ORIGINS = [
   "http://127.0.0.1:3002",
 ];
 
+export const CORS_PREFLIGHT_MAX_AGE_SECONDS = 600;
+
 export function getAllowedOrigins() {
   const configured = process.env.WORKMAP_ALLOWED_ORIGINS ?? process.env.WORKMAP_ALLOWED_ORIGIN ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
   const origins = configured

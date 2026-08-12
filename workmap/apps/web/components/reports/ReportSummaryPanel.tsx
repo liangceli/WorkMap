@@ -18,6 +18,7 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
 import { WorkMapLoader } from "../ui/WorkMapLoader";
 import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
+import { startCompletionPoller } from "./completionPoller";
 import {
   isConnectionAuditTimestampInRange,
   resolveConnectionAuditRange,
@@ -58,9 +59,12 @@ type CurrentLiveData = {
   revision: string | null;
 };
 
-const LIVE_REFRESH_MS = 5_000;
-const SUMMARY_REVISION_CHECK_MS = LIVE_REFRESH_MS;
-const AUDIT_REFRESH_MS = 5_000;
+const LIVE_REFRESH_MS = 15_000;
+const SUMMARY_REVISION_CHECK_MS = 60_000;
+const AUDIT_REFRESH_MS = 60_000;
+const LIVE_REQUEST_TIMEOUT_MS = 10_000;
+const AUDIT_REQUEST_TIMEOUT_MS = 15_000;
+const SUMMARY_REQUEST_TIMEOUT_MS = 20_000;
 
 export function ReportSummaryPanel() {
   const [auth, setAuth] = useState<AuthContext | null>(null);
@@ -72,10 +76,8 @@ export function ReportSummaryPanel() {
   const [trackingV2Live, setTrackingV2Live] = useState<WorkMapApiTrackingV2LiveActivity | null>(null);
   const [livePollingReady, setLivePollingReady] = useState(false);
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
-  const failedSummaryRevisionRef = useRef<string | null | undefined>(undefined);
-  const nextRevisionCheckAtRef = useRef(0);
   const [auditState, setAuditState] = useState<AuditState>({ audit: null, refreshStatus: "loading" });
-  const nextAuditRefreshAtRef = useRef(0);
+  const filterRequestAbortRef = useRef<AbortController | null>(null);
   const [reportState, setReportState] = useState<ReportState>({
     loading: true,
     summary: null,
@@ -85,6 +87,7 @@ export function ReportSummaryPanel() {
 
   useEffect(() => {
     let cancelled = false;
+    const requestAbort = new AbortController();
     async function initialize() {
       const authResult = await getWorkMapApiAuthOptions();
       if (cancelled) return;
@@ -139,11 +142,25 @@ export function ReportSummaryPanel() {
         });
       }
 
-      // Live connection state remains current even when a recent report snapshot
-      // is available. Historical aggregation is only refreshed when the cached
-      // revision is stale or has changed.
+      // After timezone-dependent filters are resolved, cold live and summary
+      // requests are launched together. Audit is independent and cannot be
+      // blocked by a live-status failure.
       const summaryRevisionDue = !snapshot?.summary || now - snapshot.summaryCachedAt >= SUMMARY_REVISION_CHECK_MS;
-      const initialLiveResult = await requestCurrentLive(context, initialFilters, summaryRevisionDue);
+      const cachedRevision = currentLiveRevision({
+        trackingV2: snapshot?.trackingV2Live ?? null,
+        legacy: snapshot?.liveStatus ?? null,
+        revision: null,
+      });
+      const initialLivePromise = requestCurrentLive(context, initialFilters, summaryRevisionDue, requestAbort.signal);
+      const coldSummaryPromise = snapshot?.summary
+        ? Promise.resolve(null)
+        : requestSummary(context, initialFilters, requestAbort.signal);
+      if (initialFilters.view !== "company" && (!snapshot?.audit || now - snapshot.auditCachedAt >= AUDIT_REFRESH_MS)) {
+        void loadAudit(context, initialFilters, timeZone, () => cancelled, setAuditState, (audit) => {
+          updateReportSnapshot(snapshotKey, { audit });
+        }, requestAbort.signal);
+      }
+      const [initialLiveResult, coldSummaryResult] = await Promise.all([initialLivePromise, coldSummaryPromise]);
       if (cancelled) return;
       if (initialLiveResult.ok) {
         setLiveStatus(initialLiveResult.data.legacy);
@@ -155,35 +172,20 @@ export function ReportSummaryPanel() {
         });
       }
 
-      let loadedSummary = snapshot?.summary ?? null;
-      const refreshSummary = !snapshot?.summary
-        || (summaryRevisionDue
+      if (coldSummaryResult) {
+        applyResult(coldSummaryResult, setReportState);
+        if (coldSummaryResult.ok) updateReportSnapshot(snapshotKey, { summary: coldSummaryResult.data });
+      } else if (
+        summaryRevisionDue
           && initialLiveResult.ok
-          && initialLiveResult.data.revision !== currentLiveRevision({
-            trackingV2: snapshot.trackingV2Live,
-            legacy: snapshot.liveStatus,
-            revision: null,
-          }));
-      if (refreshSummary) {
-        const result = await requestSummary(context, initialFilters);
+          && initialLiveResult.data.revision !== cachedRevision
+      ) {
+        const result = await requestSummary(context, initialFilters, requestAbort.signal);
         if (cancelled) return;
         if (result.ok) {
           applyResult(result, setReportState);
-          loadedSummary = result.data;
           updateReportSnapshot(snapshotKey, { summary: result.data });
-        } else if (!snapshot?.summary) {
-          applyResult(result, setReportState);
         }
-      }
-      nextRevisionCheckAtRef.current = summaryRevisionDue
-        ? Date.now() + SUMMARY_REVISION_CHECK_MS
-        : (snapshot?.summaryCachedAt ?? Date.now()) + SUMMARY_REVISION_CHECK_MS;
-
-      if (loadedSummary?.scope === "user" && (!snapshot?.audit || now - snapshot.auditCachedAt >= AUDIT_REFRESH_MS)) {
-        void loadAudit(context, initialFilters, timeZone, () => cancelled, setAuditState, (audit) => {
-          updateReportSnapshot(snapshotKey, { audit });
-        });
-        nextAuditRefreshAtRef.current = now + AUDIT_REFRESH_MS;
       }
 
       // The user directory only fills the Owner filter controls. It must not block
@@ -194,7 +196,11 @@ export function ReportSummaryPanel() {
       setLivePollingReady(true);
     }
     void initialize();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      requestAbort.abort();
+      filterRequestAbortRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -204,10 +210,10 @@ export function ReportSummaryPanel() {
   useEffect(() => {
     if (!auth || !livePollingReady) return;
     let cancelled = false;
+    const requestAbort = new AbortController();
     const refresh = async () => {
       if (document.visibilityState !== "visible") return;
-      const revisionDue = Date.now() >= nextRevisionCheckAtRef.current;
-      const result = await requestCurrentLive(auth, appliedFilters, revisionDue);
+      const result = await requestCurrentLive(auth, appliedFilters, false, requestAbort.signal);
       if (cancelled || !result.ok) return;
       setLiveStatus(result.data.legacy);
       setTrackingV2Live(result.data.trackingV2);
@@ -216,45 +222,63 @@ export function ReportSummaryPanel() {
         liveStatus: result.data.legacy,
         trackingV2Live: result.data.trackingV2,
       });
-      if (
-        appliedFilters.view !== "company" &&
-        Date.now() >= nextAuditRefreshAtRef.current
-      ) {
-        nextAuditRefreshAtRef.current = Date.now() + AUDIT_REFRESH_MS;
-        void loadAudit(auth, appliedFilters, reportTimeZone, () => cancelled, setAuditState, (audit) => {
-          updateReportSnapshot(snapshotKey, { audit });
-        });
-      }
-      if (
-        revisionDue
-        &&
-        result.data.revision !== activityRevisionRef.current
-        && result.data.revision !== failedSummaryRevisionRef.current
-      ) {
-        nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
-        const summaryResult = await requestSummary(auth, appliedFilters);
-        if (!cancelled && summaryResult.ok) {
-          failedSummaryRevisionRef.current = undefined;
-          activityRevisionRef.current = result.data.revision;
-          applyResult(summaryResult, setReportState);
-          updateReportSnapshot(snapshotKey, { summary: summaryResult.data });
-        } else if (!cancelled) {
-          failedSummaryRevisionRef.current = result.data.revision;
-        }
-      } else if (revisionDue) {
-        nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
-      }
     };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), LIVE_REFRESH_MS);
+    const poller = startCompletionPoller(refresh, LIVE_REFRESH_MS, undefined, false);
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") poller.trigger();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      requestAbort.abort();
+      poller.stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [auth, appliedFilters, livePollingReady, reportTimeZone]);
+
+  useEffect(() => {
+    if (!auth || !livePollingReady || appliedFilters.view === "company") return;
+    let cancelled = false;
+    const requestAbort = new AbortController();
+    const refreshAudit = async () => {
+      if (document.visibilityState !== "visible") return;
+      const snapshotKey = reportSnapshotKey(auth, appliedFilters, reportTimeZone);
+      await loadAudit(auth, appliedFilters, reportTimeZone, () => cancelled, setAuditState, (audit) => {
+        updateReportSnapshot(snapshotKey, { audit });
+      }, requestAbort.signal);
+    };
+    const poller = startCompletionPoller(refreshAudit, AUDIT_REFRESH_MS, undefined, false);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") poller.trigger();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      requestAbort.abort();
+      poller.stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [auth, appliedFilters, livePollingReady, reportTimeZone]);
+
+  useEffect(() => {
+    if (!auth || !livePollingReady) return;
+    let cancelled = false;
+    const requestAbort = new AbortController();
+    const refreshSummaryRevision = async () => {
+      if (document.visibilityState !== "visible") return;
+      const liveResult = await requestCurrentLive(auth, appliedFilters, true, requestAbort.signal);
+      if (cancelled || !liveResult.ok || liveResult.data.revision === activityRevisionRef.current) return;
+      const summaryResult = await requestSummary(auth, appliedFilters, requestAbort.signal);
+      if (cancelled || !summaryResult.ok) return;
+      activityRevisionRef.current = liveResult.data.revision;
+      applyResult(summaryResult, setReportState);
+      updateReportSnapshot(reportSnapshotKey(auth, appliedFilters, reportTimeZone), { summary: summaryResult.data });
+    };
+    const poller = startCompletionPoller(refreshSummaryRevision, SUMMARY_REVISION_CHECK_MS, undefined, false);
+    return () => {
+      cancelled = true;
+      requestAbort.abort();
+      poller.stop();
     };
   }, [auth, appliedFilters, livePollingReady, reportTimeZone]);
 
@@ -282,22 +306,33 @@ export function ReportSummaryPanel() {
       setReportState((current) => ({ ...current, loading: false, error: "Start date must be on or before end date." }));
       return;
     }
-    setReportState((current) => ({ ...current, loading: true, error: null, statusText: "Refreshing report..." }));
-    setAuditState({ audit: null, refreshStatus: "loading" });
-    failedSummaryRevisionRef.current = undefined;
-    setLiveStatus(null);
-    setTrackingV2Live(null);
-    setAppliedFilters(filters);
-    const result = await requestSummary(auth, filters);
-    persistReportFilters(auth.userId, filters);
-    applyResult(result, setReportState);
+    filterRequestAbortRef.current?.abort();
+    const requestAbort = new AbortController();
+    filterRequestAbortRef.current = requestAbort;
+    setReportState((current) => ({
+      ...current,
+      loading: current.summary === null,
+      error: null,
+      statusText: "Refreshing report...",
+    }));
+    setAuditState((current) => current.audit ? current : { audit: null, refreshStatus: "loading" });
+    const result = await requestSummary(auth, filters, requestAbort.signal);
+    if (requestAbort.signal.aborted) return;
+    applyResult(result, setReportState, true);
     const snapshotKey = reportSnapshotKey(auth, filters, reportTimeZone);
-    if (result.ok) updateReportSnapshot(snapshotKey, { summary: result.data });
-    nextRevisionCheckAtRef.current = Date.now() + SUMMARY_REVISION_CHECK_MS;
+    if (result.ok) {
+      const auditSelectionChanged = filters.view !== appliedFilters.view
+        || filters.from !== appliedFilters.from
+        || filters.to !== appliedFilters.to;
+      if (auditSelectionChanged) setAuditState({ audit: null, refreshStatus: "loading" });
+      setAppliedFilters(filters);
+      persistReportFilters(auth.userId, filters);
+      updateReportSnapshot(snapshotKey, { summary: result.data });
+    }
     if (result.ok && result.data.scope === "user") {
       void loadAudit(auth, filters, reportTimeZone, () => false, setAuditState, (audit) => {
         updateReportSnapshot(snapshotKey, { audit });
-      });
+      }, requestAbort.signal);
     }
   }
 
@@ -1467,7 +1502,7 @@ function MetricChip({ label, value, tone, title, prominent = false }: { label: s
   );
 }
 
-async function requestSummary(auth: AuthContext, filters: ReportFilters) {
+async function requestSummary(auth: AuthContext, filters: ReportFilters, signal?: AbortSignal) {
   const userId = filters.view.startsWith("user:") ? filters.view.slice(5) : undefined;
   return getUsageSummary({
     ...auth.options,
@@ -1478,6 +1513,8 @@ async function requestSummary(auth: AuthContext, filters: ReportFilters) {
     to: filters.to,
     includeAudit: false,
     includeLive: false,
+    signal,
+    timeoutMs: SUMMARY_REQUEST_TIMEOUT_MS,
   });
 }
 
@@ -1499,6 +1536,7 @@ async function requestCurrentLive(
   auth: AuthContext,
   filters: ReportFilters,
   includeRevision = true,
+  signal?: AbortSignal,
 ): Promise<
   | { ok: true; data: CurrentLiveData }
   | { ok: false; error: string }
@@ -1509,6 +1547,8 @@ async function requestCurrentLive(
     scope: (filters.view === "company" ? "company" : "user") as "company" | "user",
     userId,
     departmentId: filters.view === "company" ? filters.departmentId || undefined : undefined,
+    signal,
+    timeoutMs: LIVE_REQUEST_TIMEOUT_MS,
   };
   const trackingV2 = await getTrackingV2LiveActivity(common);
   if (trackingV2.ok && trackingV2.data.devices.length > 0) {
@@ -1576,6 +1616,7 @@ async function loadAudit(
   isCancelled: () => boolean,
   setState: React.Dispatch<React.SetStateAction<AuditState>>,
   onLoaded?: (audit: WorkMapApiTrackingAudit) => void,
+  signal?: AbortSignal,
 ) {
   setState((current) => current.audit
     ? current
@@ -1589,6 +1630,9 @@ async function loadAudit(
     departmentId: filters.view === "company" ? filters.departmentId || undefined : undefined,
     from: auditRange.request.from,
     to: auditRange.request.to,
+    includeTimeline: false,
+    signal,
+    timeoutMs: AUDIT_REQUEST_TIMEOUT_MS,
   });
   if (isCancelled()) return;
   if (!result.ok) {
@@ -1642,10 +1686,16 @@ async function loadDirectory(
 
 function applyResult(
   result: Awaited<ReturnType<typeof getUsageSummary>>,
-  setState: (state: ReportState) => void,
+  setState: React.Dispatch<React.SetStateAction<ReportState>>,
+  preservePrevious = false,
 ) {
   if (!result.ok) {
-    setState({ loading: false, summary: null, statusText: "Reports API could not be loaded.", error: result.error });
+    setState((current) => ({
+      loading: false,
+      summary: preservePrevious ? current.summary : null,
+      statusText: preservePrevious && current.summary ? "Showing the last confirmed report." : "Reports API could not be loaded.",
+      error: result.error,
+    }));
     return;
   }
   setState({

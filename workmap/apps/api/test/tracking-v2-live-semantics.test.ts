@@ -317,6 +317,11 @@ test("valid Focus active and focused-idle intervals enter the ledger and Reports
   assert.equal(prisma.intervals.length, 2, "accepted intervals are in the official ledger");
   assert.equal(prisma.fragments.length, 2, "ledger intervals have report day fragments");
   assert.equal(
+    prisma.executeRawCalls,
+    2,
+    "derived reconciliation targets and device summaries use two set-based writes",
+  );
+  assert.equal(
     Object.hasOwn(prisma.healthUpdate, "serverDiagnosticCode"),
     false,
     "a health-only confirmation preserves any prior snapshot diagnostic",
@@ -1054,6 +1059,7 @@ class SyncPrisma {
   previousHealthReceivedAt: Date | null = null;
   statusEvents: any[] = [];
   activityIntervalFindManyInputs: any[] = [];
+  executeRawCalls = 0;
 
   constructor(now: number) {
     this.now = now;
@@ -1217,6 +1223,35 @@ class SyncPrisma {
 
   async $queryRaw() {
     return [];
+  }
+
+  async $executeRaw() {
+    this.executeRawCalls += 1;
+    if (this.executeRawCalls % 2 === 1) {
+      this.targets = [
+        ...new Map(
+          this.fragments.map((fragment) => [
+            [
+              fragment.companyId,
+              fragment.userId,
+              fragment.source,
+              fragment.utcDate.toISOString(),
+            ].join(":"),
+            {
+              companyId: fragment.companyId,
+              userId: fragment.userId,
+              source: fragment.source,
+              utcDate: fragment.utcDate,
+              state: "DIRTY",
+              version: 1,
+              dirtyAt: new Date(),
+              lastErrorCode: null,
+            },
+          ]),
+        ).values(),
+      ];
+    }
+    return 1;
   }
 
   async $transaction(operation: (tx: this) => unknown) {

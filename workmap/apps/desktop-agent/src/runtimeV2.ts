@@ -85,6 +85,8 @@ type RuntimeV2Options = {
   statusQueue?: FileStatusEventQueue;
   statusWriter?: (status: AgentStatus) => Promise<unknown>;
   diagnosticLog?: AgentDiagnosticLog;
+  syncTransport?: typeof syncTrackingV2;
+  policyTransport?: typeof getTrackingPolicyV2;
 };
 
 export class DesktopAgentRuntimeV2 {
@@ -94,6 +96,8 @@ export class DesktopAgentRuntimeV2 {
   private readonly statusQueue: FileStatusEventQueue;
   private readonly statusWriter: (status: AgentStatus) => Promise<unknown>;
   private readonly diagnosticLog: AgentDiagnosticLog;
+  private readonly syncTransport: typeof syncTrackingV2;
+  private readonly policyTransport: typeof getTrackingPolicyV2;
   private state: DesktopTrackingRuntimeStateV2;
   private engine: DesktopFocusEngineV2 | null = null;
   private openRuntimeEngine: DesktopOpenRuntimeEngineV2 | null = null;
@@ -110,6 +114,8 @@ export class DesktopAgentRuntimeV2 {
   private syncRetryTimer: NodeJS.Timeout | null = null;
   private syncRetryNotBeforeMs = 0;
   private consecutiveRetryableSyncFailures = 0;
+  private policyRefreshInFlight: Promise<void> | null = null;
+  private queuedPolicyRefreshDeferSync: boolean | null = null;
   private lastSettlementAtMs = 0;
   private lastOpenRuntimeSettlementAtMs = 0;
   private lastHealthSyncAtMs = 0;
@@ -134,6 +140,8 @@ export class DesktopAgentRuntimeV2 {
     this.statusQueue = options.statusQueue ?? new FileStatusEventQueue();
     this.statusWriter = options.statusWriter ?? writeAgentStatus;
     this.diagnosticLog = options.diagnosticLog ?? new AgentDiagnosticLog();
+    this.syncTransport = options.syncTransport ?? syncTrackingV2;
+    this.policyTransport = options.policyTransport ?? getTrackingPolicyV2;
     const persistedState = this.store.readRuntimeState();
     this.recoveredPolicy = persistedState?.policy?.policyLeaseId
       ? {
@@ -654,14 +662,14 @@ export class DesktopAgentRuntimeV2 {
         reasonMessage: event.detail ?? null,
         queuePending: this.store.stats().pending,
       });
-      await this.requestSync();
+      this.requestSync();
     }
   }
 
   private async tick(monotonicMs: number) {
     const nowMs = Date.now();
     if (nowMs - this.lastPolicyRefreshAtMs >= DESKTOP_V2_POLICY_REFRESH_MS) {
-      await this.refreshPolicy(monotonicMs);
+      this.requestPolicyRefresh(false);
     }
     const focusAllowed = this.focusCaptureAllowedAt(monotonicMs);
     const openRuntimeAllowed = this.openRuntimeCaptureAllowedAt(monotonicMs);
@@ -721,7 +729,7 @@ export class DesktopAgentRuntimeV2 {
       }
     }
     if (nowMs - this.lastHealthSyncAtMs >= DESKTOP_V2_HEALTH_SYNC_MS) {
-      await this.requestSync();
+      this.requestSync();
       this.lastHealthSyncAtMs = nowMs;
     }
   }
@@ -816,7 +824,7 @@ export class DesktopAgentRuntimeV2 {
     }
     await this.updateUiStatus();
     if (immediateSync || (syncWhenIntervals && update.intervals.length > 0)) {
-      await this.requestSync();
+      this.requestSync();
     }
     return true;
   }
@@ -850,7 +858,7 @@ export class DesktopAgentRuntimeV2 {
     }
     await this.updateUiStatus();
     if (immediateSync || (syncWhenIntervals && update.intervals.length > 0)) {
-      await this.requestSync();
+      this.requestSync();
     }
     return true;
   }
@@ -874,7 +882,7 @@ export class DesktopAgentRuntimeV2 {
     };
     this.store.writeRuntimeState(this.state);
     await this.updateUiStatus(error.message);
-    await this.requestSync();
+    this.requestSync();
   }
 
   private async clearForegroundFocus(
@@ -895,7 +903,7 @@ export class DesktopAgentRuntimeV2 {
       this.state = { ...this.state, latestSnapshot: null };
       this.store.writeRuntimeState(this.state);
     }
-    if (immediateSync || update.intervals.length > 0) await this.requestSync();
+    if (immediateSync || update.intervals.length > 0) this.requestSync();
   }
 
   private async enqueueHostBoundary(
@@ -949,7 +957,7 @@ export class DesktopAgentRuntimeV2 {
     };
     this.store.writeRuntimeState(this.state);
     if (immediateSync || (syncWhenIntervals && createdIntervals)) {
-      await this.requestSync();
+      this.requestSync();
     }
   }
 
@@ -969,7 +977,7 @@ export class DesktopAgentRuntimeV2 {
       latestSnapshot: retainSnapshot ? update.snapshot : null,
     };
     this.store.writeRuntimeState(this.state);
-    if (update.intervals.length > 0) await this.requestSync();
+    if (update.intervals.length > 0) this.requestSync();
   }
 
   private async closeOpenRuntimeTimeline(monotonicMs: number) {
@@ -993,29 +1001,33 @@ export class DesktopAgentRuntimeV2 {
       openRuntimeCheckpoint: null,
     };
     this.store.writeRuntimeState(this.state);
-    if (update.intervals.length > 0) await this.requestSync();
+    if (update.intervals.length > 0) this.requestSync();
   }
 
-  private async requestSync() {
+  private requestSync(force = false) {
+    if (this.stopped && !force) return;
     if (!this.state.protocolActivatedAt) return;
     if (this.connectionState === "AUTH_REQUIRED" || this.connectionState === "UPGRADE_REQUIRED") return;
-    if (Date.now() < this.syncRetryNotBeforeMs) {
+    if (!force && Date.now() < this.syncRetryNotBeforeMs) {
       this.syncAgain = true;
       this.scheduleSyncRetry();
       return;
     }
     if (this.syncInFlight) {
       this.syncAgain = true;
-      return this.syncInFlight;
+      return;
     }
-    this.syncInFlight = this.performSync().finally(() => {
-      this.syncInFlight = null;
-    });
-    await this.syncInFlight;
-    if (this.syncAgain) {
-      this.syncAgain = false;
-      await this.requestSync();
-    }
+    const run = this.performSync()
+      .catch((error) => this.enqueueRuntimeMutation(() => this.applyFailure(error)))
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.syncInFlight === run) this.syncInFlight = null;
+        if (this.syncAgain) {
+          this.syncAgain = false;
+          this.requestSync();
+        }
+      });
+    this.syncInFlight = run;
   }
 
   private async performSync() {
@@ -1048,7 +1060,8 @@ export class DesktopAgentRuntimeV2 {
       policyLeaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
     });
     try {
-      const response = await syncTrackingV2(this.config, request, requestId);
+      const response = await this.syncTransport(this.config, request, requestId);
+      await this.enqueueRuntimeMutation(async () => {
       this.applyServerClock(response.serverTime);
       const snapshotResult = response.focusSnapshotResult ?? null;
       const intervalRejectionCodes = summarizeIntervalRejections(
@@ -1228,7 +1241,10 @@ export class DesktopAgentRuntimeV2 {
       if (snapshotResult?.status === "REJECTED") {
         await this.recoverRejectedSnapshot(snapshotResult.rejectionCode);
       }
+      await this.updateUiStatus();
+      });
     } catch (error) {
+      await this.enqueueRuntimeMutation(async () => {
       const legacySnapshotPolicyFailure = isLegacySnapshotPolicyFailure(
         error,
         request.focusSnapshot !== undefined,
@@ -1295,8 +1311,9 @@ export class DesktopAgentRuntimeV2 {
         this.connectionState = "OFFLINE";
       }
       if (!legacySnapshotPolicyFailure) await this.applyFailure(error, false);
+      await this.updateUiStatus();
+      });
     }
-    await this.updateUiStatus();
   }
 
   private deferRetryableSync(error: unknown) {
@@ -1377,20 +1394,49 @@ export class DesktopAgentRuntimeV2 {
     }
   }
 
-  private async refreshPolicy(monotonicMs: number, deferSync = false) {
+  private requestPolicyRefresh(deferSync = false) {
+    if (this.stopped) return;
+    if (this.policyRefreshInFlight) {
+      this.queuedPolicyRefreshDeferSync =
+        (this.queuedPolicyRefreshDeferSync ?? true) && deferSync;
+      return;
+    }
     this.lastPolicyRefreshAtMs = Date.now();
-    try {
-      const next = await getTrackingPolicyV2(this.config);
+    const run = this.policyTransport(this.config)
+      .then((next) => this.enqueueRuntimeMutation(() =>
+        this.applyPolicyRefresh(next, currentMonotonic(this), deferSync)))
+      .catch((error) => this.enqueueRuntimeMutation(() =>
+        this.applyPolicyRefreshFailure(error, currentMonotonic(this), deferSync)))
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.policyRefreshInFlight === run) this.policyRefreshInFlight = null;
+        if (this.queuedPolicyRefreshDeferSync !== null && !this.stopped) {
+          const queuedDeferSync = this.queuedPolicyRefreshDeferSync;
+          this.queuedPolicyRefreshDeferSync = null;
+          this.requestPolicyRefresh(queuedDeferSync);
+        }
+      });
+    this.policyRefreshInFlight = run;
+  }
+
+  private async applyPolicyRefresh(
+    next: DeviceTrackingPolicyV2,
+    monotonicMs: number | null,
+    deferSync: boolean,
+  ) {
+      const boundaryMonotonicMs = monotonicMs ?? currentMonotonic(this);
       this.applyServerClock(next.serverTime);
       const changed =
         next.policyVersion !== this.state.policy?.policyVersion ||
         next.policyLeaseId !== this.state.policy?.policyLeaseId;
       if (changed) {
-        await this.enqueueHostBoundary(
-          monotonicMs,
-          !deferSync,
-          !deferSync,
-        );
+        if (boundaryMonotonicMs !== null) {
+          await this.enqueueHostBoundary(
+            boundaryMonotonicMs,
+            !deferSync,
+            !deferSync,
+          );
+        }
         this.state = {
           ...this.state,
           policy: next,
@@ -1412,18 +1458,25 @@ export class DesktopAgentRuntimeV2 {
         policyLeaseExpiresAt: next.policyLeaseExpiresAt,
         reasonCode: changed ? "POLICY_LEASE_CHANGED" : null,
       });
-    } catch (error) {
+  }
+
+  private async applyPolicyRefreshFailure(
+    error: unknown,
+    monotonicMs: number | null,
+    deferSync: boolean,
+  ) {
       if (!this.state.policy || !policyLeaseValid(this.state.policy, serverNow(this.state))) {
         this.collectorState = "PAUSED";
         this.lastErrorCode = "POLICY_UNAVAILABLE";
-        await this.enqueueHostBoundary(
-          monotonicMs,
-          !deferSync,
-          !deferSync,
-        );
+        if (monotonicMs !== null) {
+          await this.enqueueHostBoundary(
+            monotonicMs,
+            !deferSync,
+            !deferSync,
+          );
+        }
       }
       await this.applyFailure(error, false);
-    }
   }
 
   private focusCaptureAllowedAt(monotonicMs: number) {
@@ -1644,7 +1697,7 @@ export class DesktopAgentRuntimeV2 {
       policyLeaseExpiresAt: this.state.policy?.policyLeaseExpiresAt ?? null,
     });
     if (monotonicMs !== null) {
-      await this.refreshPolicy(monotonicMs, true);
+      this.requestPolicyRefresh(true);
       this.syncAgain = true;
     }
   }
@@ -1672,6 +1725,14 @@ export class DesktopAgentRuntimeV2 {
     this.finalized = true;
     this.host.stop();
     await this.eventChain;
+
+    // A response that was already in flight may still need to acknowledge
+    // queue rows or apply a refreshed policy. Drain it before creating the
+    // final durable boundary so no late network result can race the shutdown
+    // mutation or touch SQLite after it closes.
+    await this.waitForNetworkDrain();
+    await this.eventChain;
+
     const monotonicMs = currentMonotonic(this);
     if ((this.engine || this.openRuntimeEngine) && monotonicMs !== null) {
       await this.enqueueHostBoundary(monotonicMs, true);
@@ -1683,7 +1744,12 @@ export class DesktopAgentRuntimeV2 {
         agentVersion: this.config.agentVersion,
       });
       await this.flushStatusQueue();
-      await this.requestSync();
+      // Shutdown gets one bounded-by-transport final attempt even if the
+      // normal retry backoff has not elapsed. The durable queue still remains
+      // authoritative if that attempt fails.
+      this.requestSync(true);
+      await this.waitForNetworkDrain();
+      await this.eventChain;
     }
     this.connectionState = "OFFLINE";
     await this.updateUiStatus();
@@ -1694,6 +1760,16 @@ export class DesktopAgentRuntimeV2 {
       queuePending: this.store.stats().pending,
     });
     this.store.close();
+  }
+
+  private async waitForNetworkDrain() {
+    while (true) {
+      const pending = [this.syncInFlight, this.policyRefreshInFlight].filter(
+        (operation): operation is Promise<void> => operation !== null,
+      );
+      if (pending.length === 0) return;
+      await Promise.allSettled(pending);
+    }
   }
 }
 
@@ -2096,7 +2172,7 @@ function intervalRejectionRemediation(
 ) {
   const codes = new Set(items.map((item) => item.code));
   if (codes.has("FOCUS_OVERLAP")) {
-    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.11 serializes lifecycle boundaries and keeps each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
+    return "The overlapping Focus interval was preserved as rejected evidence. Version 0.6.12 serializes lifecycle boundaries, keeps network I/O outside the capture lane, and maintains each tracking stream on a non-regressing timeline; export diagnostics with this request ID if new overlaps continue.";
   }
   if (codes.has("RUNTIME_OVERLAP")) {
     return "The overlapping runtime interval was not counted. The Agent will continue from the current visible-window observation.";

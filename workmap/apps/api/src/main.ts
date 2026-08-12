@@ -1,7 +1,11 @@
 import "./load-local-env.js";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
-import { getAllowedOrigins, isAllowedOrigin } from "./config/allowed-origins.js";
+import {
+  CORS_PREFLIGHT_MAX_AGE_SECONDS,
+  getAllowedOrigins,
+  isAllowedOrigin,
+} from "./config/allowed-origins.js";
 import { PrismaService } from "./modules/prisma/prisma.service.js";
 
 async function bootstrap() {
@@ -14,6 +18,7 @@ async function bootstrap() {
       callback(null, isAllowedOrigin(origin));
     },
     credentials: true,
+    maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS,
   });
 
   if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {

@@ -128,6 +128,7 @@ export class TrackingV2SyncService {
     const startedAtMs = Date.now();
     let stage: TrackingV2SyncStage = "parse";
     let intervalCount = 0;
+    let transactionTrace: TrackingTransactionTrace | null = null;
 
     try {
       const request = parseSyncRequest(input);
@@ -230,6 +231,7 @@ export class TrackingV2SyncService {
           : undefined;
 
       stage = "transaction";
+      transactionTrace = createTrackingTransactionTrace();
       const transactionResult = await this.prisma.$transaction(
         async (tx) => {
           const laneKeys = collectLaneKeys(
@@ -237,21 +239,39 @@ export class TrackingV2SyncService {
             acceptedSnapshot,
             expectedSource,
           );
-          await lockWriteLanes(tx, context, identity.workstationId, laneKeys);
+          await traceTrackingTransactionStep(
+            transactionTrace!,
+            "lock_write_lanes",
+            () =>
+              lockWriteLanes(
+                tx,
+                context,
+                identity.workstationId,
+                laneKeys,
+              ),
+          );
 
-          const persistedIdentity = await loadPersistedIdentities(
-            tx,
-            context.deviceId,
-            candidateIntervals,
-          );
-          const overlapRows = await loadPotentialOverlaps(
-            tx,
-            context.companyId,
-            context.deviceId,
-            candidateIntervals.filter(
-              (candidate) => candidate.rejectionCode === null,
-            ),
-          );
+          const [persistedIdentity, overlapRows] =
+            await traceTrackingTransactionStep(
+              transactionTrace!,
+              "load_identities_and_overlaps",
+              () =>
+                Promise.all([
+                  loadPersistedIdentities(
+                    tx,
+                    context.deviceId,
+                    candidateIntervals,
+                  ),
+                  loadPotentialOverlaps(
+                    tx,
+                    context.companyId,
+                    context.deviceId,
+                    candidateIntervals.filter(
+                      (candidate) => candidate.rejectionCode === null,
+                    ),
+                  ),
+                ]),
+            );
           const results: TrackingSyncItemResultV2[] = [];
           const accepted: CandidateInterval[] = [];
           const tombstones: Array<{
@@ -354,66 +374,95 @@ export class TrackingV2SyncService {
           }
 
           if (tombstones.length > 0) {
-            await tx.clientSequenceTombstone.createMany({
-              data: tombstones.map(({ candidate, code }) => ({
-                id: randomUUID(),
-                companyId: context.companyId,
-                userId: context.userId,
-                deviceId: context.deviceId,
-                clientEventId: candidate.interval.clientEventId,
-                source: candidate.interval.source as TrackingActivitySource,
-                stream: candidate.interval.stream as TrackingActivityStream,
-                clockEpochId: candidate.interval.clockEpochId,
-                sequenceNumber: candidate.interval.sequenceNumber,
-                rejectionCode: code,
-                requestId,
-                payloadHash: candidate.payloadHash,
-              })),
-              skipDuplicates: true,
-            });
+            await traceTrackingTransactionStep(
+              transactionTrace!,
+              "write_tombstones",
+              () =>
+                tx.clientSequenceTombstone.createMany({
+                  data: tombstones.map(({ candidate, code }) => ({
+                    id: randomUUID(),
+                    companyId: context.companyId,
+                    userId: context.userId,
+                    deviceId: context.deviceId,
+                    clientEventId: candidate.interval.clientEventId,
+                    source: candidate.interval.source as TrackingActivitySource,
+                    stream: candidate.interval.stream as TrackingActivityStream,
+                    clockEpochId: candidate.interval.clockEpochId,
+                    sequenceNumber: candidate.interval.sequenceNumber,
+                    rejectionCode: code,
+                    requestId,
+                    payloadHash: candidate.payloadHash,
+                  })),
+                  skipDuplicates: true,
+                }),
+            );
           }
 
-          const inserted = await insertAcceptedIntervals(
-            tx,
-            context,
-            identity.workstationId,
-            accepted,
-            leaseById,
-          );
-          const cursorKeys = uniqueCursorKeys(candidateIntervals);
-          const cursors = await refreshCursors(tx, context, cursorKeys);
-          const acceptedSnapshotSequence = acceptedSnapshot
-            ? await storeFocusSnapshot({
+          const inserted = await traceTrackingTransactionStep(
+            transactionTrace!,
+            "write_intervals_and_summaries",
+            () =>
+              insertAcceptedIntervals(
                 tx,
                 context,
-                snapshot: acceptedSnapshot,
-                browserName: identity.browserName,
-                workstationId: identity.workstationId,
-                protocolActivatedAt,
-                lease: leaseById.get(acceptedSnapshot.policyLeaseId)!,
-                cursors,
-              })
-            : null;
-          await storeClientHealth(
-            tx,
-            context,
-            expectedSource,
-            identity.workstationId,
-            request.health,
-            now,
-            snapshotValidation?.status === "REJECTED"
-              ? {
-                  code: snapshotValidation.rejectionCode,
-                  requestId,
-                  at: now,
-                }
-              : null,
-            acceptedSnapshotSequence !== null,
+                identity.workstationId,
+                accepted,
+                leaseById,
+              ),
           );
-          await tx.device.update({
-            where: { id: context.deviceId },
-            data: { lastSeenAt: now },
-          });
+          const cursorKeys = uniqueCursorKeys(candidateIntervals);
+          const cursors = await traceTrackingTransactionStep(
+            transactionTrace!,
+            "refresh_cursors",
+            () => refreshCursors(tx, context, cursorKeys),
+          );
+          const acceptedSnapshotSequence = acceptedSnapshot
+            ? await traceTrackingTransactionStep(
+                transactionTrace!,
+                "write_snapshot",
+                () =>
+                  storeFocusSnapshot({
+                    tx,
+                    context,
+                    snapshot: acceptedSnapshot,
+                    browserName: identity.browserName,
+                    workstationId: identity.workstationId,
+                    protocolActivatedAt,
+                    lease: leaseById.get(acceptedSnapshot.policyLeaseId)!,
+                    cursors,
+                  }),
+              )
+            : null;
+          await traceTrackingTransactionStep(
+            transactionTrace!,
+            "write_health",
+            async () => {
+              await storeClientHealth(
+                tx,
+                context,
+                expectedSource,
+                identity.workstationId,
+                request.health,
+                now,
+                snapshotValidation?.status === "REJECTED"
+                  ? {
+                      code: snapshotValidation.rejectionCode,
+                      requestId,
+                      at: now,
+                    }
+                  : null,
+                acceptedSnapshotSequence !== null,
+              );
+              await tx.device.update({
+                where: { id: context.deviceId },
+                data: { lastSeenAt: now },
+              });
+            },
+          );
+          markTrackingTransactionStep(
+            transactionTrace!,
+            "commit_transaction",
+          );
 
           return {
             results,
@@ -429,6 +478,18 @@ export class TrackingV2SyncService {
           timeout: 15_000,
         },
       );
+      finishTrackingTransactionTrace(transactionTrace);
+      if (transactionTrace.durationMs >= 5_000) {
+        this.logger.warn(
+          JSON.stringify({
+            event: "tracking_v2_transaction",
+            outcome: "slow",
+            requestId,
+            intervalCount,
+            ...safeTrackingTransactionTrace(transactionTrace),
+          }),
+        );
+      }
 
       const activePolicy = await this.prisma.monitoringPolicy.findFirst({
         where: {
@@ -509,6 +570,7 @@ export class TrackingV2SyncService {
     } catch (error) {
       const status = error instanceof HttpException ? error.getStatus() : 500;
       const failure = describeTrackingSyncFailure(error, status, stage);
+      const databaseFailure = classifyTrackingSyncDatabaseError(error);
       this.logger.warn(
         JSON.stringify({
           event: "tracking_v2_sync",
@@ -521,6 +583,11 @@ export class TrackingV2SyncService {
           reasonMessage: failure.reasonMessage,
           retryable: failure.retryable,
           durationMs: Date.now() - startedAtMs,
+          databaseFailure,
+          transaction:
+            transactionTrace === null
+              ? null
+              : safeTrackingTransactionTrace(transactionTrace),
         }),
       );
       throw withTrackingSyncRequestId(error, requestId, status, failure, stage);
@@ -543,6 +610,100 @@ function summarizeIntervalRejections(
 }
 
 type TrackingV2SyncStage = "parse" | "policy" | "transaction" | "response";
+
+type TrackingTransactionTrace = {
+  startedAtMs: number;
+  currentStep: string;
+  currentStepStartedAtMs: number;
+  durationMs: number;
+  timingsMs: Record<string, number>;
+};
+
+function createTrackingTransactionTrace(): TrackingTransactionTrace {
+  const now = Date.now();
+  return {
+    startedAtMs: now,
+    currentStep: "acquire_transaction",
+    currentStepStartedAtMs: now,
+    durationMs: 0,
+    timingsMs: {},
+  };
+}
+
+async function traceTrackingTransactionStep<T>(
+  trace: TrackingTransactionTrace,
+  step: string,
+  operation: () => Promise<T>,
+) {
+  trace.currentStep = step;
+  trace.currentStepStartedAtMs = Date.now();
+  try {
+    return await operation();
+  } finally {
+    const durationMs = Date.now() - trace.currentStepStartedAtMs;
+    trace.timingsMs[step] = (trace.timingsMs[step] ?? 0) + durationMs;
+    trace.durationMs = Date.now() - trace.startedAtMs;
+  }
+}
+
+function finishTrackingTransactionTrace(trace: TrackingTransactionTrace) {
+  trace.currentStep = "complete";
+  trace.currentStepStartedAtMs = Date.now();
+  trace.durationMs = Date.now() - trace.startedAtMs;
+}
+
+function markTrackingTransactionStep(
+  trace: TrackingTransactionTrace,
+  step: string,
+) {
+  trace.currentStep = step;
+  trace.currentStepStartedAtMs = Date.now();
+  trace.durationMs = Date.now() - trace.startedAtMs;
+}
+
+function safeTrackingTransactionTrace(trace: TrackingTransactionTrace) {
+  return {
+    currentStep: trace.currentStep,
+    currentStepDurationMs:
+      trace.currentStep === "complete"
+        ? 0
+        : Date.now() - trace.currentStepStartedAtMs,
+    durationMs: Math.max(trace.durationMs, Date.now() - trace.startedAtMs),
+    timingsMs: trace.timingsMs,
+  };
+}
+
+const TRACKING_DATABASE_ERROR_CATEGORIES: Record<string, string> = {
+  P1001: "DATABASE_UNREACHABLE",
+  P1002: "DATABASE_CONNECTION_TIMEOUT",
+  P1017: "DATABASE_CONNECTION_CLOSED",
+  P2002: "DATABASE_UNIQUE_CONSTRAINT",
+  P2003: "DATABASE_FOREIGN_KEY_CONSTRAINT",
+  P2010: "DATABASE_RAW_QUERY_FAILED",
+  P2024: "DATABASE_POOL_TIMEOUT",
+  P2028: "DATABASE_TRANSACTION_TIMEOUT",
+  P2034: "DATABASE_WRITE_CONFLICT",
+};
+
+export function classifyTrackingSyncDatabaseError(error: unknown): {
+  prismaCode: string;
+  category: string;
+} | null {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (typeof current !== "object" || current === null) return null;
+    const record = current as Record<string, unknown>;
+    const code = typeof record.code === "string" ? record.code : null;
+    if (code && TRACKING_DATABASE_ERROR_CATEGORIES[code]) {
+      return {
+        prismaCode: code,
+        category: TRACKING_DATABASE_ERROR_CATEGORIES[code],
+      };
+    }
+    current = record.cause;
+  }
+  return null;
+}
 
 type TrackingSyncFailureDetail = {
   code: string;
@@ -1362,25 +1523,60 @@ async function insertAcceptedIntervals(
       ]),
     ).values(),
   ];
-  for (const target of dirtyTargets) {
-    await tx.usageReconciliationTarget.upsert({
-      where: {
-        companyId_userId_source_utcDate: target,
-      },
-      update: {
-        state: "DIRTY",
-        version: { increment: 1 },
-        dirtyAt: new Date(),
-        lastErrorCode: null,
-      },
-      create: target,
-    });
-  }
+  await markReconciliationTargetsDirty(tx, dirtyTargets);
   await incrementDeviceSubjectSummaries(tx, fragments);
   return {
     intervals: inserted,
     dirtyTargets,
   };
+}
+
+async function markReconciliationTargetsDirty(
+  tx: Prisma.TransactionClient,
+  targets: TrackingReconciliationTargetKey[],
+) {
+  if (targets.length === 0) return;
+  const now = new Date();
+  const rows = targets.map(
+    (target) => Prisma.sql`(
+      CAST(${randomUUID()} AS uuid),
+      CAST(${target.companyId} AS uuid),
+      CAST(${target.userId} AS uuid),
+      CAST(${target.source} AS "TrackingActivitySource"),
+      CAST(${target.utcDate.toISOString().slice(0, 10)} AS date),
+      CAST('DIRTY' AS "TrackingReconciliationState"),
+      1,
+      0,
+      ${now},
+      ${now},
+      ${now}
+    )`,
+  );
+  await tx.$executeRaw(
+    Prisma.sql`
+      INSERT INTO "UsageReconciliationTarget" (
+        "id",
+        "companyId",
+        "userId",
+        "source",
+        "utcDate",
+        "state",
+        "version",
+        "attemptCount",
+        "dirtyAt",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES ${Prisma.join(rows)}
+      ON CONFLICT ("companyId", "userId", "source", "utcDate")
+      DO UPDATE SET
+        "state" = CAST('DIRTY' AS "TrackingReconciliationState"),
+        "version" = "UsageReconciliationTarget"."version" + 1,
+        "dirtyAt" = EXCLUDED."dirtyAt",
+        "lastErrorCode" = NULL,
+        "updatedAt" = EXCLUDED."updatedAt"
+    `,
+  );
 }
 
 async function incrementDeviceSubjectSummaries(
@@ -1440,25 +1636,54 @@ async function incrementDeviceSubjectSummaries(
     }
     grouped.set(key, current);
   }
-  for (const value of grouped.values()) {
-    await tx.deviceSubjectDailySummary.upsert({
-      where: {
-        deviceId_source_activitySubjectId_utcDate: {
-          deviceId: value.deviceId,
-          source: value.source,
-          activitySubjectId: value.activitySubjectId,
-          utcDate: value.utcDate,
-        },
-      },
-      update: {
-        focusActiveMs: { increment: value.focusActiveMs },
-        focusedIdleMs: { increment: value.focusedIdleMs },
-        openRuntimeMs: { increment: value.openRuntimeMs },
-        latestReceivedAt: value.latestReceivedAt,
-      },
-      create: value,
-    });
-  }
+  if (grouped.size === 0) return;
+  const rows = [...grouped.values()].map(
+    (value) => Prisma.sql`(
+      CAST(${randomUUID()} AS uuid),
+      CAST(${value.companyId} AS uuid),
+      CAST(${value.userId} AS uuid),
+      CAST(${value.deviceId} AS uuid),
+      CAST(${value.activitySubjectId} AS uuid),
+      CAST(${value.source} AS "TrackingActivitySource"),
+      CAST(${value.utcDate.toISOString().slice(0, 10)} AS date),
+      ${value.focusActiveMs},
+      ${value.focusedIdleMs},
+      ${value.openRuntimeMs},
+      ${value.latestReceivedAt},
+      ${receivedAt},
+      ${receivedAt}
+    )`,
+  );
+  await tx.$executeRaw(
+    Prisma.sql`
+      INSERT INTO "DeviceSubjectDailySummary" (
+        "id",
+        "companyId",
+        "userId",
+        "deviceId",
+        "activitySubjectId",
+        "source",
+        "utcDate",
+        "focusActiveMs",
+        "focusedIdleMs",
+        "openRuntimeMs",
+        "latestReceivedAt",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES ${Prisma.join(rows)}
+      ON CONFLICT ("deviceId", "source", "activitySubjectId", "utcDate")
+      DO UPDATE SET
+        "focusActiveMs" = "DeviceSubjectDailySummary"."focusActiveMs" + EXCLUDED."focusActiveMs",
+        "focusedIdleMs" = "DeviceSubjectDailySummary"."focusedIdleMs" + EXCLUDED."focusedIdleMs",
+        "openRuntimeMs" = "DeviceSubjectDailySummary"."openRuntimeMs" + EXCLUDED."openRuntimeMs",
+        "latestReceivedAt" = GREATEST(
+          "DeviceSubjectDailySummary"."latestReceivedAt",
+          EXCLUDED."latestReceivedAt"
+        ),
+        "updatedAt" = EXCLUDED."updatedAt"
+    `,
+  );
 }
 
 async function refreshCursors(

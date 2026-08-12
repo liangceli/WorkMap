@@ -6,7 +6,6 @@ import {
 } from "@nestjs/common";
 import {
   describeTrackingV2Error,
-  TRACKING_RECONCILIATION_INGESTION_QUIET_PERIOD_MS,
   TrackingV2ReconciliationService,
 } from "./tracking-v2-reconciliation.service.js";
 
@@ -47,13 +46,6 @@ export class TrackingV2ReconciliationWorker
   }
 
   async runOnce() {
-    const hasRecentTrackingActivity =
-      await this.reconciliation.hasRecentTrackingActivity(
-        TRACKING_RECONCILIATION_INGESTION_QUIET_PERIOD_MS,
-      );
-    if (hasRecentTrackingActivity) {
-      return { deferred: true, reconciled: 0 };
-    }
     const result = await this.reconciliation.reconcileDirtyTargets(
       RECONCILIATION_BATCH_SIZE,
     );

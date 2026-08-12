@@ -54,12 +54,13 @@ export async function workMapApiPut<T>(path: string, body?: unknown, options: Ap
 async function workMapApiRequest<T>(
   path: string,
   init: RequestInit,
-  { token, baseUrl = getWorkMapApiBaseUrl(), authSource }: ApiClientOptions,
+  { token, baseUrl = getWorkMapApiBaseUrl(), authSource, signal, timeoutMs }: ApiClientOptions,
 ): Promise<ApiResult<T>> {
   if (!baseUrl) {
     return { ok: false, error: "WorkMap API URL is not configured.", source: "fallback" };
   }
 
+  const requestControl = createRequestControl(signal, timeoutMs);
   try {
     let requestToken = token;
     if (authSource === "cognito") {
@@ -75,7 +76,7 @@ async function workMapApiRequest<T>(
       requestToken = tokenResult.token;
     }
 
-    let response = await sendApiRequest(baseUrl, path, init, requestToken);
+    let response = await sendApiRequest(baseUrl, path, init, requestToken, requestControl.signal);
     if (response.status === 401 && authSource === "cognito") {
       const refreshedToken = await resolveCognitoToken(true);
       if (!refreshedToken.available) {
@@ -86,7 +87,7 @@ async function workMapApiRequest<T>(
           source: "fallback",
         };
       }
-      response = await sendApiRequest(baseUrl, path, init, refreshedToken.token);
+      response = await sendApiRequest(baseUrl, path, init, refreshedToken.token, requestControl.signal);
       if (response.status === 401) {
         clearCognitoSession();
         redirectToHomeForEndedCognitoSession();
@@ -113,13 +114,19 @@ async function workMapApiRequest<T>(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "WorkMap API request failed.",
+      error: requestControl.timedOut()
+        ? "CandidGrid API request timed out. Please try again."
+        : signal?.aborted
+          ? "CandidGrid reports request was cancelled."
+          : error instanceof Error ? error.message : "WorkMap API request failed.",
       source: "fallback",
     };
+  } finally {
+    requestControl.dispose();
   }
 }
 
-function sendApiRequest(baseUrl: string, path: string, init: RequestInit, token?: string) {
+function sendApiRequest(baseUrl: string, path: string, init: RequestInit, token?: string, signal?: AbortSignal) {
   return fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
@@ -129,7 +136,33 @@ function sendApiRequest(baseUrl: string, path: string, init: RequestInit, token?
       ...init.headers,
     },
     cache: "no-store",
+    signal,
   });
+}
+
+function createRequestControl(signal?: AbortSignal, timeoutMs?: number) {
+  if (!signal && (!timeoutMs || timeoutMs <= 0)) {
+    return { signal: undefined, timedOut: () => false, dispose: () => undefined };
+  }
+  const controller = new AbortController();
+  let didTimeOut = false;
+  const forwardAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) forwardAbort();
+  else signal?.addEventListener("abort", forwardAbort, { once: true });
+  const timeout = timeoutMs && timeoutMs > 0
+    ? setTimeout(() => {
+      didTimeOut = true;
+      controller.abort();
+    }, timeoutMs)
+    : null;
+  return {
+    signal: controller.signal,
+    timedOut: () => didTimeOut,
+    dispose: () => {
+      if (timeout !== null) clearTimeout(timeout);
+      signal?.removeEventListener("abort", forwardAbort);
+    },
+  };
 }
 
 async function readApiErrorDetail(response: Response) {
