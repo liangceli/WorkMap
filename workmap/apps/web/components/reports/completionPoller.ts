@@ -5,16 +5,31 @@ type PollerScheduler = {
   clearTimeout: (handle: TimerHandle) => void;
 };
 
+type PollerTimerHost = {
+  setTimeout: (callback: () => void, delayMs: number) => TimerHandle;
+  clearTimeout: (handle: TimerHandle) => void;
+};
+
 export type CompletionPoller = {
   trigger: () => void;
   stop: () => void;
 };
 
+/** Keeps browser timer methods bound to their owning global object. */
+export function createCompletionPollerScheduler(timerHost: PollerTimerHost): PollerScheduler {
+  return {
+    setTimeout: (callback, delayMs) => timerHost.setTimeout(callback, delayMs),
+    clearTimeout: (handle) => timerHost.clearTimeout(handle),
+  };
+}
+
+const defaultScheduler = createCompletionPollerScheduler(globalThis);
+
 /** Runs one task at a time and starts the next delay only after it settles. */
 export function startCompletionPoller(
   task: () => Promise<void>,
   intervalMs: number,
-  scheduler: PollerScheduler = { setTimeout, clearTimeout },
+  scheduler: PollerScheduler = defaultScheduler,
   startImmediately = true,
 ): CompletionPoller {
   let stopped = false;

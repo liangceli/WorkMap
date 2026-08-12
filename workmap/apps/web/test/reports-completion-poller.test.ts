@@ -1,6 +1,49 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { startCompletionPoller } from "../components/reports/completionPoller.js";
+import {
+  createCompletionPollerScheduler,
+  startCompletionPoller,
+} from "../components/reports/completionPoller.js";
+
+test("browser timer methods retain their required host binding", async () => {
+  const callbacks: Array<() => void> = [];
+  const handles = new Set<ReturnType<typeof setTimeout>>();
+  type StrictTimerHost = {
+    setTimeout(
+      this: StrictTimerHost,
+      callback: () => void,
+      delayMs: number,
+    ): ReturnType<typeof setTimeout>;
+    clearTimeout(this: StrictTimerHost, handle: ReturnType<typeof setTimeout>): void;
+  };
+  const timerHost: StrictTimerHost = {
+    setTimeout(this: StrictTimerHost, callback: () => void) {
+      assert.equal(this, timerHost);
+      callbacks.push(callback);
+      const handle = callbacks.length as unknown as ReturnType<typeof setTimeout>;
+      handles.add(handle);
+      return handle;
+    },
+    clearTimeout(this: StrictTimerHost, handle: ReturnType<typeof setTimeout>) {
+      assert.equal(this, timerHost);
+      handles.delete(handle);
+    },
+  };
+  const poller = startCompletionPoller(
+    async () => undefined,
+    15_000,
+    createCompletionPollerScheduler(timerHost),
+    false,
+  );
+
+  assert.equal(callbacks.length, 1);
+  callbacks.shift()?.();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(callbacks.length, 1);
+  poller.stop();
+  assert.equal(handles.size, 0);
+});
 
 test("slow report polls never overlap and schedule only after completion", async () => {
   const timers: Array<() => void> = [];

@@ -1,5 +1,34 @@
 # Latest Implementation Handoff
 
+## 2026-08-12 Authenticated Reports `Illegal invocation` Hotfix
+
+### Original Task Brief
+
+- Diagnose and fix the production client-side exception shown immediately after signing in and opening `/reports`: `Uncaught TypeError: Illegal invocation`.
+
+### Root Cause And Implementation
+
+- Root cause was confirmed with greater than 95% confidence in `workmap/apps/web/components/reports/completionPoller.ts`. The default scheduler copied the browser's native `setTimeout` and `clearTimeout` functions into a plain object and then invoked them as object methods. That changed their receiver from the browser global object to the scheduler object; Edge rejected the unbound Web API invocation. The authenticated Reports component starts these pollers immediately, which explains why the protected page crashed while the public route remained usable.
+- Added `createCompletionPollerScheduler(timerHost)`. Its wrappers call timer methods through their owning host, preserving the required browser binding. The completion-based, non-overlapping Live/Audit/Summary polling cadence and all report data semantics are unchanged.
+- Added a regression test with a strict timer host that throws unless both timer methods receive the correct `this` binding.
+
+### Changed Files
+
+- `workmap/apps/web/components/reports/completionPoller.ts`
+- `workmap/apps/web/test/reports-completion-poller.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+### Verification And Boundaries
+
+- Focused Reports tests: pass, 18/18.
+- Web typecheck: pass.
+- Web lint: pass.
+- Web production build: pass, including static `/reports` generation.
+- Full Web tests: 106/109. All Reports/poller tests pass. The three failures are pre-existing stale Dashboard visual/source assertions and an old `WorkMap` branding expectation in the Desktop audit test; none touches the changed poller.
+- The unauthenticated in-app browser redirects from `/reports` to the public home page, so authenticated production visual QA was not available in that session. No Vercel deployment was performed. The production error will remain until this Web change is deployed and then verified with a signed-in Owner/HR Admin account.
+- Auth, RBAC, API, Browser Extension, Desktop Agent, tracking policy, ledger and report calculations were intentionally not changed.
+
 ## 2026-08-12 Tracking v2 Ingestion, Reports Polling And Browser Focus Recovery
 
 ### Original Task Brief
@@ -7627,10 +7656,12 @@ Correct the password visibility eye button so it aligns inside the right edge of
 - Desktop Agent typecheck: passed.
 - Desktop Agent lint: passed.
 - Desktop Agent build (native Windows host, TypeScript and alpha package): passed.
+- Desktop Agent `release:windows`: passed after the sandboxed first attempt was blocked from downloading an Electron Windows dependency and the approved network retry succeeded.
+- Windows NSIS installer: `workmap/artifacts/desktop-agent/WorkMap-Desktop-Agent-Setup-0.6.12.exe`, 115,434,006 bytes, SHA-256 `98CA4F960E61AFA62E513F30C4A47CC2F63C7BD5F90616EAD07A5881317D0AF2`; installer file/product version `0.6.12`. Authenticode status is `NotSigned`.
 - Repository `git diff --check`: passed; Windows line-ending warnings only.
 
 ### Manual QA, Boundaries And Next Steps
-- The new 0.6.12 executable was built but not installed over the currently running 0.6.11 Agent, and no production deployment or real Windows slow-network/crash QA was performed.
-- No installer was generated or published in this round. The existing alpha package was regenerated only by the normal build.
+- The 0.6.12 NSIS installer and blockmap were generated locally, but the installer was not installed over the currently running 0.6.11 Agent. No production deployment or real Windows slow-network/crash QA was performed.
+- No installer was published or uploaded. The unsigned installer may trigger Windows SmartScreen and is not a signed broad-production release until the normal code-signing process is completed.
 - API transaction pressure remains the primary source of the observed 500/502 responses and must still be deployed/verified separately. The Desktop fix prevents that server latency from blocking local durability; it does not conceal or locally manufacture a successful server result.
 - Normal network failure can still delay Reports until the durable queue drains. An abrupt OS/process loss can never prove time after the last local observation, but this patch removes the avoidable HTTP-sized in-memory capture backlog.

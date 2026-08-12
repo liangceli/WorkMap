@@ -1,5 +1,22 @@
 # Latest QA Handoff
 
+## 2026-08-12 Authenticated Reports `Illegal invocation` QA
+
+### Findings
+
+- Critical, fixed in source: the Reports completion poller invoked copied browser timer functions with the scheduler object as `this`. Edge raised `TypeError: Illegal invocation` as soon as the authenticated page mounted its pollers, causing the whole `/reports` client boundary to fail.
+- Pass: the scheduler now uses host-bound wrapper calls. Poll cadence, single-flight behaviour, failure retention, report data, authentication and role boundaries are unchanged.
+- Pass: a new strict-binding regression test verifies both scheduling and cancellation retain the browser host receiver.
+
+### Verification And Recommendation
+
+- Focused Reports tests: 18/18 pass.
+- Web typecheck and lint: pass.
+- Web production build: pass.
+- Full Web suite: 106/109. All affected tests pass; the three unrelated failures are two stale Dashboard layout/source assertions and one pre-existing old-brand Desktop audit expectation.
+- Authenticated production visual QA: not run because the in-app browser session was not signed in. The public production page loaded without this error, which is consistent with the poller being mounted only on the protected report route.
+- Recommendation: pass for a Web-only deployment, followed immediately by signed-in Edge and Chrome `/reports` smoke testing. Do not claim the production incident resolved before that deployment/QA.
+
 ## 2026-08-12 Tracking v2 Reliability And Reports Load QA
 
 ### Reviewed Implementation And Findings
@@ -5200,10 +5217,13 @@ Pass for feasibility with conditions. Do not start implementation until the thre
 - Desktop typecheck: passed.
 - Desktop lint: passed.
 - Desktop native/alpha build: passed.
+- Desktop `release:windows`: passed after an approved network retry for the Electron Builder dependency download.
+- Installer verification: `WorkMap-Desktop-Agent-Setup-0.6.12.exe`, 115,434,006 bytes, file/product version `0.6.12`, SHA-256 `98CA4F960E61AFA62E513F30C4A47CC2F63C7BD5F90616EAD07A5881317D0AF2`; Authenticode `NotSigned`.
 - Repository `git diff --check`: passed with line-ending warnings only.
 
 ### Manual QA, Risks And Recommendation
-- Real installed 0.6.12 Windows QA was not run; the running local Agent was deliberately not replaced.
+- Real installed 0.6.12 Windows QA was not run; the running local Agent was deliberately not replaced. The installer exists locally but has not been uploaded or published.
+- The installer is unsigned and may trigger Windows SmartScreen; complete code signing before treating it as a broad-production distribution artifact.
 - Production API deployment/load verification was not run. Current API transaction 500/502 pressure is a separate server-side root cause and should be verified before broad client rollout.
 - Recommend proceeding to a controlled 0.6.12 install on one device after API deployment, then validate a 30-minute slow/offline/reconnect/lock/sleep cycle: local queue remains bounded, no new dead-letter, pending drains, and Reports catches up without interval overlap.
 - Pass for controlled QA; not yet a claim of production rollout completion.
