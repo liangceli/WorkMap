@@ -156,6 +156,18 @@ export class TrackingV2ReportsService {
             rejectedAt: true,
           },
         },
+        statusEvents: {
+          orderBy: [{ recordedAt: "desc" }, { createdAt: "desc" }],
+          take: 1,
+          select: {
+            status: true,
+            reason: true,
+            startedAt: true,
+            recordedAt: true,
+            receivedAt: true,
+            confidence: true,
+          },
+        },
       },
     });
 
@@ -170,6 +182,7 @@ export class TrackingV2ReportsService {
       const intervalRejections = (device.sequenceTombstones ?? []).filter(
         (item) => item.source === source,
       );
+      const latestLifecycle = device.statusEvents?.[0] ?? null;
       const cursor = snapshot
         ? device.syncCursors.find(
             (item) =>
@@ -261,6 +274,16 @@ export class TrackingV2ReportsService {
         snapshotFreshnessAgeMs: snapshotAgeMs,
         snapshotFreshnessLimitMs: freshnessLimitMs,
         snapshotStatus,
+        latestLifecycle: latestLifecycle
+          ? {
+              status: latestLifecycle.status,
+              reason: latestLifecycle.reason,
+              startedAt: iso(latestLifecycle.startedAt),
+              recordedAt: iso(latestLifecycle.recordedAt),
+              receivedAt: iso(latestLifecycle.receivedAt),
+              confidence: latestLifecycle.confidence,
+            }
+          : null,
         current,
         snapshot: snapshot
           ? {

@@ -1,5 +1,23 @@
 # Latest QA Handoff
 
+## 2026-08-21 Reports Live Operational-State QA
+
+### Findings
+
+- High, fixed in the Reports read/presentation path: fresh heartbeat health previously rendered only `Connected`, so a confirmed lock or sleep transition was visible in Connection Audit but not explained on the Live card. Live now keeps connection health green while presenting the separate confirmed operational state and making current Focus unavailable.
+- Pass, honesty boundary: exact `Locked` and `Sleeping` wording is used only for the latest `CONFIRMED` lifecycle while the current health record says collection is paused. Inferred or missing causes remain the generic `Collection paused`.
+- Pass, freshness boundary: the existing Desktop 30-second and Browser 90-second server-confirmed heartbeat rules remain authoritative. Lock/sleep does not cause an immediate false disconnect; an expired heartbeat still produces the red client-specific warning.
+- Pass, recovery: a fresh healthy collector ignores an older lock/sleep transition and returns to ordinary `Connected`.
+- Pass, scope isolation: no Desktop Agent or Browser Extension file changed. No activity interval, policy, acknowledgement, lease, schedule, queue, upload, runtime or Focus calculation changed.
+
+### Test And Recommendation
+
+- Focused Web tests: 10/10 pass. Focused API tests: 15/15 pass.
+- Web/API typecheck and lint: pass. Web/API production builds: pass.
+- Full Web suite: 108/111; three unrelated stale Dashboard/old-brand assertions fail. Full API suite: 68/69; one unrelated historical fixed-time fixture now violates the existing event-age guard.
+- Authenticated production visual QA: not run. No production deployment was performed.
+- Recommendation: pass for controlled API-then-Web deployment, followed by real lock, sleep, heartbeat-expiry and recovery checks. Do not describe a locked/sleeping client as disconnected while its heartbeat is still server-confirmed and fresh.
+
 ## 2026-08-12 Reports Employee-Switch Refresh QA
 
 ### Findings

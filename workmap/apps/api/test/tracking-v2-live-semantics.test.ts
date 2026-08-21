@@ -102,6 +102,41 @@ test("fresh server-confirmed health stays connected when the App snapshot is rej
   assert.equal(response.coverage.withRejectedIntervals, 1);
 });
 
+test("live activity includes the latest confirmed lifecycle without changing heartbeat freshness", async () => {
+  const now = new Date();
+  const device = liveDevice({
+    snapshotReceivedAt: now,
+    healthReceivedAt: now,
+    diagnosticAt: now,
+    diagnosticCode: "SNAPSHOT_OUTSIDE_POLICY_WINDOW",
+  });
+  device.clientHealth[0]!.collectorState = "PAUSED";
+  device.statusEvents = [{
+    status: "LOCKED",
+    reason: "SYSTEM_LOCK",
+    startedAt: new Date(now.getTime() - 1_000),
+    recordedAt: new Date(now.getTime() - 1_000),
+    receivedAt: now,
+    confidence: "CONFIRMED",
+  }];
+  const service = new TrackingV2ReportsService(
+    { device: { findMany: async () => [device] } } as any,
+    {} as any,
+  );
+
+  const response = await service.getLiveActivity({ companyId: COMPANY_ID });
+
+  assert.equal(response.devices[0]?.connectionFresh, true);
+  assert.deepEqual(response.devices[0]?.latestLifecycle, {
+    status: "LOCKED",
+    reason: "SYSTEM_LOCK",
+    startedAt: new Date(now.getTime() - 1_000).toISOString(),
+    recordedAt: new Date(now.getTime() - 1_000).toISOString(),
+    receivedAt: now.toISOString(),
+    confidence: "CONFIRMED",
+  });
+});
+
 test("invalid snapshot state timing is not mislabeled as outside the policy window", async () => {
   const now = Date.now();
   const prisma = new SyncPrisma(now);
@@ -901,6 +936,7 @@ function liveDevice(input: {
       },
     ],
     syncCursors: [],
+    statusEvents: [],
     sequenceTombstones: [
       {
         source: TrackingActivitySource.DESKTOP_APP,

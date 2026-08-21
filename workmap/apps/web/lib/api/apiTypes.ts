@@ -466,6 +466,40 @@ export type WorkMapApiTrackingV2LiveActivity = {
       | "STALE"
       | "REJECTED"
       | "NOT_RECEIVED";
+    latestLifecycle: null | {
+      status:
+        | "RUNNING"
+        | "STOPPED_BY_USER"
+        | "NETWORK_OFFLINE"
+        | "DEVICE_SHUTDOWN"
+        | "SLEEPING"
+        | "LOCKED"
+        | "AGENT_CRASHED"
+        | "AGENT_TERMINATED"
+        | "SERVER_UNREACHABLE"
+        | "UNKNOWN_INTERRUPTED"
+        | "RECONNECTED"
+        | "RESTARTED";
+      reason:
+        | "AGENT_STARTED"
+        | "USER_STOP"
+        | "SYSTEM_SHUTDOWN"
+        | "SYSTEM_SUSPEND"
+        | "SYSTEM_RESUME"
+        | "SYSTEM_LOCK"
+        | "SYSTEM_UNLOCK"
+        | "NETWORK_UNAVAILABLE"
+        | "SERVER_REQUEST_FAILED"
+        | "PROCESS_CRASH"
+        | "PROCESS_TERMINATED"
+        | "HEARTBEAT_TIMEOUT"
+        | "AGENT_RESTART"
+        | "UNKNOWN";
+      startedAt: string | null;
+      recordedAt: string | null;
+      receivedAt: string | null;
+      confidence: "CONFIRMED" | "INFERRED";
+    };
     current: null | {
       state: "ACTIVE" | "IDLE";
       subjectKey: string | null;

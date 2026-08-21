@@ -637,7 +637,14 @@ function TrackingV2DeviceCard({
           <p style={styles.clientLabel}>{clientName}</p>
           <h3 style={styles.clientTitle}>{connection.label}</h3>
         </div>
-        <span style={{ ...styles.connectionPill, ...(attention ? styles.connectionPillAttention : styles.connectionPillConnected) }}>
+        <span style={{
+          ...styles.connectionPill,
+          ...(attention
+            ? styles.connectionPillAttention
+            : connection.paused
+              ? styles.connectionPillPaused
+              : styles.connectionPillConnected),
+        }}>
           {connection.pill}
         </span>
       </div>
@@ -2039,6 +2046,7 @@ const styles = {
   clientTitle: { margin: "2px 0 0", color: wm.colors.text, fontSize: "18px", lineHeight: 1.25, overflowWrap: "anywhere" as const },
   connectionPill: { justifySelf: "end", maxWidth: "100%", border: `1px solid ${wm.colors.borderStrong}`, borderRadius: wm.radius.full, padding: "5px 9px", color: wm.colors.textSecondary, background: wm.colors.surface, fontSize: "11px", fontWeight: 900, lineHeight: 1.2, textAlign: "center" as const },
   connectionPillConnected: { borderColor: wm.colors.successBorder, background: wm.colors.successBg, color: wm.colors.success },
+  connectionPillPaused: { borderColor: wm.colors.infoBorder, background: wm.colors.infoBg, color: wm.colors.infoText },
   connectionPillAttention: { borderColor: wm.colors.error, background: wm.colors.errorBg, color: wm.colors.errorText },
   focusBlock: { display: "grid", gap: "4px", borderTop: `1px solid ${wm.colors.borderSubtle}`, borderBottom: `1px solid ${wm.colors.borderSubtle}`, padding: "14px 0", minWidth: 0 },
   focusLabel: { color: wm.colors.textMuted, fontSize: "11px", fontWeight: 900, textTransform: "uppercase" as const },

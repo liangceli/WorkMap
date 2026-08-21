@@ -78,24 +78,35 @@ export function trackingV2ConnectionPresentation(
   device: TrackingV2LiveDevice,
 ) {
   if (!device.health || !device.connectionFresh) {
+    const isBrowser = device.clientType === "BROWSER_EXTENSION";
     return {
       connected: false,
-      label: "Browser heartbeat not received",
+      paused: false,
+      label: isBrowser
+        ? "Browser heartbeat not received"
+        : "Desktop heartbeat not received",
       pill: device.health ? "Stale" : "Health pending",
       detail: device.health
-        ? "CandidGrid has not received a confirmed Browser Extension heartbeat within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished."
+        ? isBrowser
+          ? "CandidGrid has not received a confirmed Browser Extension heartbeat within 90 seconds; browser close, offline, disabled, sleep, or crash cannot be distinguished."
+          : "CandidGrid has not received a confirmed Desktop Agent heartbeat within 30 seconds; shutdown, offline, sleep, or a client failure cannot be distinguished from heartbeat evidence alone."
         : "Waiting for the first server-confirmed health signal.",
     };
   }
+
+  const operational = trackingV2OperationalPresentation(device);
 
   // Reaching this response proves the device credential and health lane were
   // accepted by the server. Collector, policy, queue, and snapshot issues are
   // displayed independently and must not turn this into a disconnect warning.
   return {
     connected: true,
+    paused: operational !== null,
     label: "Connected",
-    pill: device.health.migrationState,
-    detail: "The latest device health signal was confirmed by CandidGrid.",
+    pill: operational?.pill ?? device.health.migrationState,
+    detail:
+      operational?.detail
+      ?? "The latest device health signal was confirmed by CandidGrid.",
   };
 }
 
@@ -103,6 +114,15 @@ export function trackingV2SnapshotPresentation(
   device: TrackingV2LiveDevice,
 ) {
   const subject = device.source === "BROWSER_DOMAIN" ? "Domain" : "App";
+  const operational = trackingV2OperationalPresentation(device);
+  if (operational) {
+    return {
+      available: false,
+      label: "Unavailable",
+      detail: operational.focusDetail,
+      pill: operational.pill,
+    };
+  }
   if (
     device.health &&
     device.health.policyState !== "ACTIVE" &&
@@ -189,5 +209,43 @@ export function trackingV2SnapshotPresentation(
       ? `The connection is online; CandidGrid has not confirmed a current ${subject} snapshot.`
       : `CandidGrid has not received a current ${subject} snapshot.`,
     pill: "Not received",
+  };
+}
+
+function trackingV2OperationalPresentation(device: TrackingV2LiveDevice) {
+  if (
+    !device.connectionFresh
+    || device.health?.collectorState !== "PAUSED"
+    || device.health.policyState !== "ACTIVE"
+  ) {
+    return null;
+  }
+
+  if (
+    device.latestLifecycle?.confidence === "CONFIRMED"
+    && device.latestLifecycle.status === "LOCKED"
+  ) {
+    return {
+      pill: "Locked",
+      detail: "The heartbeat is current and the client reported that the device is locked.",
+      focusDetail: "The device is locked, so Focus collection is paused while connection health remains online.",
+    };
+  }
+
+  if (
+    device.latestLifecycle?.confidence === "CONFIRMED"
+    && device.latestLifecycle.status === "SLEEPING"
+  ) {
+    return {
+      pill: "Sleeping",
+      detail: "The heartbeat is current and the client reported system suspend or standby.",
+      focusDetail: "The device reported sleep or standby, so Focus collection is paused. The connection will become stale if no further heartbeat is confirmed.",
+    };
+  }
+
+  return {
+    pill: "Collection paused",
+    detail: "The heartbeat is current, but the client reports that collection is paused.",
+    focusDetail: "Focus collection is paused even though connection health remains online.",
   };
 }

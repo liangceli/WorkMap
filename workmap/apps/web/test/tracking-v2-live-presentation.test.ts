@@ -102,6 +102,79 @@ test("a valid fresh snapshot presents the current App independently from connect
   assert.equal(trackingV2SnapshotPresentation(device).label, "Test App");
 });
 
+test("a fresh heartbeat presents a confirmed lock separately from Focus availability", () => {
+  const device = liveDevice({
+    connectionFresh: true,
+    snapshotFresh: true,
+    snapshotStatus: "NO_CURRENT_FOCUS",
+    diagnosticCode: null,
+  });
+  device.health!.collectorState = "PAUSED";
+  device.latestLifecycle = lifecycle("LOCKED", "SYSTEM_LOCK");
+
+  const connection = trackingV2ConnectionPresentation(device);
+  const snapshot = trackingV2SnapshotPresentation(device);
+
+  assert.equal(connection.connected, true);
+  assert.equal(connection.label, "Connected");
+  assert.equal(connection.pill, "Locked");
+  assert.equal(connection.paused, true);
+  assert.equal(snapshot.label, "Unavailable");
+  assert.equal(snapshot.pill, "Locked");
+  assert.match(snapshot.detail, /Focus collection is paused/);
+});
+
+test("a fresh heartbeat presents confirmed sleep until heartbeat freshness expires", () => {
+  const device = liveDevice({
+    connectionFresh: true,
+    snapshotFresh: true,
+    snapshotStatus: "NO_CURRENT_FOCUS",
+    diagnosticCode: null,
+  });
+  device.health!.collectorState = "PAUSED";
+  device.latestLifecycle = lifecycle("SLEEPING", "SYSTEM_SUSPEND");
+
+  assert.equal(trackingV2ConnectionPresentation(device).pill, "Sleeping");
+  assert.match(trackingV2SnapshotPresentation(device).detail, /sleep or standby/i);
+
+  device.connectionFresh = false;
+  const stale = trackingV2ConnectionPresentation(device);
+  assert.equal(stale.connected, false);
+  assert.equal(stale.label, "Desktop heartbeat not received");
+  assert.equal(stale.pill, "Stale");
+});
+
+test("a paused collector without an exact lifecycle cause stays connected and avoids inventing one", () => {
+  const device = liveDevice({
+    connectionFresh: true,
+    snapshotFresh: true,
+    snapshotStatus: "NO_CURRENT_FOCUS",
+    diagnosticCode: null,
+  });
+  device.health!.collectorState = "PAUSED";
+
+  assert.equal(trackingV2ConnectionPresentation(device).pill, "Collection paused");
+  assert.equal(trackingV2SnapshotPresentation(device).pill, "Collection paused");
+  assert.doesNotMatch(trackingV2SnapshotPresentation(device).detail, /locked|sleep/i);
+});
+
+test("an inferred lifecycle does not present an exact lock cause", () => {
+  const device = liveDevice({
+    connectionFresh: true,
+    snapshotFresh: true,
+    snapshotStatus: "NO_CURRENT_FOCUS",
+    diagnosticCode: null,
+  });
+  device.health!.collectorState = "PAUSED";
+  device.latestLifecycle = {
+    ...lifecycle("LOCKED", "SYSTEM_LOCK"),
+    confidence: "INFERRED",
+  };
+
+  assert.equal(trackingV2ConnectionPresentation(device).pill, "Collection paused");
+  assert.doesNotMatch(trackingV2SnapshotPresentation(device).detail, /locked|sleep/i);
+});
+
 test("Browser connection stays confirmed while a Domain snapshot is policy rejected", () => {
   const device = liveDevice({
     connectionFresh: true,
@@ -164,6 +237,7 @@ function liveDevice(input: {
     snapshotFreshnessAgeMs: input.snapshotFresh ? 1_000 : 60_000,
     snapshotFreshnessLimitMs: 30_000,
     snapshotStatus: input.snapshotStatus,
+    latestLifecycle: null,
     current: null,
     snapshot: null,
     health: {
@@ -189,6 +263,21 @@ function liveDevice(input: {
     },
     cursor: null,
     correlation: null,
+  };
+}
+
+function lifecycle(
+  status: "LOCKED" | "SLEEPING",
+  reason: "SYSTEM_LOCK" | "SYSTEM_SUSPEND",
+): NonNullable<WorkMapApiTrackingV2LiveActivity["devices"][number]["latestLifecycle"]> {
+  const now = new Date().toISOString();
+  return {
+    status,
+    reason,
+    startedAt: now,
+    recordedAt: now,
+    receivedAt: now,
+    confidence: "CONFIRMED",
   };
 }
 

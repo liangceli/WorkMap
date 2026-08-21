@@ -1,5 +1,38 @@
 # Latest Implementation Handoff
 
+## 2026-08-21 Reports Live Connection And Operational-State Separation
+
+### Original Task Brief
+
+- Make `/reports` present lock, sleep and collection-pause state honestly without changing Desktop Agent or Browser Extension collection, timing, queueing, upload, policy or lifecycle behaviour.
+- Keep server-confirmed connection health separate from current Focus availability: a client with a fresh heartbeat must not be painted disconnected merely because the workstation is locked or sleeping.
+
+### Changed Files And Implementation
+
+- `workmap/apps/api/src/modules/reports/tracking-v2-reports.service.ts`
+- `workmap/apps/api/test/tracking-v2-live-semantics.test.ts`
+- `workmap/apps/web/lib/api/apiTypes.ts`
+- `workmap/apps/web/components/reports/trackingV2LivePresentation.ts`
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/test/tracking-v2-live-presentation.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+- The existing live-activity read model now includes the latest stored device lifecycle transition. This is a read-only Reports enrichment; no client protocol, write path or tracking ledger changed.
+- A fresh server-confirmed heartbeat remains `Connected`. When the health record also says the collector is paused, a latest confirmed `LOCKED` or `SLEEPING` lifecycle is shown as a separate neutral operational pill and current App/Domain Focus is `Unavailable`. A pause without a confirmed exact cause is labelled only `Collection paused`; the UI does not invent lock, sleep, browser-close or crash causes.
+- After the existing freshness deadline expires, the card becomes the red client-specific heartbeat warning. Desktop keeps its existing 30-second freshness limit and Browser Extension keeps 90 seconds. Recovery to a healthy collector returns to ordinary `Connected`; an older lifecycle row cannot override current health.
+- The stale Desktop copy was corrected so it no longer says `Browser heartbeat not received` or cites the Browser 90-second threshold.
+
+### Verification And Boundaries
+
+- Focused Web live-presentation tests: pass, 10/10. Focused API live-semantics tests: pass, 15/15.
+- Web typecheck: pass. Web lint: pass. Web production build: pass, including `/reports`.
+- API typecheck: pass. API lint: pass. API production build: pass.
+- Full Web suite: 108/111. The three failures are unrelated pre-existing assertions: two stale Dashboard source/layout expectations and one old `WorkMap` audit-brand expectation.
+- Full API suite: 68/69. The unrelated verification fixture uses a historical fixed activity time and now fails the existing age guard as `Activity event is too old`; the changed live-semantics test passes.
+- Authenticated production visual QA was not run and no deployment was performed. Desktop Agent and Browser Extension directories remain untouched. Their collection, Focus/idle/open-runtime calculations, durable queues, sync cadence, policy, lifecycle emission and version/artifacts were intentionally unchanged.
+- Next step: deploy API before Web, then verify an Owner report while locking, sleeping and restoring a monitored device. Expected behaviour is `Connected + Locked/Sleeping` while a heartbeat is still fresh, followed by a red heartbeat warning only if freshness expires, and ordinary `Connected` after confirmed recovery.
+
 ## 2026-08-12 Reports Employee-Switch Feedback And Live Refresh
 
 ### Original Task Brief
