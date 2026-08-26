@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { refreshReportSelection } from "../components/reports/reportSelectionRefresh.js";
+import {
+  refreshReportSelection,
+  shouldApplySilentLiveRefresh,
+} from "../components/reports/reportSelectionRefresh.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -39,4 +42,14 @@ test("filter refresh starts Live and Summary together and applies each independe
   live.resolve("live-ready");
   await refresh;
   assert.deepEqual(applied, ["summary-ready", "live-ready"]);
+});
+
+test("silent Live refresh preserves an established Tracking v2 view during legacy fallback", () => {
+  assert.equal(shouldApplySilentLiveRefresh(true, false), false);
+  assert.equal(shouldApplySilentLiveRefresh(true, true), true);
+});
+
+test("silent Live refresh still supports legacy-only users before a Tracking v2 view exists", () => {
+  assert.equal(shouldApplySilentLiveRefresh(false, false), true);
+  assert.equal(shouldApplySilentLiveRefresh(false, true), true);
 });

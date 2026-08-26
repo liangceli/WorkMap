@@ -1,5 +1,36 @@
 # Latest QA Handoff
 
+## 2026-08-26 Reports Silent Live Refresh Preservation QA
+
+### Reviewed Implementation
+
+- Reviewed the 15-second Live poll, Tracking v2/legacy request fallback, render selection, report snapshot cache update and Apply-filter path.
+- Confirmed the screenshot matched the legacy employee overview: one online profile among historical Browser devices plus an obsolete Desktop interruption.
+- Reviewed the scoped fix in `ReportSummaryPanel.tsx`, `reportSelectionRefresh.ts` and `reports-selection-refresh.test.ts`.
+
+### Findings And Diff Review
+
+- No current-change blocker found.
+- The silent poll now refuses only the unsafe downgrade case: a current non-empty v2 view followed by a result without non-empty v2 devices.
+- Fresh non-empty v2 results still update normally. Legacy-only users still refresh normally. Cold load and Apply-filter requests were not changed.
+- No Desktop Agent, Browser Extension, API, schema, policy, ledger, timing, queue or upload files changed.
+
+### Test And Verification Status
+
+- Focused refresh test: pass, 3/3.
+- `pnpm --filter @workmap/web typecheck`: pass.
+- `pnpm --filter @workmap/web lint`: pass.
+- `pnpm --filter @workmap/web test`: 113/116; all affected Reports tests pass. Three unrelated pre-existing failures remain in two Dashboard source/layout assertions and one stale `WorkMap` brand wording assertion.
+- `pnpm --filter @workmap/web build`: pass; `/reports` generated successfully. Non-blocking webpack cache snapshot and Next ESLint-plugin warnings remain.
+- `git diff --check`: pass.
+- Secret scan over the changed files with generated, dependency and environment exclusions: pass, no matches.
+
+### Manual QA, Risk And Recommendation
+
+- Authenticated deployed visual QA: not run. No deployment was authorized or performed.
+- The fix deliberately preserves the last confirmed v2 UI during a transient read failure; it does not hide or repair the underlying API/network failure.
+- Recommendation: PASS for the scoped Web display fix. The next round can proceed to Web deployment and authenticated soak QA without publishing new Desktop Agent or Browser Extension artifacts.
+
 ## 2026-08-21 Reports Live Operational-State QA
 
 ### Findings

@@ -1,5 +1,35 @@
 # Latest Implementation Handoff
 
+## 2026-08-26 Reports Silent Live Refresh Preservation
+
+### Original Task Brief
+
+- Fix only the `/reports` display bug where an unattended page periodically replaced the current Tracking v2 Live signals with an old aggregate view showing historical Browser profiles and an obsolete Desktop interruption; clicking `Apply filters` restored the correct view.
+- Do not change Desktop Agent or Browser Extension collection, timing, queueing, upload, policy or any unrelated project behavior.
+
+### Changed Files And Implementation
+
+- `workmap/apps/web/components/reports/ReportSummaryPanel.tsx`
+- `workmap/apps/web/components/reports/reportSelectionRefresh.ts`
+- `workmap/apps/web/test/reports-selection-refresh.test.ts`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+- Root cause: the 15-second silent Live poll treated a successful legacy `/reports/agent-status` fallback as a successful replacement when `/reports/live-activity` transiently failed or returned no Tracking v2 devices. That cleared the established v2 state and rendered the legacy aggregate, including historical Browser profiles.
+- Silent polling now preserves an established non-empty Tracking v2 view unless the next result also contains non-empty Tracking v2 devices. A transient failure, empty v2 result or successful legacy fallback no longer replaces the last confirmed v2 presentation or its cached snapshot.
+- Users that have never established a Tracking v2 view retain the existing legacy compatibility behavior. Cold load and user-initiated `Apply filters` behavior are unchanged.
+- Added pure behavior tests covering both v2 preservation and legacy-only compatibility.
+
+### Verification And Boundaries
+
+- Focused refresh tests: pass, 3/3.
+- Web typecheck: pass. Web lint: pass. Web production build: pass, including `/reports`.
+- Full Web tests: 113/116. All changed Reports tests pass. The three failures are unrelated existing assertions: two stale Dashboard source/layout expectations and one old `WorkMap` Desktop-audit wording expectation.
+- Authenticated production visual QA was not run and no deployment was performed.
+- API, database, authentication, RBAC, report calculations, Desktop Agent, Browser Extension, collection, interval generation, durable queues and upload paths were intentionally unchanged.
+- Remaining risk: the underlying reason for an individual transient `/reports/live-activity` failure still requires production request evidence to classify as timeout, HTTP failure or an empty response; this patch prevents that read failure from corrupting the displayed Live state.
+- Suggested next step: deploy Web only, leave a signed-in Owner `/reports` page open through several Live refresh cycles, and confirm a temporary Live request failure retains the last Tracking v2 cards until a fresh v2 response arrives.
+
 ## 2026-08-21 Reports Live Connection And Operational-State Separation
 
 ### Original Task Brief

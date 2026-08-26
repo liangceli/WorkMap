@@ -18,7 +18,7 @@ import { wm, wmStyles } from "../../lib/theme/workmapTheme";
 import { WorkMapButton } from "../ui/WorkMapButton";
 import { readReportSnapshot, updateReportSnapshot } from "./reportSnapshotCache";
 import { startCompletionPoller } from "./completionPoller";
-import { refreshReportSelection } from "./reportSelectionRefresh";
+import { refreshReportSelection, shouldApplySilentLiveRefresh } from "./reportSelectionRefresh";
 import {
   isConnectionAuditTimestampInRange,
   resolveConnectionAuditRange,
@@ -79,6 +79,7 @@ export function ReportSummaryPanel() {
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(() => defaultReportFilters("company"));
   const [liveStatus, setLiveStatus] = useState<WorkMapApiReportLiveStatus | null>(null);
   const [trackingV2Live, setTrackingV2Live] = useState<WorkMapApiTrackingV2LiveActivity | null>(null);
+  const hasTrackingV2Live = Boolean(trackingV2Live?.devices.length);
   const [selectionRefresh, setSelectionRefresh] = useState<SelectionRefreshState>({ live: false, summary: false });
   const [livePollingReady, setLivePollingReady] = useState(false);
   const activityRevisionRef = useRef<string | null | undefined>(undefined);
@@ -221,6 +222,8 @@ export function ReportSummaryPanel() {
       if (document.visibilityState !== "visible") return;
       const result = await requestCurrentLive(auth, appliedFilters, false, requestAbort.signal);
       if (cancelled || !result.ok) return;
+      const hasNextTrackingV2 = Boolean(result.data.trackingV2?.devices.length);
+      if (!shouldApplySilentLiveRefresh(hasTrackingV2Live, hasNextTrackingV2)) return;
       setLiveStatus(result.data.legacy);
       setTrackingV2Live(result.data.trackingV2);
       const snapshotKey = reportSnapshotKey(auth, appliedFilters, reportTimeZone);
@@ -240,7 +243,7 @@ export function ReportSummaryPanel() {
       poller.stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [auth, appliedFilters, livePollingReady, reportTimeZone]);
+  }, [auth, appliedFilters, hasTrackingV2Live, livePollingReady, reportTimeZone]);
 
   useEffect(() => {
     if (!auth || !livePollingReady || appliedFilters.view === "company") return;
