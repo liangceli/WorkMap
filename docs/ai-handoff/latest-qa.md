@@ -1,5 +1,102 @@
 # Latest QA Handoff
 
+## 2026-09-10 Snapshot Sync Timeout Repair QA
+
+### Findings And Review
+
+- Reviewed new API snapshot persistence changes and tests, plus preservation of Browser 0.5.19. No Desktop/Web/shared-types/Prisma diff, capture-clock or confirmed-time change, cloud configuration edit, commit, push or deployment.
+- High priority, addressed: bootstrap overlap SQL lacked the company prefix of the existing endedAt index. The exact cumulative old SQL reached 29.673 seconds. The new plan uses the tenant/device/time index instead of scanning historical device/source rows before timestamp filtering.
+- High priority, preserved: shared bootstrap guards still reject provisional time on dispositions, overlaps, missing sequences and other ineligible states. Existence reads retain boolean semantics and strict endpoints. Interval ledger acceptance, tombstones, cursors and report aggregation were not rewritten.
+- Medium priority, addressed: unchanged snapshot subject names no longer trigger redundant shared-row upserts. Creation/rename remains atomic and tenant/source/key scoped; no cross-request cache.
+- Diagnostics: nested timings retain full parent duration and failing substep without logging raw errors, credentials or activity payloads.
+- Existing unrelated failure: fixed-July events in `tracking-reports-verification.test.ts` exceed the unchanged age limit in September. It failed before editing; do not call the normal suite fully green.
+
+### Verification
+
+- Baseline API: 68 pass / 1 fail. Final `pnpm --filter @workmap/api test`: 81 pass / 1 same baseline failure (82 total). All 13 new tests pass.
+- New coverage: App/Domain bootstrap with absent/accepted/tombstoned/overlapping history; exact company/device/source/stream predicates and time endpoints; non-first-state short circuit; subject create/reuse/rename; mixed upload and duplicate retry without extra confirmed time; 40 concurrent mocked requests; child-step failure privacy/timing.
+- Supplementary unchanged legacy test PASS with process-local mock time: `node --import tsx --import 'data:text/javascript,import {mock} from "node:test"; mock.timers.enable({apis:["Date"],now:Date.parse("2026-07-29T23:00:00Z")});' --test test/tracking-reports-verification.test.ts` from `workmap/apps/api`. This proves fixture aging, not a current-date full-suite pass; system clock and source remain unchanged.
+- API typecheck/lint/build PASS. Initial new-test unused-argument lint issues corrected and lint rerun.
+- Browser tests 86/86, typecheck, lint and build PASS. ZIP remains 72,867 bytes / 26 entries / version 0.5.19, with zero content mismatches against the rebuilt unpacked files; SHA-256 `1C051528CCBD75101353124E47BC7074DE7AFFAFB0202D1CBDE7EE5230447F85`.
+- Authenticated production SELECT-only checks: normalized SQL statistics, existing index definitions, old/new EXPLAIN, then bounded read-only EXPLAIN ANALYZE. New SQL execution: 0.124 ms and 0.762 ms, four shared-hit blocks, no execution block reads. The original same-parameter replay returned a generic upstream-timeout error, so its precise duration is unknown. Planner cost 8,919.36 -> 1.80 is not elapsed time.
+- Limits: one sampled window, warm-cache executions, later matching interval. No real production concurrency stress test, full API benchmark, complete daily reconciliation, client UI visual acceptance or post-deployment soak. Concurrent local keep-awake handoff entries were preserved; synthetic idle activity is not a human-activity QA baseline.
+
+### Risks And Recommendation
+
+- Diff review: no raised timeout, public API/schema/DDL/auth changes or unrelated refactor; previous Browser patch and concurrent handoff additions retained.
+- Final checks: `git -c core.safecrlf=false diff --check` PASS. Scoped high-confidence secret and merge-conflict-marker scan across added non-generated lines found zero matches (674 added lines at the pre-final-note checkpoint). Excluded environment, dependency, build/reference and generated unpacked directories; this is a scoped diff check, not a full security audit.
+- Remaining risks: other database steps, true name-change contention and cross-region networking can still create tails. Cumulative SQL statistics do not assign every historical failed request to a single statement.
+- Recommendation: PASS for scoped implementation and query-level validation, with the existing clock-fixture caveat. Proceed to user review and controlled API deployment acceptance; do not claim production-wide resolution before deployment and observation. Browser 0.5.19 installation is a separate step.
+
+## 2026-09-10 Local Keep-Awake Process QA
+
+- Reviewed implementation: ignored local PowerShell/native helper and hidden process 31172, requested explicitly by the user. Same native thread holds continuous system/display power requests; a 20-second zero-distance input pulse refreshes idle activity; no automatic shutdown is configured.
+- Diff review: local operational helper plus additive handoff entries only; all existing product changes preserved. No power plan, registry, authentication or managed-security changes.
+- Findings, ordered by impact: (1) synthetic input affects idle-based tracking measurements while running; do not interpret those measurements as actual human activity; (2) manual locking/sleep, reboot/logoff, enforced security policy and critical battery are outside this process's guarantee.
+- Verification: process remains alive in interactive session 1 across separate shell invocations and over one minute; heartbeat advanced to four pulses, with native power request accepted and input insertion successful; measured idle was 15 ms after the first pulse and 109 ms after the fourth. Initial stderr was empty. `git diff --check` passed (existing LF/CRLF conversion warnings only); scoped high-confidence secret scan of added handoff lines and helper source found zero matches. This was not a full repository security audit.
+- Manual QA: no deliberate lock/sleep or prolonged unattended acceptance test; no product tests/builds are relevant to this local operational request.
+- Recommendation: startup and observed persistence PASS; leave the helper running until the user requests shutdown. Next project round can proceed, while accounting for modified local idle measurements. Long-term unattended behavior is not yet manually accepted.
+
+## 2026-09-10 Render Server Correlation QA
+
+- Reviewed: authenticated Render application logs, live deployment commit, service region and 12-hour resource graphs, compared with the local Desktop request IDs and deployed snapshot-write source.
+- High-priority confirmed finding: all 10 local failed requests correlate to `P2028 / DATABASE_TRANSACTION_TIMEOUT`. Their snapshot step consumes 9.995-19.845 seconds under the 15-second interactive-transaction limit. Failure may surface in that step or the next health write. Server logs support the previous transaction-timeout hypothesis, not an attribution to user exit or a frontend-only issue.
+- Remaining diagnostic gap: snapshot traces cover multiple queries/writes. No exact SQL plan, blocked-row owner, database resource metric or database region was obtained. Shared ActivitySubject upserts and provisional-boundary lookups require focused review; do not label either as conclusively responsible yet.
+- Deployment/resources: live API commit matches local HEAD and relevant source. Render region is Virginia (US East). Sampled CPU and memory curves do not indicate service resource saturation, but do not establish database health or rule out brief spikes.
+- Diff review: documentation-only additions; no API, Desktop, Browser, database, auth, tenant, timing, retry, installed artifact or deployment mutation. Existing changes preserved.
+- Verification: UI log/request correlation and visual inspection of metrics passed; `git diff --check` passed and the added-handoff-line secret scan found zero high-confidence matches. Functional/visual product acceptance, automated tests, production fault injection and database-level diagnostics were not run.
+- Recommendation: PASS for confirmed failure category and narrowed bottleneck. NOT a completed repair or proof of the exact slow SQL cause. Proceed to focused backend/database diagnosis and then a separately scoped fix.
+
+## 2026-09-10 Local Desktop HTTP 500 Diagnostic QA
+
+- Reviewed: supplied local Desktop failure screenshot, local daily NDJSON and status, v2 transport/capture/retry paths, API transaction limits and error classification. No product implementation changed.
+- Main finding: intermittent server HTTP 500 errors are real and warrant investigation. Frozen local sample through 16:36:19 Adelaide: 3,477 confirmations, 10 failures; failures take 16.35-22.16 seconds. Backend source has a 15-second transaction timeout, but generic client errors alone cannot distinguish transaction timeout, acquisition/lock wait, connection failure or post-transaction failure.
+- Recovery finding: all 10 failures are followed by confirmations within 11.4-19.4 seconds and pending=0 within 17.1-31.1 seconds. No new interval rejection appears; dead-letter count stays at 61. This supports successful automatic recovery of the observed backlog, not an unconditional guarantee of complete daily duration or other-device health.
+- Presentation finding: the Desktop retains only the latest 10 sync diagnostics; this historical error-only list must not be interpreted as the overall request success rate or current disconnection.
+- Verification: read-only PowerShell JSON aggregation and source review completed. Render browser inspection reached login only. No authenticated server log access, deployment verification, executable test run, fault injection, lock/sleep test or visual acceptance was performed. No credentials, queue contents, pairing or installed binaries were changed.
+- Diff review: documentation-only findings prepended; pre-existing Browser patch and historical handoffs preserved. No names, credentials or raw device identifiers added.
+- Checks: `git diff --check` passed; high-confidence secret scan of added handoff lines found zero matches. This was a scoped diff scan, not a full repository audit.
+- Recommendation: PASS for bounded local diagnostic evidence; NOT a root-cause confirmation or repair acceptance. Next round can correlate Render request logs and database timing before changing code.
+
+## 2026-09-10 Desktop Audit Interpretation QA
+
+- Reviewed the supplied 9 September audit, Electron Quit handler, v2 shutdown mapping/finalization, status upload failures and Desktop audit rendering.
+- Finding: there is no displayed `STOPPED_BY_USER` event at the last-heartbeat boundary. This is insufficient to attribute user action or a bug: the event may never have been generated or may not have reached the server.
+- Corrected earlier overstatement: server heartbeat absence proves missing recent server confirmation, not that the Desktop process has exited. The confirmed midday resume/unlock also means the screenshot does not support attributing the later interruption to an uninterrupted midday sleep.
+- Diff review: documentation-only additions; retained existing Browser patch and all other user changes. No product changes or new tests. Manual remote-device QA and live-server verification were not run.
+- Risk/recommendation: PASS for this bounded interpretation; incident root cause remains unconfirmed. Next round should collect affected-device redacted diagnostics before code changes or re-pairing. Pending counts shown in Live are last-reported values and do not establish the current local backlog or lost duration.
+
+## 2026-09-02 Browser Pairing-Vault Recovery QA
+
+### Reviewed Implementation
+
+- Reviewed the installed Edge extension identity, retained `chrome.storage.local` config, recreated extension-origin IndexedDB timestamps, credential-vault split storage, Tracking v2 initialization and the 30-second durable-pairing recovery path.
+- Reviewed only the Browser Extension `0.5.19` diff plus generated manifest/artifact. No Desktop Agent, Web or API implementation was changed.
+
+### Findings And Diff Review
+
+- Critical, fixed: decrypt previously called the key create-or-read function. When the original IndexedDB key was missing, a newly generated key guaranteed decrypt failure and overwrote the original key slot.
+- Critical, fixed: startup correctly wrote `auth_required` and immediately replaced it with `unpaired`, creating the contradictory `Paired | Not paired` UI and hiding the actual repair requirement.
+- Critical, fixed: each subsequent event/alarm saw durable pairing metadata plus an empty runtime config and called `resetAfterPairing()`, repeatedly clearing Tracking v2 stores. Credential recovery is now a separate non-destructive restart path.
+- Pass, intended pairing boundary: explicit new pairing still resets stores so rows from an old device credential cannot be uploaded under a new device identity.
+- Pass, scope isolation: no Focus, idle, open/runtime, interval timing, queue readiness, sync/backoff, API, Reports or Desktop behavior changed.
+
+### Test And Verification Status
+
+- `pnpm --filter @workmap/browser-extension test`: pass, 86/86.
+- `pnpm --filter @workmap/browser-extension typecheck`: pass.
+- `pnpm --filter @workmap/browser-extension lint`: pass.
+- `pnpm --filter @workmap/browser-extension release:zip`: pass, including build.
+- Artifact inspection: pass, 26 entries, manifest `0.5.19`, 72,867 bytes, SHA-256 `1C051528CCBD75101353124E47BC7074DE7AFFAFB0202D1CBDE7EE5230447F85`.
+- `git diff --check` and changed-file secret scan are recorded after the final documentation diff.
+
+### Manual QA, Risk And Recommendation
+
+- Live installation, pairing and browser visual QA: not run; doing so would alter the user's active Edge extension state. No deployment was performed.
+- The patch prevents the application from compounding a credential-vault incident and permits automatic recovery from a temporary vault-access error. It cannot recreate a permanently lost AES key or backfill time that was never observed/was already erased.
+- The affected profile must be updated to `0.5.19` and repaired once with a fresh short-lived pairing code if `Auth required` persists. Acceptance requires a fresh heartbeat, Policy v3, Collector Healthy, queue movement and confirmed-through advancement.
+- Recommendation: PASS for a controlled Browser Extension-only update and re-pair acceptance. The next round may proceed; do not claim the missing 2 September history was recovered.
+
 ## 2026-08-26 Reports Silent Live Refresh Preservation QA
 
 ### Reviewed Implementation

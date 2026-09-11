@@ -1,5 +1,132 @@
 # Latest Implementation Handoff
 
+## 2026-09-10 Snapshot Sync Timeout Optimization (Not Yet Deployed)
+
+### Brief And Scope
+
+- User authorized a narrow API repair for the correlated Desktop/Browser sync 500s, preserving the existing uncommitted Browser patch. User will push main. No commit, push, deployment, cloud-region or paid-plan change was performed.
+- New changes: `workmap/apps/api/src/modules/devices/tracking-v2-sync.service.ts`, `workmap/apps/api/test/tracking-v2-live-semantics.test.ts`, this handoff and `docs/ai-handoff/latest-qa.md`.
+- Preserved the pre-existing Browser Extension 0.5.19 credential-vault recovery patch, version/manifests/tests and ZIP. Also preserved the concurrent local keep-awake handoff additions below; that helper was not operated or used as a human-activity QA baseline by this repair.
+
+### Evidence
+
+- Earlier request-ID correlation confirmed all 10 sampled local failures as Prisma `P2028 / DATABASE_TRANSACTION_TIMEOUT`, dominated by `write_snapshot` under the unchanged 15-second transaction limit.
+- Supabase confirms Tokyo/micro database compute; Render had confirmed Virginia. Cross-region round trips remain a latency contributor, not a proven cause of every failure. No database URL, credential or private activity payload was exported.
+- Read-only cumulative `pg_stat_statements` identified the exact bootstrap overlap SQL: 27,757 calls, mean 561.10 ms, max 29,673.14 ms, zero returned rows in that frozen sample. These are lifetime/cumulative statistics, not a September-10-only error rate or an attribution of every request to one SQL.
+- `resolveProvisionalFromAt` omitted `companyId`, the leading column of the already-deployed `ActivityInterval_companyId_deviceId_source_stream_endedAt_idx`. Its old plan scanned `ActivityInterval_focus_no_overlap` by device/source and filtered timestamps afterward. For one sampled window, Limit plan cost was 8,919.36; adding the credential-bound company condition selected the existing endedAt index at cost 1.80. Planner costs are not milliseconds.
+- After user re-login, bounded `BEGIN READ ONLY; SET LOCAL statement_timeout='3s'; EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, FORMAT JSON) ...; ROLLBACK;` checks returned new SQL execution times of 0.124 ms and 0.762 ms, four shared-hit blocks and zero execution read blocks. The original same-parameter query returned Supabase's generic upstream-timeout error; no exact duration was obtained for that attempt.
+- The later replay window contained one matching interval. This is a query-level warm-cache check, not a complete upload benchmark, sustained load test, all-device proof or deployment acceptance. Shared subject upserts also showed high cumulative tail latency (max approximately 9.46 seconds), but no lock holder was captured.
+
+### Implementation And Boundaries
+
+- Include credential-bound `companyId` in snapshot bootstrap history queries to use the existing tenant/device/time index; preserve strict `startedAt < lastObservedAt` and `endedAt > stateStartedAt` overlap endpoints.
+- Replace full accepted/tombstone counts with existence reads, because the existing guard only needs a boolean. Apply the same shared eligibility guard before history reads to avoid scans for states already unable to bootstrap; the final guard still checks dispositions and overlaps.
+- Read the tenant/source/key subject before upserting: unchanged names reuse its ID without a redundant shared-row UPDATE. New subjects and actual name changes retain the existing atomic upsert behavior. No cross-request cache was introduced.
+- Add server-only `snapshot_lookup`, `snapshot_subject`, `snapshot_provisional` and `snapshot_persist` timings. Parent `write_snapshot` uses a local start time so nested timings cannot undercount it. Client error/response contracts and privacy-safe logging are unchanged.
+- No schema/index/data changes, timeout increase, auth/RBAC changes, tenant-boundary relaxation, policy changes, Desktop/Browser capture-clock changes, interval acceptance/retry changes, reconciliation changes or Reports calculation changes.
+
+### Verification
+
+- API pre-edit baseline: 68/69 pass; existing fixed-July-date legacy report test fails with `Activity event is too old` on September 10.
+- Final API suite: 81/82 pass; same baseline failure only. All 13 new tests pass, covering App/Domain bootstrap protections, scoped/indexed existence reads, name create/reuse/rename, mixed interval/snapshot retry idempotency, 40 concurrent mocked syncs without subject UPDATEs, and nested timing/privacy diagnostics. Mocks are not a database stress benchmark.
+- The unchanged legacy report test passes with a process-local Node MockTimers Date fixed to `2026-07-29T23:00:00Z`. Neither the computer clock nor the business age limit changed. The normal current-date suite is still recorded as one failure.
+- API typecheck, lint and production build: pass. New-test unused-argument lint findings were fixed and rechecked.
+- Browser Extension tests 86/86, typecheck, lint and build: pass. Existing ZIP has 26 entries, version 0.5.19, 72,867 bytes; all entry contents match the rebuilt unpacked directory. SHA-256 remains `1C051528CCBD75101353124E47BC7074DE7AFFAFB0202D1CBDE7EE5230447F85` at `workmap/artifacts/browser-extension/CandidGrid-Browser-Extension-0.5.19.zip`.
+- Manual QA: authenticated database statistics, indexes, plans and bounded SELECT execution completed. No client UI acceptance, lock/sleep experiment, production fault injection or deployment soak. SQL was not explicitly saved as a snippet; no production records/configuration were modified.
+- Diff/secret checks are recorded in the companion QA entry. All earlier handoff sections and unrelated edits remain intact.
+
+### Next Steps And Risks
+
+1. User reviews/pushes the combined changes, then verifies the actual Render API deployment commit. No new Desktop installer or database migration is required for this API repair on the verified production schema.
+2. Install the preserved Browser 0.5.19 patch separately on affected browsers. A git push does not update installed extensions. Preserve the existing extension entry/pairing/storage; a permanently missing vault key still requires the explicit repair described in the September-2 handoff.
+3. After deployment, compare snapshot substep latency, P2028 frequency, queue drain and unchanged accepted/duplicate/rejected outcomes. Other SQL paths, true name-change contention and cross-region/network tails can remain. Do not claim all production 500s are gone before observation.
+4. Handle the unrelated legacy test's fixed clock in a separately scoped test-maintenance change; never relax event-age validation for it.
+
+- Recommendation: ready for user review and controlled deployment verification, with the pre-existing test caveat. No claim of already-deployed recovery or reconstructed unobserved time.
+
+## 2026-09-10 User-Requested Local Keep-Awake Process
+
+- Original task: start a process to prevent this computer from sleeping or locking, and do not stop it unless the user requests it.
+- Changed files: local ignored `.codex_previews/keep-awake/keep-awake.ps1`, runtime status/log/PID files, and these two handoff documents. Existing uncommitted product changes were preserved.
+- Implementation: launched hidden Windows PowerShell process 31172 in interactive session 1. A continuous native-thread system/display power request prevents idle sleep/display timeout; a zero-distance mouse input every 20 seconds refreshes input activity without clicking, typing or displacing the pointer. There is no scheduled stop. A named mutex prevents duplicate copies of this helper.
+- Verification: process exists after launch; initial status reports `powerRequestAccepted=true`, one accepted input pulse and 15 ms idle time after the pulse; stderr is empty. Subsequent persistence/diff checks are recorded in QA. No frontend/backend build is applicable.
+- Manual QA: no intentional lock, sleep, lid-close or extended unattended test was run, because the user asked to keep the computer awake.
+- Boundaries: no product source, permissions, auth, schema, deployment, Windows power-plan settings or managed security policies changed. This helper is local operational state, not a shipped WorkMap feature.
+- Risks: synthetic input changes this computer's idle measurements, so it must not be used as evidence of human activity or as an idle-tracking QA baseline. This helper cannot guarantee survival across reboot/logoff or prevent explicit locking/sleep, policy-enforced locking or critical-battery actions.
+- Next steps: leave process running until the user explicitly asks to stop it. The next project round may proceed, with this local idle-measurement caveat. Do not stop it as routine task cleanup.
+
+## 2026-09-10 Authenticated Render Correlation Of Desktop HTTP 500s
+
+- Task: after the user signed in to Render, inspect the server evidence corresponding to the local Desktop errors. Read-only investigation; no repair, deployment or configuration changes authorized in this round.
+- Changed files: this handoff and `docs/ai-handoff/latest-qa.md` only. Existing uncommitted Browser patch changes were preserved.
+- Confirmed deployment: Render identifies the live API commit as `b32cd5cbf37fe6cf48b335af46b2ed637ef49fc9`, deployed on 26 August. Local HEAD matches; the sync service and Prisma service have no diff against that commit. The earlier timeout/trace source review therefore matches the deployed commit.
+- Confirmed failure category: matched all 10 request IDs from the frozen local 10 September sample to Render application logs. Every matched server failure is `P2028 / DATABASE_TRANSACTION_TIMEOUT`; none of those 10 is classified as pool-acquisition timeout. The measured `write_snapshot` step takes 9,995-19,845 ms. Six failures surface within `write_snapshot` and four in the following `write_health` step after the snapshot step consumes most of the transaction budget.
+- Example correlation: the local screenshot's approximately 16:27 request has server duration 15,580 ms and transaction duration 15,105 ms. Its step timings are lane locking 475 ms, identities/overlaps 643 ms, intervals/summaries 1,630 ms, cursors 1,269 ms, snapshot 10,613 ms, health 159 ms. Correlation uses request ID, not exact UI timestamps, because the local/server clocks differ by seconds.
+- Source boundary: `write_snapshot` calls `storeFocusSnapshot`, which includes existing-snapshot lookup, a company/source/subject-key shared ActivitySubject upsert, provisional-boundary reads and the live snapshot upsert. Current production traces do not split those sub-operations. The failing class and expensive component are confirmed; the exact query, lock holder, query plan or I/O/network cause is NOT yet proven. Unconditional subject updates are a candidate for targeted review, not a verified root cause by themselves.
+- Infrastructure observations: service settings explicitly show Virginia (US East), not Australia, with Standard compute. Twelve-hour metrics visually show memory roughly 20-25%, CPU well below its limit and one instance; there is no visible saturation in those sampled curves. This does not rule out database saturation or short spikes. The database region and database-side wait/plan evidence were not accessed or verified. Do not recommend a region migration or larger plan solely from this evidence.
+- Recovery remains as established by the local log review: all 10 observed failures later recovered and local pending reached zero without new terminal rejections. No claim of full daily-duration reconciliation or other-device recovery is made.
+- Verification: authenticated Render UI inspection of application logs, live commit, settings and resource curves; local read-only `git show`/`git diff` and snapshot write-path review. No executable tests, production load test, lock/sleep experiment or software visual acceptance. No secrets, environment values, employee activity payloads or private identities were copied into this handoff.
+- Next step: investigate individual snapshot sub-operations and database wait/query evidence, then propose a narrowly scoped API optimization with concurrent-load and retry/idempotency regression coverage. Do not change Desktop/Browser collection clocks, report time semantics or merely raise the timeout as an asserted root fix.
+
+## 2026-09-10 Local Desktop HTTP 500 Investigation
+
+- Task: diagnose the local Desktop Agent's repeated `HTTP 500 / TRACKING_SYNC_INTERNAL / transaction` entries; the other affected computer remains unavailable. Diagnosis only, not an authorized fix or deployment.
+- Changed files this round: this handoff and `docs/ai-handoff/latest-qa.md`. All pre-existing Browser Extension patch changes were preserved. No collection, timing, queue, retry, API, database, auth, RBAC, packaging or deployment behavior changed.
+- Evidence: parsed the local 10 September NDJSON log read-only. Frozen sample through 16:36:19 Australia/Adelaide contains 3,477 confirmed and 10 failed v2 sync requests (about 0.29% failures). All 10 failures are HTTP 500 with the same generic code; failure duration is 16,354-22,164 ms and batches contain 0-14 intervals. This is intermittent server failure, not evidence of Desktop process termination.
+- Recovery: after every failed request, a later confirmation occurs in 11.4-19.4 seconds and the pending queue reaches zero in 17.1-31.1 seconds. All confirmed records in this sample have zero interval rejections; dead-letter count remains 61 throughout, with no increase. A zero-interval failed request accumulated 11 pending intervals while in flight, supporting continued collection. These aggregate observations do not prove that every possible activity millisecond was captured or independently reconcile the server ledger.
+- Source review: Desktop performs network sync outside the serialized runtime mutation lane, retries 500 responses without terminally rejecting the batch, and retains only the latest 10 sync diagnostics. Capture gates depend on collector/policy state, not merely the transport OFFLINE label. The API interactive transaction uses 5-second acquisition wait and 15-second timeout; the Desktop request envelope is 60 seconds. The observed latency is consistent with transaction/acquisition latency, but is not conclusive evidence of one particular Prisma error.
+- Server diagnostic limitation: `stage=transaction` also covers post-transaction work until the response stage; it does not prove rollback or identify a particular failing query. Current source logs `databaseFailure` and `transaction.currentStep/timingsMs` server-side. Render is at its sign-in page, so deployed version, database category, contention and server timing have not been verified. No credentials or database URLs were read.
+- Historical comparison: retained local logs also contain 9 `TRACKING_SYNC_INTERNAL` failures on 7 September and 9 on 9 September; this pattern is not unique to today. This does not establish the cause of the other computer's missing heartbeat.
+- Verification: local log aggregation, per-failure recovery correlation, status/code inspection; no executable test suite or lock/sleep/visual acceptance test was run. Documentation diff/secret checks are recorded in QA.
+- Next step: sign in to Render and correlate a supplied screenshot request ID with the full `tracking_v2_sync` failure entry, its database category and transaction step; confirm deployment and database metrics before designing any scoped repair. Proceed with diagnosis, not a claimed completed fix.
+
+## 2026-09-10 Desktop Missing Heartbeat: Historical Audit Review
+
+- Task: interpret the supplied previous-day audit to distinguish manual Desktop Agent exit from a client defect. Diagnosis only.
+- Changed files this round: this handoff and `docs/ai-handoff/latest-qa.md`. Existing Browser Extension patch changes were preserved.
+- Screenshot evidence: on 9 September the Desktop started at 09:07, reported lock/suspend at 13:18, resume at 14:05 and unlock at 14:06. Its last confirmed heartbeat was 17:23; the displayed audit contains no stop event at that boundary. Historical App totals exist for 9 September. The Live section still represents current device health even when the report date selects the previous day.
+- Source review: Electron Quit calls `shutdown("USER_STOP")`; v2 finalization maps this to `STOPPED_BY_USER`, queues it and attempts upload. The Desktop audit renders this status. A failed transmission can leave the event locally pending (and non-retryable 4xx can discard it), so absence in the server audit does not establish either manual exit or a crash. Missing heartbeat alone also does not establish process termination.
+- Verification: read-only source inspection of Electron quit, v2 finalization/status queue and Reports audit mapping. No executable tests or live employee-computer QA were run. No product behavior, permissions, collection, timing, queue, build or deployment changes.
+- Remaining uncertainty/next step: obtain the affected computer's redacted Desktop diagnostics and, if necessary, process/startup and Windows event evidence before classifying the incident or implementing a fix. Preserve local queues and pairing. Proceed with evidence collection; root cause is not yet confirmed.
+
+## 2026-09-02 Browser Pairing-Vault Recovery Without Tracking Reset
+
+### Original Task Brief
+
+- Diagnose and fix only the Browser Extension defect shown on 2 September: the Options page retained pairing metadata but reported `Not paired`, all policy/heartbeat/sync fields were pending, Tracking v2 was disabled, and the day's Domain metrics did not arrive.
+- Do not change Desktop Agent, Web, API, policy, Focus/idle/open-runtime calculations, interval generation, queues, upload semantics or any unrelated product logic.
+
+### Changed Files And Implementation
+
+- `workmap/apps/browser-extension/src/credentialVault.ts`
+- `workmap/apps/browser-extension/src/backgroundV2.ts`
+- `workmap/apps/browser-extension/src/options.ts`
+- `workmap/apps/browser-extension/src/trackingV2Types.ts`
+- `workmap/apps/browser-extension/test/credential-vault.test.ts`
+- `workmap/apps/browser-extension/test/service-worker.test.ts`
+- `workmap/apps/browser-extension/manifest.json`
+- `workmap/apps/browser-extension/package.json`
+- `workmap/apps/browser-extension/alpha-unpacked/manifest.json`
+- `workmap/artifacts/browser-extension/CandidGrid-Browser-Extension-0.5.19.zip`
+- `docs/ai-handoff/latest-implementation.md`
+- `docs/ai-handoff/latest-qa.md`
+
+- Root cause was confirmed from the installed Edge profile and source: `chrome.storage.local` still contained the paired device metadata and encrypted credential envelope, but the extension-origin IndexedDB had been recreated after non-clean Edge sessions. The AES-GCM key and Tracking v2 stores live in IndexedDB. The old decrypt path generated a replacement key when the original key was missing, which could never decrypt the retained ciphertext. Runtime startup then overwrote `auth_required` with `unpaired`; every later event/alarm treated the durable config as a new pairing and called the destructive pairing reset.
+- Credential decryption now requires the existing vault key and raises an explicit missing-key error. It never generates a replacement key during decrypt. Key creation remains limited to an intentional pair/repair operation.
+- Existing pairing metadata with `auth_required` (and the legacy contradictory `unpaired` state) now enters a non-destructive credential retry path. Temporary vault-access failures can recover and reinitialize from the existing Tracking v2 stores. This path does not call `BrowserTrackingV2Store.reset()` or clear the status queue.
+- A real new pairing still uses the existing reset/initialization behavior. Options now preserves the accurate `Auth required` state and explains that collection is paused, local data is retained, and a fresh pairing code is required only if the warning persists.
+- Browser Extension release version advanced only from `0.5.18` to `0.5.19` for this patch.
+
+### Verification And Boundaries
+
+- Full Browser Extension tests: pass, 86/86. New regressions prove decrypt cannot synthesize a replacement key and credential recovery cannot call the Tracking v2 reset path.
+- Browser Extension typecheck: pass. Lint: pass. Production build: pass. Release ZIP: pass.
+- Artifact: `workmap/artifacts/browser-extension/CandidGrid-Browser-Extension-0.5.19.zip`; 72,867 bytes; SHA-256 `1C051528CCBD75101353124E47BC7074DE7AFFAFB0202D1CBDE7EE5230447F85`; 26 entries; manifest version `0.5.19`.
+- Live Edge installation/re-pair QA was intentionally not run because it would mutate the user's current extension profile and pairing. No deployment or backend change was performed.
+- Desktop Agent, Web, API, database, Reports, RBAC, tenant boundaries, tracking policy, Focus/idle/open-runtime clocks, interval ledger, retry/backoff, upload batches and accepted/duplicate/rejected semantics were intentionally unchanged.
+- Already unobserved time cannot be reconstructed. If the AES key is already permanently missing on the affected profile, `0.5.19` will present an honest repair state but the user must pair once with a fresh short-lived code before collection resumes. Any local queue already erased by `0.5.18` or by browser storage loss is unrecoverable.
+- Suggested next step: install `0.5.19` as the controlled Extension update, create a fresh pairing code for this affected Edge profile, re-pair once, then verify Online/Policy v3/Collector Healthy and a growing confirmed-through timestamp. Run an Edge restart/crash-recovery soak and confirm any temporary vault failure remains `Auth required` without queue/dead-letter loss.
+
 ## 2026-08-26 Reports Silent Live Refresh Preservation
 
 ### Original Task Brief

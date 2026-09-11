@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { persistedPairingNeedsCredentialRetry } from "../src/backgroundV2.js";
 
 test("MV3 runtime listens to page activity and complete tab/window lifecycle", async () => {
   const source = await readFile(new URL("../src/backgroundV2.ts", import.meta.url), "utf8");
@@ -38,11 +39,11 @@ test("local extension status does not preserve stale connected state", async () 
   const api = await readFile(new URL("../src/extensionApi.ts", import.meta.url), "utf8");
   const types = await readFile(new URL("../src/trackingV2Types.ts", import.meta.url), "utf8");
 
-  assert.equal(manifest.version, "0.5.18");
-  assert.equal(packageJson.version, "0.5.18");
+  assert.equal(manifest.version, "0.5.19");
+  assert.equal(packageJson.version, "0.5.19");
   assert.equal(manifest.incognito, "not_allowed");
   assert.equal(manifest.background.service_worker, "dist/backgroundV2.js");
-  assert.match(types, /browser-extension-mv3\/0\.5\.18/);
+  assert.match(types, /browser-extension-mv3\/0\.5\.19/);
   assert.match(api, /BROWSER_EXTENSION_VERSION/);
   assert.match(background, /connectionState === "ONLINE"/);
   assert.match(background, /connectionState === "AUTH_REQUIRED"/);
@@ -65,6 +66,21 @@ test("local extension status does not preserve stale connected state", async () 
   assert.match(options, /Pairing v2 initialization is still pending|Tracking v2 initialization is still pending/);
   assert.match(options, /deriveStatusHealth/);
   assert.doesNotMatch(options, /current\?\.state \?\? "connected"/);
+});
+
+test("persisted pairing credential failures recover without resetting tracking storage", async () => {
+  const background = await readFile(new URL("../src/backgroundV2.ts", import.meta.url), "utf8");
+
+  assert.equal(persistedPairingNeedsCredentialRetry("auth_required"), true);
+  assert.equal(persistedPairingNeedsCredentialRetry("unpaired"), true);
+  assert.equal(persistedPairingNeedsCredentialRetry("offline"), false);
+  assert.equal(persistedPairingNeedsCredentialRetry(undefined), false);
+  assert.match(background, /restartAfterCredentialRecovery/);
+  const recovery = background.slice(
+    background.indexOf("private async restartAfterCredentialRecovery"),
+    background.indexOf("async handleRuntimeStarted"),
+  );
+  assert.doesNotMatch(recovery, /store\.reset/);
 });
 
 test("v2 state and intervals are persisted before sync is scheduled", async () => {

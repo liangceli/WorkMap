@@ -340,27 +340,8 @@ export class BrowserExtensionRuntimeV2 {
   }
 
   async resetAfterPairing() {
-    this.runtimeGeneration += 1;
-    this.stopCollectorKeepAlive();
-    this.syncRequested = false;
-    this.syncImmediate = false;
-    if (this.syncTimer !== null) {
-      clearTimeout(this.syncTimer);
-      this.syncTimer = null;
-    }
+    this.prepareForReinitialization();
     await this.store.reset();
-    this.config = null;
-    this.browserName = null;
-    this.state = null;
-    this.engine = null;
-    this.openRuntimeEngine = null;
-    this.connectionState = "OFFLINE";
-    this.collectorState = "PAUSED";
-    this.errorCode = "NONE";
-    this.policySetupMessage = null;
-    this.lastPolicyRefreshAtMs = 0;
-    this.lastSyncAttemptAtMs = 0;
-    this.initialized = false;
     await writeStoredState({ workmapStatusQueue: [] });
     await this.initialize();
     const initializedState =
@@ -375,6 +356,34 @@ export class BrowserExtensionRuntimeV2 {
       );
       await this.flushStatusQueue();
     }
+  }
+
+  private prepareForReinitialization() {
+    this.runtimeGeneration += 1;
+    this.stopCollectorKeepAlive();
+    this.syncRequested = false;
+    this.syncImmediate = false;
+    if (this.syncTimer !== null) {
+      clearTimeout(this.syncTimer);
+      this.syncTimer = null;
+    }
+    this.config = null;
+    this.browserName = null;
+    this.state = null;
+    this.engine = null;
+    this.openRuntimeEngine = null;
+    this.connectionState = "OFFLINE";
+    this.collectorState = "PAUSED";
+    this.errorCode = "NONE";
+    this.policySetupMessage = null;
+    this.lastPolicyRefreshAtMs = 0;
+    this.lastSyncAttemptAtMs = 0;
+    this.initialized = false;
+  }
+
+  private async restartAfterCredentialRecovery() {
+    this.prepareForReinitialization();
+    await this.initialize();
   }
 
   async handleRuntimeStarted(operation: "profile-start" | "extension-update") {
@@ -802,13 +811,15 @@ export class BrowserExtensionRuntimeV2 {
     ]);
     this.config = await resolveRuntimeConfig(stored.workmapConfig);
     if (!this.config) {
-      await writeStoredState({
-        workmapStatus: {
-          state: "unpaired",
-          queuedEvents: stored.workmapQueue?.length ?? 0,
-          queuedStatusEvents: 0,
-        },
-      });
+      if (!stored.workmapConfig) {
+        await writeStoredState({
+          workmapStatus: {
+            state: "unpaired",
+            queuedEvents: stored.workmapQueue?.length ?? 0,
+            queuedStatusEvents: 0,
+          },
+        });
+      }
       this.initialized = true;
       return;
     }
@@ -2635,8 +2646,19 @@ export class BrowserExtensionRuntimeV2 {
     // new config, or the one-shot pairing message can be interrupted. Events
     // and the 30-second alarm must recover that durable pairing instead of
     // returning forever with an empty runtime state.
-    const stored = await readStoredState(["workmapConfig"]);
+    const stored = await readStoredState([
+      "workmapConfig",
+      "workmapStatus",
+    ]);
     if (!stored.workmapConfig) return;
+    if (
+      persistedPairingNeedsCredentialRetry(stored.workmapStatus?.state)
+    ) {
+      const recoveredConfig = await resolveRuntimeConfig(stored.workmapConfig);
+      if (!recoveredConfig) return;
+      await this.restartAfterCredentialRecovery();
+      return;
+    }
     const pairingChanged =
       !this.config ||
       this.config.deviceId !== stored.workmapConfig.deviceId ||
@@ -2645,6 +2667,12 @@ export class BrowserExtensionRuntimeV2 {
     if (!pairingChanged && this.state) return;
     await this.resetAfterPairing();
   }
+}
+
+export function persistedPairingNeedsCredentialRetry(
+  status: ExtensionStatus["state"] | undefined,
+) {
+  return status === "auth_required" || status === "unpaired";
 }
 
 type DiagnosticInput = Omit<
@@ -3073,7 +3101,7 @@ async function resolveRuntimeConfig(
         queuedEvents: 0,
         queuedStatusEvents: 0,
         error:
-          "Device credential vault could not be opened. Pair this extension again.",
+          "The saved pairing credential could not be opened. Tracking is paused and will retry without clearing local data. If this persists, create a new pairing code and repair this extension.",
       },
     });
     return null;

@@ -423,6 +423,7 @@ export class TrackingV2SyncService {
                 () =>
                   storeFocusSnapshot({
                     tx,
+                    trace: transactionTrace!,
                     context,
                     snapshot: acceptedSnapshot,
                     browserName: identity.browserName,
@@ -636,11 +637,13 @@ async function traceTrackingTransactionStep<T>(
   operation: () => Promise<T>,
 ) {
   trace.currentStep = step;
-  trace.currentStepStartedAtMs = Date.now();
+  const stepStartedAtMs = Date.now();
+  trace.currentStepStartedAtMs = stepStartedAtMs;
   try {
     return await operation();
   } finally {
-    const durationMs = Date.now() - trace.currentStepStartedAtMs;
+    // Nested snapshot steps must not replace the parent's start time.
+    const durationMs = Date.now() - stepStartedAtMs;
     trace.timingsMs[step] = (trace.timingsMs[step] ?? 0) + durationMs;
     trace.durationMs = Date.now() - trace.startedAtMs;
   }
@@ -1906,6 +1909,7 @@ function cursorKey(value: {
 
 async function storeFocusSnapshot(input: {
   tx: Prisma.TransactionClient;
+  trace: TrackingTransactionTrace;
   context: DeviceRequestContext;
   snapshot: LiveFocusSnapshotV2;
   browserName: BrowserName | null;
@@ -1914,19 +1918,23 @@ async function storeFocusSnapshot(input: {
   lease: StoredPolicyLease;
   cursors: TrackingSyncCursorV2[];
 }) {
-  const existing = await input.tx.liveFocusSnapshot.findUnique({
-    where: {
-      deviceId_source: {
-        deviceId: input.context.deviceId,
-        source: input.snapshot.source as TrackingActivitySource,
+  const existing = await traceTrackingTransactionStep(
+    input.trace,
+    "snapshot_lookup",
+    () => input.tx.liveFocusSnapshot.findUnique({
+      where: {
+        deviceId_source: {
+          deviceId: input.context.deviceId,
+          source: input.snapshot.source as TrackingActivitySource,
+        },
       },
-    },
-    select: {
-      snapshotSequence: true,
-      clockEpochId: true,
-      lastObservedAt: true,
-    },
-  });
+      select: {
+        snapshotSequence: true,
+        clockEpochId: true,
+        lastObservedAt: true,
+      },
+    }),
+  );
   if (existing) {
     const sameClockEpoch = existing.clockEpochId === input.snapshot.clockEpochId;
     const incomingObservedAt = new Date(input.snapshot.lastObservedAt);
@@ -1944,24 +1952,33 @@ async function storeFocusSnapshot(input: {
   }
   let subjectId: string | null = null;
   if (input.snapshot.subjectKey && input.snapshot.displayName) {
-    const subject = await input.tx.activitySubject.upsert({
-      where: {
-        companyId_source_subjectKey: {
-          companyId: input.context.companyId,
-          source: input.snapshot.source as TrackingActivitySource,
-          subjectKey: input.snapshot.subjectKey,
-        },
+    const subjectKey = {
+      companyId: input.context.companyId,
+      source: input.snapshot.source as TrackingActivitySource,
+      subjectKey: input.snapshot.subjectKey,
+    };
+    const displayName = input.snapshot.displayName;
+    subjectId = await traceTrackingTransactionStep(
+      input.trace,
+      "snapshot_subject",
+      async () => {
+        // Subjects are shared across a company's devices. A heartbeat for an
+        // unchanged name must not take an UPDATE lock on that shared row.
+        const subject = await input.tx.activitySubject.findUnique({
+          where: { companyId_source_subjectKey: subjectKey },
+          select: { id: true, displayName: true },
+        });
+        if (subject?.displayName === displayName) return subject.id;
+        // Keep atomic conflict handling for first sightings and actual renames.
+        const saved = await input.tx.activitySubject.upsert({
+          where: { companyId_source_subjectKey: subjectKey },
+          update: { displayName },
+          create: { ...subjectKey, displayName },
+          select: { id: true },
+        });
+        return saved.id;
       },
-      update: { displayName: input.snapshot.displayName },
-      create: {
-        companyId: input.context.companyId,
-        source: input.snapshot.source as TrackingActivitySource,
-        subjectKey: input.snapshot.subjectKey,
-        displayName: input.snapshot.displayName,
-      },
-      select: { id: true },
-    });
-    subjectId = subject.id;
+    );
   }
   const cursor = input.cursors.find(
     (item) =>
@@ -1977,10 +1994,11 @@ async function storeFocusSnapshot(input: {
     missingRanges: [],
     rejectedRanges: [],
   };
-  const provisionalFromAt = await resolveProvisionalFromAt({
-    ...input,
-    cursor,
-  });
+  const provisionalFromAt = await traceTrackingTransactionStep(
+    input.trace,
+    "snapshot_provisional",
+    () => resolveProvisionalFromAt({ ...input, cursor }),
+  );
   const data = {
     companyId: input.context.companyId,
     userId: input.context.userId,
@@ -2010,20 +2028,24 @@ async function storeFocusSnapshot(input: {
     provisionalFromAt,
     receivedAt: new Date(),
   };
-  await input.tx.liveFocusSnapshot.upsert({
-    where: {
-      deviceId_source: {
+  await traceTrackingTransactionStep(
+    input.trace,
+    "snapshot_persist",
+    () => input.tx.liveFocusSnapshot.upsert({
+      where: {
+        deviceId_source: {
+          deviceId: input.context.deviceId,
+          source: input.snapshot.source as TrackingActivitySource,
+        },
+      },
+      update: data,
+      create: {
+        ...data,
         deviceId: input.context.deviceId,
         source: input.snapshot.source as TrackingActivitySource,
       },
-    },
-    update: data,
-    create: {
-      ...data,
-      deviceId: input.context.deviceId,
-      source: input.snapshot.source as TrackingActivitySource,
-    },
-  });
+    }),
+  );
   return input.snapshot.snapshotSequence;
 }
 
@@ -2081,25 +2103,50 @@ async function resolveProvisionalFromAt(input: {
     return null;
   }
 
-  const [acceptedCount, tombstoneCount, overlap] = await Promise.all([
-    input.tx.activityInterval.count({
+  const bootstrapContext = {
+    snapshot,
+    contiguousThroughSequence: input.cursor.contiguousThroughSequence,
+    hasAnyDisposition: false,
+    hasMissingSequence: input.cursor.missingRanges.length > 0,
+    hasOverlap: false,
+    protocolActivatedAt: input.protocolActivatedAt.toISOString(),
+    clockEpochStartedAt: input.protocolActivatedAt.toISOString(),
+    allowedUtcWindows: readPolicyWindows(input.lease.allowedUtcWindows),
+    ...(input.browserName === BrowserName.CHROME ||
+    input.browserName === BrowserName.EDGE
+      ? { expectedBrowserName: input.browserName }
+      : {}),
+  };
+  // Run the same eligibility guard before consulting the ledger. A state that
+  // already cannot bootstrap needs no history scan; no validation is relaxed.
+  if (!canBootstrapFirstStateProvisionalV2(bootstrapContext)) return null;
+
+  const [accepted, tombstone, overlap] = await Promise.all([
+    input.tx.activityInterval.findFirst({
       where: {
+        companyId: input.context.companyId,
         deviceId: input.context.deviceId,
         source: snapshot.source as TrackingActivitySource,
         stream: TrackingActivityStream.FOCUS,
         clockEpochId: snapshot.clockEpochId,
       },
+      select: { id: true },
     }),
-    input.tx.clientSequenceTombstone.count({
+    input.tx.clientSequenceTombstone.findFirst({
       where: {
+        companyId: input.context.companyId,
         deviceId: input.context.deviceId,
         source: snapshot.source as TrackingActivitySource,
         stream: TrackingActivityStream.FOCUS,
         clockEpochId: snapshot.clockEpochId,
       },
+      select: { id: true },
     }),
     input.tx.activityInterval.findFirst({
       where: {
+        // Match the existing company/device/source/stream/endedAt index.
+        // Without the leading company key this scanned old device history.
+        companyId: input.context.companyId,
         deviceId: input.context.deviceId,
         source: snapshot.source as TrackingActivitySource,
         stream: TrackingActivityStream.FOCUS,
@@ -2110,18 +2157,9 @@ async function resolveProvisionalFromAt(input: {
     }),
   ]);
   const allowed = canBootstrapFirstStateProvisionalV2({
-    snapshot,
-    contiguousThroughSequence: input.cursor.contiguousThroughSequence,
-    hasAnyDisposition: acceptedCount + tombstoneCount > 0,
-    hasMissingSequence: input.cursor.missingRanges.length > 0,
+    ...bootstrapContext,
+    hasAnyDisposition: Boolean(accepted || tombstone),
     hasOverlap: Boolean(overlap),
-    protocolActivatedAt: input.protocolActivatedAt.toISOString(),
-    clockEpochStartedAt: input.protocolActivatedAt.toISOString(),
-    allowedUtcWindows: readPolicyWindows(input.lease.allowedUtcWindows),
-    ...(input.browserName === BrowserName.CHROME ||
-    input.browserName === BrowserName.EDGE
-      ? { expectedBrowserName: input.browserName }
-      : {}),
   });
   return allowed ? new Date(snapshot.stateStartedAt) : null;
 }

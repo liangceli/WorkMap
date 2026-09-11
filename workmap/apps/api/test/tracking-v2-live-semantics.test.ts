@@ -292,6 +292,191 @@ test("a delayed prior clock epoch cannot overwrite a newer observed snapshot", a
   );
 });
 
+for (const source of ["DESKTOP_APP", "BROWSER_DOMAIN"] as const) {
+  for (const disposition of ["none", "accepted", "tombstone", "overlap"] as const) {
+    test(`${source} snapshot bootstrap preserves ${disposition} history guard with indexed existence reads`, async () => {
+      const now = Date.now();
+      const prisma = new SyncPrisma(now);
+      const snapshot = activeSnapshot(now, source);
+      const intervalQueries: any[] = [];
+      const tombstoneQueries: any[] = [];
+      prisma.activityInterval.findFirst = async (input: any) => {
+        intervalQueries.push(input);
+        return (input.where.clockEpochId && disposition === "accepted") ||
+          (input.where.endedAt && disposition === "overlap")
+          ? { id: "existing" }
+          : null;
+      };
+      prisma.clientSequenceTombstone.findFirst = async (input: any) => {
+        tombstoneQueries.push(input);
+        return disposition === "tombstone" ? { id: "rejected" } : null;
+      };
+      prisma.activityInterval.count = async () => assert.fail("must not count history");
+      prisma.clientSequenceTombstone.count = async () => assert.fail("must not count tombstones");
+      const isBrowser = source === "BROWSER_DOMAIN";
+      const service = new TrackingV2SyncService(
+        prisma as any,
+        (isBrowser ? browserPolicyService(now) : policyService(now)) as any,
+      );
+      const response = await service.sync(
+        isBrowser ? browserContext(now) : context(now),
+        (isBrowser ? browserSyncRequest : syncRequest)(now, { focusSnapshot: snapshot }),
+        REQUEST_ID,
+      );
+      assert.equal(response.focusSnapshotResult?.status, "ACCEPTED");
+      assert.equal(prisma.savedSnapshot.provisionalFromAt?.toISOString() ?? null,
+        disposition === "none" ? snapshot.stateStartedAt : null);
+      assert.equal(prisma.savedSnapshot.lastObservedAt.toISOString(), snapshot.lastObservedAt);
+      assert.equal(prisma.savedSnapshot.state, "ACTIVE");
+      assert.equal(prisma.intervals.length, 0, "a live snapshot never adds confirmed time");
+      assert.equal(prisma.deviceHeartbeatWritten, true);
+      assert.equal(intervalQueries.length, 2);
+      assert.equal(tombstoneQueries.length, 1);
+      for (const query of [...intervalQueries, ...tombstoneQueries]) {
+        assert.equal(query.where.companyId, COMPANY_ID);
+        assert.equal(query.where.deviceId, DEVICE_ID);
+        assert.equal(query.where.source, source);
+        assert.equal(query.where.stream, "FOCUS");
+        assert.deepEqual(query.select, { id: true });
+      }
+      assert.deepEqual(intervalQueries.find((query) => query.where.endedAt)?.where, {
+        companyId: COMPANY_ID,
+        deviceId: DEVICE_ID,
+        source,
+        stream: "FOCUS",
+        startedAt: { lt: new Date(snapshot.lastObservedAt) },
+        endedAt: { gt: new Date(snapshot.stateStartedAt) },
+      });
+    });
+  }
+}
+
+test("a non-first state skips bootstrap history reads without claiming provisional time", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  prisma.activityInterval.findFirst = async () => assert.fail("no bootstrap scan expected");
+  prisma.clientSequenceTombstone.findFirst = async () => assert.fail("no bootstrap scan expected");
+  const service = new TrackingV2SyncService(prisma as any, policyService(now) as any);
+  const response = await service.sync(context(now), syncRequest(now, {
+    focusSnapshot: { ...activeSnapshot(now), nextIntervalSequence: 2 },
+  }), REQUEST_ID);
+  assert.equal(response.focusSnapshotResult?.status, "ACCEPTED");
+  assert.equal(prisma.savedSnapshot.provisionalFromAt, null);
+  assert.equal(prisma.deviceHeartbeatWritten, true);
+});
+
+test("snapshot subject lookup avoids shared-row writes for unchanged names but preserves create and rename", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  const snapshot = activeSnapshot(now);
+  const service = new TrackingV2SyncService(prisma as any, policyService(now) as any);
+  for (const [sequence, displayName] of [[1, "Test App"], [2, "Test App"], [3, "Renamed App"]] as const) {
+    const response = await service.sync(context(now), syncRequest(now, {
+      focusSnapshot: { ...snapshot, snapshotSequence: sequence, displayName },
+    }), REQUEST_ID);
+    assert.equal(response.acceptedSnapshotSequence, sequence);
+    assert.equal(prisma.savedSnapshot.displayName, displayName);
+    assert.equal(prisma.savedSnapshot.activitySubjectId, "snapshot-subject");
+  }
+  assert.equal(prisma.subjectUpserts.length, 2, "unchanged heartbeat does not update the subject");
+  assert.equal(prisma.subjects.length, 1);
+  assert.equal(prisma.subjects[0].displayName, "Renamed App");
+  for (const input of prisma.subjectUpserts) {
+    assert.deepEqual(input.where.companyId_source_subjectKey, {
+      companyId: COMPANY_ID, source: "DESKTOP_APP", subjectKey: snapshot.subjectKey,
+    });
+    assert.equal(input.create.companyId, COMPANY_ID);
+  }
+});
+
+test("a mixed interval/snapshot upload reuses the existing subject and stays idempotent on retry", async () => {
+  const now = Date.now();
+  const prisma = new SyncPrisma(now);
+  const service = new TrackingV2SyncService(prisma as any, policyService(now) as any);
+  const request = syncRequest(now, {
+    intervals: [{
+      clientEventId: "77777777-7777-4777-8777-777777777777",
+      activitySessionId: "88888888-8888-4888-8888-888888888888",
+      sequenceNumber: 1,
+      source: "DESKTOP_APP",
+      stream: "FOCUS",
+      metric: "FOCUS_ACTIVE",
+      subjectKey: "app:test",
+      displayName: "Test App",
+      startedAt: new Date(now - 20_000).toISOString(),
+      endedAt: new Date(now - 10_000).toISOString(),
+      clockEpochId: CLOCK_ID,
+      startedMonotonicMs: 1_000,
+      endedMonotonicMs: 11_000,
+      durationMs: 10_000,
+      policyVersion: "v1",
+      policyLeaseId: LEASE_ID,
+    }],
+    focusSnapshot: { ...activeSnapshot(now), nextIntervalSequence: 2 },
+  });
+  const first = await service.sync(context(now), request, REQUEST_ID);
+  const retried = await service.sync(context(now), request, REQUEST_ID);
+  assert.equal(first.results[0]?.status, "ACCEPTED");
+  assert.equal(retried.results[0]?.status, "DUPLICATE");
+  assert.equal(first.acceptedSnapshotSequence, 1);
+  assert.equal(retried.acceptedSnapshotSequence, null);
+  assert.equal(prisma.intervals.length, 1);
+  assert.equal(prisma.intervals[0].durationMs, 10_000n);
+  assert.equal(prisma.fragments.length, 1);
+  assert.equal(prisma.subjectUpserts.length, 0, "interval subject needs no duplicate snapshot write");
+  assert.equal(prisma.savedSnapshot.activitySubjectId, prisma.intervals[0].activitySubjectId);
+});
+
+test("concurrent heartbeat subject reads do not issue shared subject UPDATEs", async () => {
+  const now = Date.now();
+  const snapshot = activeSnapshot(now);
+  const clients = Array.from({ length: 40 }, () => {
+    const prisma = new SyncPrisma(now);
+    prisma.subjects = [{
+      id: "shared-subject", companyId: COMPANY_ID, source: "DESKTOP_APP",
+      subjectKey: snapshot.subjectKey, displayName: snapshot.displayName,
+    }];
+    prisma.activitySubject.upsert = async () => assert.fail("unchanged shared subject must not be written");
+    return prisma;
+  });
+  await Promise.all(clients.map(async (prisma) => {
+    const service = new TrackingV2SyncService(prisma as any, policyService(now) as any);
+    const response = await service.sync(context(now), syncRequest(now, { focusSnapshot: snapshot }), REQUEST_ID);
+    assert.equal(response.acceptedSnapshotSequence, 1);
+    assert.equal(prisma.savedSnapshot.activitySubjectId, "shared-subject");
+    assert.equal(prisma.deviceHeartbeatWritten, true);
+  }));
+});
+
+test("snapshot failure logs retain the failing substep and full parent duration without private payloads", async (t) => {
+  const now = Date.now();
+  t.mock.timers.enable({ apis: ["Date"], now });
+  const prisma = new SyncPrisma(now);
+  prisma.liveFocusSnapshot.findUnique = async () => {
+    t.mock.timers.tick(20);
+    return null;
+  };
+  prisma.activitySubject.findUnique = async () => {
+    t.mock.timers.tick(30);
+    throw Object.assign(new Error("private database payload"), { code: "P2028" });
+  };
+  const warnings: string[] = [];
+  const service = new TrackingV2SyncService(prisma as any, policyService(now) as any);
+  (service as any).logger = { warn: (value: string) => warnings.push(value) };
+  await assert.rejects(service.sync(context(now), syncRequest(now, {
+    focusSnapshot: activeSnapshot(now),
+  }), REQUEST_ID));
+  const log = JSON.parse(warnings[0]!);
+  assert.equal(log.databaseFailure.category, "DATABASE_TRANSACTION_TIMEOUT");
+  assert.equal(log.transaction.currentStep, "snapshot_subject");
+  assert.equal(log.transaction.timingsMs.snapshot_lookup, 20);
+  assert.equal(log.transaction.timingsMs.snapshot_subject, 30);
+  assert.equal(log.transaction.timingsMs.write_snapshot, 50);
+  assert.equal(warnings.join("").includes("private database payload"), false);
+  assert.equal(warnings.join("").includes("Test App"), false);
+  assert.equal(prisma.deviceHeartbeatWritten, false, "an aborted transaction must not be acknowledged");
+});
+
 test("valid Focus active and focused-idle intervals enter the ledger and Reports", async () => {
   const now = Date.now();
   const prisma = new SyncPrisma(now);
@@ -1078,6 +1263,23 @@ function noneSnapshot(
   };
 }
 
+function activeSnapshot(now: number, source: "DESKTOP_APP" | "BROWSER_DOMAIN" = "DESKTOP_APP") {
+  return {
+    ...noneSnapshot(now, 1),
+    source,
+    ...(source === "BROWSER_DOMAIN" ? { browserName: "CHROME" } : {}),
+    activitySessionId: "77777777-7777-4777-8777-777777777777",
+    currentStateId: "88888888-8888-4888-8888-888888888888",
+    subjectKey: source === "BROWSER_DOMAIN" ? "example.test" : "app:test",
+    displayName: source === "BROWSER_DOMAIN" ? "example.test" : "Test App",
+    state: "ACTIVE",
+    sessionStartedAt: new Date(now - 5_000).toISOString(),
+    stateStartedAt: new Date(now - 5_000).toISOString(),
+    lastActivityEvidenceAt: new Date(now - 500).toISOString(),
+    activityEvidenceKind: "FOCUS_ACQUIRED",
+  };
+}
+
 class SyncPrisma {
   readonly now: number;
   readonly lease: any;
@@ -1085,6 +1287,7 @@ class SyncPrisma {
   fragments: any[] = [];
   tombstones: any[] = [];
   subjects: any[] = [];
+  subjectUpserts: any[] = [];
   targets: any[] = [];
   liveSnapshotSequence: number | null = null;
   liveSnapshotClockEpochId = CLOCK_ID;
@@ -1143,7 +1346,10 @@ class SyncPrisma {
       this.activityIntervalFindManyInputs.push(input);
       return this.intervals;
     },
-    findFirst: async () => null,
+    findFirst: async (input?: any): Promise<any> => {
+      void input;
+      return null;
+    },
     count: async () => this.intervals.length,
     createMany: async ({ data }: any) => {
       this.intervals.push(
@@ -1154,6 +1360,10 @@ class SyncPrisma {
   };
   clientSequenceTombstone = {
     findMany: async () => this.tombstones,
+    findFirst: async (input?: any): Promise<any> => {
+      void input;
+      return null;
+    },
     createMany: async ({ data }: any) => {
       this.tombstones.push(...data);
       return { count: data.length };
@@ -1161,6 +1371,20 @@ class SyncPrisma {
     count: async () => this.tombstones.length,
   };
   activitySubject = {
+    findUnique: async ({ where }: any): Promise<any> => this.subjects.find((subject) =>
+      Object.entries(where.companyId_source_subjectKey).every(([key, value]) => subject[key] === value),
+    ) ?? null,
+    upsert: async (input: any): Promise<any> => {
+      this.subjectUpserts.push(input);
+      const existing = await this.activitySubject.findUnique(input);
+      if (existing) {
+        Object.assign(existing, input.update);
+        return existing;
+      }
+      const subject = { id: "snapshot-subject", ...input.create };
+      this.subjects.push(subject);
+      return subject;
+    },
     createMany: async ({ data }: any) => {
       this.subjects.push(...data);
       return { count: data.length };

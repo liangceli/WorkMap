@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { protectCredential, unprotectCredential } from "../src/credentialVault.js";
+import {
+  CredentialVaultKeyMissingError,
+  protectCredential,
+  requireExistingVaultKey,
+  unprotectCredential,
+} from "../src/credentialVault.js";
 import { readFile } from "node:fs/promises";
 
 test("device credential is encrypted with a non-extractable AES-GCM key", async () => {
@@ -12,6 +17,19 @@ test("device credential is encrypted with a non-extractable AES-GCM key", async 
   assert(!JSON.stringify(protectedCredential).includes(credential));
   assert.equal(await unprotectCredential(protectedCredential, key), credential);
   assert.equal(key.extractable, false);
+});
+
+test("decrypt never creates a replacement key when the saved vault key is missing", async () => {
+  assert.throws(
+    () => requireExistingVaultKey(undefined),
+    CredentialVaultKeyMissingError,
+  );
+  const key = await crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+  assert.equal(requireExistingVaultKey(key), key);
 });
 
 test("pairing flow persists the encrypted envelope instead of a plaintext device credential", async () => {

@@ -9,6 +9,13 @@ const STORE_NAME = "keys";
 const KEY_ID = "device-credential-aes-gcm-v1";
 const ADDITIONAL_DATA = new TextEncoder().encode("workmap-device-credential:v1");
 
+export class CredentialVaultKeyMissingError extends Error {
+  constructor() {
+    super("The saved device credential key is missing.");
+    this.name = "CredentialVaultKeyMissingError";
+  }
+}
+
 export async function protectCredential(credential: string, key?: CryptoKey): Promise<ProtectedCredential> {
   const encryptionKey = key ?? await getOrCreateVaultKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -26,13 +33,18 @@ export async function protectCredential(credential: string, key?: CryptoKey): Pr
 }
 
 export async function unprotectCredential(protectedCredential: ProtectedCredential, key?: CryptoKey) {
-  const encryptionKey = key ?? await getOrCreateVaultKey();
+  const encryptionKey = key ?? await getExistingVaultKey();
   const plaintext = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: decodeBytes(protectedCredential.credentialIv), additionalData: ADDITIONAL_DATA },
     encryptionKey,
     decodeBytes(protectedCredential.credentialCiphertext),
   );
   return new TextDecoder().decode(plaintext);
+}
+
+export function requireExistingVaultKey(key: CryptoKey | undefined) {
+  if (!key) throw new CredentialVaultKeyMissingError();
+  return key;
 }
 
 async function getOrCreateVaultKey() {
@@ -44,6 +56,22 @@ async function getOrCreateVaultKey() {
     const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
     await transactionComplete(database, "readwrite", (store) => store.put(key, KEY_ID));
     return key;
+  } finally {
+    database.close();
+  }
+}
+
+async function getExistingVaultKey() {
+  const database = await openVaultDatabase();
+  try {
+    return requireExistingVaultKey(
+      await requestResult<CryptoKey | undefined>(
+        database
+          .transaction(STORE_NAME, "readonly")
+          .objectStore(STORE_NAME)
+          .get(KEY_ID),
+      ),
+    );
   } finally {
     database.close();
   }

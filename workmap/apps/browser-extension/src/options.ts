@@ -193,12 +193,14 @@ function renderDiagnostics(
 ) {
   const title = element("h2", "Tracking diagnostics");
   if (!config || !runtime) {
+    const unavailableMessage =
+      config && current?.state === "auth_required"
+        ? current.error ??
+          "The saved pairing credential is unavailable. Tracking is paused while the extension retries; repair pairing only if the warning persists."
+        : "Pair the extension to view server-confirmed connection, Domain snapshot, interval ledger, queue, policy, and coverage status.";
     diagnostics.replaceChildren(
       title,
-      element(
-        "p",
-        "Pair the extension to view server-confirmed connection, Domain snapshot, interval ledger, queue, policy, and coverage status.",
-      ),
+      element("p", unavailableMessage),
     );
     return;
   }
