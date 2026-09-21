@@ -78,7 +78,9 @@ declare const chrome: {
       sendLatestActivity();
       send({ type: "workmap:domain-blur", observedAt: Date.now() });
     };
-    window.addEventListener("blur", stopPageFocus, true);
+    // Blur does not bubble. Listen only at Window so a control losing focus
+    // inside a still-focused page cannot end the page's collection interval.
+    window.addEventListener("blur", stopPageFocus);
     window.addEventListener("focus", sendPageCheckpoint, true);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") stopPageFocus();
