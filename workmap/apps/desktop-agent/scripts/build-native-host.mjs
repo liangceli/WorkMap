@@ -93,6 +93,7 @@ function smokeTestNativeHost(executablePath) {
     let stderrTail = "";
     let settled = false;
     const observedEventTypes = new Set();
+    let healthReady = false;
     const timeout = setTimeout(() => {
       finish(new Error("Native host did not report healthy during its build smoke test."));
     }, 5_000);
@@ -111,9 +112,11 @@ function smokeTestNativeHost(executablePath) {
             if (typeof event?.eventType === "string") {
               observedEventTypes.add(event.eventType);
             }
+            if (event?.eventType === "health") {
+              healthReady = event.state === "HEALTHY" || event.state === "LIMITED";
+            }
             if (
-              event?.eventType === "health" &&
-              (event.state === "HEALTHY" || event.state === "LIMITED") &&
+              healthReady &&
               observedEventTypes.has("foreground_changed") &&
               observedEventTypes.has("visible_apps_changed")
             ) {

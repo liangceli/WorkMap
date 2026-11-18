@@ -153,7 +153,7 @@ async function getUiState() {
     paired,
     status,
     deviceId: config?.deviceId ?? null,
-    startsWithWindows: app.getLoginItemSettings().openAtLogin,
+    startsWithWindows: app.getLoginItemSettings({ args: ["--background"] }).openAtLogin,
     version: app.getVersion(),
   };
 }

@@ -1,4 +1,5 @@
 import { BrowserFocusEngineV2 } from "./browserFocusEngineV2.js";
+import { browserCallback, BrowserCallbackTimeoutError } from "./browserCallback.js";
 import { BrowserOpenRuntimeEngineV2 } from "./browserOpenRuntimeEngineV2.js";
 import {
   advanceBrowserFocusTimelineThroughAt,
@@ -210,6 +211,7 @@ type CollectorMaintenanceFailurePresentation = {
 const FOCUS_PROOF_RETRY_CODES = new Set([
   "FOCUS_WINDOW_QUERY_RETRY",
   "FOCUS_TAB_QUERY_RETRY",
+  "FOCUS_PAGE_PROBE_RETRY",
 ]);
 
 class BrowserCollectorMaintenanceError extends Error {
@@ -327,6 +329,7 @@ export class BrowserExtensionRuntimeV2 {
   private syncInFlight: Promise<void> | null = null;
   private collectorKeepAliveTimer: number | null = null;
   private runtimeGeneration = 0;
+  private idleStateUnconfirmed = false;
 
   constructor(private readonly chromeApi: ChromeApi) {}
 
@@ -620,6 +623,7 @@ export class BrowserExtensionRuntimeV2 {
     if (!this.state) return;
     await this.guardLifecycleContinuity();
     const previousState = this.state.lastSystemState;
+    this.idleStateUnconfirmed = false;
     const isIdle = state !== "active";
     this.state = {
       ...this.state,
@@ -769,7 +773,9 @@ export class BrowserExtensionRuntimeV2 {
     await runCollectorMaintenanceWithHeartbeat(
       async () => {
         const discontinuity = await this.guardLifecycleContinuity();
+        await this.refreshUnconfirmedIdleState();
         await this.refreshPolicyIfDue();
+        await this.retryFailedContentRegistration();
         await this.restoreCollectorIfAllowed();
         if (!this.captureAllowed()) {
           await this.closeAtPolicyBoundary();
@@ -967,15 +973,9 @@ export class BrowserExtensionRuntimeV2 {
       async () => {
         await this.flushLegacyQueue();
         await this.closeRecoveredV2Tail();
-        const idleState = await queryIdleState(this.chromeApi, 60);
-        if (!this.state) return;
-        this.state = {
-          ...this.state,
-          systemIdle: idleState !== "active",
-          lastSystemState: idleState,
-        };
-        if (this.state.systemIdle) this.collectorState = "PAUSED";
-        await this.store.writeRuntimeState(this.state);
+        this.enforceCollectorReadiness();
+        this.idleStateUnconfirmed = true;
+        await this.refreshUnconfirmedIdleState();
         await this.reconcileOpenRuntime(true);
         await this.reconcileBrowserReality(true);
         await this.flushStatusQueue();
@@ -983,6 +983,19 @@ export class BrowserExtensionRuntimeV2 {
       (error) => this.recordCollectorMaintenanceFailure(error),
       () => this.requestSync(true),
     );
+  }
+
+  private async refreshUnconfirmedIdleState() {
+    if (!this.idleStateUnconfirmed || !this.state) return;
+    const idleState = await runCollectorMaintenanceStep(
+      "SYSTEM_IDLE_QUERY_RETRY",
+      "CandidGrid could not confirm the current system idle or lock state. Collection remains paused until a fresh system state is confirmed; health sync continues.",
+      () => queryIdleState(this.chromeApi, 60),
+    );
+    this.state = { ...this.state, systemIdle: idleState !== "active", lastSystemState: idleState };
+    if (this.state.systemIdle) this.collectorState = "PAUSED";
+    await this.store.writeRuntimeState(this.state);
+    this.idleStateUnconfirmed = false;
   }
 
   private async closeLegacyTrackerAt(
@@ -1156,7 +1169,18 @@ export class BrowserExtensionRuntimeV2 {
     // accessible. The probe succeeds only when the hostname-only content
     // script is running in the visible, focused top-level document. Protected
     // pages and inaccessible browser PDF viewers therefore remain NONE.
-    const proof = await probeTab(this.chromeApi, tab.id);
+    let proof: { visible: boolean; focused: boolean } | null;
+    try {
+      proof = await probeTab(this.chromeApi, tab.id);
+    } catch (error) {
+      if (!(error instanceof BrowserCallbackTimeoutError)) throw error;
+      await this.recordFocusProofFailure(new BrowserCollectorMaintenanceError(
+        "FOCUS_PAGE_PROBE_RETRY",
+        "CandidGrid could not confirm page focus. Only the last proven Focus tail was sealed; the page will be probed again without backfilling the unknown gap.",
+        error,
+      ));
+      return;
+    }
     if (proof?.visible && proof.focused) {
       await this.recordFocusProofRecovered();
       await this.acquireMessageFocus(tab, domain, performance.now());
@@ -1297,7 +1321,17 @@ export class BrowserExtensionRuntimeV2 {
     const tabs = await runCollectorMaintenanceStep(
       "OPEN_RUNTIME_TAB_QUERY_RETRY",
       "CandidGrid could not refresh the eligible open-tab inventory. Existing durable Domain runtime is preserved and reconciliation will retry.",
-      () => queryTabs(this.chromeApi, {}),
+      async () => {
+        try {
+          return await queryTabs(this.chromeApi, {});
+        } catch (error) {
+          if (error instanceof BrowserCallbackTimeoutError) {
+            const lastProvenAt = this.openRuntimeEngine?.checkpoint().lastObservedAtMonotonicMs;
+            await this.clearOpenRuntime(lastProvenAt ?? atMonotonicMs, false);
+          }
+          throw error;
+        }
+      },
     );
     const domains = tabs
       .map((tab) =>
@@ -1738,6 +1772,8 @@ export class BrowserExtensionRuntimeV2 {
     };
     this.connectionState = "ONLINE";
     this.errorCode = "NONE";
+    this.enforceCollectorReadiness();
+    this.state = { ...this.state, lastErrorCode: this.errorCode };
     await this.store.writeRuntimeState(this.state);
     this.refreshCollectorKeepAlive();
     await this.updateVisibleStatus();
@@ -1985,6 +2021,7 @@ export class BrowserExtensionRuntimeV2 {
         serverNow(this.state),
       );
       this.errorCode = "NONE";
+      this.enforceCollectorReadiness();
       this.lastPolicyRefreshAtMs = Date.now();
       await this.store.writeRuntimeState(this.state);
       if (changed) await this.requestSync(true);
@@ -2000,6 +2037,10 @@ export class BrowserExtensionRuntimeV2 {
 
   private async restoreCollectorIfAllowed() {
     if (!this.state?.policy) return;
+    if (!this.enforceCollectorReadiness()) {
+      await this.updateVisibleStatus();
+      return;
+    }
     const next = collectorStateForPolicy(
       this.state.policy,
       serverNow(this.state),
@@ -2009,6 +2050,33 @@ export class BrowserExtensionRuntimeV2 {
       this.errorCode = "NONE";
       await this.updateVisibleStatus();
     }
+  }
+
+  private enforceCollectorReadiness() {
+    if (
+      this.state?.trackingAccess.hostPermission !== "GRANTED" ||
+      this.state.trackingAccess.contentRegistration !== "REGISTERED"
+    ) {
+      this.collectorState = "PAUSED";
+      this.errorCode = "INTERACTION_PERMISSION_REQUIRED";
+      return false;
+    }
+    if (this.idleStateUnconfirmed) {
+      this.collectorState = "PAUSED";
+      this.errorCode = "UNKNOWN";
+      return false;
+    }
+    return true;
+  }
+
+  private async retryFailedContentRegistration() {
+    const access = this.state?.trackingAccess;
+    if (access?.contentRegistration !== "FAILED") return;
+    const elapsedMs = Date.now() - Date.parse(access.checkedAt ?? "");
+    // Alarms can be delivered together after a worker wake. Reuse the durable
+    // attempt time so registration cannot spin across retries or worker restarts.
+    if (elapsedMs >= 0 && elapsedMs < 30_000) return;
+    await this.registerContentScript();
   }
 
   private async restoreAfterQueuePressure() {
@@ -2222,6 +2290,7 @@ export class BrowserExtensionRuntimeV2 {
   private captureAllowed() {
     return (
       this.state !== null &&
+      !this.idleStateUnconfirmed &&
       !this.state.systemIdle &&
       this.collectorState === "HEALTHY" &&
       this.state.policy !== null &&
@@ -2236,6 +2305,7 @@ export class BrowserExtensionRuntimeV2 {
     const policy = this.state?.policy;
     if (!this.state || !policy) return false;
     return (
+      !this.idleStateUnconfirmed &&
       this.collectorState !== "ERROR" &&
       this.connectionState !== "AUTH_REQUIRED" &&
       this.connectionState !== "UPGRADE_REQUIRED" &&
@@ -2252,6 +2322,7 @@ export class BrowserExtensionRuntimeV2 {
     const policy = this.state?.policy;
     if (!this.state || !policy) return false;
     return (
+      !this.idleStateUnconfirmed &&
       policy.collectDomainOpenRuntime &&
       this.state.lastSystemState !== "locked" &&
       this.state.trackingAccess.hostPermission === "GRANTED" &&
@@ -3109,47 +3180,47 @@ async function resolveRuntimeConfig(
 }
 
 function queryTabs(api: ChromeApi, query: Record<string, unknown>) {
-  return new Promise<ChromeTab[]>((resolve, reject) => {
+  return browserCallback<ChromeTab[]>((resolve, reject) => {
     api.tabs.query(query, (tabs) => {
       const error = api.runtime.lastError;
       if (error) reject(new Error(error.message ?? "Tab query failed."));
       else resolve(tabs);
     });
-  });
+  }, "Timed out querying browser tabs.");
 }
 
 function getLastFocusedWindow(api: ChromeApi) {
-  return new Promise<ChromeWindow>((resolve, reject) => {
+  return browserCallback<ChromeWindow>((resolve, reject) => {
     api.windows.getLastFocused({ populate: false }, (window) => {
       const error = api.runtime.lastError;
       if (error) reject(new Error(error.message ?? "Window query failed."));
       else resolve(window);
     });
-  });
+  }, "Timed out querying the focused browser window.");
 }
 
 function getWindow(api: ChromeApi, windowId: number) {
-  return new Promise<ChromeWindow>((resolve, reject) => {
+  return browserCallback<ChromeWindow>((resolve, reject) => {
     api.windows.get(windowId, { populate: false }, (window) => {
       const error = api.runtime.lastError;
       if (error) reject(new Error(error.message ?? "Window query failed."));
       else resolve(window);
     });
-  });
+  }, "Timed out querying a browser window.");
 }
 
 function getTab(api: ChromeApi, tabId: number) {
-  return new Promise<ChromeTab>((resolve, reject) => {
+  return browserCallback<ChromeTab>((resolve, reject) => {
     api.tabs.get(tabId, (tab) => {
       const error = api.runtime.lastError;
       if (error) reject(new Error(error.message ?? "Tab query failed."));
       else resolve(tab);
     });
-  });
+  }, "Timed out querying a browser tab.");
 }
 
 function probeTab(api: ChromeApi, tabId: number) {
-  return new Promise<{ visible: boolean; focused: boolean } | null>(
+  return browserCallback<{ visible: boolean; focused: boolean } | null>(
     (resolve) => {
       api.tabs.sendMessage(
         tabId,
@@ -3172,17 +3243,18 @@ function probeTab(api: ChromeApi, tabId: number) {
         },
       );
     },
+    "Timed out confirming browser page focus.",
   );
 }
 
 function queryIdleState(api: ChromeApi, seconds: number) {
-  return new Promise<"active" | "idle" | "locked">((resolve, reject) => {
+  return browserCallback<"active" | "idle" | "locked">((resolve, reject) => {
     api.idle.queryState(seconds, (state) => {
       const error = api.runtime.lastError;
       if (error) reject(new Error(error.message ?? "Idle query failed."));
       else resolve(state);
     });
-  });
+  }, "Timed out querying browser idle state.");
 }
 
 function installRuntimeListeners(api: ChromeApi) {

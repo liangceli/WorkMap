@@ -90,7 +90,7 @@ jobs:
             if grep -Fxq "workmap/apps/desktop-agent/package.json" <<< "$changed_files" && version_changed "workmap/apps/desktop-agent/package.json"; then
               desktop=true
             fi
-            if grep -Fxq "workmap/apps/browser-extension/package.json" && version_changed "workmap/apps/browser-extension/package.json"; then
+            if grep -Fxq "workmap/apps/browser-extension/package.json" <<< "$changed_files" && version_changed "workmap/apps/browser-extension/package.json"; then
               extension=true
             fi
           fi
@@ -211,7 +211,7 @@ jobs:
         run: |
           $package = Get-Content "workmap/apps/browser-extension/package.json" -Raw | ConvertFrom-Json
           $version = $package.version
-          $asset = Join-Path $PWD "workmap/artifacts/browser-extension/WorkMap-Browser-Extension-$version.zip"
+          $asset = Join-Path $PWD "workmap/artifacts/browser-extension/CandidGrid-Browser-Extension-$version.zip"
           if (-not (Test-Path -LiteralPath $asset)) {
             throw "Expected Browser Extension archive was not created: $asset"
           }

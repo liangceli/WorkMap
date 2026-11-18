@@ -1,1 +1,1 @@
-export const DESKTOP_AGENT_VERSION = "desktop-agent-windows/0.6.12";
+export const DESKTOP_AGENT_VERSION = "desktop-agent-windows/0.6.13";

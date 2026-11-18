@@ -175,7 +175,9 @@ async function refreshDiagnostics(force) {
     const reason = document.createElement("span");
     reason.className = "diagnostic-error-reason";
     reason.textContent = failure.errorMessage
-      ?? "Historical rejection: the Agent version that recorded this request did not save a detailed server reason.";
+      ?? (!failure.httpStatus
+        ? "No HTTP response was received. The Agent could not confirm the server result for this request."
+        : "Historical rejection: the Agent version that recorded this request did not save a detailed server reason.");
     const request = document.createElement("code");
     request.textContent = `Request ID: ${failure.requestId ?? "Not available"}`;
     item.append(heading, reason, request);
